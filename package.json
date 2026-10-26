@@ -27,7 +27,7 @@
     "3dmol": "2.5.5",
     "echarts": "6.1.0",
     "katex": "0.19.0",
-    "markdown-it": "14.1.0",
+    "markdown-it": "15.0.3",
     "markdown-it-cjk-friendly": "3.0.0",
     "motion-v": "2.8.0",
     "pg": "8.23.1",
