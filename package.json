@@ -18,7 +18,8 @@
     "hooks:install": "bash scripts/install-git-hooks.sh",
     "serve": "node server/web.mjs",
     "content": "node scripts/content.mjs",
-    "content:preview": "node scripts/preview.mjs"
+    "content:preview": "node scripts/preview.mjs",
+    "molecule:layout": "node scripts/layout.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1156.0",

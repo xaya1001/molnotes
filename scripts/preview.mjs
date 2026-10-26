@@ -1,7 +1,8 @@
 // Renders the figures of content units as a reader will see them, without
 // publishing: timelines, flows and structures from the content directory,
 // drawn by this checkout's components at desktop and phone width. Prints
-// where each screenshot went and the layout warnings the page found.
+// where each screenshot went, the layout warnings the page found and the
+// structures whose drawing stacks atoms or bonds.
 //
 //   npm run content:preview -- notes/<dir>[/<slug>] | sites/<slug> ...
 import { execFileSync } from "node:child_process";
@@ -14,6 +15,8 @@ import { chromium } from "playwright";
 import { defineFlow } from "../src/ui/diagrams/flow.ts";
 import { defineTimeline } from "../src/ui/diagrams/model.ts";
 import { resolveData } from "./topic-blocks.mjs";
+import { moleculeToolkit } from "./molecule-toolkit.mjs";
+import { layoutProblems } from "./molecule-layout.mjs";
 import { setting } from "./settings.mjs";
 
 const repo = resolve(import.meta.dirname, "..");
@@ -268,6 +271,20 @@ try {
   await browser.close();
   server.close();
 }
+const toolkit = await moleculeToolkit();
+for (const entry of report)
+  if (entry.kind === "molecule")
+    entry.value.forEach(({ smiles }, k) => {
+      // A SMILES RDKit cannot read already shows as a render failure above.
+      const mol = toolkit.get_mol(smiles);
+      if (!mol) return;
+      mol.delete();
+      const problems = layoutProblems(toolkit, smiles);
+      if (problems.length)
+        entry.warnings.push(
+          `第 ${k + 1} 个结构：${problems.join("，")}；用 npm run molecule:layout 生成坐标`,
+        );
+    });
 let warned = 0;
 for (const [i, entry] of report.entries()) {
   console.log(`\n${i + 1}. ${entry.kind}  ${entry.where}`);
