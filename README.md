@@ -21,7 +21,7 @@
 
 ## 开发
 
-需要 Node.js 26、npm、PostgreSQL 和 Playwright Chromium。
+需要 Node.js 26、npm、PostgreSQL、Playwright Chromium，以及装有 `scripts/requirements-material.txt` 所列包的 Python 3（资料书架与引用渲染使用）。
 
 ```bash
 npm ci

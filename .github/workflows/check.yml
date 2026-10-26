@@ -43,6 +43,11 @@ jobs:
         with:
           node-version: "26"
           cache: npm
+      - name: Install pinned Python dependencies for the materials shelf
+        run: |
+          python3 -m venv "${RUNNER_TEMP}/python"
+          "${RUNNER_TEMP}/python/bin/pip" install --quiet -r scripts/requirements-material.txt
+          echo "${RUNNER_TEMP}/python/bin" >> "${GITHUB_PATH}"
       - name: Plan browser checks
         id: plan
         env:
