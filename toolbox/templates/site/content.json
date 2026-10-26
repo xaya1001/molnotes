@@ -1,0 +1,90 @@
+{
+  "parts": [
+    {
+      "title": "开始学习",
+      "chapters": ["intro"]
+    }
+  ],
+  "chapters": [
+    {
+      "id": "intro",
+      "number": 1,
+      "title": "开始学习",
+      "short": "开始",
+      "minutes": 10,
+      "lead": "这一章要回答的实验室问题写在这里。",
+      "terms": [],
+      "blocks": [
+        {
+          "type": "heading",
+          "text": "先从已知的类比切入"
+        },
+        {
+          "type": "paragraph",
+          "text": "正文第一段：从合成人员已知的概念类比切入，再给出生物或药化的准确说法。"
+        },
+        {
+          "type": "prediction",
+          "question": "先预测：在这个条件下会发生什么？",
+          "options": ["结果 A", "结果 B"],
+          "answer": 0,
+          "explanation": "为什么是结果 A：写出依据与出处。"
+        },
+        {
+          "type": "heading",
+          "text": "教材案例"
+        },
+        {
+          "type": "paragraph",
+          "text": "这一段讲解教材案例；题目的答案与解释由预测组件在作答后显示。"
+        },
+        {
+          "type": "molecule",
+          "name": "乙酸",
+          "smiles": "CC(=O)O",
+          "caption": "结构图这类块直接写在 blocks 里；不需要时删掉。"
+        }
+      ],
+      "refs": [1],
+      "excerpts": ["intro-evidence"],
+      "reading": [
+        {
+          "source": 1,
+          "locator": "第 1 章 · PDF 第 1–10 页（印刷页 1–10）",
+          "minutes": 10,
+          "question": "带着什么问题读这一节？",
+          "skip": "可以跳过的部分。"
+        }
+      ]
+    }
+  ],
+  "excerpts": [
+    {
+      "id": "intro-evidence",
+      "source": 1,
+      "locator": "PDF 第 1 页（印刷页 1）",
+      "text": "原文摘录。",
+      "guide": "中文导读：这段原文支撑了上面哪个结论。"
+    }
+  ],
+  "reading": [],
+  "quiz": [
+    {
+      "id": "q1",
+      "question": "判断题题面，不泄露答案。",
+      "options": ["选项一", "选项二"],
+      "answer": 0,
+      "explanation": "选后立即给出的解释。",
+      "chapter": "intro"
+    }
+  ],
+  "sources": [
+    {
+      "id": 1,
+      "title": "主教材 · 版次（年份）",
+      "kind": "主教材",
+      "note": "核对方式；书架来源登记进 sources.json 后用 cite 列出 src: 引用。",
+      "checked": "2026-01-01"
+    }
+  ]
+}

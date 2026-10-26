@@ -1,0 +1,58 @@
+{
+  "name": "molnotes",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "worktree:setup": "node scripts/worktree-setup.mjs",
+    "site:new": "node scripts/new-site.mjs",
+    "patent:inventory": "node scripts/patent-inventory.mjs",
+    "patent:search": "node scripts/patent-search.mjs",
+    "check": "node --test tests/*.test.mjs && node scripts/check-staged-files.mjs --tracked && golar typecheck",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test:e2e": "playwright test",
+    "video:render": "remotion render toolbox/video/entry.ts ProximityDemo public/showcase/explainer.mp4 --codec h264 --concurrency 2",
+    "format:check": "prettier --check . --cache --cache-strategy content",
+    "format:staged": "lint-staged",
+    "hooks:install": "bash scripts/install-git-hooks.sh",
+    "serve": "node server/web.mjs",
+    "content": "node scripts/content.mjs",
+    "content:preview": "node scripts/preview.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1148.0",
+    "@fontsource/noto-serif-sc": "5.3.0",
+    "@rdkit/rdkit": "2026.9.1",
+    "3dmol": "2.5.5",
+    "echarts": "6.1.0",
+    "katex": "0.19.0",
+    "markdown-it": "14.1.0",
+    "markdown-it-cjk-friendly": "3.0.0",
+    "motion-v": "2.6.0",
+    "pg": "8.23.1",
+    "reka-ui": "2.11.0",
+    "vue": "3.5.43",
+    "vue-router": "5.4.0",
+    "yaml": "2.9.1"
+  },
+  "devDependencies": {
+    "@golar/vue": "0.1.10",
+    "@playwright/test": "1.64.0",
+    "@remotion/cli": "4.0.534",
+    "@types/katex": "0.16.8",
+    "@types/node": "26.6.4",
+    "@vitejs/plugin-vue": "6.0.9",
+    "golar": "0.1.10",
+    "lint-staged": "17.6.0",
+    "prettier": "3.9.9",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "remotion": "4.0.534",
+    "typescript": "7.0.2",
+    "vite": "8.3.4"
+  },
+  "lint-staged": {
+    "*.{css,html,js,json,md,mjs,ts,vue,yaml,yml}": "prettier --write"
+  }
+}

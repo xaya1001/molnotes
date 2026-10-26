@@ -1,0 +1,1345 @@
+{
+  "parts": [
+    {
+      "title": "虚构练习",
+      "chapters": ["start", "examples", "claims", "sar", "synthesis", "sources"]
+    }
+  ],
+  "chapters": [
+    {
+      "id": "start",
+      "number": 1,
+      "title": "虚构记录总览",
+      "short": "虚构记录总览",
+      "minutes": 5,
+      "lead": "",
+      "refs": [],
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "12 条虚构记录、5 条权利要求和 3 页自制原图。"
+        },
+        {
+          "type": "table",
+          "caption": "检测条件",
+          "columns": ["实验", "条件"],
+          "rows": [
+            ["读数甲", "样品甲；15 °C；辅因子未列"],
+            ["读数乙", "样品乙；7 单位辅因子"]
+          ]
+        },
+        {
+          "type": "table",
+          "caption": "读数甲分档计数",
+          "columns": ["分档", "条数"],
+          "rows": [
+            [
+              "A",
+              {
+                "text": "5",
+                "href": "/sites/fable-patent/examples?activity=A"
+              }
+            ]
+          ]
+        }
+      ],
+      "layout": "wide"
+    },
+    {
+      "id": "examples",
+      "number": 2,
+      "title": "全部实施例",
+      "short": "全部实施例",
+      "minutes": 5,
+      "lead": "",
+      "refs": [],
+      "blocks": [
+        {
+          "type": "record-collection",
+          "collection": "examples"
+        }
+      ],
+      "layout": "wide"
+    },
+    {
+      "id": "claims",
+      "number": 3,
+      "title": "权利要求",
+      "short": "权利要求",
+      "minutes": 5,
+      "lead": "",
+      "refs": [],
+      "blocks": [
+        {
+          "type": "claims",
+          "set": "main"
+        }
+      ],
+      "layout": "wide"
+    },
+    {
+      "id": "sar",
+      "number": 4,
+      "title": "构效关系",
+      "short": "构效关系",
+      "minutes": 5,
+      "lead": "",
+      "refs": [],
+      "blocks": [
+        {
+          "type": "sar-cases",
+          "cases": "pairs",
+          "collection": "examples"
+        }
+      ],
+      "layout": "wide"
+    },
+    {
+      "id": "synthesis",
+      "number": 5,
+      "title": "中间体",
+      "short": "中间体",
+      "minutes": 5,
+      "lead": "",
+      "refs": [],
+      "blocks": [
+        {
+          "type": "record-collection",
+          "collection": "intermediates"
+        },
+        {
+          "type": "synthesis-network",
+          "network": "fable"
+        }
+      ],
+      "layout": "wide"
+    },
+    {
+      "id": "sources",
+      "number": 6,
+      "title": "原文与证据",
+      "short": "原文与证据",
+      "minutes": 5,
+      "lead": "",
+      "refs": [],
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "样品 1 的另一来源读数为 B；两种读数分别保留。"
+        },
+        {
+          "type": "source-pages",
+          "source": "alpha"
+        },
+        {
+          "type": "source-pages",
+          "source": "beta"
+        }
+      ],
+      "layout": "wide"
+    }
+  ],
+  "quiz": [],
+  "sources": [],
+  "data": {
+    "sources": {
+      "alpha": {
+        "title": "来源甲",
+        "pages": 3,
+        "image": "/sites/fable-patent/static/pages/{page}.svg",
+        "text": "/sites/fable-patent/static/pages-text.json",
+        "paragraphs": {
+          "0005": 2
+        },
+        "size": [612, 792]
+      },
+      "beta": {
+        "title": "来源乙",
+        "pages": 3,
+        "image": "/sites/fable-patent/static/pages-a4/{page}.svg",
+        "text": "/sites/fable-patent/static/pages-text.json",
+        "paragraphs": {
+          "0005": 2
+        },
+        "size": [595, 842]
+      }
+    },
+    "collections": {
+      "examples": {
+        "title": "实施例",
+        "route": "examples",
+        "fields": [
+          {
+            "key": "name",
+            "label": "名称",
+            "kind": "text",
+            "filter": true
+          },
+          {
+            "key": "smiles",
+            "label": "结构",
+            "kind": "smiles"
+          },
+          {
+            "key": "tags",
+            "label": "标签",
+            "kind": "tags",
+            "filter": true
+          },
+          {
+            "key": "amount",
+            "label": "样品量",
+            "kind": "number",
+            "filter": true,
+            "sort": true
+          },
+          {
+            "key": "activity",
+            "label": "读数甲",
+            "kind": "grade",
+            "scale": "activity",
+            "filter": true,
+            "sort": true,
+            "ref": {
+              "source": "alpha",
+              "page": 2,
+              "rect": [40, 100, 550, 180]
+            }
+          },
+          {
+            "key": "binding",
+            "label": "读数乙",
+            "kind": "grade",
+            "scale": "binding",
+            "filter": true,
+            "sort": true
+          },
+          {
+            "key": "structure",
+            "label": "结构原图",
+            "kind": "ref"
+          },
+          {
+            "key": "synthesis",
+            "label": "制备",
+            "kind": "ref"
+          },
+          {
+            "key": "body",
+            "label": "制备正文",
+            "kind": "body"
+          },
+          {
+            "key": "potency",
+            "label": "活性测量",
+            "kind": "measurement",
+            "filter": true,
+            "sort": true
+          },
+          {
+            "key": "scaffold",
+            "label": "骨架归类",
+            "kind": "assignments",
+            "filter": true
+          }
+        ],
+        "scales": {
+          "activity": {
+            "bins": [
+              {
+                "value": "A",
+                "label": "≤10 单位"
+              },
+              {
+                "value": "B",
+                "label": ">10 单位"
+              }
+            ],
+            "blank": "原表空白",
+            "dash": "原表破折号"
+          },
+          "binding": {
+            "bins": [
+              {
+                "value": "A",
+                "label": "≤5 单位"
+              },
+              {
+                "value": "B",
+                "label": ">5 单位"
+              }
+            ],
+            "blank": "原表空白",
+            "dash": "原表破折号"
+          }
+        },
+        "pins": {
+          "max": 6
+        },
+        "export": true,
+        "records": [
+          {
+            "id": 1,
+            "source": "alpha",
+            "name": "样品 1",
+            "smiles": "CCO",
+            "tags": ["含氧"],
+            "amount": 10,
+            "activity": "A",
+            "binding": "A",
+            "structure": {
+              "page": 1,
+              "rect": [40, 80, 300, 240],
+              "asset": "/sites/fable-patent/static/pages/1.svg"
+            },
+            "synthesis": {
+              "page": 2,
+              "end": 3
+            },
+            "body": {
+              "url": "/sites/fable-patent/static/bodies.json",
+              "key": "1"
+            },
+            "refs": {
+              "examples": [2],
+              "claims": [1],
+              "intermediates": ["A"]
+            },
+            "notes": [
+              {
+                "field": "binding",
+                "text": "另一来源的读数为 B，保留两个读数。",
+                "ref": {
+                  "source": "beta",
+                  "page": 2
+                }
+              }
+            ],
+            "potency": {
+              "assay": "alpha-potency",
+              "status": "reported",
+              "qualifier": "=",
+              "value": 10,
+              "ref": {
+                "page": 1
+              }
+            },
+            "scaffold": [
+              {
+                "group": "核心甲",
+                "basis": "agent",
+                "evidence": [
+                  {
+                    "page": 1
+                  }
+                ],
+                "claims": [1],
+                "limit": "根据虚构示例归类；尚未核对全部变量定义。"
+              }
+            ]
+          },
+          {
+            "id": 2,
+            "source": "alpha",
+            "name": "样品 2",
+            "smiles": "CCCO",
+            "tags": ["含氧"],
+            "amount": 20,
+            "activity": "B",
+            "binding": "A",
+            "structure": {
+              "page": 1,
+              "rect": [40, 80, 300, 240],
+              "asset": "/sites/fable-patent/static/pages/1.svg"
+            },
+            "synthesis": {
+              "page": 2,
+              "end": 3
+            },
+            "body": {
+              "url": "/sites/fable-patent/static/bodies.json",
+              "key": "2"
+            },
+            "refs": {
+              "examples": [3],
+              "claims": [1]
+            },
+            "potency": {
+              "assay": "alpha-potency",
+              "status": "reported",
+              "qualifier": "<",
+              "value": 20,
+              "ref": {
+                "page": 1
+              }
+            },
+            "scaffold": [
+              {
+                "group": "核心甲",
+                "basis": "agent",
+                "evidence": [
+                  {
+                    "page": 1
+                  }
+                ],
+                "claims": [1],
+                "limit": "根据虚构示例归类；尚未核对全部变量定义。"
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "source": "alpha",
+            "name": "样品 3",
+            "smiles": "CCCCO",
+            "tags": ["含氧"],
+            "amount": 30,
+            "activity": "A",
+            "binding": "B",
+            "structure": {
+              "page": 1,
+              "rect": [40, 80, 300, 240],
+              "asset": "/sites/fable-patent/static/pages/1.svg"
+            },
+            "synthesis": {
+              "page": 2,
+              "end": 3
+            },
+            "body": {
+              "url": "/sites/fable-patent/static/bodies.json",
+              "key": "3"
+            },
+            "refs": {
+              "examples": [4],
+              "claims": [1]
+            },
+            "potency": {
+              "assay": "alpha-potency",
+              "status": "reported",
+              "qualifier": ">",
+              "value": 30,
+              "ref": {
+                "page": 1
+              }
+            },
+            "scaffold": [
+              {
+                "group": "核心甲",
+                "basis": "agent",
+                "evidence": [
+                  {
+                    "page": 1
+                  }
+                ],
+                "claims": [1],
+                "limit": "根据虚构示例归类；尚未核对全部变量定义。"
+              }
+            ]
+          },
+          {
+            "id": 4,
+            "source": "alpha",
+            "name": "样品 4",
+            "smiles": "CCN",
+            "tags": ["其他"],
+            "amount": 40,
+            "activity": "B",
+            "binding": "A",
+            "structure": {
+              "page": 1,
+              "rect": [40, 80, 300, 240],
+              "asset": "/sites/fable-patent/static/pages/1.svg"
+            },
+            "synthesis": {
+              "page": 2,
+              "end": 3
+            },
+            "body": {
+              "url": "/sites/fable-patent/static/bodies.json",
+              "key": "4"
+            },
+            "refs": {
+              "examples": [5],
+              "claims": [3]
+            },
+            "potency": {
+              "assay": "alpha-potency",
+              "status": "reported",
+              "qualifier": "range",
+              "value": 40,
+              "ref": {
+                "page": 1
+              },
+              "upper": 60
+            },
+            "scaffold": [
+              {
+                "group": "核心甲",
+                "basis": "agent",
+                "evidence": [
+                  {
+                    "page": 1
+                  }
+                ],
+                "claims": [1],
+                "limit": "根据虚构示例归类；尚未核对全部变量定义。"
+              }
+            ]
+          },
+          {
+            "id": 5,
+            "source": "alpha",
+            "name": "样品 5",
+            "smiles": "CCCN",
+            "tags": ["其他"],
+            "amount": 50,
+            "activity": "A",
+            "binding": "A",
+            "structure": {
+              "page": 1,
+              "rect": [40, 80, 300, 240],
+              "asset": "/sites/fable-patent/static/pages/1.svg"
+            },
+            "synthesis": {
+              "page": 2,
+              "end": 3
+            },
+            "body": {
+              "url": "/sites/fable-patent/static/bodies.json",
+              "key": "5"
+            },
+            "refs": {
+              "examples": [6],
+              "claims": [3]
+            },
+            "potency": {
+              "assay": "beta-potency",
+              "status": "reported",
+              "qualifier": "=",
+              "value": 0.005,
+              "ref": {
+                "page": 1
+              }
+            },
+            "scaffold": [
+              {
+                "group": "核心甲",
+                "basis": "agent",
+                "evidence": [
+                  {
+                    "page": 1
+                  }
+                ],
+                "claims": [1],
+                "limit": "根据虚构示例归类；尚未核对全部变量定义。"
+              }
+            ]
+          },
+          {
+            "id": 6,
+            "source": "alpha",
+            "name": "样品 6",
+            "smiles": "CCCCN",
+            "tags": ["其他"],
+            "amount": 60,
+            "activity": "B",
+            "binding": "B",
+            "structure": {
+              "page": 1,
+              "rect": [40, 80, 300, 240],
+              "asset": "/sites/fable-patent/static/pages/1.svg"
+            },
+            "synthesis": {
+              "page": 2,
+              "end": 3
+            },
+            "body": {
+              "url": "/sites/fable-patent/static/bodies.json",
+              "key": "6"
+            },
+            "refs": {
+              "examples": [7],
+              "claims": [3]
+            },
+            "potency": {
+              "assay": "alpha-potency",
+              "status": "unreported",
+              "reason": "表中未列数值"
+            },
+            "scaffold": [
+              {
+                "group": "核心甲",
+                "basis": "agent",
+                "evidence": [
+                  {
+                    "page": 1
+                  }
+                ],
+                "claims": [1],
+                "limit": "根据虚构示例归类；尚未核对全部变量定义。"
+              }
+            ]
+          },
+          {
+            "id": 7,
+            "source": "beta",
+            "name": "样品 7",
+            "smiles": "c1ccccc1",
+            "tags": ["其他"],
+            "amount": 70,
+            "activity": "A",
+            "binding": "A",
+            "structure": {
+              "page": 1,
+              "rect": [40, 80, 300, 240],
+              "asset": "/sites/fable-patent/static/pages/1.svg"
+            },
+            "synthesis": {
+              "page": 2,
+              "end": 3
+            },
+            "body": {
+              "url": "/sites/fable-patent/static/bodies.json",
+              "key": "7"
+            },
+            "refs": {
+              "examples": [8],
+              "claims": [3]
+            },
+            "potency": {
+              "assay": "unknown-unit",
+              "status": "reported",
+              "qualifier": "=",
+              "value": 1,
+              "ref": {
+                "page": 1
+              }
+            },
+            "scaffold": [
+              {
+                "group": "核心乙",
+                "basis": "agent",
+                "evidence": [
+                  {
+                    "page": 1
+                  }
+                ],
+                "claims": [1],
+                "limit": "根据虚构示例归类；尚未核对全部变量定义。"
+              }
+            ]
+          },
+          {
+            "id": 8,
+            "source": "beta",
+            "name": "样品 8",
+            "smiles": "Cc1ccccc1",
+            "tags": ["其他"],
+            "amount": 80,
+            "activity": "B",
+            "binding": "A",
+            "structure": {
+              "page": 1,
+              "rect": [40, 80, 300, 240],
+              "asset": "/sites/fable-patent/static/pages/1.svg"
+            },
+            "synthesis": {
+              "page": 2,
+              "end": 3
+            },
+            "body": {
+              "url": "/sites/fable-patent/static/bodies.json",
+              "key": "8"
+            },
+            "refs": {
+              "examples": [9],
+              "claims": [3]
+            },
+            "potency": {
+              "assay": "alpha-potency",
+              "status": "reported",
+              "qualifier": "=",
+              "value": 80,
+              "ref": {
+                "page": 1
+              }
+            },
+            "scaffold": [
+              {
+                "group": "核心乙",
+                "basis": "agent",
+                "evidence": [
+                  {
+                    "page": 1
+                  }
+                ],
+                "claims": [1],
+                "limit": "根据虚构示例归类；尚未核对全部变量定义。"
+              }
+            ]
+          },
+          {
+            "id": 9,
+            "source": "beta",
+            "name": "样品 9",
+            "smiles": "Oc1ccccc1",
+            "tags": ["含氧"],
+            "amount": 90,
+            "activity": "A",
+            "binding": "B",
+            "structure": {
+              "page": 1,
+              "rect": [40, 80, 300, 240],
+              "asset": "/sites/fable-patent/static/pages/1.svg"
+            },
+            "synthesis": {
+              "page": 2,
+              "end": 3
+            },
+            "body": {
+              "url": "/sites/fable-patent/static/bodies.json",
+              "key": "9"
+            },
+            "refs": {
+              "examples": [10],
+              "claims": [1]
+            },
+            "potency": {
+              "assay": "alpha-potency",
+              "status": "reported",
+              "qualifier": "=",
+              "value": 90,
+              "ref": {
+                "page": 1
+              }
+            },
+            "scaffold": [
+              {
+                "group": "核心乙",
+                "basis": "agent",
+                "evidence": [
+                  {
+                    "page": 1
+                  }
+                ],
+                "claims": [1],
+                "limit": "根据虚构示例归类；尚未核对全部变量定义。"
+              }
+            ]
+          },
+          {
+            "id": 10,
+            "source": "beta",
+            "name": "样品 10",
+            "smiles": "CC(=O)O",
+            "tags": ["含氧"],
+            "amount": 100,
+            "binding": "A",
+            "structure": {
+              "page": 1,
+              "rect": [40, 80, 300, 240],
+              "asset": "/sites/fable-patent/static/pages/1.svg"
+            },
+            "synthesis": {
+              "page": 2,
+              "end": 3
+            },
+            "body": {
+              "url": "/sites/fable-patent/static/bodies.json",
+              "key": "10"
+            },
+            "refs": {
+              "examples": [11],
+              "claims": [1]
+            },
+            "potency": {
+              "assay": "alpha-potency",
+              "status": "reported",
+              "qualifier": "=",
+              "value": 100,
+              "ref": {
+                "page": 1
+              }
+            },
+            "scaffold": [
+              {
+                "group": "核心乙",
+                "basis": "agent",
+                "evidence": [
+                  {
+                    "page": 1
+                  }
+                ],
+                "claims": [1],
+                "limit": "根据虚构示例归类；尚未核对全部变量定义。"
+              }
+            ]
+          },
+          {
+            "id": 11,
+            "source": "beta",
+            "name": "样品 11",
+            "smiles": "CCC(=O)O",
+            "tags": ["含氧"],
+            "amount": 110,
+            "activity": "",
+            "binding": "A",
+            "structure": {
+              "page": 1,
+              "rect": [40, 80, 300, 240],
+              "asset": "/sites/fable-patent/static/pages/1.svg"
+            },
+            "synthesis": {
+              "page": 2,
+              "end": 3
+            },
+            "body": {
+              "url": "/sites/fable-patent/static/bodies.json",
+              "key": "11"
+            },
+            "refs": {
+              "examples": [12],
+              "claims": [1]
+            },
+            "potency": {
+              "assay": "alpha-potency",
+              "status": "reported",
+              "qualifier": "=",
+              "value": 110,
+              "ref": {
+                "page": 1
+              }
+            },
+            "scaffold": [
+              {
+                "group": "核心乙",
+                "basis": "agent",
+                "evidence": [
+                  {
+                    "page": 1
+                  }
+                ],
+                "claims": [1],
+                "limit": "根据虚构示例归类；尚未核对全部变量定义。"
+              }
+            ]
+          },
+          {
+            "id": 12,
+            "source": "beta",
+            "name": "样品 12",
+            "smiles": "CCOC",
+            "tags": ["含氧"],
+            "amount": 120,
+            "activity": "--",
+            "binding": "B",
+            "structure": {
+              "page": 1,
+              "rect": [40, 80, 300, 240],
+              "asset": "/sites/fable-patent/static/pages/1.svg"
+            },
+            "synthesis": {
+              "page": 2,
+              "end": 3
+            },
+            "body": {
+              "url": "/sites/fable-patent/static/bodies.json",
+              "key": "12"
+            },
+            "refs": {
+              "examples": [],
+              "claims": [1]
+            },
+            "potency": {
+              "assay": "alpha-potency",
+              "status": "reported",
+              "qualifier": "=",
+              "value": 120,
+              "ref": {
+                "page": 1
+              }
+            },
+            "scaffold": [
+              {
+                "group": "核心乙",
+                "basis": "agent",
+                "evidence": [
+                  {
+                    "page": 1
+                  }
+                ],
+                "claims": [1],
+                "limit": "根据虚构示例归类；尚未核对全部变量定义。"
+              }
+            ]
+          }
+        ],
+        "assays": {
+          "alpha-potency": {
+            "title": "虚构测定甲",
+            "target": "虚构酶甲",
+            "endpoint": "IC50",
+            "conditions": "15 °C；体外；30 min",
+            "unit": "nM",
+            "evidence": [
+              {
+                "source": "alpha",
+                "page": 1
+              }
+            ]
+          },
+          "beta-potency": {
+            "title": "虚构测定乙",
+            "target": "虚构酶甲",
+            "endpoint": "IC50",
+            "conditions": "25 °C；体外；60 min",
+            "unit": "µM",
+            "evidence": [
+              {
+                "source": "beta",
+                "page": 1
+              }
+            ]
+          },
+          "unknown-unit": {
+            "title": "单位待核实",
+            "target": "虚构酶甲",
+            "endpoint": "IC50",
+            "conditions": "未报告",
+            "unit": null,
+            "unitReason": "原页单位不清晰",
+            "evidence": [
+              {
+                "source": "alpha",
+                "page": 1
+              }
+            ]
+          }
+        }
+      },
+      "intermediates": {
+        "title": "中间体",
+        "route": "synthesis/intermediates",
+        "fields": [
+          {
+            "key": "name",
+            "label": "名称",
+            "kind": "text"
+          },
+          {
+            "key": "body",
+            "label": "实验正文",
+            "kind": "body"
+          }
+        ],
+        "scales": {},
+        "records": [
+          {
+            "id": "A",
+            "source": "alpha",
+            "name": "虚构中间体 A",
+            "body": {
+              "url": "/sites/fable-patent/static/bodies.json",
+              "key": "A"
+            },
+            "refs": {
+              "examples": [1]
+            }
+          }
+        ]
+      }
+    },
+    "claims": {
+      "main": {
+        "source": "alpha",
+        "claims": [
+          {
+            "id": 1,
+            "title": "虚构范围 1",
+            "group": "结构",
+            "text": "Claim 1. Synthetic teaching text.",
+            "note": "仅用于核对数据流程的虚构范围。",
+            "refs": [],
+            "children": [2, 3],
+            "segments": [
+              {
+                "page": 3,
+                "rect": [40, 100, 550, 220],
+                "asset": "/sites/fable-patent/static/pages/3.svg"
+              }
+            ],
+            "examples": [1, 2, 3],
+            "scope": {
+              "smarts": "[#8]",
+              "note": "以是否含对应元素原子作为教学简化范围。"
+            }
+          },
+          {
+            "id": 2,
+            "title": "虚构范围 2",
+            "group": "结构",
+            "text": "Claim 2. Synthetic teaching text.",
+            "note": "仅用于核对数据流程的虚构范围。",
+            "refs": [1],
+            "children": [],
+            "segments": [
+              {
+                "page": 3,
+                "rect": [40, 100, 550, 220],
+                "asset": "/sites/fable-patent/static/pages/3.svg"
+              }
+            ],
+            "examples": [4],
+            "scope": {
+              "smarts": "[#7]",
+              "note": "以是否含对应元素原子作为教学简化范围。"
+            }
+          },
+          {
+            "id": 3,
+            "title": "虚构范围 3",
+            "group": "结构",
+            "text": "Claim 3. Synthetic teaching text.",
+            "note": "仅用于核对数据流程的虚构范围。",
+            "refs": [1],
+            "children": [],
+            "segments": [
+              {
+                "page": 3,
+                "rect": [40, 100, 550, 220],
+                "asset": "/sites/fable-patent/static/pages/3.svg"
+              }
+            ],
+            "examples": [4]
+          },
+          {
+            "id": 4,
+            "title": "虚构范围 4",
+            "group": "用途",
+            "text": "Claim 4. Synthetic teaching text.",
+            "note": "仅用于核对数据流程的虚构范围。",
+            "refs": [],
+            "children": [],
+            "segments": [
+              {
+                "page": 3,
+                "rect": [40, 100, 550, 220],
+                "asset": "/sites/fable-patent/static/pages/3.svg"
+              }
+            ],
+            "examples": [4]
+          },
+          {
+            "id": 5,
+            "title": "虚构范围 5",
+            "group": "用途",
+            "text": "Claim 5. Synthetic teaching text.",
+            "note": "仅用于核对数据流程的虚构范围。",
+            "refs": [],
+            "children": [],
+            "segments": [
+              {
+                "page": 3,
+                "rect": [40, 100, 550, 220],
+                "asset": "/sites/fable-patent/static/pages/3.svg"
+              }
+            ],
+            "examples": [4]
+          }
+        ]
+      }
+    },
+    "sarCases": {
+      "pairs": [
+        {
+          "id": "oxygen",
+          "title": "含氧链长配对",
+          "ids": [1, 2],
+          "area": "链长",
+          "change": "增加一个碳。",
+          "finding": "同属 A 与 B 两档。",
+          "limit": "虚构数据不能作实验结论。",
+          "claims": [1],
+          "analysis": {
+            "kind": "design-around-hypothesis",
+            "rationale": "虚构实例仅用于形成待实验检验的取代基假设。",
+            "evidence": [
+              {
+                "source": "alpha",
+                "page": 1
+              }
+            ]
+          }
+        },
+        {
+          "id": "nitrogen",
+          "title": "含氮链长配对",
+          "ids": [4, 5],
+          "area": "链长",
+          "change": "增加一个碳。",
+          "finding": "比较原始分档。",
+          "limit": "仅用于展示。",
+          "claims": [2]
+        }
+      ]
+    },
+    "synthesis": {
+      "fable": {
+        "title": "虚构分支路线",
+        "procedures": {
+          "method-a": {
+            "reagents": "虚构通法试剂",
+            "conditions": "虚构通法条件",
+            "evidence": [
+              {
+                "source": "alpha",
+                "page": 2
+              }
+            ],
+            "sourceRecord": {
+              "collection": "examples",
+              "id": 1
+            }
+          }
+        },
+        "steps": [
+          {
+            "id": "core",
+            "title": "虚构反应 core",
+            "strategy": "核心构建",
+            "reactants": [
+              {
+                "collection": "examples",
+                "id": 1
+              }
+            ],
+            "products": [
+              {
+                "collection": "examples",
+                "id": 2
+              }
+            ],
+            "reagents": "虚构试剂",
+            "conditions": "虚构条件；教学数据",
+            "evidence": [
+              {
+                "source": "alpha",
+                "page": 2
+              }
+            ],
+            "yield": {
+              "status": "unreported",
+              "reason": "仅报告粗品质量，不能换算百分比"
+            },
+            "isolatedMass": {
+              "value": 24,
+              "unit": "g",
+              "state": "crude",
+              "product": {
+                "collection": "examples",
+                "id": 2
+              },
+              "ref": {
+                "source": "alpha",
+                "page": 2
+              }
+            }
+          },
+          {
+            "id": "branch-a",
+            "title": "虚构反应 branch-a",
+            "strategy": "后期衍生化",
+            "reactants": [
+              {
+                "collection": "examples",
+                "id": 2
+              }
+            ],
+            "products": [
+              {
+                "collection": "examples",
+                "id": 3
+              }
+            ],
+            "reagents": "虚构试剂",
+            "conditions": "虚构条件；教学数据",
+            "evidence": [
+              {
+                "source": "alpha",
+                "page": 2
+              }
+            ],
+            "yield": {
+              "status": "unreported",
+              "reason": "未报告"
+            }
+          },
+          {
+            "id": "branch-b",
+            "title": "虚构反应 branch-b",
+            "strategy": "后期衍生化",
+            "reactants": [
+              {
+                "collection": "examples",
+                "id": 2
+              },
+              {
+                "collection": "examples",
+                "id": 5
+              }
+            ],
+            "products": [
+              {
+                "collection": "examples",
+                "id": 4
+              }
+            ],
+            "conditions": "虚构条件；教学数据",
+            "evidence": [
+              {
+                "source": "alpha",
+                "page": 2
+              }
+            ],
+            "yield": {
+              "status": "unreported",
+              "reason": "未报告"
+            },
+            "procedure": "method-a",
+            "procedureNote": "按通法甲，原文另列温度；收率未报告",
+            "overrideEvidence": [
+              {
+                "source": "alpha",
+                "page": 2
+              }
+            ]
+          },
+          {
+            "id": "partner",
+            "title": "虚构反应 partner",
+            "strategy": "后期衍生化",
+            "reactants": [
+              {
+                "collection": "examples",
+                "id": 6
+              }
+            ],
+            "products": [
+              {
+                "collection": "examples",
+                "id": 5
+              }
+            ],
+            "reagents": "虚构试剂",
+            "conditions": "虚构条件；教学数据",
+            "evidence": [
+              {
+                "source": "alpha",
+                "page": 2
+              }
+            ],
+            "yield": {
+              "status": "unreported",
+              "reason": "未报告"
+            }
+          }
+        ],
+        "routes": [
+          {
+            "id": "a",
+            "title": "来源甲路线",
+            "scaffold": "核心甲",
+            "target": {
+              "collection": "examples",
+              "id": 3
+            },
+            "steps": ["core", "branch-a"],
+            "evidence": [
+              {
+                "source": "alpha",
+                "page": 2
+              }
+            ],
+            "startingMaterials": [
+              {
+                "collection": "examples",
+                "id": 1
+              }
+            ],
+            "extent": "fragment",
+            "limit": "虚构核验片段；步数仅指所列步骤。",
+            "reportedYield": {
+              "value": 73,
+              "unit": "%",
+              "scopeStepIds": ["core", "branch-a"],
+              "product": {
+                "collection": "examples",
+                "id": 3
+              },
+              "basis": "虚构原文明确报告的两步合并收率",
+              "ref": {
+                "source": "alpha",
+                "page": 2
+              }
+            }
+          },
+          {
+            "id": "b",
+            "title": "来源乙汇聚路线",
+            "scaffold": "核心乙",
+            "target": {
+              "collection": "examples",
+              "id": 4
+            },
+            "steps": ["core", "partner", "branch-b"],
+            "evidence": [
+              {
+                "source": "beta",
+                "page": 2
+              }
+            ],
+            "startingMaterials": [
+              {
+                "collection": "examples",
+                "id": 1
+              },
+              {
+                "collection": "examples",
+                "id": 6
+              }
+            ],
+            "extent": "fragment",
+            "limit": "虚构汇聚片段；不计算总收率。"
+          }
+        ],
+        "references": [
+          {
+            "record": {
+              "collection": "examples",
+              "id": 7
+            },
+            "procedure": "method-a",
+            "note": "虚构原文按样品1程序制备，替换指定试剂；未展开步骤。",
+            "reagents": "虚构替换试剂，数量未列",
+            "evidence": [
+              {
+                "source": "beta",
+                "page": 2
+              }
+            ],
+            "overrideEvidence": [
+              {
+                "source": "beta",
+                "page": 2
+              }
+            ],
+            "yield": {
+              "status": "unreported",
+              "reason": "不得继承所引程序的收率。"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

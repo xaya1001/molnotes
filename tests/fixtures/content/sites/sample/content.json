@@ -1,0 +1,171 @@
+{
+  "parts": [
+    {
+      "title": "观察",
+      "chapters": ["start", "next"]
+    }
+  ],
+  "chapters": [
+    {
+      "id": "start",
+      "number": 1,
+      "title": "样品预测",
+      "short": "预测",
+      "minutes": 5,
+      "lead": "判断哪个样品更多。",
+      "terms": ["样品"],
+      "refs": [],
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "乙醇 ethanol 是中性结构演示，也是本章的样品。"
+        },
+        {
+          "type": "prediction",
+          "question": "哪个样品更多？",
+          "options": ["A", "B"],
+          "answer": 0,
+          "explanation": "A 有两个，B 有一个。",
+          "reset": true,
+          "source": "AI 原创 · 计数观察",
+          "optionExplanations": [
+            "A 有两个，数量较多。",
+            "B 只有一个，数量较少。"
+          ],
+          "context": "在同一观察范围内计数：A 有两个，B 有一个。",
+          "evidence": ["counting-evidence"]
+        },
+        {
+          "type": "molecule",
+          "name": "乙醇",
+          "smiles": "CCO"
+        },
+        {
+          "type": "path-picker"
+        }
+      ],
+      "excerpts": ["counting-evidence"]
+    },
+    {
+      "id": "next",
+      "number": 2,
+      "title": "继续观察",
+      "short": "观察",
+      "minutes": 5,
+      "lead": "比较结果。",
+      "refs": [],
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "记录读过的内容。"
+        },
+        {
+          "type": "problem",
+          "id": "compare-zh",
+          "lang": "zh",
+          "label": "第 1 题",
+          "source": "AI 原创 · 中性样本",
+          "task": "动手计算 · 约 5 分钟",
+          "prompt": [
+            "样品 A 有两个，样品 B 有一个。",
+            "怎样记录两个样品的差异？"
+          ],
+          "parts": ["计算两者数量之差。", "说明比较时保持不变的条件。"],
+          "answer": {
+            "text": ["A 比 B 多一个。", "在同样的观察范围内计数。"],
+            "origin": "ai",
+            "basis": "中性计数样本的题设"
+          },
+          "evidence": ["comparison-evidence"]
+        },
+        {
+          "type": "problem",
+          "id": "compare-en",
+          "lang": "en",
+          "label": "Problem 2",
+          "source": "Neutral observation exercise",
+          "prompt": [
+            "Compare two observations of a collection containing three identical objects.",
+            "Explain how a consistent observation procedure helps distinguish a change in the collection from a change in the measurement."
+          ],
+          "parts": [
+            "Describe a reproducible counting procedure and the conditions that must remain constant.",
+            "Explain how you would report an observation when an object is temporarily hidden from view."
+          ],
+          "answer": {
+            "text": [
+              "Count each visible object once within the same observation boundary.",
+              "Record the uncertainty when visibility changes; repeat the observation before concluding that the collection has changed."
+            ],
+            "origin": "book",
+            "basis": "Neutral fixture answer, observation protocol"
+          }
+        },
+        {
+          "type": "prediction",
+          "id": "difference",
+          "kind": "number",
+          "question": "A 有两个，B 有一个，相差多少？",
+          "input": {
+            "label": "数量差",
+            "min": 0,
+            "step": 1
+          },
+          "answer": 1,
+          "explanation": "两个减去一个，相差一个。",
+          "reset": true
+        }
+      ]
+    }
+  ],
+  "quiz": [
+    {
+      "id": "q1",
+      "chapter": "start",
+      "question": "A 有两个吗？",
+      "options": ["是", "否"],
+      "answer": 0,
+      "explanation": "数出两个。"
+    }
+  ],
+  "placement": [
+    {
+      "id": "p1",
+      "chapter": "start",
+      "question": "一个加一个是多少？",
+      "options": ["二", "三"],
+      "answer": 0,
+      "explanation": "一加一等于二。"
+    }
+  ],
+  "paths": [
+    {
+      "id": "all",
+      "title": "全部",
+      "summary": "依次观察。",
+      "chapters": ["start", "next"]
+    }
+  ],
+  "sources": [
+    {
+      "id": 1,
+      "title": "中性观察记录"
+    }
+  ],
+  "excerpts": [
+    {
+      "id": "counting-evidence",
+      "source": 1,
+      "locator": "观察表 1",
+      "text": "Sample A: two objects. Sample B: one object.",
+      "guide": "逐一计数后比较。"
+    },
+    {
+      "id": "comparison-evidence",
+      "source": 1,
+      "locator": "观察方法",
+      "text": "Use the same observation boundary for both samples.",
+      "guide": "比较时保持观察范围一致。"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "handbook": {
+    "file": "textbooks/sample-handbook.pdf",
+    "title": "样本手册",
+    "kind": "教材",
+    "author": "测试作者",
+    "edition": "第 2 版"
+  },
+  "manual": {
+    "file": "reports/sample-report/manual.pdf",
+    "title": "样本软件手册",
+    "kind": "手册"
+  },
+  "reader": {
+    "file": "textbooks/sample-reader.epub",
+    "title": "样本读本",
+    "kind": "教材",
+    "author": "测试作者"
+  },
+  "lesson-1": {
+    "file": "reports/sample-report/chapter-1.html",
+    "title": "读一张轨道图",
+    "kind": "网页",
+    "author": "样本课堂"
+  }
+}

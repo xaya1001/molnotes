@@ -1,0 +1,130 @@
+{
+  "fetchedOn": "2026-10-13",
+  "entries": [
+    {
+      "id": "181L",
+      "label": "181L · 空腔里的苯",
+      "source": {
+        "pdb": "181L",
+        "title": "Specificity of ligand binding in a buried non-polar cavity of T4 lysozyme: linkage of dynamics and structural plasticity",
+        "resolution": 1.8,
+        "note": "Morton 1995, Biochemistry"
+      },
+      "subset": {
+        "residues": {
+          "A": [60, 162]
+        },
+        "hetero": [
+          {
+            "chain": "A",
+            "resn": "BNZ",
+            "resi": 400
+          }
+        ]
+      },
+      "ligand": {
+        "chain": "A",
+        "resn": "BNZ",
+        "resi": 400,
+        "name": "苯"
+      },
+      "layers": [
+        {
+          "label": "溶菌酶 C 端结构域",
+          "select": {
+            "chain": "A"
+          },
+          "style": "cartoon",
+          "color": "grey",
+          "opacity": 0.7
+        },
+        {
+          "label": "苯",
+          "select": {
+            "chain": "A",
+            "resi": [400]
+          },
+          "style": "stick",
+          "color": "green",
+          "radius": 0.2
+        },
+        {
+          "label": "空腔内壁残基",
+          "select": {
+            "chain": "A",
+            "resi": [84, 87, 88, 91, 99, 103, 111, 118, 121, 153]
+          },
+          "style": "stick",
+          "color": "orange",
+          "radius": 0.12
+        }
+      ],
+      "presets": [
+        {
+          "id": "v111",
+          "label": "苯 C5 … V111 侧链 CG1",
+          "a": {
+            "chain": "A",
+            "resi": 400,
+            "atom": "C5"
+          },
+          "b": {
+            "chain": "A",
+            "resi": 111,
+            "atom": "CG1"
+          },
+          "expect": 3.43
+        },
+        {
+          "id": "l118",
+          "label": "苯 C3 … L118 侧链 CD2",
+          "a": {
+            "chain": "A",
+            "resi": 400,
+            "atom": "C3"
+          },
+          "b": {
+            "chain": "A",
+            "resi": 118,
+            "atom": "CD2"
+          },
+          "expect": 3.48
+        },
+        {
+          "id": "a99",
+          "label": "苯 C5 … A99 Cβ（L99A 突变留下的空位旁）",
+          "a": {
+            "chain": "A",
+            "resi": 400,
+            "atom": "C5"
+          },
+          "b": {
+            "chain": "A",
+            "resi": 99,
+            "atom": "CB"
+          },
+          "expect": 3.58
+        },
+        {
+          "id": "f153",
+          "label": "苯 C3 … F153 苯环 CZ",
+          "a": {
+            "chain": "A",
+            "resi": 400,
+            "atom": "C3"
+          },
+          "b": {
+            "chain": "A",
+            "resi": 153,
+            "atom": "CZ"
+          },
+          "expect": 4.09
+        }
+      ],
+      "labels": {
+        "chain": "A",
+        "resi": [99, 111, 118]
+      }
+    }
+  ]
+}

@@ -1,0 +1,612 @@
+# Regression gallery: the published timelines and flows with their text
+# replaced by neutral characters of the same kind and length (punctuation,
+# digits, spacing and line breaks kept), so each still poses its layout
+# problem. Add a figure here when a new kind of layout ships.
+- kind: flow
+  caption: 样本条目记录：观察数据结果方法步骤；对照实验阶段测量指标变化样本条目记录观
+  value:
+    nodes:
+      - id: n1
+        text: 察数
+        kind: end
+      - id: n2
+        text: 据结、果方法、步骤、对照实
+      - id: n3
+        text: 验阶段测量指标：变化样
+        tone: muted
+      - id: n4
+        text: 本条目
+        tone: muted
+      - id: n5
+        text: 记录观察
+        tone: muted
+      - id: n6
+        text: 数据结果方法
+        tone: accent
+      - id: n7
+        text: 步骤对，照实验阶
+      - id: n8
+        text: 段测量指，标变化样本条
+      - id: n9
+        text: 目记录
+      - id: n10
+        text: 观察数据
+      - id: n11
+        text: 结果方法步
+        kind: end
+    edges:
+      - n1 > n2 > n3 > n4 > n5
+      - n2 > n6 > n7 > n8 > n9 > n10
+      - from: n10
+        to: n11
+        dashed: true
+- kind: timeline
+  caption: 骤对照实验阶段测1860量指标变化样，24 本条目记录观察数
+  value:
+    axis:
+      ticks: none
+    events:
+      - date: 1860
+        show: 1860 据
+        text: |-
+          结果方法步骤对照实（验阶，段测量）
+          指标：变化样本条目记录观察
+      - date: 1884
+        show: 1884 数
+        text: |-
+          据结果方法步：骤对照实验阶段测，量指标变化样本
+          条目记录观，察数据结果方法步
+    spans:
+      - from: 1860
+        to: 1884
+        text: 骤对照实验阶段测量
+    brackets:
+      - from: 1860
+        to: 1884
+        text: 指标变化
+        accent: true
+- kind: timeline
+  caption: 样本条目记录观 500 察数据结果方法：步骤对照 28 实
+  value:
+    axis:
+      even: true
+    events:
+      - date: 1937
+        text: 验阶段测量指标变化样本，条目记录观
+      - date: 1951-01
+        show: 1951 察数
+        text: 据结果方法步骤对照
+      - date: 1953-09
+        text: 实验阶段测量指标变化样本条；目记录观察数据结果方法，步骤对照实验
+      - date: 1956-04
+        text: 阶段测量指标变化样本条目记录（观察数据结果方）
+      - date: 1957
+        text: Rabivq 法步，骤对照实验阶段测
+      - date: 1960-05-09
+        text: 量指标变化样本条 Rabivq 目记录观
+        accent: true
+      - date: 1965
+        text: 察数据结果方法步骤对
+- kind: timeline
+  caption: 照实验阶段测：量指标 21 变，化样本条目记录观察数据结
+  value:
+    axis:
+      from: 1949
+      to: 1971
+      every: 5
+    lanes:
+      - label: 果
+        events:
+          - date: 1949
+            show: 1949 方
+            text: 法步骤对照实验阶
+          - date: 1954
+            show: 1954 段
+            text: 测量指标变化
+          - date: 1970
+            show: 1970 样
+            text: 本条目记
+        spans:
+          - from: 1949
+            to: 1970
+            text: 录观察数
+            accent: true
+      - label: 据结果
+        events:
+          - date: 1951
+            show: 1951 方法
+            text: 步骤对照实验阶段测量指标“变化样本”
+          - date: 1952
+            show: 1952 条目
+            text: 记录观察
+          - date: 1954
+            show: 1954 数
+            text: 据结果方
+      - label: 法步骤
+        events:
+          - date: 1956
+            show: 1956 对 1 照
+            text: 实验阶段测量指标变化样本条
+          - date: 1957
+            show: 1957 目 9 记
+            text: 录观察数据：结果方法步骤
+          - date: 1958
+            show: 1958 对照
+            text: 实验
+- kind: timeline
+  caption: 阶段测量指标变 12 化：样本条目记录观察数据结果
+  value:
+    axis:
+      from: 1964
+      to: 1976
+      every: 2
+    events:
+      - date: 1964
+        text: 方法步骤对照（实验阶段，测量指标变化样本条目）
+      - date: 1968-01
+        show: 1968 记录
+        text: 观察数据：结果方法
+        accent: true
+      - between:
+          - 1968
+          - 1970
+        text: 步骤对照实验阶：段测量指
+      - date: 1970
+        text: 标变化样：本条目记录，观察数据结果，方法步骤
+      - between:
+          - 1970
+          - 1972
+        text: 对照实验：阶段测；量指标变化样本，条目
+      - date: 1972
+        text: |-
+          U2 记录观察（数据结果方法步骤对照）
+          实验阶段测量
+      - date: 1976
+        text: 指标变化样本条目记录
+        accent: true
+    spans:
+      - from: 1964
+        to: 1968
+        text: 4 观，200 察数据结果方法，步骤对照实验
+    brackets:
+      - from: 1964
+        to: 1976
+        text: 12 阶
+- kind: timeline
+  caption: 段测量指标，变化样本条目记
+  value:
+    axis:
+      from: 1986
+      to: 1997
+      every: 1
+    markers:
+      - date: 1989-02
+        text: 录观察数
+    lanes:
+      - label: 据结
+        events:
+          - date: 1986
+            text: 果方：法步骤对照（实验阶段测）
+          - date: 1991
+            text: Eb 31-8959（量指标变）
+          - date: 1995-12
+            text: 化样：本条目
+            accent: true
+      - label: 记录
+        events:
+          - date: 1989-02
+            show: ""
+            text: 观察：数据
+          - date: 1996-03
+            text: 结果：方法步骤
+            accent: true
+      - label: 对照
+        events:
+          - date: 1986
+            text: 实验
+          - date: 1990
+            text: 阶段测量指标变
+          - between:
+              - 1990
+              - 1996
+            text: 化样：本条目记录观察数
+          - date: 1996-03
+            text: 据结：果方法步（骤对 42 照）
+            accent: true
+- kind: timeline
+  caption: 实验阶段：测量指标，变化样本条目记录观察数，据结果
+  value:
+    axis:
+      from: 1960
+      to: 2030
+      every: 10
+    lanes:
+      - label: UVI
+        events:
+          - date: 1983
+            mark: diamond
+            text: 方法步骤对
+          - date: 1984
+            accent: true
+            text: 照实 G 验阶段测
+          - date: 1987
+            mark: square
+            text: NMG 量指
+          - date: 1996
+            mark: square
+            text: 标变化样本条目记录：观察数据结果
+      - label: 方法
+        events:
+          - date: 1989
+            mark: diamond
+            text: 步骤对照实
+          - date: 1999
+            accent: true
+            text: 验阶段
+          - date: 2011
+            mark: square
+            text: 测量指标变化样本
+          - date: 2014
+            mark: square
+            text: 条目记录，观察
+      - label: 数据
+        events:
+          - date: 1965
+            mark: diamond
+            text: 结果方法步
+          - date: 1991
+            mark: ring
+            accent: true
+            text: 骤对照实验阶段测量指标
+          - date: 1998
+            mark: square
+            text: 变化样本（条目记录）
+          - date: 2012
+            mark: ring
+            accent: true
+            text: 观察数据：结果方法步骤对，照实验阶
+          - date: 2026-10-20
+            show: "2026"
+            mark: square
+            text: |-
+              orcvebivefra：
+              段测量指标变化样本条
+    legend:
+      - mark: diamond
+        text: 目记录观察
+      - mark:
+          - dot
+          - ring
+        accent: true
+        text: 数据结果方法步骤对照（实验：阶段）
+      - mark: square
+        text: 测量指标
+- kind: timeline
+  caption: 变化，1999样2007：本条目记录观察数据
+  value:
+    axis:
+      from: 1999
+      to: 2007-12
+      every: 1
+    events:
+      - date: 1999-05-20
+        text: 结果
+      - date: 2000
+        show: 2000 方
+        text: 法步骤对照实 1.6 验阶段
+      - date: 2000
+        show: 2000 测
+        text: |-
+          8000 量指标：变化样本条目记录观察数据结 5 果
+          方法步骤：对照 / 实验阶段测量指 / 标变化样本条
+      - date: 2004-09-30
+        text: 目记录观；察数据结果 26.8%，方法步 270 骤对照
+        accent: true
+      - date: 2004-11-18
+        text: 实验阶段测量：指标变化样本条目记录观察数 88,000 据 139,000 结，果方法步骤对照实
+      - date: 2007-11
+        text: 验阶 48.5 段测量
+    spans:
+      - from: 2000
+        to: 2004-09-30
+        text: 指标变化样本条目记，录观察数 4 据
+- kind: timeline
+  caption: 结果方 CQ-1 法步，2003骤2016：对照实2016验阶段测量指标变化
+  value:
+    axis:
+      from: 2003
+      to: 2016-12
+      ticks:
+        - 2003
+        - 2006
+        - 2009
+        - 2013
+        - 2014
+        - 2016
+    lanes:
+      - label: 样本条目记
+        events:
+          - date: 2003
+            text: 录观察数据结果 CQ-1 方法
+          - date: 2006
+            text: 步骤对
+          - date: 2013
+            text: 照实验阶段测量指标变化样
+          - date: 2014-09-04
+            text: 本条目记录观察数据结果，方法步骤对照 CQ-1 实
+          - date: 2016-06-16
+            text: |-
+              验阶段测量指：标变化样 CQ-Y1 本条 ≥50%
+              目记
+            accent: true
+        spans:
+          - from: 2003
+            to: 2009
+            text: 录观察，数据结果方法步骤
+      - label: 对照实验阶段
+        events:
+          - date: 2009-07
+            text: 测量 Zrqnerk
+          - date: 2014-07
+            text: 指标变化样本条目记录观
+          - date: 2014-12-22
+            text: 察数据结果
+          - date: 2016-08-05
+            text: |-
+              方法步骤对照：CQ-Y1 ≥5%
+              实验阶段测量
+            accent: true
+- kind: flow
+  caption: PNE-G 指标变化样本：条目记录观察，数据结果
+  value:
+    over: 方法步骤对照实：验阶段测
+    nodes:
+      - id: n1
+        text: 量指
+        tag: 标变化样
+      - id: n2
+        text: 本条目 G 记录
+      - id: n3
+        text: 观察
+      - id: n4
+        text: |-
+          数据结果方
+          法步 PNE 骤对
+      - id: n5
+        text: |-
+          照实验阶段测量
+          9 指 11 标
+        tone: accent
+      - id: n6
+        text: 变化
+      - id: n7
+        text: 样本条目
+        tag: 记录观察
+    edges:
+      - n1 > n2 > n3 > n4 > n5 > n6 > n7
+    note: 数据结果方法，步骤对照
+- kind: timeline
+  caption: 2026实验阶段测量指标变化样本条目，记录观察数据结果方法步骤
+  value:
+    axis:
+      from: 2026-04-01
+      to: 2026-10-31
+    events:
+      - date: 2026-04-01
+        accent: true
+        text: |-
+          besbetyvceba
+          对照实验阶段（测量指标）
+      - date: 2026-05-01
+        accent: true
+        text: |-
+          ircqrtrfgenag
+          CEBGNP，变化样本条目记录观（察数据结）
+      - date: 2026-05-15
+        text: |-
+          onkqebfgng
+          果方法步骤对照实验（阶段测）
+      - date: 2026-06-12
+        text: |-
+          量指标变化，样本条目记（录观察数 8 据 17 结）
+          果 PQ3 方法（步骤对照）
+      - date: 2026-08-05
+        text: |-
+          bircberkgba
+          实验阶段测量指（标变化）
+      - date: 2026-08-13
+        accent: true
+        text: |-
+          voreqbzvqr
+          样本条（目记录观）
+      - date: 2026-10-20
+        accent: true
+        text: |-
+          orcvebivefra
+          察数据结（果方法步）
+    legend:
+      - accent: true
+        text: 骤对照实验阶段测
+      - text: 量指标变化样本
+- kind: timeline
+  caption: 2000条2019：目记录观察数，据结果方法步骤对照实；验阶段2015测7量22指
+  value:
+    axis:
+      from: 2000
+      to: 2020
+      every: 5
+    markers:
+      - date: 2015-07-22
+        below: 标变化
+        accent: true
+    lanes:
+      - label: 样本
+        events:
+          - date: 2001
+            text: |-
+              条目
+              （记录观
+              察数据结）
+          - date: 2003
+            text: 果方
+          - date: 2010
+            text: 法步骤对
+          - date: 2011
+            text: 照实
+          - date: 2012
+            text: 验阶
+          - date: 2012
+            text: 段测
+      - label: 量指
+        events:
+          - date: 2011
+            mark: ring
+            text: 标变化样（本条）
+          - date: 2014
+            mark: ring
+            text: 目记录观（察数）
+          - date: 2019
+            mark: ring
+            text: 据结果方（法步骤对，照实验阶）
+- kind: flow
+  caption: 段测量指：标变化样本条、目记录观察数据结、果方法步骤对照，实验阶段测
+  value:
+    nodes:
+      - id: n1
+        tag: 量指标变
+        text: |-
+          2017 化 样本 VPU
+          条目记录观察数据结
+      - id: n2
+        tag: 果方法步
+        text: |-
+          2018 骤 对照实 18N 验
+          阶段测量指标变化样本条
+          目记录观
+      - id: n3
+        tag: 察数据结
+        text: |-
+          2018 果 2020 方
+          法步骤对照
+          实验阶段测量指
+        tone: accent
+      - id: n4
+        text: |-
+          标变
+          化样本条目记录观察数
+    edges:
+      - from: n1
+        to: n4
+        text: 据结果方法步骤对照
+      - from: n2
+        to: n4
+        text: 实验阶段测
+      - from: n3
+        to: n4
+        text: 量指标变化样本条
+- kind: flow
+  caption: 目记录观察数据结果方法：步骤对 NGC 照实，验阶段测量，指标变化样本条目记，录观察数据结果方法步
+  value:
+    direction: down
+    nodes:
+      - id: n1
+        text: 骤对照实，验阶段测量
+        kind: end
+      - id: n2
+        text: 指标变化样 NGC 本条目 1 zZ 记录 VP50
+      - id: n3
+        text: VP50 观察数据 → 结果方法步骤对照实验 NGC 阶段；测量指标变化样本条目记录
+        kind: note
+      - id: n4
+        text: 观察数据结果，方法步骤
+      - id: n5
+        text: 对照实验阶段测 1 → 量指标变化样；本条目记录观察数据结果方法步骤对照实验阶段
+        kind: note
+      - id: n6
+        text: 测量指标 YP-ZF 变化样本条目记录观
+      - id: n7
+        text: 察数 ≠ 据结果方法步骤对照；实验阶段测量指标变化样
+        kind: note
+      - id: n8
+        tag: 本：条目记录观察数据
+        text: |-
+          结果 VP50 3 aZ（NGC 15 μZ）；
+          方法 RP50 600 aZ，步 200 骤
+        tone: muted
+      - id: n9
+        text: NGC 1 zZ：VP50 对照 90 aZ，实验 30 阶
+        tone: muted
+      - id: n10
+        text: 段测量 8.5，指标变化；样本条目：记录观察数据结
+        tone: muted
+      - id: n11
+        text: |-
+          果方法步骤对 →
+          照实验 1.5，阶段 RP50 测 100 aZ
+        tone: accent
+    edges:
+      - n1 > n2 > n4
+      - from: n4
+        to: n6
+        dashed: true
+      - from: n2
+        to: n3
+        side: true
+      - from: n4
+        to: n5
+        side: true
+      - from: n6
+        to: n7
+        side: true
+      - n8 > n9 > n10 > n11
+    note: 量指标，变化样
+- kind: flow
+  caption: uvg 本条目记录观察数据结果方法步骤对照实
+  value:
+    over: 验阶段测量指标
+    nodes:
+      - id: n1
+        text: 变化样本条 uvg 目记
+        kind: end
+      - id: n2
+        tag: 1 录观察数据
+        text: 结果方法步骤；对照实
+      - id: n3
+        tag: 2 验阶段测量
+        text: 指标变化样；本 FCE、VGP 条 AZE 目记录观察数
+      - id: n4
+        tag: 3 据结果方法步
+        text: 骤 YR 对 YYR；照实验阶段、测量指标、变化样本
+      - id: n5
+        tag: 4 条目 FNE
+        text: 记录观察数据结果方法步，骤 FNE 对照实验
+      - id: n6
+        text: 阶段测量指标变化样
+        kind: end
+      - id: n7
+        text: 本条：目记录、观察数据结、果方法步骤对照
+        tone: muted
+      - id: n8
+        text: 实验：阶段测量、指标变化样本条
+        tone: muted
+      - id: n9
+        text: 目记录观察数
+        kind: note
+      - id: n10
+        text: FNE 据结：果方法步骤
+        tone: accent
+    edges:
+      - n1 > n2 > n3 > n4 > n5 > n6
+      - from: n2
+        to: n7
+        side: true
+      - from: n3
+        to: n8
+        side: true
+      - from: n4
+        to: n9
+        side: true
+      - from: n5
+        to: n10
+        side: true
+    note: 对照：实验 1030 阶段测量指标，30 μZ 变化样 uvg 本 19%，5 μZ 条 1.4%

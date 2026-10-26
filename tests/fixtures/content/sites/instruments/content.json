@@ -1,0 +1,1121 @@
+{
+  "parts": [
+    {
+      "title": "交互",
+      "chapters": ["instruments"]
+    }
+  ],
+  "chapters": [
+    {
+      "id": "instruments",
+      "title": "观察工具",
+      "number": 1,
+      "short": "工具",
+      "minutes": 5,
+      "lead": "中性样本覆盖共享交互。",
+      "refs": [1],
+      "blocks": [
+        {
+          "type": "prediction",
+          "kind": "atoms",
+          "question": "点选氧原子。",
+          "molecule": {
+            "name": "乙醇",
+            "smiles": "CCO",
+            "atoms": 3
+          },
+          "answer": [2],
+          "explanation": "末端是氧。"
+        },
+        {
+          "type": "matrix",
+          "id": "grid",
+          "matrix": {
+            "rows": [
+              {
+                "id": "a",
+                "label": "A"
+              }
+            ],
+            "columns": [
+              {
+                "id": "x",
+                "label": "X"
+              }
+            ],
+            "outcomes": [
+              {
+                "id": "yes",
+                "label": "有",
+                "tone": "success"
+              },
+              {
+                "id": "no",
+                "label": "无",
+                "tone": "danger"
+              }
+            ],
+            "choices": ["yes", "no"],
+            "required": ["a:x"],
+            "cells": [
+              {
+                "row": "a",
+                "column": "x",
+                "outcome": "yes",
+                "evidence": [
+                  {
+                    "source": 1,
+                    "locator": "测试表"
+                  }
+                ]
+              }
+            ]
+          },
+          "question": "{row} 对 {column}？",
+          "label": "观察矩阵",
+          "caption": "合成测试数据",
+          "rowHeader": "样品"
+        },
+        {
+          "type": "lab",
+          "model": "plate-capacity",
+          "label": "孔板容量",
+          "defaults": {
+            "capacity": 96
+          }
+        },
+        {
+          "type": "tabs",
+          "label": "比较",
+          "items": [
+            {
+              "id": "a",
+              "label": "A",
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "text": "样品 A"
+                }
+              ]
+            },
+            {
+              "id": "b",
+              "label": "B",
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "text": "样品 B"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "data-table",
+          "table": {
+            "columns": [
+              {
+                "key": "value",
+                "label": "读数",
+                "unit": "nM",
+                "scale": "log"
+              }
+            ],
+            "rows": [
+              {
+                "id": "a",
+                "label": "A",
+                "name": "样品 A",
+                "values": {
+                  "value": {
+                    "raw": "12"
+                  }
+                }
+              },
+              {
+                "id": "b",
+                "label": "B",
+                "name": "样品 B",
+                "values": {
+                  "value": {
+                    "raw": "24"
+                  }
+                }
+              }
+            ]
+          },
+          "title": "样本读数",
+          "label": "样本数据"
+        },
+        {
+          "type": "figure",
+          "src": "/sites/instruments/static/sample.svg",
+          "alt": "合成线段",
+          "caption": "合成图示"
+        },
+        {
+          "type": "spectrum",
+          "molecule": {
+            "name": "乙醇",
+            "smiles": "CCO"
+          },
+          "peaks": [
+            {
+              "id": "a",
+              "ppm": 1.2,
+              "hydrogens": 3,
+              "multiplicity": "t",
+              "atoms": [0],
+              "assignment": "测试甲基信号"
+            }
+          ],
+          "caption": "演示峰表"
+        },
+        {
+          "type": "structure-lab",
+          "set": {
+            "fetchedOn": "2026-10-16",
+            "entries": [
+              {
+                "id": "demo",
+                "label": "合成坐标",
+                "url": "/sites/instruments/static/sample.pdb",
+                "source": {
+                  "pdb": "1ABC",
+                  "title": "合成测试坐标",
+                  "method": "合成数据",
+                  "note": "仅验证交互，不表示实验结构。"
+                },
+                "subset": {
+                  "residues": {
+                    "A": [1, 2]
+                  },
+                  "hetero": []
+                },
+                "layers": [
+                  {
+                    "select": {
+                      "chain": "A"
+                    },
+                    "style": "sphere",
+                    "color": "grey"
+                  }
+                ],
+                "presets": []
+              }
+            ]
+          }
+        },
+        {
+          "type": "scene",
+          "label": "步骤",
+          "frames": [
+            {
+              "title": "开始",
+              "text": "初始状态",
+              "image": {
+                "src": "/sites/instruments/static/sample.svg",
+                "alt": "线段"
+              }
+            },
+            {
+              "title": "完成",
+              "text": "观察完成"
+            }
+          ]
+        },
+        {
+          "type": "lab",
+          "model": "first-order-elimination",
+          "label": "预设消除模型",
+          "data": "pkSamples",
+          "defaults": {
+            "selected": 1
+          },
+          "reset": true
+        },
+        {
+          "type": "lab",
+          "model": "assay-panel-ratio",
+          "label": "多终点比较",
+          "data": "panelSamples",
+          "reset": true
+        },
+        {
+          "type": "lab",
+          "model": "route-ledger",
+          "label": "路线核算",
+          "data": "routeSample"
+        },
+        {
+          "type": "lab",
+          "model": "atp-competition",
+          "label": "竞争参数",
+          "data": "atpSample",
+          "reset": true
+        },
+        {
+          "type": "lab",
+          "model": "atp-selectivity",
+          "label": "竞争浓度",
+          "data": "competitionSample"
+        },
+        {
+          "type": "data-table",
+          "label": "配对数据",
+          "title": "中性相关数据",
+          "table": "correlationSample",
+          "defaultX": "alpha",
+          "defaultY": "beta"
+        },
+        {
+          "type": "lab",
+          "model": "assay-correlation",
+          "label": "相关性读数",
+          "data": "correlationSample"
+        },
+        {
+          "type": "lab",
+          "model": "ternary-equilibrium",
+          "data": "overlaySample",
+          "label": "三体实测叠加",
+          "reset": true
+        },
+        {
+          "type": "lab",
+          "model": "degradation-recovery",
+          "data": "overlaySample",
+          "label": "时间实测叠加",
+          "reset": true
+        },
+        {
+          "type": "lab",
+          "model": "saturated-chair",
+          "data": "chairSample",
+          "label": "两态构象参考",
+          "reset": true,
+          "presets": [
+            {
+              "label": "参考零差",
+              "values": {
+                "dg": 0
+              }
+            },
+            {
+              "label": "参考下限",
+              "values": {
+                "dg": 20
+              }
+            }
+          ]
+        },
+        {
+          "type": "lab",
+          "model": "radical-selectivity",
+          "data": "radicalSample",
+          "label": "逐氢因子样本",
+          "reveal": {
+            "label": "显示参考"
+          }
+        },
+        {
+          "type": "lab",
+          "model": "radical-distribution",
+          "data": "radicalSample",
+          "label": "提供因子样本",
+          "reveal": {
+            "label": "显示预测"
+          }
+        },
+        {
+          "type": "lab",
+          "model": "enolates-pka-dmso",
+          "data": "pkaSample",
+          "label": "酸碱标尺样本 dmso",
+          "reset": true
+        },
+        {
+          "type": "lab",
+          "model": "enolates-pka-water",
+          "data": "pkaSample",
+          "label": "酸碱标尺样本 water",
+          "reset": true
+        },
+        {
+          "type": "lab",
+          "model": "strategy-hammett-sigma",
+          "data": "hammettSample",
+          "label": "取代效应样本 sigma",
+          "reset": true,
+          "reveal": {
+            "label": "显示计算"
+          }
+        },
+        {
+          "type": "lab",
+          "model": "strategy-hammett-rate",
+          "data": "hammettSample",
+          "label": "取代效应样本 rate",
+          "reset": true
+        }
+      ]
+    }
+  ],
+  "quiz": [],
+  "sources": [
+    {
+      "id": 1,
+      "title": "合成测试数据",
+      "kind": "测试",
+      "note": "仅验证交互。"
+    }
+  ],
+  "data": {
+    "pkSamples": {
+      "presets": [
+        {
+          "name": "样品 A",
+          "halfLife": 0.05,
+          "label": "短时样本",
+          "source": "A"
+        },
+        {
+          "name": "样品 B",
+          "halfLife": 8,
+          "label": "中时样本",
+          "source": "B"
+        },
+        {
+          "name": "样品 C",
+          "halfLife": 48,
+          "label": "长时样本",
+          "source": "C"
+        }
+      ]
+    },
+    "panelSamples": {
+      "caption": "中性测量样本",
+      "endpoints": [
+        {
+          "value": "signal",
+          "label": "信号测定",
+          "columns": ["样品", "体系 A", "体系 B", "体系 C", "B / A"]
+        },
+        {
+          "value": "growth",
+          "label": "生长测定",
+          "columns": ["样品", "条件 A", "条件 B", "条件 C", "B / A"]
+        }
+      ],
+      "rows": [
+        {
+          "name": "样品 X",
+          "signal": [4, 12, 8],
+          "growth": [2, 10, 6]
+        },
+        {
+          "name": "样品 Y",
+          "signal": [8, 16, 4],
+          "growth": [10, 20, 5]
+        }
+      ],
+      "ratio": {
+        "numerator": 1,
+        "denominator": 0
+      }
+    },
+    "routeSample": {
+      "inputLabel": "待测步骤收率（%）",
+      "routes": [
+        {
+          "title": "样本路线甲：从起始材料到最终分离产物的连续步骤与累计收率核算",
+          "claimed": 0.4,
+          "claimedText": "40%",
+          "steps": [
+            {
+              "name": "起始转化",
+              "note": "样本记录一",
+              "yield": 0.8
+            },
+            {
+              "name": "待测转化",
+              "note": "待测记录",
+              "yield": 1,
+              "assumed": true
+            },
+            {
+              "name": "最终分离",
+              "note": "样本记录二",
+              "yield": 0.5
+            }
+          ]
+        }
+      ],
+      "mass": {
+        "title": "样本质量核算：SampleProductWithAnUnbrokenIdentifierForReadoutWrapping",
+        "claimed": 0.5,
+        "startFormula": "C2H6",
+        "productFormula": "C2H6O",
+        "startGrams": 3.007,
+        "startMol": 0.1,
+        "productGrams": 2.30345
+      }
+    },
+    "atpSample": {
+      "variants": ["Reference", "Variant A", "Variant B"],
+      "inhibitors": ["compound-x", "compound-y"],
+      "km": {
+        "Reference": {
+          "value": 10,
+          "sd": 0.1
+        },
+        "Variant A": {
+          "value": 20,
+          "sd": 0.1
+        },
+        "Variant B": {
+          "value": 5,
+          "sd": 0.1
+        }
+      },
+      "kd": {
+        "compound-x": {
+          "Reference": {
+            "value": 4,
+            "sd": 0.2
+          },
+          "Variant A": {
+            "value": 2,
+            "sd": 0.2
+          },
+          "Variant B": {
+            "value": 6,
+            "sd": 0.2
+          }
+        },
+        "compound-y": {
+          "Reference": {
+            "value": 10,
+            "sd": 0.2
+          },
+          "Variant A": {
+            "value": 4,
+            "sd": 0.2
+          },
+          "Variant B": {
+            "value": 1,
+            "sd": 0.2
+          }
+        }
+      },
+      "atpSteps": [0, 10, 1000],
+      "inhibitorLabels": {
+        "compound-x": "样本 X",
+        "compound-y": "样本 Y"
+      },
+      "defaultStep": 1,
+      "roles": {
+        "reference": "Reference",
+        "numerator": "Variant B",
+        "denominator": "Variant A"
+      },
+      "comparisonAtp": [0, 100],
+      "parameterCaption": "中性结合与竞争参数",
+      "parameterColumns": [
+        "样本",
+        "Kd（nM）",
+        "Km（µM）",
+        "Ki,app（nM）",
+        "参照 ÷ 本行"
+      ],
+      "comparisonCaption": "中性浓度对照",
+      "comparisonColumns": ["ATP", "Variant A", "Variant B", "比值"],
+      "referenceWarning": "参照与比较项的比值小于一。"
+    },
+    "competitionSample": {
+      "variants": [
+        {
+          "name": "Reference",
+          "kd": 4,
+          "km": 10
+        },
+        {
+          "name": "Variant A",
+          "kd": 2,
+          "km": 20
+        },
+        {
+          "name": "Variant B",
+          "kd": 6,
+          "km": 5
+        }
+      ],
+      "comparison": {
+        "numerator": "Variant B",
+        "denominator": "Variant A"
+      },
+      "caption": "中性竞争样本",
+      "columns": ["样本", "Kd (nM)", "Km (µM)", "[ATP]/Km", "表观 Ki (nM)"]
+    },
+    "correlationSample": {
+      "columns": [
+        {
+          "key": "alpha",
+          "label": "测量 甲",
+          "scale": "linear"
+        },
+        {
+          "key": "beta",
+          "label": "测量 乙",
+          "scale": "linear"
+        },
+        {
+          "key": "gamma",
+          "label": "测量 丙",
+          "scale": "linear"
+        },
+        {
+          "key": "outside",
+          "label": "测量 丁",
+          "scale": "linear"
+        }
+      ],
+      "rows": [
+        {
+          "id": "1",
+          "label": "样本 1",
+          "values": {
+            "alpha": {
+              "raw": "1"
+            },
+            "beta": {
+              "raw": "1"
+            },
+            "gamma": {
+              "raw": "1"
+            },
+            "outside": {
+              "raw": "1"
+            }
+          }
+        },
+        {
+          "id": "2",
+          "label": "样本 2",
+          "values": {
+            "alpha": {
+              "raw": "2"
+            },
+            "beta": {
+              "raw": "2"
+            },
+            "gamma": {
+              "raw": "2"
+            },
+            "outside": {
+              "raw": "2"
+            }
+          }
+        },
+        {
+          "id": "3",
+          "label": "样本 3",
+          "values": {
+            "alpha": {
+              "raw": "3"
+            },
+            "beta": {
+              "raw": "3"
+            },
+            "gamma": {
+              "raw": "3"
+            },
+            "outside": {
+              "raw": "3"
+            }
+          }
+        },
+        {
+          "id": "4",
+          "label": "样本 4",
+          "values": {
+            "alpha": {
+              "raw": "4"
+            },
+            "beta": {
+              "raw": "0"
+            },
+            "outside": {
+              "raw": "4"
+            }
+          }
+        },
+        {
+          "id": "5",
+          "label": "样本 5",
+          "values": {
+            "alpha": {
+              "raw": "5"
+            },
+            "beta": {
+              "raw": "5"
+            },
+            "gamma": {
+              "raw": ">5"
+            },
+            "outside": {
+              "raw": "5"
+            }
+          }
+        },
+        {
+          "id": "6",
+          "label": "样本 6",
+          "values": {
+            "alpha": {
+              "raw": "6"
+            },
+            "beta": {
+              "raw": "6"
+            },
+            "gamma": {
+              "raw": "6"
+            },
+            "outside": {
+              "raw": "6",
+              "alternate": {
+                "raw": "0",
+                "where": "样本原记录"
+              }
+            }
+          }
+        },
+        {
+          "id": "7",
+          "label": "样本 7",
+          "values": {
+            "alpha": {
+              "raw": "7"
+            },
+            "beta": {
+              "raw": "7"
+            },
+            "gamma": {
+              "raw": "7",
+              "alternate": {
+                "raw": "<8",
+                "where": "样本原记录"
+              }
+            },
+            "outside": {
+              "raw": "7"
+            }
+          }
+        }
+      ],
+      "alternates": {
+        "source": "原记录",
+        "alternate": "记录甲",
+        "listed": "记录乙",
+        "legend": "不同记录的值",
+        "plot": "listed"
+      },
+      "correlation": {
+        "defaultX": "alpha",
+        "defaultY": "beta",
+        "cohort": {
+          "keys": ["alpha", "beta", "gamma"],
+          "description": "甲、乙、丙均有确切值"
+        }
+      }
+    },
+    "overlaySample": {
+      "signalSample": {
+        "dose": [1, 10, 100],
+        "signal": [0, 8, 4]
+      },
+      "decreaseSample": {
+        "dose": [0, 1, 10, 100],
+        "level": [0, 80, 40, 90]
+      },
+      "timeSample": {
+        "hours": [0, 2, 4],
+        "level": [100, 50, 0]
+      },
+      "washoutSample": {
+        "hours": [1, 3],
+        "level": [25, 101],
+        "pretreatHours": 2,
+        "start": 0
+      },
+      "overlays": {
+        "concentration": {
+          "label": "叠加浓度实测",
+          "choices": [
+            {
+              "value": "signal",
+              "label": "信号样本",
+              "series": [
+                {
+                  "kind": "signal-peak",
+                  "dataset": "signalSample",
+                  "name": "实测信号归一值"
+                }
+              ]
+            },
+            {
+              "value": "decrease",
+              "label": "蛋白降低样本",
+              "series": [
+                {
+                  "kind": "protein-decrease-peak",
+                  "dataset": "decreaseSample",
+                  "name": "实测降低量归一值"
+                }
+              ]
+            }
+          ]
+        },
+        "time": {
+          "label": "叠加时间实测",
+          "choices": [
+            {
+              "value": "time-and-washout",
+              "label": "连续与洗脱样本",
+              "series": [
+                {
+                  "kind": "protein-time",
+                  "dataset": "timeSample",
+                  "name": "实测连续时间"
+                },
+                {
+                  "kind": "protein-washout",
+                  "dataset": "washoutSample",
+                  "name": "实测洗脱时间"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "chairSample": {
+      "rows": [
+        {
+          "substituent": "样本甲",
+          "deltaG": 0,
+          "k": 1,
+          "percent": 50
+        },
+        {
+          "substituent": "样本乙",
+          "deltaG": 5,
+          "k": 7.5,
+          "percent": 88.3
+        },
+        {
+          "substituent": "样本丙",
+          "deltaG": 20,
+          "k": 1000,
+          "percent": 99,
+          "lowerBound": true
+        }
+      ],
+      "referenceTemperature": 298.15,
+      "referenceLabel": "样本参考记录",
+      "defaultDeltaG": 5
+    },
+    "radicalSample": {
+      "alkanes": [
+        {
+          "id": "sample-a",
+          "name": "样本甲",
+          "counts": {
+            "primary": 4,
+            "secondary": 2
+          },
+          "products": {
+            "primary": "产物甲一",
+            "secondary": "产物甲二"
+          }
+        },
+        {
+          "id": "sample-b",
+          "name": "样本乙",
+          "counts": {
+            "primary": 6,
+            "tertiary": 2
+          },
+          "products": {
+            "primary": "产物乙一",
+            "tertiary": "产物乙二"
+          }
+        },
+        {
+          "id": "sample-c",
+          "name": "样本丙",
+          "counts": {
+            "primary": 3,
+            "secondary": 2,
+            "tertiary": 1
+          },
+          "products": {
+            "primary": "产物丙一",
+            "secondary": "产物丙二",
+            "tertiary": "产物丙三"
+          }
+        }
+      ],
+      "measured": [
+        {
+          "alkane": "sample-a",
+          "halogen": "X",
+          "shares": {
+            "primary": {
+              "op": "=",
+              "value": 40
+            },
+            "secondary": {
+              "op": "=",
+              "value": 60
+            }
+          },
+          "page": "记录一",
+          "condition": "样本条件甲",
+          "note": "确切比例样本。"
+        },
+        {
+          "alkane": "sample-b",
+          "halogen": "X",
+          "shares": {
+            "primary": {
+              "op": "=",
+              "value": 60
+            },
+            "tertiary": {
+              "op": "=",
+              "value": 40
+            }
+          },
+          "page": "记录二",
+          "condition": "样本条件甲",
+          "note": "另一确切比例样本。"
+        },
+        {
+          "alkane": "sample-b",
+          "halogen": "Y",
+          "shares": {
+            "primary": {
+              "op": "<",
+              "value": 2
+            },
+            "tertiary": {
+              "op": ">",
+              "value": 98
+            }
+          },
+          "page": "记录三",
+          "condition": "样本条件乙",
+          "note": "仅有上下限的样本。"
+        }
+      ],
+      "halogens": [
+        {
+          "id": "X",
+          "label": "自由基甲",
+          "offered": {
+            "secondary": {
+              "kind": "measured",
+              "alkane": "sample-a"
+            },
+            "tertiary": {
+              "kind": "measured",
+              "alkane": "sample-b"
+            }
+          },
+          "source": "样本两组确切比例"
+        },
+        {
+          "id": "Y",
+          "label": "自由基乙",
+          "offered": {
+            "secondary": {
+              "kind": "printed",
+              "value": 200
+            },
+            "tertiary": {
+              "kind": "printed",
+              "value": 900
+            }
+          },
+          "source": "样本印刷因子"
+        }
+      ],
+      "defaults": {
+        "estimateAlkane": "sample-b",
+        "offeredAlkane": "sample-c",
+        "halogen": "X"
+      },
+      "sourceLabel": "示例记录"
+    },
+    "pkaSample": {
+      "donors": [
+        {
+          "id": "donor-a",
+          "label": "供体甲",
+          "name": "样本供体甲",
+          "values": {
+            "dmso": [
+              {
+                "value": 10,
+                "source": "记录甲"
+              }
+            ],
+            "water": [
+              {
+                "value": 18,
+                "source": "记录乙"
+              }
+            ]
+          }
+        },
+        {
+          "id": "donor-b",
+          "label": "供体乙",
+          "name": "样本供体乙",
+          "values": {
+            "dmso": [
+              {
+                "value": 11,
+                "source": "记录丙"
+              },
+              {
+                "value": 12,
+                "source": "记录丁"
+              }
+            ]
+          }
+        },
+        {
+          "id": "donor-c",
+          "label": "供体丙",
+          "name": "样本供体丙",
+          "values": {
+            "dmso": [
+              {
+                "value": 5,
+                "source": "记录戊"
+              }
+            ],
+            "water": [
+              {
+                "value": 7,
+                "source": "记录己"
+              }
+            ]
+          }
+        }
+      ],
+      "bases": [
+        {
+          "id": "base-a",
+          "label": "碱甲",
+          "acid": "共轭酸甲",
+          "values": {
+            "dmso": [
+              {
+                "value": 14,
+                "source": "记录庚"
+              }
+            ],
+            "water": [
+              {
+                "value": 13,
+                "source": "记录辛"
+              }
+            ]
+          }
+        },
+        {
+          "id": "base-b",
+          "label": "碱乙",
+          "acid": "共轭酸乙",
+          "values": {
+            "dmso": [
+              {
+                "value": 12,
+                "source": "记录壬"
+              },
+              {
+                "value": 13,
+                "source": "记录癸"
+              }
+            ],
+            "water": [
+              {
+                "value": 20,
+                "source": "记录子"
+              },
+              {
+                "value": 22,
+                "source": "记录丑"
+              }
+            ]
+          }
+        }
+      ],
+      "fetchedFrom": ["中性样本记录"],
+      "defaults": {
+        "donorId": "donor-a",
+        "baseId": "base-a"
+      }
+    },
+    "hammettSample": {
+      "referencePka": 5,
+      "substituents": [
+        {
+          "id": "group-a",
+          "name": "基团甲",
+          "pkaPara": 4.7,
+          "pkaMeta": 5.1,
+          "sigmaPara": 0.4,
+          "sigmaMeta": -0.2
+        },
+        {
+          "id": "group-b",
+          "name": "基团乙",
+          "pkaPara": 5.2,
+          "pkaMeta": 4.6,
+          "sigmaPara": -0.2,
+          "sigmaMeta": 0.4
+        },
+        {
+          "id": "group-c",
+          "name": "基团丙",
+          "pkaPara": 5,
+          "pkaMeta": 5,
+          "sigmaPara": 0,
+          "sigmaMeta": 0
+        }
+      ],
+      "reactions": [
+        {
+          "id": "reaction-a",
+          "name": "反应甲",
+          "rho": 2
+        },
+        {
+          "id": "reaction-b",
+          "name": "反应乙",
+          "rho": -3
+        }
+      ],
+      "defaults": {
+        "subId": "group-a",
+        "reaction": "reaction-a",
+        "sigmaPosition": "para",
+        "ratePosition": "meta"
+      }
+    }
+  }
+}

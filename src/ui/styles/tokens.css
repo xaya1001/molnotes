@@ -1,0 +1,66 @@
+:root {
+  color-scheme: light;
+
+  --font-serif:
+    "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", serif;
+  --font-sans:
+    system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --font-mono:
+    ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1.0625rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 1.875rem;
+  --text-3xl: clamp(2rem, 1.4rem + 2.4vw, 2.75rem);
+  --leading-body: 1.85;
+  --leading-tight: 1.35;
+
+  --paper: #faf8f3;
+  --paper-deep: #f3efe6;
+  --surface: #fffdf9;
+  --ink: #1c1e22;
+  --ink-soft: #464b53;
+  --ink-muted: #676c74;
+  --rule: #e4ded2;
+  --rule-strong: #c9c1b2;
+  --scrollbar-thumb: #cbc3b4;
+  --scrollbar-thumb-hover: #a39b8c;
+
+  --accent: #1d4d80;
+  --accent-strong: #143a63;
+  --accent-soft: #e8eef6;
+  --evidence: #8a5412;
+  --page-highlight: rgb(230 180 35 / 0.25);
+  --evidence-soft: #f6eddf;
+  --danger: #a3322a;
+  --danger-soft: #f8e8e5;
+  --success: #2d6a3f;
+  --success-soft: #e6f1e8;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4.5rem;
+
+  --radius-sm: 3px;
+  --radius: 6px;
+  --shadow-float: 0 12px 40px rgb(28 30 34 / 0.14);
+
+  --measure: 40em;
+  --wide: 72rem;
+  --gutter: clamp(1rem, 4vw, 2.5rem);
+  --sidebar-width: 17.5rem;
+  --topbar-height: 3.25rem;
+
+  --focus-ring: 2px solid var(--accent);
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --duration: 160ms;
+}

@@ -1,0 +1,32 @@
+{
+  "collection": "Sample lessons for tests",
+  "article": {
+    "tag": "div",
+    "class": "article-body"
+  },
+  "files": [
+    {
+      "file": "chapter-1.html",
+      "chapter": 1,
+      "source_url": "https://example.org/lesson-1",
+      "downloaded": "2026-10-01",
+      "bytes": 1308,
+      "sha256": "2c86eb4046380adea2afa1a1431fed6a1d4898499634eb8608b8437974e28b65"
+    },
+    {
+      "file": "figure-1.png",
+      "chapter": 1,
+      "source_url": "https://example.org/uploads/sample/figure-1.png",
+      "downloaded": "2026-10-01",
+      "bytes": 704,
+      "sha256": "7ec1b36fe1efc76af15701c1955426c1bbcfa2e1c1ac550d1d78ce9f17e85513"
+    },
+    {
+      "file": "manual.pdf",
+      "source_url": "https://example.org/downloads/manual.pdf",
+      "downloaded": "2026-10-01",
+      "bytes": 5146,
+      "sha256": "9526630bf9df99b04f18fbe7db3f8e1911fdfd2734affbba3ef40bfba7c18ea9"
+    }
+  ]
+}

@@ -1,0 +1,459 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-padding-top: calc(var(--topbar-height) + var(--space-4));
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+* {
+  scrollbar-width: thin;
+}
+
+@supports not (scrollbar-color: auto) {
+  ::-webkit-scrollbar {
+    width: 0.625rem;
+    height: 0.625rem;
+  }
+
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    border: 0.1875rem solid transparent;
+    border-radius: 999px;
+    background: var(--scrollbar-thumb) padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
+  }
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--paper);
+  color: var(--ink);
+  font: var(--text-base) / var(--leading-body) var(--font-sans);
+  font-synthesis: weight;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+img,
+svg,
+video,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+img,
+video {
+  height: auto;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+a:hover {
+  color: var(--accent-strong);
+}
+
+:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.92em;
+}
+
+/* Page widths */
+
+.page-reading {
+  max-width: var(--measure);
+  margin-inline: auto;
+}
+
+.page-wide {
+  max-width: var(--wide);
+  margin-inline: auto;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-serif);
+}
+
+/* Prose */
+
+.prose > * + * {
+  margin-top: var(--space-4);
+}
+
+.prose h2,
+.prose h3,
+.prose h4 {
+  margin: var(--space-7) 0 0;
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  letter-spacing: 0.01em;
+}
+
+.prose h2 {
+  font-size: var(--text-xl);
+}
+
+.prose h3 {
+  margin-top: var(--space-6);
+  font-size: var(--text-lg);
+}
+
+.prose h4 {
+  margin-top: var(--space-5);
+  font-size: var(--text-base);
+}
+
+.prose h2 + *,
+.prose h3 + *,
+.prose h4 + * {
+  margin-top: var(--space-3);
+}
+
+.prose p,
+.prose ul,
+.prose ol {
+  margin-bottom: 0;
+  /* Unbroken runs such as peptide sequences wrap instead of widening the page. */
+  overflow-wrap: anywhere;
+}
+
+.prose ul,
+.prose ol {
+  padding-left: 1.4em;
+}
+
+.prose li + li {
+  margin-top: var(--space-1);
+}
+
+.prose .katex {
+  font-size: 1.1em;
+}
+
+.prose strong {
+  font-weight: 600;
+}
+
+.prose blockquote {
+  margin-inline: 0;
+  padding-left: var(--space-4);
+  border-left: 2px solid var(--rule-strong);
+  color: var(--ink-soft);
+}
+
+.prose code {
+  padding: 0.1em 0.3em;
+  border-radius: var(--radius-sm);
+  background: var(--paper-deep);
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+}
+
+.prose pre {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--paper-deep);
+  line-height: 1.55;
+}
+
+.prose pre code {
+  padding: 0;
+  background: none;
+}
+
+.prose hr {
+  margin-block: var(--space-7);
+  border: 0;
+  border-top: 1px solid var(--rule);
+}
+
+/* Tables: three-line style inside their own scroll container */
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.prose table,
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  border-top: 1.5px solid var(--ink);
+  border-bottom: 1.5px solid var(--ink);
+  font: var(--text-sm) / 1.6 var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+.prose thead th,
+.data-table thead th {
+  border-bottom: 1px solid var(--ink);
+  font-weight: 600;
+  text-align: left;
+}
+
+.prose th,
+.prose td,
+.data-table th,
+.data-table td {
+  padding: var(--space-2) var(--space-3);
+  vertical-align: top;
+}
+
+.prose tbody tr + tr td,
+.data-table tbody tr + tr td {
+  border-top: 1px solid var(--rule);
+}
+
+/* On phones, columns keep a readable width and the table scrolls inside its container. */
+@media (max-width: 640px) {
+  .table-scroll > table {
+    width: max-content;
+    min-width: 100%;
+  }
+
+  .table-scroll th,
+  .table-scroll td {
+    min-width: 5em;
+    max-width: 14em;
+  }
+}
+
+/* Figures */
+
+.prose figure,
+.figure {
+  margin: var(--space-6) 0;
+}
+
+figcaption,
+.caption {
+  margin-top: var(--space-2);
+  color: var(--ink-muted);
+  font: var(--text-sm) / 1.6 var(--font-sans);
+}
+
+/* Callouts */
+
+.callout {
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: var(--accent-soft);
+  font-size: 0.95em;
+}
+
+.callout--evidence {
+  border-color: var(--evidence);
+  background: var(--evidence-soft);
+}
+
+.callout--caution {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.callout > :first-child {
+  margin-top: 0;
+}
+
+.callout-title {
+  display: block;
+  margin-bottom: var(--space-1);
+  font: 600 var(--text-sm) / 1.5 var(--font-sans);
+  letter-spacing: 0.04em;
+}
+
+/* Source references */
+
+.ref {
+  font: 500 0.8em / 1 var(--font-sans);
+  text-decoration: none;
+  white-space: nowrap;
+  vertical-align: 0.15em;
+}
+
+.ref::before {
+  content: "[";
+}
+
+.ref::after {
+  content: "]";
+}
+
+/* A citation reads as a link and opens the original in a viewer. */
+
+.cite {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-align: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+
+.cite:hover {
+  color: var(--accent-strong);
+}
+
+/* Controls */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 2.25rem;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: 500 var(--text-sm) / 1 var(--font-sans);
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background var(--duration) var(--ease),
+    border-color var(--duration) var(--ease);
+}
+
+.button:hover {
+  border-color: var(--ink-muted);
+  color: var(--ink);
+}
+
+.button--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.button--primary:hover {
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+  color: #fff;
+}
+
+.button--quiet {
+  border-color: transparent;
+  background: transparent;
+}
+
+.button--quiet:hover {
+  background: var(--paper-deep);
+  border-color: transparent;
+}
+
+.button--icon {
+  width: 2.25rem;
+  padding: 0;
+}
+
+.button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+  font: var(--text-sm) / 1.5 var(--font-sans);
+}
+
+.input {
+  min-height: 2.25rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font: var(--text-sm) / 1.4 var(--font-sans);
+}
+
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+/* Small uppercase labels above headings */
+
+.eyebrow {
+  margin: 0;
+  color: var(--ink-muted);
+  font: 500 var(--text-xs) / 1.5 var(--font-sans);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Sources at the end of notes and topic chapters. */
+.note-sources {
+  margin-top: var(--space-7);
+  border-top: 1px solid var(--rule);
+}
+.note-sources > summary {
+  cursor: pointer;
+  font-weight: 500;
+  padding-block: var(--space-4);
+}

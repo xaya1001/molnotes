@@ -1,0 +1,34 @@
+{
+  "parts": [
+    {
+      "title": "观察",
+      "chapters": ["start"]
+    }
+  ],
+  "chapters": [
+    {
+      "id": "start",
+      "number": 1,
+      "title": "计数",
+      "short": "计数",
+      "minutes": 2,
+      "lead": "观察数量。",
+      "refs": [],
+      "blocks": [
+        {
+          "type": "heading",
+          "text": "比较样本"
+        },
+        {
+          "type": "paragraph",
+          "text": "A 有两个，B 有一个。"
+        },
+        {
+          "type": "list",
+          "items": ["A: 2", "B: 1"]
+        }
+      ]
+    }
+  ],
+  "sources": []
+}

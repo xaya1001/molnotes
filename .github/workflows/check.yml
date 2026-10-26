@@ -1,0 +1,117 @@
+name: Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  actions: read
+  packages: write
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04-arm
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      MOLNOTES_TEST_DATABASE_URL: postgres://postgres@localhost:5432/postgres
+      MOLNOTES_DATABASE_TESTS: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Scan for secrets
+        run: docker run --rm -v "${GITHUB_WORKSPACE}:/repo:ro" zricethezav/gitleaks:v8.24.0@sha256:2bcceac45179b3a91bff11a824d0fb952585b429e54fc928728b1d4d5c3e5176 dir /repo --no-banner --redact
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+          cache: npm
+      - name: Plan browser checks
+        id: plan
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if test "${BASE_SHA}" = 0000000000000000000000000000000000000000 || ! git cat-file -e "${BASE_SHA}^{commit}"; then
+            printf 'vite.config.ts\0' > "${RUNNER_TEMP}/changed-files"
+          elif test "${{ github.event_name }}" = pull_request; then
+            git diff --name-only -z "${BASE_SHA}...${HEAD_SHA}" > "${RUNNER_TEMP}/changed-files"
+          else
+            git diff --name-only -z "${BASE_SHA}" "${HEAD_SHA}" > "${RUNNER_TEMP}/changed-files"
+          fi
+          node scripts/ci-plan.mjs "${RUNNER_TEMP}/changed-files" >> "${GITHUB_OUTPUT}"
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run check
+        if: steps.plan.outputs.mode != 'docs'
+      - run: node --test tests/ci-plan.test.mjs tests/checked-workflow.test.mjs
+        if: steps.plan.outputs.mode == 'docs'
+      - run: npm run build
+        if: steps.plan.outputs.mode != 'docs'
+      - run: npx playwright install --with-deps chromium
+        if: steps.plan.outputs.mode != 'docs'
+      - run: npm run test:e2e
+        if: steps.plan.outputs.mode != 'docs'
+      - name: Summarize browser timings
+        if: always() && hashFiles('test-results/results.json') != ''
+        run: node scripts/test-timings.mjs test-results/results.json >> "${GITHUB_STEP_SUMMARY}"
+      - name: Verify the parent image passed Check
+        if: github.event_name == 'push' && steps.plan.outputs.mode == 'docs'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PARENT_SHA: ${{ github.event.before }}
+        run: node scripts/checked-workflow.mjs "${PARENT_SHA}"
+      - name: Build, publish, and verify the exact image
+        if: github.event_name == 'push'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MODE: ${{ steps.plan.outputs.mode }}
+          PARENT_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          export DOCKER_CONFIG="${RUNNER_TEMP}/docker-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          container="candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -m 0700 "${DOCKER_CONFIG}"
+          cleanup() {
+            docker rm -f "${container}" >/dev/null 2>&1 || true
+            rm -rf "${DOCKER_CONFIG}"
+          }
+          trap cleanup EXIT
+          printf '%s' "${GHCR_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+          repository="ghcr.io/${GITHUB_REPOSITORY,,}"
+          tag="${repository}:${GITHUB_SHA}"
+          if test "${MODE}" = docs; then
+            # Documentation is not in the image: relabel the parent revision's
+            # smoke-tested image so the update service can deploy this revision.
+            parent="${repository}:${PARENT_SHA}"
+            docker pull "${parent}"
+            node scripts/resolve-published-image.mjs "${repository}" "${PARENT_SHA}" "${parent}" >/dev/null
+            printf 'FROM %s\n' "${parent}" | docker build \
+              --label "org.opencontainers.image.revision=${GITHUB_SHA}" -t "${tag}" -
+          else
+            docker build \
+              --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+              --label "org.opencontainers.image.revision=${GITHUB_SHA}" -t "${tag}" .
+          fi
+          docker push "${tag}"
+          docker pull "${tag}"
+          image="$(node scripts/resolve-published-image.mjs "${repository}" "${GITHUB_SHA}" "${tag}")"
+          if test "${MODE}" != docs; then node scripts/smoke-image.mjs "${image}"; fi
+          printf 'Published and smoke-tested %s\n' "${image}" >> "${GITHUB_STEP_SUMMARY}"

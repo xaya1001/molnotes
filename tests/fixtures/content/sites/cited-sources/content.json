@@ -1,0 +1,48 @@
+{
+  "parts": [{ "title": "核对", "chapters": ["start"] }],
+  "chapters": [
+    {
+      "id": "start",
+      "number": 1,
+      "title": "核对出处",
+      "short": "出处",
+      "minutes": 2,
+      "lead": "打开原文核对。",
+      "refs": [1],
+      "blocks": [
+        { "type": "paragraph", "text": "方框段落给出依据。" },
+        { "type": "excerpt", "excerpt": "boxed" },
+        { "type": "reading", "scope": "chapter" }
+      ],
+      "reading": [
+        {
+          "source": 1,
+          "locator": "PDF 第 3–4 页",
+          "minutes": 5,
+          "question": "方框里写了什么？",
+          "skip": "其余各行可以跳过。",
+          "cite": "src:handbook#3-4"
+        }
+      ]
+    }
+  ],
+  "excerpts": [
+    {
+      "id": "boxed",
+      "source": 1,
+      "locator": "PDF 第 2 页方框",
+      "text": "Boxed passage on page 2",
+      "guide": "方框就是本章的依据。",
+      "cite": "src:handbook#2&rect=72,300,540,420"
+    }
+  ],
+  "sources": [
+    {
+      "id": 1,
+      "title": "样本手册",
+      "kind": "教材",
+      "note": "方框段落与课堂示意图。",
+      "cite": ["src:handbook#2-3&print=12", "src:lesson-1"]
+    }
+  ]
+}
