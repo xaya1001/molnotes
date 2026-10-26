@@ -698,7 +698,7 @@ test(
       await cp(resolve("tests/fixtures/content"), main, { recursive: true });
       await assert.rejects(
         committedSource(main, paths(units), "agent"),
-        /not the top of a Git repository/,
+        /not inside a Git work tree/,
       );
       await run(root, "init", "-q", "-b", "main", main);
       await run(main, "config", "user.name", "Test");
@@ -866,7 +866,7 @@ test(
         execFileAsync(process.execPath, ["scripts/content.mjs", "list"], {
           env: { ...env, MOLNOTES_CONTENT_DIR: join(root, "objects") },
         }),
-        /not the top of a Git repository/,
+        /not inside a Git work tree/,
       );
     } finally {
       await db.close();
@@ -1180,6 +1180,58 @@ test(
       server.closeAllConnections();
       await new Promise((resolve) => server.close(resolve));
       await db.close();
+    }
+  },
+);
+
+test(
+  "a content directory below the top of a repository publishes its committed units",
+  { skip: process.env.MOLNOTES_DATABASE_TESTS !== "1" },
+  async () => {
+    const db = await testDatabase();
+    const root = await mkdtemp(join(tmpdir(), "il-git-subdir-test-"));
+    const store = await assetStore("dir:" + join(root, "objects"));
+    const repo = join(root, "repo");
+    const content = join(repo, "content");
+    const run = (...args) =>
+      execFileAsync("git", ["-C", repo, ...args]).then((r) => r.stdout.trim());
+    const units = ["notes/reader-test", "sites/sample"];
+    const paths = [...units, "sources.json", "glossary.json"];
+    try {
+      await cp(resolve("tests/fixtures/content"), content, { recursive: true });
+      await writeFile(join(repo, "README.md"), "outside the content\n");
+      await run("init", "-q", "-b", "main");
+      await run("config", "user.name", "Test");
+      await run("config", "user.email", "test@example.invalid");
+      await run("add", "-A");
+      await run("commit", "-qm", "initial");
+      const head = await run("rev-parse", "HEAD");
+
+      // Changes outside the content directory do not block publishing.
+      await writeFile(join(repo, "README.md"), "edited\n");
+      await pushUnits(db.pool, store, content, units, {
+        source: await committedSource(content, paths, "agent"),
+      });
+      assert.equal(
+        (
+          await db.pool.query(
+            "SELECT git_commit FROM content_units WHERE unit = $1",
+            [units[0]],
+          )
+        ).rows[0].git_commit,
+        head,
+      );
+
+      // Uncommitted files inside the content directory are listed from the
+      // repository root.
+      await writeFile(join(content, "notes/reader-test/draft.md"), "草稿\n");
+      await assert.rejects(
+        committedSource(content, paths, "agent"),
+        /\?\? content\/notes\/reader-test\/draft\.md/,
+      );
+    } finally {
+      await db.close();
+      await rm(root, { recursive: true, force: true });
     }
   },
 );

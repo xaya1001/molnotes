@@ -6,7 +6,6 @@ import {
   writeFile,
   copyFile,
   stat,
-  realpath,
 } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify, isDeepStrictEqual } from "node:util";
@@ -347,17 +346,19 @@ const git = async (root, args) =>
       },
     )
   ).stdout;
-/** Fails unless `root` is the top of a Git repository or worktree. */
+/** Fails unless `root` is a directory inside a Git work tree. */
 export async function checkRepository(root) {
-  let top;
+  let inside;
   try {
-    top = (await git(root, ["rev-parse", "--show-toplevel"])).trim();
+    inside =
+      (await git(root, ["rev-parse", "--is-inside-work-tree"])).trim() ===
+      "true";
   } catch {
-    top = null;
+    inside = false;
   }
-  if (!top || (await realpath(top)) !== (await realpath(root)))
+  if (!inside)
     throw new Error(
-      `${root}: not the top of a Git repository; the content directory must be the content repository or one of its worktrees`,
+      `${root}: not inside a Git work tree; the content directory must be in a Git repository or one of its worktrees`,
     );
 }
 /**
