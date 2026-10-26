@@ -201,6 +201,11 @@ test("a long current notebook scrolls its entries without moving the shelf or fi
   });
   await page.goto("/notes/reader-test/entry-30");
   await page.locator('.notes-subbar button[aria-haspopup="dialog"]').click();
+  await page
+    .getByRole("dialog")
+    .evaluate((element) =>
+      Promise.all(element.getAnimations().map((motion) => motion.finished)),
+    );
   const current = page.locator('.section-sidebar-scroll [aria-current="page"]');
   await expect(current).toBeInViewport({ ratio: 1 });
   const shelf = page.locator(".sidebar-shelf");

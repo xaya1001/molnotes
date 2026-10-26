@@ -86,6 +86,9 @@ test("on a phone the 目录 button opens a bottom sheet at the current entry tha
   await expect(button).toBeFocused();
 
   await button.click();
+  await sheet.evaluate((element) =>
+    Promise.all(element.getAnimations().map((motion) => motion.finished)),
+  );
   await page.mouse.click(195, 20);
   await expect(sheet).toBeHidden();
 
