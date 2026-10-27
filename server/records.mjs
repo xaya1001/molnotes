@@ -40,13 +40,11 @@ function parseNotesRecords(value) {
 }
 
 /** Resolve the current topic contract before reading or accepting a record. */
-export async function recordContext(pool, slug) {
+export async function recordContext(content, slug) {
   if (!slug) return { scope: "notes", codec: null };
-  const content = (
-    await pool.query("SELECT content FROM topics WHERE slug=$1", [slug])
-  ).rows[0]?.content;
-  return content
-    ? { scope: "sites/" + slug, codec: topicRecordsCodec(content) }
+  const topic = (await content()).topic(slug);
+  return topic
+    ? { scope: "sites/" + slug, codec: topicRecordsCodec(topic.content) }
     : null;
 }
 

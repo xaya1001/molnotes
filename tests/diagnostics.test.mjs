@@ -2,7 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { runCommand, deploymentFailure } from "../server/deploy-command.mjs";
 import { measureStage } from "../server/stage-timing.mjs";
-import { contentCache } from "../server/content-cache.mjs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { contentSnapshot } from "../server/content-cache.mjs";
 
 const node = (source, options) =>
   runCommand(process.execPath, ["-e", source], options);
@@ -82,24 +85,35 @@ test("stage timings preserve values and errors and report only stage, outcome an
 
 test("query timing records cold builds only and never includes content identifiers", async () => {
   const events = [];
-  let revision = 1;
-  const query = async () => ({ rows: [{ revision }] });
-  const cache = contentCache(
-    { query, connect: async () => ({ query, release() {} }) },
-    (event) => events.push(event),
-  );
-  const build = async () => ({ value: "private content" });
-  await Promise.all([
-    cache("/api/topics/private-slug", build),
-    cache("/api/topics/private-slug", build),
-  ]);
-  await cache("/api/topics/private-slug", build);
-  assert.equal(events.length, 1);
-  revision++;
-  await cache("/api/topics/private-slug", build);
-  assert.equal(events.length, 2);
-  assert.ok(events.every((event) => event.stage === "query.build.topic"));
-  assert.ok(!JSON.stringify(events).includes("private"));
+  const root = await mkdtemp(join(tmpdir(), "il-query-timing-"));
+  try {
+    await writeFile(
+      join(root, "snapshot.json"),
+      JSON.stringify({
+        format: 1,
+        topics: [],
+        directories: [],
+        notes: [],
+        glossary: [],
+        registry: null,
+        assets: [],
+      }),
+    );
+    const snapshot = await contentSnapshot(root, (event) =>
+      events.push(event),
+    )();
+    const build = async () => ({ value: "private content" });
+    await Promise.all([
+      snapshot.cached("/api/topics/private-slug", build),
+      snapshot.cached("/api/topics/private-slug", build),
+    ]);
+    await snapshot.cached("/api/topics/private-slug", build);
+    assert.equal(events.length, 1);
+    assert.equal(events[0].stage, "query.build.topic");
+    assert.ok(!JSON.stringify(events).includes("private"));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("deployment receipts preserve both failures without serializing arbitrary error messages", () => {

@@ -5,8 +5,7 @@ import { join, resolve } from "node:path";
 import { once } from "node:events";
 import { execFileSync } from "node:child_process";
 import { testDatabase } from "./helpers/database.mjs";
-import { assetStore } from "../server/assets.mjs";
-import { pushUnits } from "../server/content-publish.mjs";
+import { buildSnapshot, publishSnapshot } from "./helpers/content-snapshot.mjs";
 import { createWebServer } from "../server/web.mjs";
 
 test("generated chapters compose the shared shell and the block catalogue", async ({
@@ -16,11 +15,10 @@ test("generated chapters compose the shared shell and the block catalogue", asyn
   const root = resolve(import.meta.dirname, "..");
   const fixture = await mkdtemp(join(tmpdir(), "il-authoring-"));
   const db = await testDatabase();
-  const store = await assetStore("dir:" + join(fixture, "objects"));
+  const releases = join(fixture, "releases");
   const server = createWebServer({
     pool: db.pool,
-    store,
-    cache: join(fixture, "cache"),
+    snapshot: join(releases, "current"),
   });
   try {
     const title = "专题 <chapter> {{ 7 * 7 }} </script>";
@@ -67,7 +65,9 @@ test("generated chapters compose the shared shell and the block catalogue", asyn
       '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="80"><rect width="160" height="80" fill="teal"/></svg>',
     );
     await writeFile(join(fixture, "glossary.json"), "[]");
-    await pushUnits(db.pool, store, fixture, ["sites/authoring"]);
+    await publishSnapshot(releases, (snapshot) =>
+      buildSnapshot(fixture, ["sites/authoring"], snapshot),
+    );
     server.listen(0, "127.0.0.1");
     await once(server, "listening");
     const address = server.address();

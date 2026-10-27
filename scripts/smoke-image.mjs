@@ -3,8 +3,10 @@ import { mkdtemp, rm, chmod } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { testDatabase } from "../tests/helpers/database.mjs";
-import { assetStore } from "../server/assets.mjs";
-import { pushUnits } from "../server/content-publish.mjs";
+import {
+  buildSnapshot,
+  publishSnapshot,
+} from "../tests/helpers/content-snapshot.mjs";
 import { smokeBrowser } from "./smoke-browser.mjs";
 const image = process.argv[2];
 if (!/^ghcr\.io\/.+@sha256:[a-f0-9]{64}$/.test(image ?? ""))
@@ -31,9 +33,13 @@ async function docker(args, env = {}) {
 }
 try {
   await chmod(directory, 0o755);
-  const store = await assetStore("dir:" + join(directory, "objects"));
-  for (const unit of ["sites/sample", "sites/instruments", "notes/reader-test"])
-    await pushUnits(db.pool, store, "tests/fixtures/content", [unit]);
+  await publishSnapshot(join(directory, "content"), (snapshot) =>
+    buildSnapshot(
+      "tests/fixtures/content",
+      ["sites/sample", "sites/instruments", "notes/reader-test"],
+      snapshot,
+    ),
+  );
   // The candidate reaches the test database published on the Docker host.
   const url = new URL(db.url);
   url.hostname = "host.docker.internal";
@@ -54,14 +60,8 @@ try {
       "no-new-privileges:true",
       "--env",
       "MOLNOTES_DATABASE_URL",
-      "--env",
-      "MOLNOTES_ASSET_STORE=dir:/objects",
-      "--env",
-      "MOLNOTES_ASSET_CACHE=/cache",
       "--mount",
-      `type=bind,src=${directory}/objects,dst=/objects,readonly`,
-      "--tmpfs",
-      "/cache:uid=1001,gid=1001",
+      `type=bind,src=${directory}/content,dst=/content,readonly`,
       "--tmpfs",
       "/tmp",
       image,
