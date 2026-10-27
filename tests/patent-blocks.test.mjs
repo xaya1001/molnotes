@@ -137,12 +137,7 @@ test("publication checks molecules, scopes, assets and lazy JSON keys", async ()
     new URL("./fixtures/content/", import.meta.url).pathname,
     "sites/fable-patent",
   );
-  const store = {
-    fetchObject() {
-      throw new Error("unexpected fetch");
-    },
-  };
-  await validatePatentAssets(unit.content, "fable-patent", unit.assets, store);
+  await validatePatentAssets(unit.content, "fable-patent", unit.assets);
   for (const mutate of [
     (c) => (c.data.collections.examples.records[0].smiles = "C("),
     (c) => (c.data.claims.main.claims[0].scope.smarts = "["),
@@ -153,9 +148,7 @@ test("publication checks molecules, scopes, assets and lazy JSON keys", async ()
   ]) {
     const c = fixture();
     mutate(c);
-    await assert.rejects(
-      validatePatentAssets(c, "fable-patent", unit.assets, store),
-    );
+    await assert.rejects(validatePatentAssets(c, "fable-patent", unit.assets));
   }
 });
 
@@ -292,11 +285,6 @@ test("publication validates assignment patterns and new nested evidence assets",
     new URL("./fixtures/content/", import.meta.url).pathname,
     "sites/fable-patent",
   );
-  const store = {
-    fetchObject() {
-      throw new Error("unexpected fetch");
-    },
-  };
   for (const mutate of [
     (c) =>
       Object.assign(c.data.collections.examples.records[0].scaffold[0], {
@@ -318,8 +306,6 @@ test("publication validates assignment patterns and new nested evidence assets",
   ]) {
     const c = fixture();
     mutate(c);
-    await assert.rejects(
-      validatePatentAssets(c, "fable-patent", unit.assets, store),
-    );
+    await assert.rejects(validatePatentAssets(c, "fable-patent", unit.assets));
   }
 });

@@ -3,13 +3,6 @@ import { buildTopicIndex, buildReviewIndex } from "../scripts/topic-index.mjs";
 import { siteGroups, sortSites } from "../scripts/site-catalog.mjs";
 import { chapterRoutePath, topicBasePath } from "../scripts/topic-content.mjs";
 
-/** The glossary the publisher has stored in the database. */
-export async function publishedGlossary(client) {
-  return (
-    (await client.query("SELECT terms FROM glossary")).rows[0]?.terms ?? []
-  );
-}
-
 // The reader functions below answer from one loaded content snapshot
 // (`content-cache.mjs`).
 

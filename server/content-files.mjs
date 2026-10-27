@@ -1,14 +1,6 @@
-import {
-  readFile,
-  readdir,
-  lstat,
-  mkdir,
-  writeFile,
-  copyFile,
-  stat,
-} from "node:fs/promises";
+import { readFile, readdir, lstat } from "node:fs/promises";
 import { execFile } from "node:child_process";
-import { promisify, isDeepStrictEqual } from "node:util";
+import { promisify } from "node:util";
 import { join } from "node:path";
 import { parseNote, noteCitations } from "../scripts/notes-index.mjs";
 import {
@@ -18,7 +10,7 @@ import {
 import { validateGlossary } from "../scripts/glossary.mjs";
 import { parseSiteManifest } from "../scripts/site-catalog.mjs";
 import { validateTopicContent } from "../scripts/topic-content.mjs";
-import { sha256, contentType, cachedAsset } from "./assets.mjs";
+import { sha256, contentType } from "./assets.mjs";
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export function unitName(unit) {
@@ -28,7 +20,7 @@ export function unitName(unit) {
     !slugPattern.test(slug) ||
     rest.length
   )
-    throw new Error("Expected notes/<dir> or sites/<slug> (database content)");
+    throw new Error(`${unit}: expected notes/<dir> or sites/<slug>`);
   return { kind, slug };
 }
 const json = async (file) => JSON.parse(await readFile(file, "utf8"));
@@ -167,174 +159,6 @@ export async function readGlossary(root) {
   }
   return validateGlossary(glossary);
 }
-/** A unit's published files as JSON ($2 is the slug). */
-const unitFilesSql = {
-  sites:
-    "SELECT jsonb_build_object('site', site, 'content', content, 'citations', citations) FROM topics WHERE slug = $2",
-  notes: `SELECT jsonb_build_object('metadata', d.metadata, 'citations', d.citations, 'notes',
-      (SELECT coalesce(jsonb_agg(jsonb_build_object('slug', n.slug, 'author', n.author, 'source', n.source)
-        ORDER BY n.author, n.slug), '[]') FROM notes n WHERE n.dir = d.dir))
-    FROM note_directories d WHERE d.dir = $2`,
-};
-/** A unit's asset manifest as JSON ($1 is the unit). */
-const unitAssetsSql = `SELECT coalesce(jsonb_agg(jsonb_build_object('path', path, 'sha256', sha256,
-    'size', size, 'content_type', content_type, 'prompt', prompt) ORDER BY path), '[]')
-  FROM assets WHERE scope = $1`;
-
-/** A unit's stored files and asset manifest; undefined when absent. */
-async function storedRow(db, unit) {
-  const { kind, slug } = unitName(unit);
-  return (
-    await db.query(
-      `SELECT d.files, (${unitAssetsSql}) AS assets FROM (${unitFilesSql[kind]}) AS d(files)`,
-      [unit, slug],
-    )
-  ).rows[0];
-}
-const jsonText = (value) => JSON.stringify(value, null, 2) + "\n";
-/**
- * The working-directory layout of a stored unit: text files by relative path
- * and the asset manifest. Cited pages and articles are rebuilt from the shelf
- * on every push, so they are not part of it.
- */
-function storedLayout(kind, { files, assets }) {
-  const texts = new Map();
-  if (kind === "sites") {
-    const { slug: _, ...site } = files.site;
-    texts.set("site.json", jsonText(site));
-    texts.set("content.json", jsonText(files.content));
-  } else {
-    texts.set("directory.json", jsonText(files.metadata));
-    for (const note of files.notes)
-      texts.set(`${note.author ? "author/" : ""}${note.slug}.md`, note.source);
-  }
-  const binary = assets.filter((asset) => !asset.path.startsWith("cited/"));
-  for (const asset of binary)
-    if (asset.prompt !== null)
-      texts.set(
-        `prompts/${asset.path.slice("assets/".length)}.md`,
-        asset.prompt,
-      );
-  return { texts, assets: binary };
-}
-/** A unit's layout as stored, or null when the database lacks it. */
-async function storedUnit(db, unit) {
-  const row = await storedRow(db, unit);
-  return row ? storedLayout(unitName(unit).kind, row) : null;
-}
-/** The files `push` reads from the working directory, in the stored layout. */
-async function localUnit(root, unit) {
-  const { kind } = unitName(unit);
-  const folder = join(root, unit);
-  const texts = new Map();
-  const assets = [];
-  const prefix = kind === "sites" ? "static" : "assets";
-  for (const path of await files(folder)) {
-    if (path.startsWith(prefix + "/")) {
-      const bytes = await readFile(join(folder, path));
-      assets.push({ path, sha256: sha256(bytes) });
-    } else texts.set(path, await readFile(join(folder, path), "utf8"));
-  }
-  return { texts, assets };
-}
-/**
- * Whether the working directory holds exactly what the database stores for
- * the unit: every file a pull exports, JSON compared by value and assets by
- * hash, and nothing else.
- */
-export async function matchesStored(db, root, unit) {
-  const [stored, local] = [
-    await storedUnit(db, unit),
-    await localUnit(root, unit),
-  ];
-  if (!stored) return false;
-  const json = (text) => {
-    try {
-      return JSON.parse(text);
-    } catch {
-      return Symbol("invalid");
-    }
-  };
-  const hashes = (layout) =>
-    Object.fromEntries(layout.assets.map((a) => [a.path, a.sha256]));
-  return (
-    stored.texts.size === local.texts.size &&
-    [...stored.texts].every(([path, text]) =>
-      path.endsWith(".json")
-        ? isDeepStrictEqual(json(text), json(local.texts.get(path)))
-        : text === local.texts.get(path),
-    ) &&
-    isDeepStrictEqual(hashes(stored), hashes(local))
-  );
-}
-
-/** Exports a unit's files. */
-export async function pullUnit(pool, store, root, unit, cache) {
-  const row = await storedRow(pool, unit);
-  if (!row) throw new Error(`${unit}: not found`);
-  await writeUnit(
-    store,
-    join(root, unit),
-    storedLayout(unitName(unit).kind, row),
-    cache,
-  );
-}
-/**
- * Writes a unit's files. Assets already present with the same hash are left
- * alone; the rest come through the local hash-addressed `cache`, several at a
- * time, so repeated pulls do not download unchanged objects again.
- */
-async function writeUnit(store, folder, { texts, assets }, cache) {
-  for (const [path, text] of texts) {
-    await mkdir(join(folder, path, ".."), { recursive: true });
-    await writeFile(join(folder, path), text);
-  }
-  const queue = [...assets];
-  await Promise.all(
-    Array.from({ length: 8 }, async () => {
-      for (let asset = queue.shift(); asset; asset = queue.shift()) {
-        const path = join(folder, asset.path);
-        if (!(await sameFile(path, asset))) {
-          await mkdir(join(path, ".."), { recursive: true });
-          await copyFile(await cachedAsset(store, cache, asset), path);
-        }
-      }
-    }),
-  );
-}
-async function sameFile(path, asset) {
-  try {
-    if ((await stat(path)).size !== Number(asset.size)) return false;
-  } catch (error) {
-    if (error.code === "ENOENT") return false;
-    throw error;
-  }
-  return sha256(await readFile(path)) === asset.sha256;
-}
-/** Writes the published source registry back to sources.json; false when none was published. */
-export async function pullRegistry(pool, root) {
-  const row = (await pool.query("SELECT registry FROM source_registry"))
-    .rows[0];
-  if (!row) return false;
-  await mkdir(root, { recursive: true });
-  await writeFile(
-    join(root, "sources.json"),
-    JSON.stringify(row.registry, null, 2) + "\n",
-  );
-  return true;
-}
-/** Writes the published glossary back to glossary.json; false when none was published. */
-export async function pullGlossary(pool, root) {
-  const row = (await pool.query("SELECT terms FROM glossary")).rows[0];
-  if (!row) return false;
-  await mkdir(root, { recursive: true });
-  await writeFile(
-    join(root, "glossary.json"),
-    JSON.stringify(row.terms, null, 2) + "\n",
-  );
-  return true;
-}
-
 const execFileAsync = promisify(execFile);
 const git = async (root, args) =>
   (
@@ -347,7 +171,7 @@ const git = async (root, args) =>
     )
   ).stdout;
 /** Fails unless `root` is a directory inside a Git work tree. */
-export async function checkRepository(root) {
+async function checkRepository(root) {
   let inside;
   try {
     inside =
@@ -364,10 +188,10 @@ export async function checkRepository(root) {
 /**
  * The committed state of the content repository at `root` for publishing
  * `paths`: HEAD, with none of those paths changed, untracked or ignored.
- * `contains(commit)` tells whether HEAD includes a commit; `verify()` checks
- * again, after reading, that HEAD and the paths have not moved.
+ * `verify()` checks again, after reading, that HEAD and the paths have not
+ * moved.
  */
-export async function committedSource(root, paths, pusher) {
+export async function committedSource(root, paths) {
   await checkRepository(root);
   const head = async () => {
     try {
@@ -401,25 +225,11 @@ export async function committedSource(root, paths, pusher) {
   await check();
   return {
     commit,
-    pusher,
-    async contains(ancestor) {
-      try {
-        await git(root, ["merge-base", "--is-ancestor", ancestor, commit]);
-        return true;
-      } catch {
-        // Not an ancestor, or a commit this repository does not have.
-        return false;
-      }
-    },
-    /** Whether HEAD tracks files under `path`. */
-    async tracks(path) {
-      return (
-        (await git(root, ["ls-tree", "--name-only", commit, "--", path])) !== ""
-      );
-    },
     async verify() {
       if ((await head()) !== commit)
-        throw new Error(`${root}: HEAD moved during publication; push again`);
+        throw new Error(
+          `${root}: HEAD moved during publication; publish again`,
+        );
       await check();
     },
   };

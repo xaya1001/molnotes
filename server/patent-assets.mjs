@@ -2,7 +2,7 @@ import { moleculeToolkit } from "../scripts/molecule-toolkit.mjs";
 import { patentBlocks } from "../scripts/patent-contract.mjs";
 let toolkit;
 const checked = new Set();
-export async function validatePatentAssets(content, slug, assets, store) {
+export async function validatePatentAssets(content, slug, assets) {
   if (!patentBlocks(content).length) return;
   const where = `sites/${slug}/content.json`,
     data = content.data;
@@ -14,8 +14,7 @@ export async function validatePatentAssets(content, slug, assets, store) {
   const jsonCache = new Map();
   async function json(path) {
     if (!jsonCache.has(path)) {
-      const asset = get(path);
-      const bytes = asset.bytes ?? (await store.fetchObject(asset.sha256));
+      const { bytes } = get(path);
       try {
         jsonCache.set(path, JSON.parse(bytes.toString("utf8")));
       } catch {
@@ -27,8 +26,6 @@ export async function validatePatentAssets(content, slug, assets, store) {
   for (const source of Object.values(data.sources ?? {})) {
     for (let n = 1; n <= source.pages; n++)
       get(source.image.replace("{page}", String(n)));
-    get(source.text);
-    if (!store) continue;
     const text = await json(source.text);
     if (
       !Array.isArray(text) ||
@@ -43,8 +40,6 @@ export async function validatePatentAssets(content, slug, assets, store) {
         const value = record[field.key];
         if (value === undefined) continue;
         if (field.kind === "body") {
-          get(value.url);
-          if (!store) continue;
           const body = await json(value.url);
           if (
             !body ||

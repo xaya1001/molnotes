@@ -3,7 +3,7 @@ import { contentCitations, parseCitation } from "./source-citations.mjs";
 // The part of a topic's content.json every topic shares. Topics add their own
 // fields beside these; this check only covers the common core and the cross
 // references between its parts, and it runs during publication
-// (content push) and when a topic module loads (defineTopicContent).
+// (content build) and when a topic module loads (defineTopicContent).
 import {
   chapterPredictions,
   validateBlocks,

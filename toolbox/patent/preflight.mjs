@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Authoring checks in addition to the authoritative content push validation.
+// Authoring checks in addition to the authoritative content build validation.
 import fs from "node:fs/promises";
 import path from "node:path";
 const [directory] = process.argv.slice(2);
