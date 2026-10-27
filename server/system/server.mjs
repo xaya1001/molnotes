@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 import { chmodSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { isMainModule } from "./main-module.mjs";
+import { isMainModule } from "../../shared/main-module.mjs";
 import { systemConfig } from "./system-config.mjs";
 
 const exec = promisify(execFile);

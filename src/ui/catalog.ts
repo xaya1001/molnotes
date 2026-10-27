@@ -1,4 +1,4 @@
-import { topicBasePath } from "../../scripts/topic-content.mjs";
+import { topicBasePath } from "../../shared/topic-content.ts";
 export interface CatalogSite {
   slug: string;
   title: string;

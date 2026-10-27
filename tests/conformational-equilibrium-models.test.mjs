@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { validateTopicContent } from "../scripts/topic-content.mjs";
-import { labModels, modelInputs } from "../src/ui/models/catalog.mjs";
+import { validateTopicContent } from "../shared/topic-content.ts";
+import { labModels, modelInputs } from "../src/ui/models/catalog.ts";
 
 const { calculate: chairEquilibrium } = labModels["saturated-chair"];
 const fixture = () =>

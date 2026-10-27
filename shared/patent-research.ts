@@ -1,19 +1,29 @@
-const object = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
-const require = (valid, at) => {
+const object = (v: unknown) =>
+  v !== null && typeof v === "object" && !Array.isArray(v);
+const require = (valid: unknown, at: string) => {
   if (!valid) throw new Error(at);
 };
-const text = (v, at) => require(typeof v === "string" && v.trim(), at);
-const array = (v, at) => {
+const text = (v: unknown, at: string) =>
+  require(typeof v === "string" && v.trim(), at);
+const array = (v: any, at: string): any[] => {
   require(Array.isArray(v), at);
   return v;
 };
-const unique = (items, at) => require(new Set(items).size === items.length, at);
-/** Publication boundary for research observations, assignments and connected routes. */
-export function validateResearchData(data, ref, where) {
+const unique = (items: unknown[], at: string) =>
+  require(new Set(items).size === items.length, at);
+/**
+ * Publication boundary for research observations, assignments and connected
+ * routes; `data` is parsed content JSON.
+ */
+export function validateResearchData(
+  data: any,
+  ref: (value: unknown, source?: string, at?: string) => void,
+  where: string,
+): void {
   let at = where;
-  const check = (valid, reason = "invalid research data") =>
+  const check = (valid: unknown, reason = "invalid research data") =>
     require(valid, `${at}: ${reason}`);
-  const evidence = (refs, source) => {
+  const evidence = (refs: any, source?: string) => {
     check(array(refs, at).length > 0);
     for (const r of refs) {
       if (source === undefined)
@@ -24,11 +34,11 @@ export function validateResearchData(data, ref, where) {
       ref(r, source, at);
     }
   };
-  const claimIds = Object.values(data.claims ?? {}).flatMap((s) =>
-    s.claims.map((c) => c.id),
+  const claimIds = Object.values<any>(data.claims ?? {}).flatMap((s) =>
+    s.claims.map((c: any) => c.id),
   );
-  for (const [collectionId, c] of Object.entries(data.collections ?? {})) {
-    for (const [id, assay] of Object.entries(c.assays ?? {})) {
+  for (const [collectionId, c] of Object.entries<any>(data.collections ?? {})) {
+    for (const [id, assay] of Object.entries<any>(c.assays ?? {})) {
       at = `${where}.collections.${collectionId}.assays.${id}`;
       text(id, at);
       for (const key of ["title", "target", "endpoint", "conditions"])
@@ -76,12 +86,14 @@ export function validateResearchData(data, ref, where) {
           }
       }
   }
-  const compound = (v) => {
+  const compound = (v: any) => {
     check(object(v));
-    check(data.collections?.[v.collection]?.records.some((r) => r.id === v.id));
+    check(
+      data.collections?.[v.collection]?.records.some((r: any) => r.id === v.id),
+    );
   };
-  const nodeKey = (v) => JSON.stringify([v.collection, v.id]);
-  for (const cases of Object.values(data.sarCases ?? {}))
+  const nodeKey = (v: any) => JSON.stringify([v.collection, v.id]);
+  for (const cases of Object.values<any>(data.sarCases ?? {}))
     for (const c of cases)
       if (c.analysis) {
         check(
@@ -92,12 +104,14 @@ export function validateResearchData(data, ref, where) {
         text(c.analysis.rationale, at);
         evidence(c.analysis.evidence);
       }
-  for (const [networkId, network] of Object.entries(data.synthesis ?? {})) {
+  for (const [networkId, network] of Object.entries<any>(
+    data.synthesis ?? {},
+  )) {
     const networkAt = `${where}.synthesis.${networkId}`;
     at = networkAt;
     text(network.title, at);
     const procedures = network.procedures ?? {};
-    for (const [procedureId, p] of Object.entries(procedures)) {
+    for (const [procedureId, p] of Object.entries<any>(procedures)) {
       at = `${networkAt}.procedures.${procedureId}`;
       check(p.yield === undefined, "procedure cannot supply a yield");
       if (p.sourceRecord) compound(p.sourceRecord);
@@ -160,9 +174,9 @@ export function validateResearchData(data, ref, where) {
         text(s.reagents, at);
         text(s.conditions, at);
       }
-      const product = (v) => {
+      const product = (v: any) => {
         compound(v);
-        check(s.products.some((p) => nodeKey(p) === nodeKey(v)));
+        check(s.products.some((p: any) => nodeKey(p) === nodeKey(v)));
       };
       if (s.isolatedMass) {
         check(
@@ -199,7 +213,7 @@ export function validateResearchData(data, ref, where) {
     array(network.routes, at);
     check(
       steps.every((s) =>
-        network.routes.some((r) => array(r.steps, at).includes(s.id)),
+        network.routes.some((r: any) => array(r.steps, at).includes(s.id)),
       ),
       "step is not included in any declared route",
     );
@@ -220,9 +234,11 @@ export function validateResearchData(data, ref, where) {
       unique(route.startingMaterials.map(nodeKey), at);
       check(array(route.steps, at).length > 0);
       unique(route.steps, at);
-      check(route.steps.every((id) => steps.some((s) => s.id === id)));
+      check(route.steps.every((id: any) => steps.some((s) => s.id === id)));
       compound(route.target);
-      const selected = route.steps.map((id) => steps.find((s) => s.id === id));
+      const selected = route.steps.map((id: any) =>
+        steps.find((s) => s.id === id),
+      );
       const producers = new Map();
       for (const s of selected)
         for (const p of s.products) {
@@ -235,7 +251,7 @@ export function validateResearchData(data, ref, where) {
           if (!producers.has(nodeKey(r))) inputs.add(nodeKey(r));
       check(
         inputs.size === route.startingMaterials.length &&
-          route.startingMaterials.every((c) => inputs.has(nodeKey(c))),
+          route.startingMaterials.every((c: any) => inputs.has(nodeKey(c))),
       );
       if (route.reportedYield) {
         const y = route.reportedYield;
@@ -250,19 +266,21 @@ export function validateResearchData(data, ref, where) {
         compound(y.product);
         check(array(y.scopeStepIds, at).length > 1);
         unique(y.scopeStepIds, at);
-        check(y.scopeStepIds.every((id) => route.steps.includes(id)));
-        const sequence = y.scopeStepIds.map((id) =>
-          selected.find((s) => s.id === id),
+        check(y.scopeStepIds.every((id: any) => route.steps.includes(id)));
+        const sequence = y.scopeStepIds.map((id: any) =>
+          selected.find((s: any) => s.id === id),
         );
         check(
           sequence
             .at(-1)
-            .products.some((p) => nodeKey(p) === nodeKey(y.product)),
+            .products.some((p: any) => nodeKey(p) === nodeKey(y.product)),
         );
         for (let i = 1; i < sequence.length; i++)
           check(
-            sequence[i].reactants.some((r) =>
-              sequence[i - 1].products.some((p) => nodeKey(r) === nodeKey(p)),
+            sequence[i].reactants.some((r: any) =>
+              sequence[i - 1].products.some(
+                (p: any) => nodeKey(r) === nodeKey(p),
+              ),
             ),
           );
       }
@@ -270,7 +288,7 @@ export function validateResearchData(data, ref, where) {
       check(target);
       const visiting = new Set(),
         visited = new Set();
-      const visit = (s) => {
+      const visit = (s: any) => {
         check(!visiting.has(s.id), `cycle at step ${s.id}`);
         if (visited.has(s.id)) return;
         visiting.add(s.id);

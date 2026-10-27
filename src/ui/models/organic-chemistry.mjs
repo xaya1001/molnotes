@@ -61,7 +61,7 @@ const numberInput = (id, label, min, max, value, step = 0.1) => ({
   step,
 });
 
-/** @type {Record<string, import("./catalog.mjs").LabModel & { calculate?: unknown }>} */
+/** @type {Record<string, import("./catalog.ts").LabModel & { calculate?: unknown }>} */
 export const organicChemistryModels = {
   "carbonyl-acidity": {
     inputs: [

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { publishedImage } from "../server/release-image.mjs";
+import { publishedImage } from "../server/system/release-image.mjs";
 
 const revision = "a".repeat(40);
 const digest = "b".repeat(64);

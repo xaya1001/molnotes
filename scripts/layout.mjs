@@ -6,7 +6,7 @@
 // Candidates start from RDKit's and CoordGen's layouts, PubChem's 2D drawing
 // (unless --offline) and, with --like, a structure that already has the
 // wanted skeleton layout; each is polished and the cleanest is printed last.
-import { moleculeToolkit } from "./molecule-toolkit.mjs";
+import { moleculeToolkit } from "../shared/molecule-toolkit.mjs";
 import {
   coordinatesFrom,
   layoutCandidates,

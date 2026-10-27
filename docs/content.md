@@ -85,7 +85,7 @@ edges:
 
 ## 专题
 
-`sites/<slug>/site.json` 含 `title`、`description`、正整数 `order` 与分组 `group`，可选 `label`。`group` 取 `靶点案例`、`药化进阶`、`专利拆解`、`合成与机理`、`谱图`、`读书复习`、`入门专题`、`练习` 之一（集合与顺序由 `scripts/site-catalog.mjs` 的 `siteGroups` 定义），缺失或取值不在集合内时拒绝发布。`练习` 专题使用 `/practice/<slug>/`，笔记链接到的练习专题在首页显示为该套笔记的练习；其余专题使用 `/sites/<slug>/`，侧栏书架按分组展示，没有分组的已发布专题归入“其他”。`content.json` 在专题根目录，遵守 `scripts/topic-content.mjs` 与 `scripts/topic-blocks.mjs` 契约；`static/` 放图、原页图和坐标文件。网站使用 `/sites/<slug>/static/<path>` 提供资源。专题以共享入口在浏览器加载。
+`sites/<slug>/site.json` 含 `title`、`description`、正整数 `order` 与分组 `group`，可选 `label`。`group` 取 `靶点案例`、`药化进阶`、`专利拆解`、`合成与机理`、`谱图`、`读书复习`、`入门专题`、`练习` 之一（集合与顺序由 `shared/site-catalog.mjs` 的 `siteGroups` 定义），缺失或取值不在集合内时拒绝发布。`练习` 专题使用 `/practice/<slug>/`，笔记链接到的练习专题在首页显示为该套笔记的练习；其余专题使用 `/sites/<slug>/`，侧栏书架按分组展示，没有分组的已发布专题归入“其他”。`content.json` 在专题根目录，遵守 `shared/topic-content.ts` 与 `shared/topic-blocks.mjs` 契约；`static/` 放图、原页图和坐标文件。网站使用 `/sites/<slug>/static/<path>` 提供资源。专题以共享入口在浏览器加载。
 
 专题根路径 `/` 是简介、全部章节与 `sourcesIntro`（专题级来源说明）的首页。章节默认路径是 `/<id>`，可用 `chapterRoute` 或章的 `path` 指定其他路径；章节路径必须唯一，不能是 `/`。章末的资料来源只展示该章 `refs` 中的条目及其 `cite` 原文定位。发布时站内链接必须命中当前栏目与章节路由，练习链接使用 `/practice/<slug>/…`。
 
@@ -151,7 +151,7 @@ git diff --word-diff=plain --word-diff-regex='[A-Za-z0-9_]+|[^[:space:]]' main..
 
 ## Agent 专利研究记录
 
-Agent 在私有内容工作目录补充数据，随内容仓库提交后 `publish`；浏览器承担检索、阅读与比较。中性可运行样例是 `tests/fixtures/content/sites/fable-patent/content.json`，运行契约为 `scripts/patent-contract.mjs`、`scripts/patent-research.mjs` 和 `src/ui/topic/patent.ts`。原始专利、OCR、核对截图和真实数据不得进入源码仓库。已有分档、编号与学习记录可继续使用。
+Agent 在私有内容工作目录补充数据，随内容仓库提交后 `publish`；浏览器承担检索、阅读与比较。中性可运行样例是 `tests/fixtures/content/sites/fable-patent/content.json`，运行契约为 `shared/patent-contract.ts`、`shared/patent-research.ts` 和 `src/ui/topic/patent.ts`。原始专利、OCR、核对截图和真实数据不得进入源码仓库。已有分档、编号与学习记录可继续使用。
 
 collection 的内部 `id` 唯一且保持稳定。跨来源编号相同时使用如 `alpha-46`、`beta-46` 的内部 ID，并以普通 `text` 字段保留原编号；不得为新增来源改写全部旧 ID。化合物引用写 `{collection,id}`，引用的是该来源的实际化学身份；制备中的局部产物另建记录，不能用最终实施例代替中间产物。未核对的结构省略 SMILES，并在 notes 说明。路线链接优先显示记录的 `shortName` 文本字段，可用短中文名称标识局部产物；原文全名仍作为独立字段保留。
 

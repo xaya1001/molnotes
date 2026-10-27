@@ -1,4 +1,4 @@
-import { recordSync } from "../record-sync.mjs";
+import { recordSync } from "../record-sync.ts";
 import { reactive, ref, watch } from "vue";
 
 import {

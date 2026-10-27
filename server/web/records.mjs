@@ -1,10 +1,13 @@
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import { problemField, topicProblems } from "../src/ui/topic/problem.ts";
-import { patentRecordFields } from "../src/ui/topic/patent-records.ts";
-import { createRecordCodec, RECORD_VERSION } from "../src/contracts/records.ts";
-import { predictionField, pathField } from "../src/ui/topic/prediction.ts";
-import { topicPredictions } from "../scripts/topic-content.mjs";
+import { problemField, topicProblems } from "../../src/ui/topic/problem.ts";
+import { patentRecordFields } from "../../src/ui/topic/patent-records.ts";
+import {
+  createRecordCodec,
+  RECORD_VERSION,
+} from "../../src/contracts/records.ts";
+import { predictionField, pathField } from "../../src/ui/topic/prediction.ts";
+import { topicPredictions } from "../../shared/topic-content.ts";
 
 export function topicRecordsCodec(content) {
   return createRecordCodec({

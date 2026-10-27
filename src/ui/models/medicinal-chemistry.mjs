@@ -112,7 +112,7 @@ const range = (id, label, min, max, step, value, unit) => ({
   default: value,
   ...(unit ? { unit } : {}),
 });
-/** @type {Record<string, import('./catalog.mjs').LabModel>} */
+/** @type {Record<string, import('./catalog.ts').LabModel>} */
 export const medicinalChemistryModels = {
   "data-literacy-constants": {
     inputs: [range("ratio", "底物与 Km 比值", 0, 20, 0.5, 1)],

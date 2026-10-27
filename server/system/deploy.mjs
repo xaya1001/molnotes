@@ -1,6 +1,6 @@
 import { runCommand, deploymentFailure } from "./deploy-command.mjs";
 import { deploymentSmoke, containerSmokeRequest } from "./deploy-smoke.mjs";
-import { measureStage } from "./stage-timing.mjs";
+import { measureStage } from "../../shared/stage-timing.mjs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

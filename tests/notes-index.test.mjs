@@ -1,16 +1,16 @@
-import { moleculeToolkit } from "../scripts/molecule-toolkit.mjs";
-import { noteTerms, notesSearchIndex } from "../scripts/notes-reading.mjs";
+import { moleculeToolkit } from "../shared/molecule-toolkit.mjs";
+import { noteTerms, notesSearchIndex } from "../shared/notes-reading.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readUnit } from "../server/content-files.mjs";
+import { readUnit } from "../scripts/content/content-files.mjs";
 import {
   compileNotes,
   parseNote,
   noteCitations,
-} from "../scripts/notes-index.mjs";
+} from "../shared/notes-index.ts";
 
 const head =
   "---\ntitle: Test\nsummary: Summary\ndate: 2026-10-16\norder: 0\n---\n";

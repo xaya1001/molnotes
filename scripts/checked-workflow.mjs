@@ -1,4 +1,4 @@
-import { isMainModule } from "../server/main-module.mjs";
+import { isMainModule } from "../shared/main-module.mjs";
 
 /** A pushed tag alone does not prove that its image passed smoke and browser checks. */
 export function assertCheckedParent(runs, revision) {

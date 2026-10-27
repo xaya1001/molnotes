@@ -1,11 +1,11 @@
 import { resolve } from "node:path";
-import { setting } from "./settings.mjs";
-import { buildSnapshot } from "../server/content-publish.mjs";
+import { setting } from "../shared/settings.mjs";
+import { buildSnapshot } from "./content/content-publish.mjs";
 import {
   writeSnapshot,
   publishSnapshot,
   rollbackSnapshot,
-} from "../server/content-snapshot.mjs";
+} from "./content/content-snapshot.mjs";
 
 const usage = "Usage: content build <output> | publish [--rollback <commit>]";
 const [command, ...args] = process.argv.slice(2);

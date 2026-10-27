@@ -10,8 +10,8 @@ import {
 import { useRoute, useRouter } from "vue-router";
 import { api } from "../ui/api";
 import { loadIndex } from "../ui/content-data";
-import type { Note, NoteDirectory } from "../../scripts/notes-index.mjs";
-import type { GlossaryTerm } from "../../scripts/glossary.mjs";
+import type { Note, NoteDirectory } from "../../shared/notes-index.ts";
+import type { GlossaryTerm } from "../../shared/glossary.ts";
 import { notebook as index } from "../ui/content-data";
 import { PageHeading, UiDialog } from "@ui";
 import SiteBar from "@ui/SiteBar.vue";

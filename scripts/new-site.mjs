@@ -6,8 +6,8 @@ import {
   readdirSync,
 } from "node:fs";
 import { resolve } from "node:path";
-import { siteGroups } from "./site-catalog.mjs";
-import { setting } from "./settings.mjs";
+import { siteGroups } from "../shared/site-catalog.mjs";
+import { setting } from "../shared/settings.mjs";
 const [slug, title, description, group] = process.argv.slice(2);
 if (
   !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug ?? "") ||

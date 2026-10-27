@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as m from "../src/ui/models/biochemical-kinetics.mjs";
-import { labModels } from "../src/ui/models/catalog.mjs";
+import { labModels } from "../src/ui/models/catalog.ts";
 
 const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} != ${b}`);
 

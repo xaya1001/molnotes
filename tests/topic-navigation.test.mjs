@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { topicRecordsCodec } from "../server/records.mjs";
-import { buildTopicIndex } from "../scripts/topic-index.mjs";
-import { mergeRecords } from "../src/ui/record-sync.mjs";
+import { topicRecordsCodec } from "../server/web/records.mjs";
+import { buildTopicIndex } from "../shared/topic-index.ts";
+import { mergeRecords } from "../src/ui/record-sync.ts";
 const content = JSON.parse(
   readFileSync(
     new URL("./fixtures/content/sites/sample/content.json", import.meta.url),

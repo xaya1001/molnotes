@@ -2,12 +2,10 @@ import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { citedSource } from "../scripts/source-citations.mjs";
-import { contentType, sha256 } from "./assets.mjs";
+import { citedSource } from "../../shared/source-citations.mjs";
+import { contentType, sha256 } from "../../shared/assets.mjs";
 
-const script = fileURLToPath(
-  new URL("../scripts/material.py", import.meta.url),
-);
+const script = fileURLToPath(new URL("../material.py", import.meta.url));
 
 /** Runs `material.py cite`; the shelf answers each request with a result or an error. */
 function material(requests, shelf) {

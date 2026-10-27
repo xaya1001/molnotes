@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   containerSmokeRequest,
   deploymentSmoke,
-} from "../server/deploy-smoke.mjs";
+} from "../server/system/deploy-smoke.mjs";
 
 const site = (group = "专利拆解") => ({
   slug: "sample",

@@ -1,4 +1,4 @@
-import { labModels } from "../src/ui/models/catalog.mjs";
+import { labModels } from "../src/ui/models/catalog.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { leadMath } from "../src/ui/models/medicinal-chemistry.mjs";

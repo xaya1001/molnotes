@@ -9,17 +9,20 @@ import {
   symlink,
 } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { isMainModule } from "./main-module.mjs";
+import { isMainModule } from "../../shared/main-module.mjs";
 import { systemConfig } from "./system-config.mjs";
 
 /**
- * The update service runs from an immutable copy of `server/` per main
- * revision: `<root>/releases/<sha>/`, with `<root>/current` pointing at the
- * active one. The canonical checkout can then move without touching the
- * running service.
+ * The update service runs from an immutable copy of `server/system/` and the
+ * `shared/` modules it imports per main revision: `<root>/releases/<sha>/`,
+ * with `<root>/current` pointing at the active one. The canonical checkout
+ * can then move without touching the running service.
  */
 const shaPattern = /^[0-9a-f]{40}$/;
 const KEEP_RELEASES = 5;
+const RELEASED = ["server/system", "shared"];
+/** The service entry inside a release. */
+const ENTRY = "server/system/server.mjs";
 
 async function exists(path) {
   try {
@@ -35,27 +38,28 @@ function releasesDir(root) {
 }
 
 /**
- * Writes `server/` at `revision` from the repository into its release
- * directory. A complete release is immutable and reused as it is.
+ * Writes the released directories at `revision` from the repository into its
+ * release directory, keeping their repository paths. A complete release is
+ * immutable and reused as it is.
  */
 export async function prepareRelease({ repo, root, revision }) {
   if (!shaPattern.test(revision)) throw new Error("invalid revision");
   const target = join(releasesDir(root), revision);
-  if (await exists(join(target, "server.mjs"))) return target;
+  if (await exists(join(target, ENTRY))) return target;
   const staging = `${target}.partial`;
   await rm(staging, { recursive: true, force: true });
   await mkdir(staging, { recursive: true });
   await new Promise((resolve, reject) => {
-    const archive = spawn("git", ["-C", repo, "archive", revision, "server"], {
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-    const extract = spawn(
-      "tar",
-      ["-x", "--strip-components=1", "-C", staging],
+    const archive = spawn(
+      "git",
+      ["-C", repo, "archive", revision, ...RELEASED],
       {
-        stdio: ["pipe", "ignore", "ignore"],
+        stdio: ["ignore", "pipe", "ignore"],
       },
     );
+    const extract = spawn("tar", ["-x", "-C", staging], {
+      stdio: ["pipe", "ignore", "ignore"],
+    });
     archive.stdout.pipe(extract.stdin);
     let pending = 2;
     const done = (name) => (code) => {
@@ -67,7 +71,7 @@ export async function prepareRelease({ repo, root, revision }) {
     archive.once("close", done("git archive"));
     extract.once("close", done("tar"));
   });
-  await stat(join(staging, "server.mjs"));
+  await stat(join(staging, ENTRY));
   await rm(target, { recursive: true, force: true });
   await rename(staging, target);
   return target;
@@ -88,7 +92,7 @@ export async function activeRevision(root) {
 export async function activateRelease({ root, revision }) {
   if (!shaPattern.test(revision)) throw new Error("invalid revision");
   const target = join(releasesDir(root), revision);
-  await stat(join(target, "server.mjs"));
+  await stat(join(target, ENTRY));
   const previous = await activeRevision(root);
   const link = join(root, "current");
   const next = `${link}.next`;
@@ -117,7 +121,7 @@ export async function activateRelease({ root, revision }) {
 
 // Installs and activates a release of a main revision from the canonical
 // checkout, for the first installation and for rollback:
-// `node server/releases.mjs <sha>`.
+// `node server/system/releases.mjs <sha>`.
 if (isMainModule(import.meta.url)) {
   const revision = process.argv[2];
   const { checkout, releases } = systemConfig();

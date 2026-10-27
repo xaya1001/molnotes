@@ -9,11 +9,11 @@ RUN addgroup -g 1001 learning-socket && adduser -D -u 1001 -G learning-socket le
 COPY package.json ./
 COPY --from=production-dependencies /app/node_modules ./node_modules
 COPY dist ./dist
-COPY server/web.mjs server/assets.mjs server/content-query.mjs server/content-cache.mjs server/stage-timing.mjs server/http-response.mjs server/records.mjs server/main-module.mjs ./server/
-COPY scripts/settings.mjs scripts/notes-reading.mjs scripts/topic-index.mjs scripts/topic-content.mjs scripts/topic-blocks.mjs scripts/patent-contract.mjs scripts/patent-research.mjs scripts/source-citations.mjs scripts/glossary.mjs scripts/site-catalog.mjs ./scripts/
+COPY server/web ./server/web
+COPY shared ./shared
 COPY src/ui ./src/ui
 COPY src/contracts ./src/contracts
 ENV MOLNOTES_RECORDS_FILE=/data/records.sqlite
 USER learning
 EXPOSE 8080
-CMD ["node", "server/web.mjs"]
+CMD ["node", "server/web/web.mjs"]

@@ -547,7 +547,7 @@ function measuredOverlays(selected, data, group) {
     .series.map((descriptor) => measuredSeries(descriptor, data));
 }
 
-/** @type {Record<string, import('./catalog.mjs').LabModel>} */
+/** @type {Record<string, import('./catalog.ts').LabModel>} */
 export const inducedProximityModels = {
   "binding-occupancy": {
     inputs: proximityInputs.Binding,

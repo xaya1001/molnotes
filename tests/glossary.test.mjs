@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validateGlossary } from "../scripts/glossary.mjs";
+import { validateGlossary } from "../shared/glossary.ts";
 
 const entry = {
   term: "占有率",

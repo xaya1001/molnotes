@@ -4,8 +4,8 @@ import { createServer, request as httpRequest } from "node:http";
 import { pipeline } from "node:stream/promises";
 import { open, readFile, stat } from "node:fs/promises";
 import { resolve, extname, sep } from "node:path";
-import { setting } from "../scripts/settings.mjs";
-import { contentType, byteRange } from "./assets.mjs";
+import { setting } from "../../shared/settings.mjs";
+import { contentType, byteRange } from "../../shared/assets.mjs";
 import {
   contentIndex,
   reviewIndex,
@@ -24,7 +24,7 @@ import {
   allRecords,
   parseRecord,
 } from "./records.mjs";
-import { isMainModule } from "./main-module.mjs";
+import { isMainModule } from "../../shared/main-module.mjs";
 
 export function createWebServer({
   records,

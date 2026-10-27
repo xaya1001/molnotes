@@ -4,7 +4,7 @@ import {
   degradation,
   absoluteHalfLoss,
 } from "../src/ui/models/biochemical-kinetics.mjs";
-import { labModels } from "../src/ui/models/catalog.mjs";
+import { labModels } from "../src/ui/models/catalog.ts";
 
 test("teaching response has zero baseline, amplitude-relative half response and bounded saturation", () => {
   assert.equal(degradation(80, 10, 0), 0);

@@ -1,11 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { runCommand, deploymentFailure } from "../server/deploy-command.mjs";
-import { measureStage } from "../server/stage-timing.mjs";
+import {
+  runCommand,
+  deploymentFailure,
+} from "../server/system/deploy-command.mjs";
+import { measureStage } from "../shared/stage-timing.mjs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { contentSnapshot } from "../server/content-cache.mjs";
+import { contentSnapshot } from "../server/web/content-cache.mjs";
 
 const node = (source, options) =>
   runCommand(process.execPath, ["-e", source], options);

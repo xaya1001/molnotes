@@ -9,7 +9,7 @@ import type { CatalogSite } from "../ui/catalog";
 import { loadCatalog } from "../ui/content-data";
 import { loadSiteRecords } from "../ui/site-records";
 import type { Citation } from "../ui/citations";
-import type { GlossaryTerm } from "../../scripts/glossary.mjs";
+import type { GlossaryTerm } from "../../shared/glossary.ts";
 import "../ui/styles/index.css";
 boot(async () => {
   const slug = location.pathname.split("/")[2];

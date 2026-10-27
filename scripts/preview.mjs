@@ -14,10 +14,10 @@ import { parseDocument } from "yaml";
 import { chromium } from "playwright";
 import { defineFlow } from "../src/ui/diagrams/flow.ts";
 import { defineTimeline } from "../src/ui/diagrams/model.ts";
-import { resolveData } from "./topic-blocks.mjs";
-import { moleculeToolkit } from "./molecule-toolkit.mjs";
+import { resolveData } from "../shared/topic-blocks.mjs";
+import { moleculeToolkit } from "../shared/molecule-toolkit.mjs";
 import { layoutProblems } from "./molecule-layout.mjs";
-import { setting } from "./settings.mjs";
+import { setting } from "../shared/settings.mjs";
 
 const repo = resolve(import.meta.dirname, "..");
 const content = setting("MOLNOTES_CONTENT_DIR");

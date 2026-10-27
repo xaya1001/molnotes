@@ -6,7 +6,7 @@ import {
   tumorTgi,
   tumorVolume,
 } from "../src/ui/models/biochemical-kinetics.mjs";
-import { labModels } from "../src/ui/models/catalog.mjs";
+import { labModels } from "../src/ui/models/catalog.ts";
 
 test("Ras steady state respects residual hydrolysis and approaches one only in the stated limit", () => {
   assert.ok(rasSteady(1, 0, 0.00001) > 0.999);

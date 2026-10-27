@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildTopicIndex } from "../scripts/topic-index.mjs";
-import { validateTopicContent } from "../scripts/topic-content.mjs";
+import { buildTopicIndex } from "../shared/topic-index.ts";
+import { validateTopicContent } from "../shared/topic-content.ts";
 
 function chapter(id, number, extra = {}) {
   return {

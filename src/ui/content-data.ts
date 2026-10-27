@@ -1,9 +1,9 @@
-import type { TopicIndex } from "../../scripts/topic-index.mjs";
+import type { TopicIndex } from "../../shared/topic-index.ts";
 import type {
   NotebookIndex,
   NotesSearchIndex,
-} from "../../scripts/notes-index.mjs";
-import type { GlossaryTerm } from "../../scripts/glossary.mjs";
+} from "../../shared/notes-index.ts";
+import type { GlossaryTerm } from "../../shared/glossary.ts";
 import { api } from "./api";
 import {
   directories,

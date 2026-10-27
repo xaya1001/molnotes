@@ -17,13 +17,13 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
-import { buildSnapshot } from "../server/content-publish.mjs";
+import { buildSnapshot } from "../scripts/content/content-publish.mjs";
 import {
   keptSnapshots,
   publishSnapshot,
   rollbackSnapshot,
   writeSnapshot,
-} from "../server/content-snapshot.mjs";
+} from "../scripts/content/content-snapshot.mjs";
 
 const execFileAsync = promisify(execFile);
 const fixtures = resolve("tests/fixtures/content");

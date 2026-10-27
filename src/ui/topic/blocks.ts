@@ -1,4 +1,4 @@
-// The block catalogue as the runtime reads it. scripts/topic-blocks.mjs is
+// The block catalogue as the runtime reads it. shared/topic-blocks.mjs is
 // the definition and checks every topic's content.json against it; these
 // types mirror it so the renderer and the pages read checked data.
 import type {

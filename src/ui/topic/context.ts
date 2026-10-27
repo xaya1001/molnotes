@@ -3,7 +3,7 @@ import type { PatentRecords } from "./patent";
 import { inject, provide, type InjectionKey } from "vue";
 import type { CheckedTopic, PredictionAnswer, Topic } from "./content";
 import type { TopicRecordsStore } from "./records";
-import type { GlossaryTerm } from "../../../scripts/glossary.mjs";
+import type { GlossaryTerm } from "../../../shared/glossary.ts";
 
 /** The record field every topic mounted by `mountTopic` keeps beside the shared ones. */
 export interface TopicPredictionRecords extends PatentRecords {

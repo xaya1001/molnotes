@@ -6,7 +6,7 @@ import {
   remaining,
   residence,
 } from "../src/ui/models/biochemical-kinetics.mjs";
-import { labModels } from "../src/ui/models/catalog.mjs";
+import { labModels } from "../src/ui/models/catalog.ts";
 
 test("two-step inactivation has a half-maximal rate at KI and saturates", () => {
   assert.equal(kobs(0, 100, 0.1), 0);

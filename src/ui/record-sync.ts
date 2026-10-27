@@ -1,9 +1,25 @@
-const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const equal = (a: unknown, b: unknown) =>
+  JSON.stringify(a) === JSON.stringify(b);
 const conflictMessage =
   "conflict: 同一项记录已在其他页面修改。当前输入仍保留，请核对后再保存。";
-const object = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+const object = (v: unknown) =>
+  v !== null && typeof v === "object" && !Array.isArray(v);
 /** Three-way merge; only chapter membership arrays have set semantics. */
-export function mergeRecords(base, local, remote, key = "", resolve = false) {
+export function mergeRecords<T>(
+  base: T | undefined,
+  local: T,
+  remote: T,
+  key?: string,
+  resolve?: boolean,
+): T;
+// Records are JSON documents, merged field by field.
+export function mergeRecords(
+  base: any,
+  local: any,
+  remote: any,
+  key = "",
+  resolve = false,
+): any {
   if (key === "recent" && object(local) && object(remote))
     return local.opened >= remote.opened ? local : remote;
   if (equal(local, base)) return remote;
@@ -19,7 +35,7 @@ export function mergeRecords(base, local, remote, key = "", resolve = false) {
     );
   }
   if (object(local) && object(remote) && (base === undefined || object(base))) {
-    const result = {};
+    const result: Record<string, unknown> = {};
     for (const field of new Set([
       ...Object.keys(base ?? {}),
       ...Object.keys(local),
@@ -39,48 +55,58 @@ export function mergeRecords(base, local, remote, key = "", resolve = false) {
   if (resolve) return local;
   throw new Error(conflictMessage);
 }
+class RecordRequestError extends Error {
+  status: number;
+  constructor(status: number) {
+    super(`记录请求失败（${status}）`);
+    this.status = status;
+  }
+}
+
 /** A snapshot and its server validator move together only after a successful save. */
-export function recordSync(endpoint, validate = () => {}, storage) {
-  let base,
-    etag,
+export function recordSync<T>(
+  endpoint: string,
+  validate: (document: T) => void = () => {},
+  storage?: Pick<Storage, "getItem" | "setItem" | "removeItem">,
+) {
+  let base: T | undefined,
+    etag: string | null = null,
     conflicted = false;
   const key = `molnotes/pending:${endpoint}`;
   let pending = false;
-  function stage(document) {
+  function stage(document: T) {
     if (!storage) return;
     validate(document);
     storage.setItem(key, JSON.stringify({ base, document, conflicted }));
     pending = true;
   }
-  async function request(options) {
+  async function request(
+    options: RequestInit & { body?: string },
+  ): Promise<{ document: T; etag: string | null }> {
     if (options.method === "PUT")
       options.keepalive =
         new TextEncoder().encode(options.body).byteLength <= 60_000;
     const response = await fetch(endpoint, options);
-    if (!response.ok) {
-      const error = new Error(`记录请求失败（${response.status}）`);
-      error.status = response.status;
-      throw error;
-    }
+    if (!response.ok) throw new RecordRequestError(response.status);
     return {
       document: await response.json(),
       etag: response.headers.get("etag"),
     };
   }
   return {
-    async load() {
+    async load(): Promise<T> {
       const value = await request({ cache: "no-store" });
       validate(value.document);
       base = value.document;
       etag = value.etag;
       conflicted = false;
-      const saved = storage?.getItem(key);
-      pending = saved !== null && saved !== undefined;
-      if (pending) {
+      const saved = storage?.getItem(key) ?? null;
+      pending = saved !== null;
+      if (saved !== null) {
         const draft = JSON.parse(saved);
         validate(draft.base);
         validate(draft.document);
-        let merged;
+        let merged: T;
         try {
           merged = mergeRecords(draft.base, draft.document, base);
           conflicted = draft.conflicted === true;
@@ -101,7 +127,7 @@ export function recordSync(endpoint, validate = () => {}, storage) {
     get conflicted() {
       return conflicted;
     },
-    async save(local, resolve = false, current = () => local) {
+    async save(local: T, resolve = false, current = () => local): Promise<T> {
       if (conflicted && !resolve) throw new Error(conflictMessage);
       let candidate = local,
         expected = etag;
@@ -116,7 +142,7 @@ export function recordSync(endpoint, validate = () => {}, storage) {
             method: "PUT",
             headers: {
               "Content-Type": "application/json",
-              "If-Match": expected,
+              "If-Match": String(expected),
             },
             body: JSON.stringify(candidate),
           });
@@ -137,7 +163,8 @@ export function recordSync(endpoint, validate = () => {}, storage) {
           } else stage(rebased);
           return structuredClone(rebased);
         } catch (error) {
-          if (error.status !== 412) throw error;
+          if (!(error instanceof RecordRequestError) || error.status !== 412)
+            throw error;
           const latest = await request({ cache: "no-store" });
           try {
             candidate = mergeRecords(base, local, latest.document, "", resolve);
