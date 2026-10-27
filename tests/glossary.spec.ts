@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 
 test("a topic term opens the site definition", async ({ page }) => {
   await page.goto("/practice/sample/start");

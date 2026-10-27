@@ -1,5 +1,5 @@
 import { putRecords } from "./helpers/records";
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./helpers/test";
 test("read, inspect a term and retain reading state across browser contexts", async ({
   page,
   browser,
