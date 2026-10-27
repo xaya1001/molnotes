@@ -78,6 +78,11 @@ export async function writeRecord(pool, scope, document, revision) {
   return result.rows[0]?.revision ?? null;
 }
 
+/** Rejects when the record store cannot answer. */
+export async function recordsReady(pool) {
+  await pool.query("SELECT 1");
+}
+
 export async function allRecords(pool) {
   const rows = (await pool.query("SELECT scope,document FROM learning_records"))
     .rows;

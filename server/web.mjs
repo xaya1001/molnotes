@@ -22,6 +22,7 @@ import {
 } from "./content-query.mjs";
 import {
   recordContext,
+  recordsReady,
   readRecord,
   writeRecord,
   allRecords,
@@ -69,7 +70,7 @@ export function createWebServer({
       }
       if (path === "/healthz") {
         await content();
-        await pool.query("SELECT 1");
+        await recordsReady(pool);
         send(res, 200, { status: "ok" });
         return;
       }
