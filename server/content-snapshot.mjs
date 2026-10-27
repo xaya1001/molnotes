@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import {
+  link,
   mkdir,
+  readFile,
   readdir,
   readlink,
   rename,
@@ -29,21 +31,47 @@ async function snapshots(releases) {
     .sort((a, b) => b.built.localeCompare(a.built));
 }
 
+/** Asset hashes by file path in the snapshot at `directory`, empty when there is none. */
+async function assetHashes(directory) {
+  if (!directory) return new Map();
+  try {
+    const { assets } = JSON.parse(
+      await readFile(join(directory, "snapshot.json"), "utf8"),
+    );
+    return new Map(assets.map((a) => [`${a.scope}/${a.path}`, a.sha256]));
+  } catch (error) {
+    if (error.code === "ENOENT") return new Map();
+    throw error;
+  }
+}
+
 /**
  * Writes a built snapshot to `output`, which must not exist yet: the files
- * go to a sibling directory that is renamed into place once complete.
+ * go to a sibling directory that is renamed into place once complete. A file
+ * whose hash matches the same path in the `previous` snapshot is hard-linked
+ * instead of written, so unchanged files take no extra space.
  */
-export async function writeSnapshot(output, { snapshot, files }) {
+export async function writeSnapshot(
+  output,
+  { snapshot, files },
+  { previous } = {},
+) {
   const temporary = join(
     dirname(output),
     `.${basename(output)}.${randomUUID()}`,
+  );
+  const earlier = await assetHashes(previous);
+  const hashes = new Map(
+    snapshot.assets.map((a) => [`${a.scope}/${a.path}`, a.sha256]),
   );
   try {
     await mkdir(temporary, { recursive: true });
     for (const [path, bytes] of files) {
       const file = join(temporary, "files", path);
       await mkdir(dirname(file), { recursive: true });
-      await writeFile(file, bytes);
+      if (earlier.get(path) && earlier.get(path) === hashes.get(path))
+        await link(join(previous, "files", path), file);
+      else await writeFile(file, bytes);
     }
     await writeFile(join(temporary, "snapshot.json"), JSON.stringify(snapshot));
     await rename(temporary, output);
@@ -98,7 +126,10 @@ export async function publishSnapshot(root, releases, { shelf } = {}) {
   await source.verify();
   await mkdir(releases, { recursive: true });
   const name = nameOf(source.commit, built.snapshot.builtAt);
-  await writeSnapshot(join(releases, name), built);
+  const current = await currentName(releases);
+  await writeSnapshot(join(releases, name), built, {
+    previous: current && join(releases, current),
+  });
   await switchCurrent(releases, name);
   await prune(releases);
   return name;

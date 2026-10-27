@@ -11,6 +11,7 @@ import {
   realpath,
   rename,
   rm,
+  stat,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -190,6 +191,19 @@ test("publish switches current to the committed snapshot, keeps five and rolls b
   assert.equal(await current(), again);
   assert.ok((await kept()).includes(published.at(-1)));
   assert.equal((await kept()).length, keptSnapshots);
+  // Files unchanged since the previous build are links to the same data.
+  const { assets } = JSON.parse(
+    await readFile(join(releases, again, "snapshot.json"), "utf8"),
+  );
+  assert.ok(assets.length);
+  for (const { scope, path } of assets) {
+    const [earlier, later] = await Promise.all(
+      [published.at(-1), again].map((name) =>
+        stat(join(releases, name, "files", scope, path)),
+      ),
+    );
+    assert.equal(later.ino, earlier.ino, `${scope}/${path}`);
+  }
 
   const back = published.at(-3);
   await content(root, "publish", "--rollback", commitOf(back).slice(0, 7));
