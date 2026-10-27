@@ -82,8 +82,8 @@ async function smoke(includeSystem = true) {
 }
 
 async function pullPublishedImage(revision) {
-  const config = await mkdtemp(join(tmpdir(), "molnotes-ghcr-"));
-  const env = { DOCKER_CONFIG: config };
+  const dockerConfig = await mkdtemp(join(tmpdir(), "molnotes-ghcr-"));
+  const env = { DOCKER_CONFIG: dockerConfig };
   try {
     const token = await run("image.credentials", "gh", ["auth", "token"]);
     await run(
@@ -104,7 +104,7 @@ async function pullPublishedImage(revision) {
       throw deploymentError("expected one published image");
     return publishedImage(repository, revision, JSON.stringify(inspected[0]));
   } finally {
-    await rm(config, { recursive: true, force: true });
+    await rm(dockerConfig, { recursive: true, force: true });
   }
 }
 
