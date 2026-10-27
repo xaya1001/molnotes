@@ -53,7 +53,7 @@ async function fixture(check = "passed", overrides = {}) {
       req.end();
     });
   }
-  return { request, target, getStarts: () => starts, logs };
+  return { server, request, target, getStarts: () => starts, logs };
 }
 
 test("every rejected update leaves a journal line with status and reason", async () => {
@@ -237,4 +237,45 @@ test("status, validation and start failures release reservation; stale callbacks
     (await f.request("/system/api/status")).body.update.state,
     "succeeded",
   );
+});
+
+test("deploys a passed main revision automatically once, and never retries one that failed", async () => {
+  let finish;
+  const started = [];
+  const { server, request, target, logs } = await fixture("passed", {
+    startUpdate: async (revision, done) => {
+      started.push(revision);
+      finish = done;
+    },
+  });
+  assert.equal(await server.deployAutomatically(), target);
+  assert.deepEqual(started, [target]);
+  assert.ok(logs.includes(`update started automatically: ${target}`));
+  // A running update is never joined by another automatic one.
+  assert.equal(await server.deployAutomatically(), null);
+  assert.equal(
+    (await request("/system/api/status")).body.update.state,
+    "running",
+  );
+  finish("更新失败，请查看项目部署记录");
+  assert.equal(await server.deployAutomatically(), null);
+  assert.deepEqual(started, [target]);
+  // The button may still deploy the revision that failed automatically.
+  const manual = await request("/system/api/update", {
+    method: "POST",
+    headers: {
+      host: "site.example.test",
+      origin: "https://site.example.test",
+    },
+  });
+  assert.equal(manual.status, 202);
+  assert.deepEqual(started, [target, target]);
+});
+
+test("automatic deployment waits for a passed check", async () => {
+  for (const check of ["pending", "failed", "unknown"]) {
+    const { server, getStarts } = await fixture(check);
+    assert.equal(await server.deployAutomatically(), null);
+    assert.equal(getStarts(), 0);
+  }
 });

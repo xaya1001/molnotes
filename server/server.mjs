@@ -95,6 +95,14 @@ function send(response, code, data) {
   response.end(JSON.stringify(data));
 }
 
+/** Whether `current` offers a revision the update may deploy. */
+const updatable = (current) =>
+  current.running.health === "healthy" &&
+  current.running.revision !== null &&
+  current.latest.revision !== null &&
+  current.running.revision !== current.latest.revision &&
+  current.latest.check === "passed";
+
 export function createSystemServer({
   readStatus,
   startUpdate,
@@ -102,6 +110,9 @@ export function createSystemServer({
   log = (line) => console.error(line),
 }) {
   let update = { state: "idle", target: null };
+  // A revision whose automatic deployment failed is not retried automatically;
+  // the update button can still deploy it.
+  let failedAutomatically = null;
   // Rejections leave a journal line (status and reason only, never header
   // values) so a disabled or failing update button can be diagnosed later.
   function reject(response, code, error) {
@@ -109,18 +120,62 @@ export function createSystemServer({
     send(response, code, { error });
   }
   let operation = null;
-  return createServer(async (request, response) => {
+  /** Starts deploying `target` under the reservation `owned`. */
+  async function launch(owned, target, automatic = false) {
+    log(`update started${automatic ? " automatically" : ""}: ${target}`);
+    update = { state: "running", target };
+    await startUpdate(target, (error) => {
+      if (operation !== owned) return;
+      operation = null;
+      if (error && automatic) failedAutomatically = target;
+      update = error
+        ? { state: "failed", target, message: error }
+        : { state: "succeeded", target, message: "网站已更新" };
+    });
+    return target;
+  }
+  /**
+   * Deploys the latest passed main revision when nothing else is running and
+   * it has not failed automatically before. Returns the started target or null.
+   */
+  async function deployAutomatically() {
+    if (operation !== null) return null;
+    const owned = {};
+    operation = owned;
+    try {
+      const current = await readStatus();
+      if (
+        operation !== owned ||
+        !updatable(current) ||
+        current.latest.revision === failedAutomatically
+      ) {
+        if (operation === owned) operation = null;
+        return null;
+      }
+      return await launch(owned, current.latest.revision, true);
+    } catch (cause) {
+      if (operation === owned) {
+        operation = null;
+        update = {
+          state: "failed",
+          target: update.target,
+          message: "更新未能启动",
+        };
+      }
+      log(
+        `automatic update failed to start: ${
+          cause instanceof Error ? cause.message : String(cause)
+        }`,
+      );
+      return null;
+    }
+  }
+  const server = createServer(async (request, response) => {
     let owned = null;
     try {
       if (request.method === "GET" && request.url === "/system/api/status") {
         const current = await readStatus();
-        const canUpdate =
-          operation === null &&
-          current.running.health === "healthy" &&
-          current.running.revision !== null &&
-          current.latest.revision !== null &&
-          current.running.revision !== current.latest.revision &&
-          current.latest.check === "passed";
+        const canUpdate = operation === null && updatable(current);
         send(response, 200, { ...current, update, canUpdate });
         return;
       }
@@ -148,28 +203,13 @@ export function createSystemServer({
         operation = owned;
         update = { state: "running", target: null };
         const current = await readStatus();
-        if (
-          current.running.health !== "healthy" ||
-          current.running.revision === null ||
-          current.latest.revision === null ||
-          current.running.revision === current.latest.revision ||
-          current.latest.check !== "passed"
-        ) {
+        if (!updatable(current)) {
           operation = null;
           update = { state: "idle", target: null };
           reject(response, 409, "没有已通过检查的可用更新");
           return;
         }
-        const target = current.latest.revision;
-        log(`update started: ${target}`);
-        update = { state: "running", target };
-        await startUpdate(target, (error) => {
-          if (operation !== owned) return;
-          operation = null;
-          update = error
-            ? { state: "failed", target, message: error }
-            : { state: "succeeded", target, message: "网站已更新" };
-        });
+        const target = await launch(owned, current.latest.revision);
         send(response, 202, { target });
         return;
       }
@@ -191,6 +231,8 @@ export function createSystemServer({
       send(response, 503, { error: "系统状态暂时无法获取" });
     }
   });
+  server.deployAutomatically = deployAutomatically;
+  return server;
 }
 
 function startActualUpdate(config, target, done) {
@@ -224,4 +266,6 @@ if (isMainModule(import.meta.url)) {
   });
   rmSync(config.socket, { force: true });
   server.listen(config.socket, () => chmodSync(config.socket, 0o660));
+  if (config.autoDeploySeconds)
+    setInterval(server.deployAutomatically, config.autoDeploySeconds * 1000);
 }
