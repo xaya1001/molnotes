@@ -8,7 +8,7 @@ import {
   comparePotency,
   freeConcentration,
 } from "../src/ui/models/medicinal-chemistry.mjs";
-import { labModels } from "../src/ui/models/catalog.mjs";
+import { labModels } from "../src/ui/models/catalog.ts";
 
 const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-10);
 

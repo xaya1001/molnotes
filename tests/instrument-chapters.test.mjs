@@ -5,7 +5,7 @@ import { withInstrumentChapters } from "./helpers/instrument-chapters.mjs";
 import {
   validateTopicContent,
   chapterPredictions,
-} from "../scripts/topic-content.mjs";
+} from "../shared/topic-content.ts";
 
 const fixture = JSON.parse(
   await readFile(

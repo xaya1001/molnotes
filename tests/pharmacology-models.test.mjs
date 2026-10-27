@@ -1,4 +1,4 @@
-import { labModels } from "../src/ui/models/catalog.mjs";
+import { labModels } from "../src/ui/models/catalog.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { drugActionMath } from "../src/ui/models/medicinal-chemistry.mjs";

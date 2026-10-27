@@ -2,8 +2,8 @@ import { spawn } from "node:child_process";
 import { mkdtemp, mkdir, rm, chmod, symlink } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { buildSnapshot } from "../server/content-publish.mjs";
-import { writeSnapshot } from "../server/content-snapshot.mjs";
+import { buildSnapshot } from "./content/content-publish.mjs";
+import { writeSnapshot } from "./content/content-snapshot.mjs";
 import { smokeBrowser } from "./smoke-browser.mjs";
 const image = process.argv[2];
 if (!/^ghcr\.io\/.+@sha256:[a-f0-9]{64}$/.test(image ?? ""))

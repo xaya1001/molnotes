@@ -2,10 +2,10 @@ import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { publishSnapshot } from "./content-snapshot.mjs";
-import { buildSnapshot } from "../../server/content-publish.mjs";
-import { writeSnapshot } from "../../server/content-snapshot.mjs";
-import { openRecords } from "../../server/records.mjs";
-import { createWebServer } from "../../server/web.mjs";
+import { buildSnapshot } from "../../scripts/content/content-publish.mjs";
+import { writeSnapshot } from "../../scripts/content/content-snapshot.mjs";
+import { openRecords } from "../../server/web/records.mjs";
+import { createWebServer } from "../../server/web/web.mjs";
 import { withInstrumentChapters } from "./instrument-chapters.mjs";
 import { requireBrowserBuild } from "./browser-build.mjs";
 

@@ -5,7 +5,7 @@ import {
   absoluteHalfLoss,
   proteinAt,
 } from "../src/ui/models/biochemical-kinetics.mjs";
-import { labModels } from "../src/ui/models/catalog.mjs";
+import { labModels } from "../src/ui/models/catalog.ts";
 
 test("Protein degradation curve distinguishes half-maximal response from absolute loss", () => {
   assert.equal(degradation(40, 10, 10), 20);

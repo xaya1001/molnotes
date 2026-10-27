@@ -3,7 +3,7 @@ import { afterEach, test } from "node:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createSystemServer } from "../server/server.mjs";
+import { createSystemServer } from "../server/system/server.mjs";
 
 const sockets = [];
 afterEach(async () => {

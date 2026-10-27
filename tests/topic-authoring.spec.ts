@@ -5,10 +5,10 @@ import { join, resolve } from "node:path";
 import { once } from "node:events";
 import { execFileSync } from "node:child_process";
 import { publishSnapshot } from "./helpers/content-snapshot.mjs";
-import { buildSnapshot } from "../server/content-publish.mjs";
-import { writeSnapshot } from "../server/content-snapshot.mjs";
-import { openRecords } from "../server/records.mjs";
-import { createWebServer } from "../server/web.mjs";
+import { buildSnapshot } from "../scripts/content/content-publish.mjs";
+import { writeSnapshot } from "../scripts/content/content-snapshot.mjs";
+import { openRecords } from "../server/web/records.mjs";
+import { createWebServer } from "../server/web/web.mjs";
 
 test("generated chapters compose the shared shell and the block catalogue", async ({
   page,

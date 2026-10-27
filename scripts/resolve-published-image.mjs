@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { publishedImage } from "../server/release-image.mjs";
+import { publishedImage } from "../server/system/release-image.mjs";
 
 const [repository, revision, tag] = process.argv.slice(2);
 if (!repository || !revision || !tag)

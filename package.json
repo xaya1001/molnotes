@@ -16,7 +16,7 @@
     "format:check": "prettier --check . --cache --cache-strategy content",
     "format:staged": "lint-staged",
     "hooks:install": "bash scripts/install-git-hooks.sh",
-    "serve": "node server/web.mjs",
+    "serve": "node server/web/web.mjs",
     "content": "node scripts/content.mjs",
     "content:preview": "node scripts/preview.mjs",
     "molecule:layout": "node scripts/layout.mjs"

@@ -12,7 +12,7 @@ import { defineTopicRoutes } from "./routes";
 import TopicApp from "./TopicApp.vue";
 import { openCitation } from "./overlay";
 import { provideCitations, type Citation } from "../citations";
-import type { GlossaryTerm } from "../../../scripts/glossary.mjs";
+import type { GlossaryTerm } from "../../../shared/glossary.ts";
 
 export interface TopicOptions {
   slug: string;

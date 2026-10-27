@@ -6,7 +6,7 @@ import {
   engagement,
   lowConcentrationRate,
 } from "../src/ui/models/biochemical-kinetics.mjs";
-import { labModels } from "../src/ui/models/catalog.mjs";
+import { labModels } from "../src/ui/models/catalog.ts";
 
 test("RAS steady state balances exchange and hydrolysis fluxes", () => {
   assert.equal(rasSteady(0, 1), 0);

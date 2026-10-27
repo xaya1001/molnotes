@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { labModels, modelInputs } from "../src/ui/models/catalog.mjs";
+import { labModels, modelInputs } from "../src/ui/models/catalog.ts";
 
 const samples = JSON.parse(
   readFileSync(

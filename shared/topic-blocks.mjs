@@ -4,7 +4,7 @@
 // of the catalogue; the runtime renders exactly these types.
 import { defineDataTable } from "../src/ui/data/values.ts";
 import { defineMatrix } from "../src/ui/matrix/model.ts";
-import { labModels, modelInputs } from "../src/ui/models/catalog.mjs";
+import { labModels, modelInputs } from "../src/ui/models/catalog.ts";
 import { defineStructureSet } from "../src/ui/structure/model.ts";
 import { defineFlow, flowText } from "../src/ui/diagrams/flow.ts";
 import { defineTimeline, timelineText } from "../src/ui/diagrams/model.ts";

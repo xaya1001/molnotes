@@ -1,6 +1,6 @@
 import { readFile, realpath } from "node:fs/promises";
 import { join } from "node:path";
-import { measureStage, logTiming } from "./stage-timing.mjs";
+import { measureStage, logTiming } from "../../shared/stage-timing.mjs";
 
 const family = (key) =>
   key.startsWith("/api/topics/")

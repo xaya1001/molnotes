@@ -1,30 +1,37 @@
-import { validatePatentData } from "./patent-contract.mjs";
+import { validatePatentData } from "./patent-contract.ts";
 import { contentCitations, parseCitation } from "./source-citations.mjs";
 // The part of a topic's content.json every topic shares. Topics add their own
 // fields beside these; this check only covers the common core and the cross
 // references between its parts, and it runs during publication
 // (content build) and when a topic module loads (defineTopicContent).
-import {
-  chapterPredictions,
-  validateBlocks,
-  validateStaticBlocks,
-} from "./topic-blocks.mjs";
+import * as topicBlocks from "./topic-blocks.mjs";
+const { validateBlocks, validateStaticBlocks } = topicBlocks;
 
-export {
-  blockSearchText,
-  chapterPredictions,
-  resolveData,
-} from "./topic-blocks.mjs";
+/** The predictions of a chapter with the ids their records are kept under; a matrix block becomes `{ kind: "matrix", model }`. */
+export const chapterPredictions: <P>(
+  chapter: { id: string; blocks: readonly { type: string; id?: string }[] },
+  data?: Record<string, unknown>,
+) => { id: string; prediction: P }[] = topicBlocks.chapterPredictions;
+export const blockSearchText: (
+  blocks: readonly { type: string }[],
+  data?: Record<string, unknown>,
+) => string[] = topicBlocks.blockSearchText;
+/** `value` itself, or the entry of `data` it names. */
+export const resolveData: <T>(
+  value: T | string,
+  data: Record<string, unknown> | undefined,
+  where: string,
+) => T = topicBlocks.resolveData;
 
-function isObject(value) {
+function isObject(value: unknown) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function assert(condition, message) {
+function assert(condition: unknown, message: string) {
   if (!condition) throw new Error(message);
 }
 
-function text(value, where) {
+function text(value: unknown, where: string) {
   assert(typeof value === "string" && value.trim(), `${where} must be text`);
 }
 
@@ -35,16 +42,22 @@ const routePlaceholder = /\{(\w+)\}/g;
  * otherwise `chapterRoute` (for example `/chapters/{number}`) names it from
  * the chapter's `{id}` or `{number}`; without it chapters use `/<id>`. The root is the topic home.
  */
-export function chapterRoutePath(content, chapter) {
+export function chapterRoutePath(
+  content: { chapterRoute?: string; chapters: readonly { id: string }[] },
+  chapter: { id: string; number?: number; path?: string },
+): string {
   if (chapter.path !== undefined) return chapter.path;
   if (content.chapterRoute === undefined) return `/${chapter.id}`;
-  return content.chapterRoute.replace(routePlaceholder, (_, name) =>
-    String(chapter[name]),
+  // The content check allows only these two placeholders.
+  return content.chapterRoute.replace(routePlaceholder, (_, name: string) =>
+    String(name === "number" ? chapter.number : chapter.id),
   );
 }
 
 /** Throws on the first contract violation; returns the content unchanged. */
-export function validateTopicContent(content, name = "content.json") {
+export function validateTopicContent<T>(content: T, name?: string): T;
+// `content` is parsed JSON; the checks below are its boundary.
+export function validateTopicContent(content: any, name = "content.json") {
   assert(isObject(content), `${name} must be an object`);
   assert(Array.isArray(content.chapters), `${name}: chapters must be an array`);
   if (content.data !== undefined)
@@ -54,9 +67,9 @@ export function validateTopicContent(content, name = "content.json") {
   // Cross references the blocks and predictions make, checked once the
   // excerpts and quiz are known.
   const found = {
-    excerpts: [],
-    quiz: [],
-    predictionIds: new Set(),
+    excerpts: [] as [string, string][],
+    quiz: [] as [string, string][],
+    predictionIds: new Set<string>(),
     pathPicker: false,
   };
   for (const chapter of content.chapters) {
@@ -95,7 +108,7 @@ export function validateTopicContent(content, name = "content.json") {
       assert(
         Array.isArray(path.chapters) &&
           path.chapters.length > 0 &&
-          path.chapters.every((id) => chapterIds.has(id)),
+          path.chapters.every((id: any) => chapterIds.has(id)),
         `${name}: path ${path.id} chapters must list known chapter ids`,
       );
     }
@@ -123,7 +136,9 @@ export function validateTopicContent(content, name = "content.json") {
           `${name}: chapter ${chapter.id} needs a number for chapterRoute`,
         );
     const paths = new Set(
-      content.chapters.map((chapter) => chapterRoutePath(content, chapter)),
+      content.chapters.map((chapter: any) =>
+        chapterRoutePath(content, chapter),
+      ),
     );
     assert(
       !paths.has("/") && paths.size === content.chapters.length,
@@ -132,7 +147,9 @@ export function validateTopicContent(content, name = "content.json") {
   }
   {
     const paths = new Set(
-      content.chapters.map((chapter) => chapterRoutePath(content, chapter)),
+      content.chapters.map((chapter: any) =>
+        chapterRoutePath(content, chapter),
+      ),
     );
     assert(
       !paths.has("/") && paths.size === content.chapters.length,
@@ -157,7 +174,9 @@ export function validateTopicContent(content, name = "content.json") {
     try {
       parseCitation(href);
     } catch (error) {
-      throw new Error(`${where}: ${error.message}`);
+      throw new Error(
+        `${where}: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
   if (content.sourcesIntro !== undefined) {
@@ -172,7 +191,7 @@ export function validateTopicContent(content, name = "content.json") {
       assert(
         Array.isArray(intro.paragraphs) &&
           intro.paragraphs.length > 0 &&
-          intro.paragraphs.every((p) => typeof p === "string" && p),
+          intro.paragraphs.every((p: any) => typeof p === "string" && p),
         `${name}: sourcesIntro paragraphs must be a list of text`,
       );
     else {
@@ -185,7 +204,7 @@ export function validateTopicContent(content, name = "content.json") {
       found.excerpts.push(...intros.excerpts);
     }
   }
-  const refs = (ids, where) => {
+  const refs = (ids: any, where: string) => {
     if (ids === undefined) return;
     assert(Array.isArray(ids), `${where} refs must be an array`);
     for (const id of ids)
@@ -285,7 +304,7 @@ export function validateTopicContent(content, name = "content.json") {
     const where = `${name}: chapter ${chapter.id} terms`;
     assert(
       Array.isArray(chapter.terms) &&
-        chapter.terms.every((term) => typeof term === "string" && term),
+        chapter.terms.every((term: any) => typeof term === "string" && term),
       `${where} must be a list of term names`,
     );
     assert(
@@ -297,9 +316,15 @@ export function validateTopicContent(content, name = "content.json") {
 }
 
 /** Every prediction of the topic with the id its records are kept under and its chapter. */
-export function topicPredictions(content) {
+export function topicPredictions<P>(content: {
+  chapters: readonly {
+    id: string;
+    blocks: readonly { type: string; id?: string }[];
+  }[];
+  data?: Record<string, unknown>;
+}): { id: string; chapter: string; prediction: P }[] {
   return content.chapters.flatMap((chapter) =>
-    chapterPredictions(chapter, content.data).map((entry) => ({
+    chapterPredictions<P>(chapter, content.data).map((entry) => ({
       ...entry,
       chapter: chapter.id,
     })),
@@ -307,6 +332,6 @@ export function topicPredictions(content) {
 }
 
 /** Public base for a topic; content storage continues to use sites/<slug>. */
-export function topicBasePath(site) {
+export function topicBasePath(site: { slug: string; group?: string }): string {
   return `/${site.group === "练习" ? "practice" : "sites"}/${site.slug}`;
 }

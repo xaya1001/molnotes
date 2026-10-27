@@ -1,5 +1,5 @@
 import { reactive, ref } from "vue";
-import { recordSync } from "../ui/record-sync.mjs";
+import { recordSync } from "../ui/record-sync.ts";
 import { readPosition, savePosition } from "../ui/reading-position";
 interface Reading {
   opened: number;

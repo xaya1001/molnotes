@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { validateTopicContent } from "../scripts/topic-content.mjs";
-import { patentRoutePaths } from "../scripts/patent-contract.mjs";
+import { validateTopicContent } from "../shared/topic-content.ts";
+import { patentRoutePaths } from "../shared/patent-contract.ts";
 import { filterRecords, recordsCsv } from "../src/ui/topic/patent-filter.ts";
-import { topicRecordsCodec } from "../server/records.mjs";
-import { validatePatentAssets } from "../server/patent-assets.mjs";
-import { readUnit } from "../server/content-files.mjs";
+import { topicRecordsCodec } from "../server/web/records.mjs";
+import { validatePatentAssets } from "../scripts/content/patent-assets.mjs";
+import { readUnit } from "../scripts/content/content-files.mjs";
 const fixture = () =>
   JSON.parse(
     readFileSync(

@@ -1,5 +1,5 @@
-import { moleculeToolkit } from "../scripts/molecule-toolkit.mjs";
-import { patentBlocks } from "../scripts/patent-contract.mjs";
+import { moleculeToolkit } from "../../shared/molecule-toolkit.mjs";
+import { patentBlocks } from "../../shared/patent-contract.ts";
 let toolkit;
 const checked = new Set();
 export async function validatePatentAssets(content, slug, assets) {

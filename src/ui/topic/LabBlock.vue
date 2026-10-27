@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from "vue";
 import LineChart from "../LineChart.vue";
 import TopicTable from "./TopicTable.vue";
-import { labModels, modelInputs, type LabResult } from "../models/catalog.mjs";
+import { labModels, modelInputs, type LabResult } from "../models/catalog.ts";
 import type { LabBlock } from "./blocks";
 
 /**

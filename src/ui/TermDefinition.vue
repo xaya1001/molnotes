@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import UiDialog from "./UiDialog.vue";
-import type { GlossaryTerm } from "../../scripts/glossary.mjs";
+import type { GlossaryTerm } from "../../shared/glossary.ts";
 defineProps<{ term?: GlossaryTerm }>();
 const open = defineModel<boolean>("open", { required: true });
 </script>

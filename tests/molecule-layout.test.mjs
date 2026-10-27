@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { moleculeToolkit } from "../scripts/molecule-toolkit.mjs";
+import { moleculeToolkit } from "../shared/molecule-toolkit.mjs";
 import {
   layoutCandidates,
   layoutProblems,

@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { contentSnapshot } from "../server/content-cache.mjs";
+import { contentSnapshot } from "../server/web/content-cache.mjs";
 
 test("reading and record validation load without browser state or publication compilers", () => {
   execFileSync(
@@ -17,7 +17,7 @@ test("reading and record validation load without browser state or publication co
     registerHooks({
       resolve(specifier, context, next) {
         if (["vue", "@vue", "@rdkit", "markdown-it", "markdown-it-cjk-friendly", "katex", "yaml"].includes(specifier.split("/")[0]) ||
-            ["content-publish.mjs", "content-files.mjs", "citations.mjs", "patent-assets.mjs", "notes-index.mjs"].includes(specifier.split("/").at(-1)))
+            ["content-publish.mjs", "content-files.mjs", "citations.mjs", "patent-assets.mjs", "notes-index.ts"].includes(specifier.split("/").at(-1)))
           throw new Error('Reading boundary imported publication or browser dependency: ' + specifier);
         return next(specifier, context);
       },
@@ -25,7 +25,7 @@ test("reading and record validation load without browser state or publication co
     const { createRecordCodec } = await import(${JSON.stringify(new URL("../src/contracts/records.ts", import.meta.url).href)});
     const codec = createRecordCodec({ chapterIds: [], quiz: [], extras: {} });
     codec.parseRecords({ version: 1, ...codec.empty() });
-    await import(${JSON.stringify(new URL("../server/web.mjs", import.meta.url).href)});
+    await import(${JSON.stringify(new URL("../server/web/web.mjs", import.meta.url).href)});
   `,
     ],
     { stdio: "pipe" },

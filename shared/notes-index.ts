@@ -1,22 +1,113 @@
 import MarkdownIt from "markdown-it";
+import type { Env } from "markdown-it";
 import markdownItCjkFriendly from "markdown-it-cjk-friendly";
 import { parseDocument } from "yaml";
 import katex from "katex";
 import { moleculeToolkit } from "./molecule-toolkit.mjs";
-import { defineFlow, flowText } from "../src/ui/diagrams/flow.ts";
-import { defineTimeline, timelineText } from "../src/ui/diagrams/model.ts";
+import { defineFlow, flowText, type Flow } from "../src/ui/diagrams/flow.ts";
+import {
+  defineTimeline,
+  timelineText,
+  type Timeline,
+} from "../src/ui/diagrams/model.ts";
+import type { Citation } from "../src/ui/citations.ts";
+import type { GlossaryTerm } from "./glossary.ts";
+
+export interface NoteSection {
+  id: string;
+  title: string;
+  level: number;
+}
+export interface NoteMolecules {
+  id: string;
+  molecules: { smiles: string; caption: string }[];
+}
+export type NoteDiagram =
+  | { id: string; kind: "timeline"; timeline: Timeline; caption: string }
+  | { id: string; kind: "flow"; flow: Flow; caption: string };
+export interface Note {
+  slug: string;
+  directory: string;
+  directoryTitle: string;
+  path: string;
+  title: string;
+  summary: string;
+  date: string;
+  updated?: string;
+  order: number;
+  html: string;
+  text: string;
+  sections: NoteSection[];
+  molecules: NoteMolecules[];
+  /** Absent until the note is published again. */
+  diagrams?: NoteDiagram[];
+  /** Resolved citations by href (absent until the note is published again). */
+  citations?: Record<string, Citation>;
+}
+export interface NoteDirectory {
+  slug: string;
+  title: string;
+  intro: string;
+  html: string;
+  summary: string;
+  order: number;
+  path: string;
+  citations?: Record<string, Citation>;
+}
+export interface NotesIndex {
+  directories: NoteDirectory[];
+  notes: Note[];
+  terms: Record<string, GlossaryTerm>;
+}
+
+export interface NotebookIndex {
+  directories: Omit<NoteDirectory, "html" | "citations" | "intro">[];
+  notes: Omit<
+    Note,
+    "html" | "text" | "sections" | "molecules" | "diagrams" | "citations"
+  >[];
+}
+
+export interface NotesSearchIndex {
+  directories: Pick<NoteDirectory, "title" | "summary" | "path">[];
+  notes: Pick<Note, "path" | "title" | "directoryTitle" | "summary" | "text">[];
+}
+
+/** What compile() hands markdown-it, which passes it back to every rule. */
+type NoteEnv = {
+  file: string;
+  line: number;
+  offset: number;
+  directory: string;
+  path: string;
+  molecules: NoteMolecules[];
+  diagrams: object[];
+  text: string[];
+  citations: Record<string, Citation>;
+  cited: Set<string>;
+  citeOpen?: boolean;
+};
+const noteEnv = (env: Env | undefined) => env as NoteEnv;
 
 // Fences drawn as figures: the YAML inside is the block's value plus a caption.
-const diagramKinds = {
+const diagramKinds: Record<
+  string,
+  { define: (value: unknown) => unknown; words: (model: any) => string[] }
+> = {
   timeline: { define: defineTimeline, words: timelineText },
   flow: { define: defineFlow, words: flowText },
 };
 
-const fail = (file, line, message) => {
+function fail(file: string, line: number, message: string): never {
   throw new Error(`${file}:${line}: ${message}`);
-};
-let toolkit;
-function fields(value, required, optional, file) {
+}
+let toolkit: Awaited<ReturnType<typeof moleculeToolkit>> | undefined;
+function fields(
+  value: any,
+  required: string[],
+  optional: string[],
+  file: string,
+) {
   if (!value || typeof value !== "object" || Array.isArray(value))
     fail(file, 1, "Expected a mapping");
   for (const key of required)
@@ -25,7 +116,7 @@ function fields(value, required, optional, file) {
     if (![...required, ...optional].includes(key))
       fail(file, 1, `Unknown field ${key}`);
 }
-function date(value) {
+function date(value: unknown) {
   return (
     typeof value === "string" &&
     /^\d{4}-\d{2}-\d{2}$/.test(value) &&
@@ -33,7 +124,7 @@ function date(value) {
     new Date(value).toISOString().slice(0, 10) === value
   );
 }
-export function parseNote(source, file) {
+export function parseNote(source: string, file: string) {
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(source);
   if (!match) fail(file, 1, "Missing YAML front matter");
   const doc = parseDocument(match[1], { uniqueKeys: true });
@@ -69,8 +160,8 @@ function noteMarkdown() {
     const remaining = state.src.slice(state.pos);
     const term = /^\[\[([^\]\n]+)\]\]/.exec(remaining);
     const math = /^\$([^$\n]+)\$/.exec(remaining);
-    if (!term && !math) return false;
     const match = term ?? math;
+    if (!match) return false;
     if (!silent) {
       const token = state.push(term ? "note_term" : "note_math", "", 0);
       token.content = match[1];
@@ -95,7 +186,7 @@ function noteMarkdown() {
       )
         last++;
       if (last === end)
-        fail(state.env.file, start + 1, "Unclosed display formula");
+        fail(noteEnv(state.env).file, start + 1, "Unclosed display formula");
       if (silent) return true;
       const token = state.push("note_display_math", "", 0);
       token.content = state.getLines(start + 1, last, 0, false);
@@ -111,16 +202,16 @@ function noteMarkdown() {
 const citationMarkdown = noteMarkdown();
 
 /** The citations (`[text](src:...)`) of a note body with the line of each. */
-export function noteCitations(body, file, offset = 0) {
-  const found = [];
+export function noteCitations(body: string, file: string, offset = 0) {
+  const found: { href: string; where: string }[] = [];
   for (const token of citationMarkdown.parse(body, { file }))
     for (const child of token.children ?? [])
       if (
         child.type === "link_open" &&
-        child.attrGet("href").startsWith("src:")
+        String(child.attrGet("href")).startsWith("src:")
       )
         found.push({
-          href: child.attrGet("href"),
+          href: String(child.attrGet("href")),
           where: `${file}:${(token.map?.[0] ?? 0) + 1 + offset}`,
         });
   return found;
@@ -137,10 +228,18 @@ export async function compileNotes({
   routes,
   assetExists,
   citations = {},
+}: {
+  directories: any[];
+  notes: any[];
+  terms: Record<string, GlossaryTerm>;
+  routes: Set<string>;
+  assetExists: (directory: string, href: string) => boolean;
+  citations?: Record<string, Record<string, Citation>>;
 }) {
   const md = noteMarkdown();
   const esc = md.utils.escapeHtml;
-  md.renderer.rules.note_term = (tokens, i, _options, env) => {
+  md.renderer.rules.note_term = (tokens, i, _options, rawEnv) => {
+    const env = noteEnv(rawEnv);
     const name = tokens[i].content;
     if (!Object.hasOwn(terms, name))
       fail(env.file, env.line, `Unknown term ${name}`);
@@ -154,7 +253,8 @@ export async function compileNotes({
     });
   const validatedSmiles = new Set();
   const originalFence = md.renderer.rules.fence;
-  md.renderer.rules.fence = (tokens, i, options, env, self) => {
+  md.renderer.rules.fence = (tokens, i, options, rawEnv, self) => {
+    const env = noteEnv(rawEnv);
     const token = tokens[i];
     const kind = token.info.trim();
     if (Object.hasOwn(diagramKinds, kind)) {
@@ -171,7 +271,11 @@ export async function compileNotes({
       try {
         model = diagramKinds[kind].define(input);
       } catch (error) {
-        fail(env.file, env.line, error.message);
+        fail(
+          env.file,
+          env.line,
+          error instanceof Error ? error.message : String(error),
+        );
       }
       const id = `note-diagram-${env.diagrams.length}`;
       env.diagrams.push({ id, kind, [kind]: model, caption: caption ?? "" });
@@ -179,19 +283,19 @@ export async function compileNotes({
       return `<div id="${id}" class="note-diagram"></div>`;
     }
     if (kind !== "molecule")
-      return originalFence(tokens, i, options, env, self);
-    const molecules = [];
+      return originalFence!(tokens, i, options, env, self);
+    const molecules: NoteMolecules["molecules"] = [];
     for (const [n, line] of token.content.trim().split("\n").entries()) {
       const match = /^(smiles|caption):\s*(.+)$/.exec(line);
       if (!match)
         fail(env.file, env.line + n + 1, "Expected smiles: / caption: pair");
       if (match[1] === "smiles") {
-        if (molecules.length && !molecules.at(-1).caption)
+        if (molecules.length && !molecules[molecules.length - 1].caption)
           fail(env.file, env.line + n, "Missing caption");
         if (!validatedSmiles.has(match[2])) {
           let mol;
           try {
-            mol = toolkit.get_mol(match[2]);
+            mol = toolkit?.get_mol(match[2]);
             if (!mol || !mol.is_valid()) throw new Error();
             validatedSmiles.add(match[2]);
           } catch {
@@ -202,18 +306,18 @@ export async function compileNotes({
         }
         molecules.push({ smiles: match[2], caption: "" });
       } else {
-        if (!molecules.length || molecules.at(-1).caption)
+        if (!molecules.length || molecules[molecules.length - 1].caption)
           fail(env.file, env.line + n + 1, "caption must follow smiles");
-        molecules.at(-1).caption = match[2];
+        molecules[molecules.length - 1].caption = match[2];
       }
     }
-    if (!molecules.length || !molecules.at(-1).caption)
+    if (!molecules.length || !molecules[molecules.length - 1].caption)
       fail(env.file, env.line, "Missing caption");
     const id = `note-molecule-${env.molecules.length}`;
     env.molecules.push({ id, molecules });
     return `<div id="${id}" class="note-molecules"></div>`;
   };
-  function link(href, env, image = false) {
+  function link(href: string, env: NoteEnv, image = false) {
     if (image) {
       if (!/^assets\/[A-Za-z0-9_.-]+$/.test(href))
         fail(env.file, env.line, "Images must use assets/<file>");
@@ -229,8 +333,9 @@ export async function compileNotes({
       fail(env.file, env.line, `Unknown internal link ${href}`);
     return `${url.pathname}${url.search}${url.hash}`;
   }
-  md.renderer.rules.link_open = (tokens, i, options, env, self) => {
-    const href = tokens[i].attrGet("href");
+  md.renderer.rules.link_open = (tokens, i, options, rawEnv, self) => {
+    const env = noteEnv(rawEnv);
+    const href = String(tokens[i].attrGet("href"));
     if (href.startsWith("src:")) {
       if (!Object.hasOwn(env.citations, href))
         fail(env.file, env.line, `Unresolved citation ${href}`);
@@ -241,14 +346,15 @@ export async function compileNotes({
     tokens[i].attrSet("href", link(href, env));
     return self.renderToken(tokens, i, options);
   };
-  md.renderer.rules.link_close = (tokens, i, options, env, self) => {
+  md.renderer.rules.link_close = (tokens, i, options, rawEnv, self) => {
+    const env = noteEnv(rawEnv);
     if (!env.citeOpen) return self.renderToken(tokens, i, options);
     env.citeOpen = false;
     return "</button>";
   };
   md.renderer.rules.image = (tokens, i, _options, env) => {
     const token = tokens[i];
-    const src = link(token.attrGet("src"), env, true);
+    const src = link(String(token.attrGet("src")), noteEnv(env), true);
     const image = `<button type="button" class="note-image" data-image="${esc(src)}" aria-label="放大图片：${esc(token.content)}"><img src="${esc(src)}" alt="${esc(token.content)}"></button>`;
     // The description doubles as the visible caption.
     return token.content
@@ -259,7 +365,8 @@ export async function compileNotes({
   md.renderer.rules.table_close = () => "</table></div>";
   md.renderer.rules.note_display_math = (tokens, i) =>
     `<div class="table-scroll">${katex.renderToString(tokens[i].content, { displayMode: true, throwOnError: true })}</div>`;
-  async function compile(body, env) {
+  async function compile(body: string, start: Omit<NoteEnv, "line" | "text">) {
+    const env: NoteEnv = { ...start, line: 0, text: [] };
     const tokens = md.parse(body, env);
     if (
       tokens.some(
@@ -267,10 +374,10 @@ export async function compileNotes({
       )
     )
       toolkit ??= await moleculeToolkit();
-    const sections = [];
+    const sections: NoteSection[] = [];
     let html = "",
       sourceOpen = false;
-    const text = (env.text = []);
+    const text = env.text;
     for (let i = 0; i < tokens.length; i++) {
       const token = tokens[i];
       env.line = (token.map?.[0] ?? 0) + 1 + env.offset;

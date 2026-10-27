@@ -105,7 +105,7 @@ export { default as TopicOverlays } from "./topic/TopicOverlays.vue";
 export { default as ChapterBody } from "./topic/ChapterBody.vue";
 export { default as ChapterBlocks } from "./topic/ChapterBlocks.vue";
 export type { TopicBlock } from "./topic/blocks";
-export { labModels } from "./models/catalog.mjs";
+export { labModels } from "./models/catalog.ts";
 export { default as ChapterPrediction } from "./topic/ChapterPrediction.vue";
 export { default as ChapterRecords } from "./topic/ChapterRecords.vue";
 export { default as QuizQuestion } from "./topic/QuizQuestion.vue";

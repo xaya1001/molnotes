@@ -18,7 +18,9 @@ import {
   activateRelease,
   activeRevision,
   prepareRelease,
-} from "../server/releases.mjs";
+} from "../server/system/releases.mjs";
+
+const entry = join("server", "system", "server.mjs");
 
 async function repository() {
   const repo = await mkdtemp(join(tmpdir(), "molnotes-releases-repo-"));
@@ -27,9 +29,13 @@ async function repository() {
   git("init", "-q");
   git("config", "user.email", "test@example.com");
   git("config", "user.name", "test");
-  await mkdir(join(repo, "server"));
+  await mkdir(join(repo, "server", "system"), { recursive: true });
+  await mkdir(join(repo, "shared"));
+  await mkdir(join(repo, "server", "web"));
+  await writeFile(join(repo, "server", "web", "web.mjs"), "// web\n");
   const commit = async (content) => {
-    await writeFile(join(repo, "server", "server.mjs"), content);
+    await writeFile(join(repo, "server", "system", "server.mjs"), content);
+    await writeFile(join(repo, "shared", "module.mjs"), content);
     git("add", ".");
     git("commit", "-q", "-m", content);
     return git("rev-parse", "HEAD");
@@ -52,7 +58,7 @@ test("releases are written per revision and activated by an atomic link", async 
     });
     await prepareRelease({ repo, root, revision: second });
     assert.equal(await activeRevision(root), first);
-    const active = join(root, "releases", first, "server.mjs");
+    const active = join(root, "releases", first, entry);
     const before = (await stat(active)).ino;
     await prepareRelease({ repo, root, revision: first });
     assert.equal((await stat(active)).ino, before, "complete release reused");
@@ -61,11 +67,20 @@ test("releases are written per revision and activated by an atomic link", async 
       current: second,
     });
     assert.equal(
-      await readFile(join(root, "current", "server.mjs"), "utf8"),
+      await readFile(join(root, "current", entry), "utf8"),
       "// second\n",
     );
     assert.equal(
-      await readFile(join(root, "releases", first, "server.mjs"), "utf8"),
+      await readFile(join(root, "current", "shared", "module.mjs"), "utf8"),
+      "// second\n",
+    );
+    assert.deepEqual(
+      (await readdir(join(root, "current", "server"))).sort(),
+      ["system"],
+      "the website is not part of a release",
+    );
+    assert.equal(
+      await readFile(join(root, "releases", first, entry), "utf8"),
       "// first\n",
     );
 
@@ -126,13 +141,13 @@ test("a missing revision leaves no release behind", async () => {
 test("server scripts run as programs when launched through the release link", async () => {
   const root = await mkdtemp(join(tmpdir(), "molnotes-releases-link-"));
   try {
-    await symlink(
-      resolve(import.meta.dirname, "../server"),
-      join(root, "current"),
-    );
+    await symlink(resolve(import.meta.dirname, ".."), join(root, "current"));
     const result = spawnSync(
       process.execPath,
-      [join(root, "current", "releases.mjs"), "not-a-revision"],
+      [
+        join(root, "current", "server", "system", "releases.mjs"),
+        "not-a-revision",
+      ],
       {
         encoding: "utf8",
         env: {

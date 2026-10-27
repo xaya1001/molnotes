@@ -5,8 +5,8 @@ import {
   contentCitations,
   parseCitation,
   validateSourceRegistry,
-} from "../scripts/source-citations.mjs";
-import { validateTopicContent } from "../scripts/topic-content.mjs";
+} from "../shared/source-citations.mjs";
+import { validateTopicContent } from "../shared/topic-content.ts";
 
 const registry = validateSourceRegistry({
   book: { file: "textbooks/book.pdf", title: "书", kind: "教材" },

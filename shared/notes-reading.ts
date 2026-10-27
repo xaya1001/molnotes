@@ -1,5 +1,7 @@
+import type { NotesIndex, NotesSearchIndex } from "./notes-index.ts";
+
 /** The terms a compiled note's HTML marks, in order of first use. */
-export function noteTerms(html) {
+export function noteTerms(html: string): string[] {
   const names = [...html.matchAll(/data-term="([^"]*)"/g)].map(([, name]) =>
     name
       .replaceAll("&lt;", "<")
@@ -11,7 +13,7 @@ export function noteTerms(html) {
 }
 
 /** Search consumers never receive rendered HTML, structures or the glossary. */
-export function notesSearchIndex(index) {
+export function notesSearchIndex(index: NotesIndex): NotesSearchIndex {
   return {
     directories: index.directories.map(({ title, summary, path }) => ({
       title,

@@ -2,12 +2,36 @@
 // write `[[term]]` and topic chapters list the terms they use; both resolve
 // against this one list when content is published.
 
+export interface GlossaryTerm {
+  term: string;
+  /** The English original or the full name. */
+  full: string;
+  definition: string;
+  /** What the term is commonly confused with. */
+  confusion: string;
+}
+
+/** A note or topic chapter that uses a term. */
+export interface GlossaryUse {
+  title: string;
+  /** The note's directory or the chapter's topic. */
+  context: string;
+  path: string;
+}
+
+export interface GlossaryEntry extends GlossaryTerm {
+  uses: GlossaryUse[];
+}
+
 const fields = ["term", "full", "definition", "confusion"];
-const isObject = (value) =>
+const isObject = (value: unknown) =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** Throws on the first invalid entry; returns the entries unchanged. */
-export function validateGlossary(glossary, name = "glossary.json") {
+export function validateGlossary(
+  glossary: unknown,
+  name = "glossary.json",
+): GlossaryTerm[] {
   if (!Array.isArray(glossary))
     throw new Error(`${name}: expected an array of terms`);
   const names = new Set();

@@ -6,7 +6,7 @@ import {
   PROTON,
   SODIUM,
 } from "../src/ui/models/medicinal-chemistry.mjs";
-import { labModels } from "../src/ui/models/catalog.mjs";
+import { labModels } from "../src/ui/models/catalog.ts";
 
 const close = (a, b, eps = 1e-10) =>
   assert.ok(Math.abs(a - b) < eps, `${a} != ${b}`);

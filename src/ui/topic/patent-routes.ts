@@ -1,6 +1,6 @@
 import type { RouteRecordRaw } from "vue-router";
 import type { Topic } from "./content";
-import { patentBlocks } from "../../../scripts/patent-contract.mjs";
+import { patentBlocks } from "../../../shared/patent-contract.ts";
 import { patentData } from "./patent";
 export function patentRoutes(content: Topic): RouteRecordRaw[] {
   const blocks = patentBlocks(content),

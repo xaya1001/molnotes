@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { labModels, modelInputs } from "../src/ui/models/catalog.mjs";
-import { validateTopicContent } from "../scripts/topic-content.mjs";
+import { labModels, modelInputs } from "../src/ui/models/catalog.ts";
+import { validateTopicContent } from "../shared/topic-content.ts";
 import {
   columnCorrelation,
   assayFoldChange as foldChange,

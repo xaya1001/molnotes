@@ -7,8 +7,8 @@ import ImageViewer from "./ImageViewer.vue";
 import TermDefinition from "./TermDefinition.vue";
 import CitedSource from "./CitedSource.vue";
 import type { Citation } from "./citations";
-import type { NoteDiagram, NoteMolecules } from "../../scripts/notes-index.mjs";
-import type { GlossaryTerm } from "../../scripts/glossary.mjs";
+import type { NoteDiagram, NoteMolecules } from "../../shared/notes-index.ts";
+import type { GlossaryTerm } from "../../shared/glossary.ts";
 const props = withDefaults(
   defineProps<{
     html: string;

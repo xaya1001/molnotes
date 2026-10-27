@@ -5,7 +5,7 @@ import {
   chapterPredictions,
   chapterRoutePath,
   validateTopicContent,
-} from "../scripts/topic-content.mjs";
+} from "../shared/topic-content.ts";
 
 function content(overrides = {}) {
   return {

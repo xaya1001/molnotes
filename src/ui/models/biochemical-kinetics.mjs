@@ -16,7 +16,7 @@ export function proteinAt(time, halfLife, kdeg, washout) {
       : 1 + (atWashout - 1) * Math.exp(-basal * (time - washout)))
   );
 }
-/** @type {import('./catalog.mjs').LabModel} */
+/** @type {import('./catalog.ts').LabModel} */
 const proteinTurnover = {
   inputs: [
     {
@@ -69,7 +69,7 @@ const proteinTurnover = {
     };
   },
 };
-/** @type {import('./catalog.mjs').LabModel} */
+/** @type {import('./catalog.ts').LabModel} */
 const proteinLossCurve = {
   inputs: [
     {
@@ -120,7 +120,7 @@ export const kobs = (inhibitor, ki, kinact) =>
 export const engagement = (rate, minutes) => -Math.expm1(-rate * minutes);
 export const lowConcentrationRate = (efficiency, inhibitor) =>
   efficiency * inhibitor * 1e-6 * 60;
-/** @type {import('./catalog.mjs').LabModel} */
+/** @type {import('./catalog.ts').LabModel} */
 const gtpaseSteadyState = {
   inputs: [
     {
@@ -162,7 +162,7 @@ const gtpaseSteadyState = {
     };
   },
 };
-/** @type {import('./catalog.mjs').LabModel} */
+/** @type {import('./catalog.ts').LabModel} */
 const covalentEngagement = {
   inputs: [
     {
@@ -271,7 +271,7 @@ export function atpLabel(atpUm) {
   return atpUm >= 1000 ? `${atpUm / 1000} mM` : `${atpUm} µM`;
 }
 
-/** @type {import('./catalog.mjs').LabModel} */
+/** @type {import('./catalog.ts').LabModel} */
 const atpCompetition = {
   validateData(data) {
     requireCase(caseObject(data), "ATP experiment");
@@ -535,7 +535,7 @@ export function eliminationCurve(halfLifeHours, horizonHours = 168) {
     .sort((a, b) => a - b)
     .map((t) => [t, remainingPercent(t, halfLifeHours)]);
 }
-/** @type {import('./catalog.mjs').LabModel} */
+/** @type {import('./catalog.ts').LabModel} */
 const firstOrderElimination = {
   validateData(data) {
     requireCase(
@@ -610,7 +610,7 @@ const firstOrderElimination = {
     };
   },
 };
-/** @type {import('./catalog.mjs').LabModel} */
+/** @type {import('./catalog.ts').LabModel} */
 const degradationDoseResponse = {
   inputs: [
     {
@@ -1219,6 +1219,7 @@ const bindingDissociation = {
     };
   },
 };
+/** @type {Record<string, import('./catalog.ts').LabModel>} */
 export const biochemicalKineticsModels = {
   "covalent-inactivation": covalentInactivation,
   "binding-dissociation": bindingDissociation,

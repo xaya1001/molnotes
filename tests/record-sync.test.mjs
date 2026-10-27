@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mergeRecords } from "../src/ui/record-sync.mjs";
+import { mergeRecords } from "../src/ui/record-sync.ts";
 test("merges independent leaves, membership changes and intentional deletions", () => {
   const base = {
     complete: ["a"],
@@ -38,7 +38,7 @@ test("merges independent leaves, membership changes and intentional deletions", 
 });
 
 test("two clients merge through conditional HTTP, retain conflict input, and explicitly resolve against latest", async () => {
-  const { recordSync } = await import("../src/ui/record-sync.mjs");
+  const { recordSync } = await import("../src/ui/record-sync.ts");
   const original = globalThis.fetch;
   let document = {
       notes: { a: "old" },
@@ -95,7 +95,7 @@ test("two clients merge through conditional HTTP, retain conflict input, and exp
 });
 
 test("deferred successful save retains pending input and unrelated merged fields before explicit conflict resolution", async () => {
-  const { recordSync } = await import("../src/ui/record-sync.mjs");
+  const { recordSync } = await import("../src/ui/record-sync.ts");
   const original = globalThis.fetch;
   let remote = { notes: { a: "old", b: "old" }, bookmarks: [] },
     version = 1,
@@ -155,7 +155,7 @@ test("deferred successful save retains pending input and unrelated merged fields
 });
 
 test("a response rejected by the current content codec does not advance the client baseline", async () => {
-  const { recordSync } = await import("../src/ui/record-sync.mjs");
+  const { recordSync } = await import("../src/ui/record-sync.ts");
   const original = globalThis.fetch;
   let version = 1,
     invalid = false,
@@ -192,7 +192,7 @@ test("a response rejected by the current content codec does not advance the clie
 });
 
 test("pending drafts survive reload, merge remote edits, and retain conflicts until explicit resolution", async () => {
-  const { recordSync } = await import("../src/ui/record-sync.mjs");
+  const { recordSync } = await import("../src/ui/record-sync.ts");
   const items = new Map();
   const storage = {
     getItem: (key) => items.get(key) ?? null,

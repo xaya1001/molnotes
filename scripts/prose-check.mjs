@@ -13,8 +13,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readSiteCatalog } from "./site-catalog.mjs";
-import { setting } from "./settings.mjs";
+import { readSiteCatalog } from "../shared/site-catalog.mjs";
+import { setting } from "../shared/settings.mjs";
 
 const root = () => setting("MOLNOTES_CONTENT_DIR");
 const chinese = /[一-鿿]/;

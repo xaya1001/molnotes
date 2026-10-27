@@ -1,7 +1,7 @@
 import { defineComponent, h } from "vue";
 import { api, boot } from "../ui/api";
 import { mountPage } from "@ui";
-import type { GlossaryEntry } from "../../scripts/glossary.mjs";
+import type { GlossaryEntry } from "../../shared/glossary.ts";
 import App from "./App.vue";
 
 boot(async () => {

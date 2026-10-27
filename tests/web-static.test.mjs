@@ -11,9 +11,9 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createWebServer } from "../server/web.mjs";
-import { sha256 } from "../server/assets.mjs";
-import { openRecords } from "../server/records.mjs";
+import { createWebServer } from "../server/web/web.mjs";
+import { sha256 } from "../shared/assets.mjs";
+import { openRecords } from "../server/web/records.mjs";
 
 /** Writes a snapshot directory `name` under `root` from table rows and files. */
 async function snapshot(root, name, data = {}, files = {}) {

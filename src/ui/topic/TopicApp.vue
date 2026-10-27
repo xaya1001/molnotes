@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import SourceSearch from "./SourceSearch.vue";
-import { patentBlocks } from "../../../scripts/patent-contract.mjs";
+import { patentBlocks } from "../../../shared/patent-contract.ts";
 import RecordTray from "./RecordTray.vue";
 import { computed, watch } from "vue";
 import { useRoute } from "vue-router";

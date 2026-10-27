@@ -2,15 +2,15 @@ import { readFile, readdir, lstat } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { join } from "node:path";
-import { parseNote, noteCitations } from "../scripts/notes-index.mjs";
+import { parseNote, noteCitations } from "../../shared/notes-index.ts";
 import {
   contentCitations,
   validateSourceRegistry,
-} from "../scripts/source-citations.mjs";
-import { validateGlossary } from "../scripts/glossary.mjs";
-import { parseSiteManifest } from "../scripts/site-catalog.mjs";
-import { validateTopicContent } from "../scripts/topic-content.mjs";
-import { sha256, contentType } from "./assets.mjs";
+} from "../../shared/source-citations.mjs";
+import { validateGlossary } from "../../shared/glossary.ts";
+import { parseSiteManifest } from "../../shared/site-catalog.mjs";
+import { validateTopicContent } from "../../shared/topic-content.ts";
+import { sha256, contentType } from "../../shared/assets.mjs";
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export function unitName(unit) {

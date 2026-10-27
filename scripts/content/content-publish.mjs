@@ -1,16 +1,16 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { measureStage } from "./stage-timing.mjs";
-import { moleculeToolkit } from "../scripts/molecule-toolkit.mjs";
-import { patentRoutePaths } from "../scripts/patent-contract.mjs";
+import { measureStage } from "../../shared/stage-timing.mjs";
+import { moleculeToolkit } from "../../shared/molecule-toolkit.mjs";
+import { patentRoutePaths } from "../../shared/patent-contract.ts";
 import { validatePatentAssets } from "./patent-assets.mjs";
-import { compileNotes, parseNote } from "../scripts/notes-index.mjs";
-import { sortSites } from "../scripts/site-catalog.mjs";
+import { compileNotes, parseNote } from "../../shared/notes-index.ts";
+import { sortSites } from "../../shared/site-catalog.mjs";
 import {
   chapterRoutePath,
   topicBasePath,
   validateTopicContent,
-} from "../scripts/topic-content.mjs";
+} from "../../shared/topic-content.ts";
 import { resolveCitations } from "./citations.mjs";
 import { readUnit, readRegistry, readGlossary } from "./content-files.mjs";
 

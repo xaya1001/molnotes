@@ -3,7 +3,7 @@ import {
   resolveData,
   topicPredictions,
   validateTopicContent,
-} from "../../../scripts/topic-content.mjs";
+} from "../../../shared/topic-content.ts";
 import type { MoleculeData } from "../chemistry/types";
 import type { EvidenceSource, Excerpt, ReadingItem } from "../evidence";
 import { validateEvidence } from "../evidence";

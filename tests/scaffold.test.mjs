@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { validateTopicContent } from "../scripts/topic-content.mjs";
+import { validateTopicContent } from "../shared/topic-content.ts";
 test("scaffold creates an editable content unit and retains the literal title", () => {
   const root = mkdtempSync(join(tmpdir(), "il-scaffold-"));
   try {

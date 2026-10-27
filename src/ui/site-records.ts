@@ -4,7 +4,7 @@ import { problemField, type ProblemAnswer } from "./topic/problem";
 import type { PredictionAnswer } from "./topic/content";
 import { api } from "./api";
 import { topicBase, type CatalogSite } from "./catalog";
-import type { IndexedTopic } from "../../scripts/topic-index.mjs";
+import type { IndexedTopic } from "../../shared/topic-index.ts";
 import { isObject } from "../contracts/records";
 
 /**

@@ -3,7 +3,7 @@ import ExerciseSource from "./ExerciseSource.vue";
 import { computed, ref } from "vue";
 import MoleculeView from "../MoleculeView.vue";
 import ImagePoints from "./ImagePoints.vue";
-import { labModels, modelInputs } from "../models/catalog.mjs";
+import { labModels, modelInputs } from "../models/catalog.ts";
 import PredictionExercise from "../PredictionExercise.vue";
 import SourceExcerpt from "../SourceExcerpt.vue";
 import type { PredictionAnswer, TopicPrediction } from "./content";

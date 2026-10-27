@@ -1,7 +1,7 @@
-import { noteTerms, notesSearchIndex } from "../scripts/notes-reading.mjs";
-import { buildTopicIndex, buildReviewIndex } from "../scripts/topic-index.mjs";
-import { siteGroups, sortSites } from "../scripts/site-catalog.mjs";
-import { chapterRoutePath, topicBasePath } from "../scripts/topic-content.mjs";
+import { noteTerms, notesSearchIndex } from "../../shared/notes-reading.ts";
+import { buildTopicIndex, buildReviewIndex } from "../../shared/topic-index.ts";
+import { siteGroups, sortSites } from "../../shared/site-catalog.mjs";
+import { chapterRoutePath, topicBasePath } from "../../shared/topic-content.ts";
 
 // The reader functions below answer from one loaded content snapshot
 // (`content-cache.mjs`).

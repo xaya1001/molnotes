@@ -4,10 +4,10 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, writeFile, cp, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { once } from "node:events";
-import { buildSnapshot } from "../server/content-publish.mjs";
-import { writeSnapshot } from "../server/content-snapshot.mjs";
-import { allRecords, openRecords, readRecord } from "../server/records.mjs";
-import { createWebServer } from "../server/web.mjs";
+import { buildSnapshot } from "../scripts/content/content-publish.mjs";
+import { writeSnapshot } from "../scripts/content/content-snapshot.mjs";
+import { allRecords, openRecords, readRecord } from "../server/web/records.mjs";
+import { createWebServer } from "../server/web/web.mjs";
 import { publishSnapshot } from "./helpers/content-snapshot.mjs";
 
 const shelf = (root) => ({

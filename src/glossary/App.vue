@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { SiteBar } from "@ui";
-import type { GlossaryEntry } from "../../scripts/glossary.mjs";
+import type { GlossaryEntry } from "../../shared/glossary.ts";
 
 /** Every site glossary term with the notes and topic chapters that use it. */
 const props = defineProps<{ entries: GlossaryEntry[] }>();
