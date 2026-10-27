@@ -1,4 +1,5 @@
-import type { Unchecked } from "../shared/unchecked.ts";
+import type { TopicContent } from "../src/ui/topic/content.ts";
+import type FixtureFixture from "./fixtures/content/sites/instruments/content.json";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -6,7 +7,7 @@ import { validateTopicContent } from "../shared/topic-content.ts";
 import { labModels, modelInputs } from "../src/ui/models/catalog.ts";
 
 import { chairEquilibrium } from "../src/ui/models/organic-chemistry.ts";
-const fixture = () =>
+const fixture = (): typeof FixtureFixture & TopicContent =>
   JSON.parse(
     readFileSync(
       new URL(
@@ -66,46 +67,60 @@ test("chair reference lookup uses content defaults and exact reference temperatu
   );
   assert.equal(values.dg, 5);
   assert.equal(values.t, 298.15);
-  assert.deepEqual(model.run(values, data).readouts!, [
+  assert.deepEqual(model(data).run(values).readouts!, [
     { label: data.referenceLabel, value: "K = 7.5，平伏 88.3%。" },
   ]);
   assert.deepEqual(
-    model.run({ ...values, t: 298.15000000001 }, data).readouts!,
+    model(data).run({ ...values, t: 298.15000000001 }).readouts!,
     [],
   );
-  assert.deepEqual(model.run({ ...values, dg: -5 }, data).readouts!, []);
-  assert.deepEqual(model.run({ ...values, dg: 0 }, data).readouts!, [
+  assert.deepEqual(model(data).run({ ...values, dg: -5 }).readouts!, []);
+  assert.deepEqual(model(data).run({ ...values, dg: 0 }).readouts!, [
     { label: data.referenceLabel, value: "K = 1，平伏 50%。" },
   ]);
-  assert.deepEqual(model.run({ ...values, dg: 20 }, data).readouts!, [
+  assert.deepEqual(model(data).run({ ...values, dg: 20 }).readouts!, [
     { label: data.referenceLabel, value: "K > 1000，平伏 >99%。" },
   ]);
   data.referenceTemperature = 300;
   modelInputs(model, data);
-  assert.equal(model.run(values, data).readouts!.length, 0);
-  assert.equal(model.run({ ...values, t: 300 }, data).readouts!.length, 1);
+  assert.equal(model(data).run(values).readouts!.length, 0);
+  assert.equal(model(data).run({ ...values, t: 300 }).readouts!.length, 1);
 });
 
 test("publication refuses partial or ambiguous chair reference datasets", () => {
   validateTopicContent(fixture());
   const mutations = [
-    (d: Unchecked) => (d.rows = []),
-    (d: Unchecked) => (d.referenceLabel = ""),
-    (d: Unchecked) => (d.referenceTemperature = 249),
-    (d: Unchecked) => (d.referenceTemperature = Infinity),
-    (d: Unchecked) => (d.defaultDeltaG = 1),
-    (d: Unchecked) => (d.defaultDeltaG = NaN),
-    (d: Unchecked) => (d.rows[0] = null),
-    (d: Unchecked) => (d.rows[0].substituent = ""),
-    (d: Unchecked) => (d.rows[1].deltaG = d.rows[0].deltaG),
-    (d: Unchecked) => (d.rows[0].deltaG = Infinity),
-    (d: Unchecked) => (d.rows[0].k = 0),
-    (d: Unchecked) => (d.rows[0].percent = 101),
-    (d: Unchecked) => (d.rows[0].lowerBound = "yes"),
-    (d: Unchecked) => delete d.rows[0].percent,
+    (d: (typeof FixtureFixture)["data"]["chairSample"]) =>
+      Reflect.set(d, "rows", []),
+    (d: (typeof FixtureFixture)["data"]["chairSample"]) =>
+      Reflect.set(d, "referenceLabel", ""),
+    (d: (typeof FixtureFixture)["data"]["chairSample"]) =>
+      Reflect.set(d, "referenceTemperature", 249),
+    (d: (typeof FixtureFixture)["data"]["chairSample"]) =>
+      Reflect.set(d, "referenceTemperature", Infinity),
+    (d: (typeof FixtureFixture)["data"]["chairSample"]) =>
+      Reflect.set(d, "defaultDeltaG", 1),
+    (d: (typeof FixtureFixture)["data"]["chairSample"]) =>
+      Reflect.set(d, "defaultDeltaG", NaN),
+    (d: (typeof FixtureFixture)["data"]["chairSample"]) =>
+      Reflect.set(d.rows, 0, null),
+    (d: (typeof FixtureFixture)["data"]["chairSample"]) =>
+      Reflect.set(d.rows[0], "substituent", ""),
+    (d: (typeof FixtureFixture)["data"]["chairSample"]) =>
+      Reflect.set(d.rows[1], "deltaG", d.rows[0].deltaG),
+    (d: (typeof FixtureFixture)["data"]["chairSample"]) =>
+      Reflect.set(d.rows[0], "deltaG", Infinity),
+    (d: (typeof FixtureFixture)["data"]["chairSample"]) =>
+      Reflect.set(d.rows[0], "k", 0),
+    (d: (typeof FixtureFixture)["data"]["chairSample"]) =>
+      Reflect.set(d.rows[0], "percent", 101),
+    (d: (typeof FixtureFixture)["data"]["chairSample"]) =>
+      Reflect.set(d.rows[0], "lowerBound", "yes"),
+    (d: (typeof FixtureFixture)["data"]["chairSample"]) =>
+      Reflect.deleteProperty(d.rows[0], "percent"),
   ];
   const missing = fixture();
-  delete missing.data.chairSample;
+  Reflect.deleteProperty(missing.data, "chairSample");
   assert.throws(() => validateTopicContent(missing));
   for (const mutate of mutations) {
     const doc = fixture();

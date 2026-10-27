@@ -1,4 +1,4 @@
-import type { Unchecked } from "../../shared/unchecked.ts";
+import { isObject } from "../../shared/json.ts";
 import type { DeploymentError } from "./deploy-command.ts";
 
 type Run = (name: string, file: string, args: string[]) => Promise<string>;
@@ -24,7 +24,7 @@ export async function deploymentSmoke({
   if (!/<html[\s>]/i.test(home))
     throw failure("home smoke did not return HTML");
   // The catalog is checked field by field below.
-  let catalog: Unchecked;
+  let catalog: unknown;
   try {
     catalog = JSON.parse(await request("/api/catalog", true));
   } catch {
@@ -32,7 +32,7 @@ export async function deploymentSmoke({
   }
   try {
     if (
-      !catalog ||
+      !isObject(catalog) ||
       !Array.isArray(catalog.sites) ||
       !Array.isArray(catalog.groups) ||
       !Array.isArray(catalog.directories)
@@ -49,14 +49,15 @@ export async function deploymentSmoke({
         throw new Error();
     }
     if (
-      new Set(catalog.sites.map((site: Unchecked) => site.slug)).size !==
+      new Set(catalog.sites.map((site) => site.slug)).size !==
       catalog.sites.length
     )
       throw new Error();
   } catch {
     throw failure("catalog smoke returned invalid data");
   }
-  const site = catalog.sites[0];
+  const site = (catalog as { sites: { slug: string; group: string }[] })
+    .sites[0];
   if (site) {
     await request(`/api/topics/${site.slug}`);
     const path = site.group === "练习" ? "practice" : "sites";

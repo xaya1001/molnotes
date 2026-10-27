@@ -33,7 +33,7 @@ test("base ionization changes logD with the correct sign and limiting behavior",
 
 test("shared model defaults preserve the original displayed readouts", () => {
   assert.equal(
-    labModels["design-efficiency"].run({
+    labModels["design-efficiency"]().run({
       concentration: 10,
       count: 30,
       lipophilicity: 3,
@@ -41,7 +41,7 @@ test("shared model defaults preserve the original displayed readouts", () => {
     "pIC50 8.00；LE 0.365 kcal·mol⁻¹·重原子⁻¹；LipE(logP) 5.00。",
   );
   assert.equal(
-    labModels["design-pka"].run({ pKa: 9, logP: 3, pH: 7.4 }).summary!,
+    labModels["design-pka"]().run({ pKa: 9, logP: 3, pH: 7.4 }).summary!,
     "模型 logD7.4 = 1.39",
   );
 });

@@ -1,5 +1,9 @@
+import type {
+  contentCatalog,
+  notebookIndex,
+  contentIndex,
+} from "../server/web/content-query.ts";
 import type { AddressInfo } from "node:net";
-import type { Unchecked } from "../shared/unchecked.ts";
 import test from "node:test";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
@@ -38,7 +42,7 @@ async function serve(
   content: string,
   releases: string,
   options?: Parameters<typeof buildSnapshot>[1],
-): Promise<Unchecked> {
+): Promise<Snapshot> {
   // Tests read the snapshot as the JSON it is written as.
   let snapshot: Snapshot | undefined;
   await publishSnapshot(releases, async (directory: string) => {
@@ -76,34 +80,37 @@ test("published content, records and HTTP assets", async () => {
       fetch(base + path, options);
     assert.equal((await call("/healthz")).status, 200);
     const reviewMetadata = await (await call("/api/review")).json();
-    const searchIndex = await (await call("/api/index")).json();
+    const searchIndex: ReturnType<typeof contentIndex> = await (
+      await call("/api/index")
+    ).json();
     assert.deepEqual(reviewMetadata.chapters, searchIndex.chapters);
     assert.deepEqual(reviewMetadata.quiz, searchIndex.quiz);
     assert.deepEqual(Object.keys(reviewMetadata).sort(), ["chapters", "quiz"]);
 
     // A topic declares its group; notebooks name the practice topics their notes link to.
-    const catalog = await (await call("/api/catalog")).json();
+    const catalog: ReturnType<typeof contentCatalog> = await (
+      await call("/api/catalog")
+    ).json();
     assert.deepEqual(
-      catalog.sites.map((site: Unchecked) => [site.slug, site.group]),
+      catalog.sites.map((site) => [site.slug, site.group]),
       [
         ["sample", "练习"],
         ["instruments", "谱图"],
       ],
     );
     assert.deepEqual(
-      catalog.sites.find((site: Unchecked) => site.slug === "sample")
-        .chapterIds,
+      catalog.sites.find((site) => site.slug === "sample")!.chapterIds,
       ["start", "next"],
     );
     assert.equal(catalog.groups.at(-1), "练习");
     assert.ok(
       catalog.directories.every(
-        (directory: Unchecked) =>
+        (directory) =>
           !["intro", "html", "citations"].some((key) => key in directory),
       ),
     );
     assert.deepEqual(
-      catalog.directories.map((d: Unchecked) => [d.slug, d.practice]),
+      catalog.directories.map((d) => [d.slug, d.practice]),
       [["reader-test", ["sample"]]],
     );
     const index = await call("/api/notes", {
@@ -123,10 +130,12 @@ test("published content, records and HTTP assets", async () => {
       original + "\n重新发布后的段落。\n",
     );
     await serve(content, releases);
-    const notebook = await (await call("/api/notes")).json();
+    const notebook: ReturnType<typeof notebookIndex> = await (
+      await call("/api/notes")
+    ).json();
     assert.ok(
       notebook.notes.every(
-        (note: Unchecked) =>
+        (note) =>
           !["html", "text", "sections", "molecules", "citations"].some(
             (key) => key in note,
           ),
@@ -134,8 +143,7 @@ test("published content, records and HTTP assets", async () => {
     );
     assert.ok(
       notebook.directories.every(
-        (dir: Unchecked) =>
-          !["html", "intro", "citations"].some((key) => key in dir),
+        (dir) => !["html", "intro", "citations"].some((key) => key in dir),
       ),
     );
     assert.match(
@@ -144,13 +152,13 @@ test("published content, records and HTTP assets", async () => {
     );
     // Reader APIs expose notes; author material remains available to editors.
     assert.deepEqual(
-      notebook.notes.map((note: Unchecked) => note.path),
+      notebook.notes.map((note) => note.path),
       ["/notes/reader-test/first", "/notes/reader-test/second"],
     );
     assert.deepEqual(Object.keys(notebook).sort(), ["directories", "notes"]);
     const planHtml = snapshot!.notes.find(
-      (note: Unchecked) => note.author && note.slug === "plan",
-    ).compiled.html;
+      (note) => note.author && note.slug === "plan",
+    )!.compiled.html;
     for (const href of [
       'href="/notes/reader-test/first"',
       'href="/notes/reader-test/author/conventions"',
@@ -158,9 +166,11 @@ test("published content, records and HTTP assets", async () => {
     ])
       assert.ok(planHtml.includes(href), href);
     assert.deepEqual(
-      (await (await call("/api/index")).json()).notesSearch.notes.map(
-        (note: Unchecked) => note.path,
-      ),
+      (
+        (await (await call("/api/index")).json()) as ReturnType<
+          typeof contentIndex
+        >
+      ).notesSearch.notes.map((note) => note.path),
       ["/notes/reader-test/first", "/notes/reader-test/second"],
     );
     const asset = await call("/notes/reader-test/assets/sample.svg");
@@ -185,7 +195,7 @@ test("published content, records and HTTP assets", async () => {
     )!;
     record.complete = ["start"];
     record.predictions = { start: { option: 0 } };
-    const put = async (value: Unchecked) =>
+    const put = async (value: unknown) =>
       call("/api/records/topics/sample", {
         method: "PUT",
         headers: {
@@ -288,7 +298,7 @@ test("the site glossary lists the notes and topic chapters that use each term", 
   });
   const readJson = async (path: string) =>
     JSON.parse(await readFile(join(content, path), "utf8"));
-  const writeJson = (path: string, value: Unchecked) =>
+  const writeJson = (path: string, value: unknown) =>
     writeFile(join(content, path), JSON.stringify(value));
   try {
     const instruments = await readJson("sites/instruments/content.json");
@@ -365,7 +375,7 @@ test("citations serve cited pages, articles and epub chapters", async () => {
       note.html,
       /<button type="button" class="cite" data-cite="src:handbook#2-3&amp;print=12&amp;rect=72,300,540,420">PDF 第 2–3 页<\/button>/,
     );
-    assert.deepEqual(Object.keys(note.citations).sort(), [
+    assert.deepEqual(Object.keys(note.citations!).sort(), [
       boxed,
       "src:handbook#4",
       "src:lesson-1",
@@ -373,7 +383,8 @@ test("citations serve cited pages, articles and epub chapters", async () => {
       "src:reader#ch=3.1",
       "src:reader#ch=3.1&sec=2",
     ]);
-    const pages = note.citations[boxed];
+    const pages = note.citations![boxed];
+    assert.ok(pages.type === "pdf");
     assert.deepEqual(
       { ...pages, pages: undefined },
       {
@@ -390,11 +401,7 @@ test("citations serve cited pages, articles and epub chapters", async () => {
       },
     );
     assert.deepEqual(
-      pages.pages.map(({ page, label, size }: Unchecked) => [
-        page,
-        label,
-        size,
-      ]),
+      pages.pages.map(({ page, label, size }) => [page, label, size]),
       [
         [1, "11", [612, 792]],
         [2, "12", [612, 792]],
@@ -403,13 +410,15 @@ test("citations serve cited pages, articles and epub chapters", async () => {
       ],
     );
     assert.deepEqual(
-      note.citations["src:manual#1&print=iv"].pages.map(
-        (p: Unchecked) => p.label,
-      ),
+      (
+        note.citations![
+          "src:manual#1&print=iv"
+        ] as import("../src/ui/citations.ts").PdfCitation
+      ).pages.map((p) => p.label),
       ["iv", undefined],
     );
     const directory = snapshot!.directories[0].compiled;
-    assert.deepEqual(Object.keys(directory.citations), ["src:handbook#1"]);
+    assert.deepEqual(Object.keys(directory.citations!), ["src:handbook#1"]);
 
     server.listen(0, "127.0.0.1");
     await once(server, "listening");
@@ -417,7 +426,8 @@ test("citations serve cited pages, articles and epub chapters", async () => {
     const image = await fetch(base + pages.pages[1].image);
     assert.equal(image.status, 200);
     assert.equal(image.headers.get("content-type"), "image/webp");
-    const lesson = note.citations["src:lesson-1"];
+    const lesson = note.citations!["src:lesson-1"];
+    assert.ok(lesson.type === "web");
     assert.deepEqual(
       [lesson.type, lesson.url, lesson.downloaded],
       ["web", "https://example.org/lesson-1", "2026-10-01"],
@@ -433,8 +443,9 @@ test("citations serve cited pages, articles and epub chapters", async () => {
       ),
     );
     // Both citations of the chapter share one body; the section one names where to open.
-    const chapter = note.citations["src:reader#ch=3.1"];
-    const section = note.citations["src:reader#ch=3.1&sec=2"];
+    const chapter = note.citations!["src:reader#ch=3.1"];
+    assert.ok(chapter.type === "epub");
+    const section = note.citations!["src:reader#ch=3.1&sec=2"];
     assert.deepEqual(section, {
       ...chapter,
       section: { key: "2", title: "2.2 细节" },
@@ -492,7 +503,7 @@ test("record CAS distinguishes absence, concurrent creation, reset and deletion"
   await once(server, "listening");
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/records/notes`;
   const get = () => fetch(url);
-  const put = (document: Unchecked, tag?: string | null) =>
+  const put = (document: unknown, tag?: string | null) =>
     fetch(url, {
       method: "PUT",
       headers: tag ? { "If-Match": tag } : {},

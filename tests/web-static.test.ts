@@ -1,5 +1,5 @@
+import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import type { Unchecked } from "../shared/unchecked.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
@@ -26,7 +26,7 @@ async function snapshot(
 ) {
   const directory = join(root, name);
   await mkdir(directory, { recursive: true });
-  const assets: Unchecked[] = [];
+  const assets: unknown[] = [];
   for (const [key, bytes] of Object.entries(files)) {
     const [scope, path] = [
       key.split("/").slice(0, 2).join("/"),
@@ -64,12 +64,12 @@ async function point(root: string, name: string) {
   await symlink(name, join(root, "next"));
   await rename(join(root, "next"), join(root, "current"));
 }
-async function listen(server: Unchecked) {
+async function listen(server: Server) {
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }
-async function stop(server: Unchecked) {
+async function stop(server: Server) {
   server.closeAllConnections();
   await new Promise((resolve) => server.close(resolve));
 }
@@ -271,7 +271,7 @@ test("notebook metadata leaves out bodies and is built once per snapshot", async
     ],
   });
   await point(root, "one");
-  const events: Unchecked[] = [];
+  const events: { stage: string }[] = [];
   const timings = process.env.MOLNOTES_TIMINGS;
   const error = console.error;
   process.env.MOLNOTES_TIMINGS = "1";

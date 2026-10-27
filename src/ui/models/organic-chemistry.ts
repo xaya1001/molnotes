@@ -1,9 +1,28 @@
+import type {
+  RadicalMeasurement,
+  RadicalAlkane,
+  RadicalShare,
+  PkaEntry,
+} from "./data.ts";
+import {
+  isObject,
+  isFiniteNumber,
+  isInteger,
+  type JsonObject,
+} from "../../../shared/json.ts";
+import type {
+  RadicalData,
+  ChairData,
+  PkaData,
+  HammettData,
+  RouteData,
+} from "./data.ts";
+import { lab, type LabEntry } from "./model.ts";
 /** Ideal standard-state estimates; energies in kJ/mol and T in kelvin. */
-import type { LabInput, LabModel, LabResult } from "./catalog.ts";
-import type { Unchecked } from "../../../shared/unchecked.ts";
+import type { LabInput, LabResult } from "./model.ts";
 const R = 0.008314462618;
-function finite(value: Unchecked) {
-  if (!Number.isFinite(value)) throw new Error("请输入有限数值");
+function finite(value: unknown) {
+  if (!isFiniteNumber(value)) throw new Error("请输入有限数值");
 }
 export function acidEquilibrium(pKaHA: number, pKaHB: number) {
   finite(pKaHA);
@@ -58,7 +77,7 @@ const numberInput = (
   label: string,
   min: number,
   max: number,
-  value: Unchecked,
+  value: number,
   step = 0.1,
 ): LabInput => ({
   id,
@@ -70,42 +89,38 @@ const numberInput = (
   step,
 });
 
-export const organicChemistryModels: Record<
-  string,
-  LabModel & { calculate?: unknown; productShare?: unknown }
-> = {
-  "carbonyl-acidity": {
+export const organicChemistryModels: Record<string, LabEntry> = {
+  "carbonyl-acidity": lab({
     inputs: [
       numberInput("ha", "pKa(HA)", -60, 60, 25),
       numberInput("hb", "pKa(HB)", -60, 60, 33),
     ],
-    calculate: acidEquilibrium,
+
     run({ ha, hb }: { ha: number; hb: number }) {
       const v = acidEquilibrium(ha, hb);
       return {
         summary: `log₁₀K = ${v.logK.toFixed(1)}；K = ${v.K.toExponential(2)}。${v.logK > 0 ? "右侧有利" : v.logK < 0 ? "左侧有利" : "标准态两侧相当"}。`,
       };
     },
-  },
-  "carbonyl-equilibrium": {
+  }),
+  "carbonyl-equilibrium": lab({
     inputs: [numberInput("deltaG", "ΔG（kJ/mol）", -60, 60, -8.8)],
-    calculate: equilibriumFromDeltaG,
-    productShare,
+
     run({ deltaG }: { deltaG: number }) {
       const v = equilibriumFromDeltaG(deltaG, 298);
       return {
         summary: `K = ${v.K.toPrecision(3)}；产物侧占 ${(v.productShare * 100).toFixed(2)}%。`,
       };
     },
-  },
-  "carbonyl-pathways": {
+  }),
+  "carbonyl-pathways": lab({
     inputs: [
       numberInput("temperature", "温度（K）", 200, 500, 298, 1),
       numberInput("barrierP", "P 生成能垒（kJ/mol）", 0, 200, 55, 1),
       numberInput("barrierQ", "Q 生成能垒（kJ/mol）", 0, 200, 60, 1),
       numberInput("energy", "G(Q)−G(P)（kJ/mol）", -50, 50, -8.8),
     ],
-    calculate: pathwayFractions,
+
     run({
       temperature,
       barrierP,
@@ -122,7 +137,7 @@ export const organicChemistryModels: Record<
         summary: `初始 P ${(v.kineticP * 100).toFixed(1)}% / Q ${((1 - v.kineticP) * 100).toFixed(1)}%；平衡 P ${(v.equilibriumP * 100).toFixed(1)}% / Q ${((1 - v.equilibriumP) * 100).toFixed(1)}%。`,
       };
     },
-  },
+  }),
 };
 
 /**
@@ -141,15 +156,13 @@ const order: string[] = ["primary", "secondary", "tertiary"];
 export function measuredFor(
   alkane: string,
   halogen: string,
-  measurements: Unchecked,
+  measurements: RadicalMeasurement[],
 ) {
-  return measurements.find(
-    (m: Unchecked) => m.alkane === alkane && m.halogen === halogen,
-  );
+  return measurements.find((m) => m.alkane === alkane && m.halogen === halogen);
 }
 
-function positive(value: number, what: string) {
-  if (!Number.isFinite(value) || value <= 0)
+function positive(value: unknown, what: string): asserts value is number {
+  if (!isFiniteNumber(value) || value <= 0)
     throw new Error(`${what}必须是正数`);
 }
 
@@ -167,7 +180,7 @@ export function factor(shareA: number, nA: number, shareB: number, nB: number) {
 
 /** Product shares (%) when every hydrogen of a type reacts at the given factor. */
 export function distribution(
-  counts: Unchecked,
+  counts: Partial<Record<string, number>>,
   factors: Record<string, number>,
 ) {
   const weights = order.flatMap((type): [string, number][] => {
@@ -186,40 +199,43 @@ export function distribution(
 
 const trim = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(2));
 /** The per-hydrogen factor each printed ratio gives, with a lower bound where the page prints one. */
-export function derive(m: Unchecked, counts: Unchecked) {
-  const reference = m.shares.primary;
+export function derive(
+  m: Pick<RadicalMeasurement, "shares">,
+  counts: Partial<Record<string, number>>,
+) {
+  const reference = m.shares.primary!;
   return order.flatMap((type) => {
     if (type === "primary") return [];
     const share = m.shares[type];
     if (!share) return [];
-    const nA = counts[type];
-    const nB = counts.primary;
-    const exact = share.op === "=" && reference.op === "=";
+    const nA = counts[type]!;
+    const nB = counts.primary!;
+    const exact = share!.op === "=" && reference.op === "=";
     // A factor is bounded below when the tertiary share is a floor and the primary a ceiling.
-    if (!exact && !(share.op === ">" && reference.op === "<"))
+    if (!exact && !(share!.op === ">" && reference.op === "<"))
       throw new Error("界限方向不能给出因子");
-    const value = factor(share.value, nA, reference.value, nB);
-    const working = `(${share.value}/${nA}) ÷ (${reference.value}/${nB}) = ${trim(value)}`;
+    const value = factor(share!.value, nA, reference.value, nB);
+    const working = `(${share!.value}/${nA}) ÷ (${reference.value}/${nB}) = ${trim(value)}`;
     return [{ type, op: exact ? "=" : ">", value, working }];
   });
 }
 
 /** Explicit source descriptors distinguish derived exact factors from printed values. */
-export function offered(halogen: string, data: Unchecked) {
-  const selected = data.halogens.find((h: Unchecked) => h.id === halogen);
+export function offered(halogen: string, data: RadicalData) {
+  const selected = data.halogens.find((h) => h.id === halogen)!;
   return Object.fromEntries(
     ["secondary", "tertiary"].map((type) => {
       const descriptor = selected.offered[type];
-      if (descriptor.kind === "printed") return [type, descriptor.value];
+      if (descriptor.kind === "printed") return [type, descriptor.value!];
       const measurement = measuredFor(
-        descriptor.alkane,
+        descriptor.alkane!,
         halogen,
         data.measured,
       );
       const counts = data.alkanes.find(
-        (a: Unchecked) => a.id === descriptor.alkane,
-      ).counts;
-      const result = derive(measurement, counts).find((d) => d.type === type);
+        (a) => a.id === descriptor.alkane!,
+      )!.counts;
+      const result = derive(measurement!, counts).find((d) => d.type === type);
       if (!result || result.op !== "=")
         throw new Error("提供因子须有对应的确切实测比例");
       return [type, result.value];
@@ -228,13 +244,13 @@ export function offered(halogen: string, data: Unchecked) {
 }
 
 /** The mode that wins in the printed "found" column. */
-export function winner(row: Unchecked) {
+export function winner(row: { foundRatio: { op: string; value: number } }) {
   const { op, value } = row.foundRatio;
   if (op === "<") return "endo";
   if (op === ">") return "exo";
   return value > 1 ? "exo" : "endo";
 }
-export function closureRatio(c: Unchecked) {
+export function closureRatio(c: { main: number; minor: number }) {
   positive(c.main, "产物比例");
   positive(c.minor, "产物比例");
   return c.main / c.minor;
@@ -250,13 +266,13 @@ export const kjPerKcal = 4.184;
 export const assumedKelvin = 298.15;
 
 export function kelvin(celsius: number) {
-  if (!Number.isFinite(celsius) || celsius < -150 || celsius > 150)
+  if (!isFiniteNumber(celsius) || celsius < -150 || celsius > 150)
     throw new Error("温度请在 −150 到 150 °C 之间");
   return celsius + 273.15;
 }
 /** Enantiomer fractions (%) of a sample with the given ee (%). */
 export function eeToEr(ee: number) {
-  if (!Number.isFinite(ee) || ee < 0 || ee >= 100)
+  if (!isFiniteNumber(ee) || ee < 0 || ee >= 100)
     throw new Error("ee 请在 0 到 100 之间，不含 100");
   const major = (100 + ee) / 2;
   const minor = (100 - ee) / 2;
@@ -275,13 +291,13 @@ export function ddG(ee: number, temperature: number) {
 /** The ee (%) that a ΔΔG‡ (kJ/mol) gives at `temperature` (K). */
 export function eeFromDdG(delta: number, temperature: number) {
   positive(temperature, "温度");
-  if (!Number.isFinite(delta) || delta < 0) throw new Error("ΔΔG‡ 不能为负");
+  if (!isFiniteNumber(delta) || delta < 0) throw new Error("ΔΔG‡ 不能为负");
   const ratio = Math.exp(delta / (gasConstant * temperature));
   return (100 * (ratio - 1)) / (ratio + 1);
 }
 export const toKcal = (kj: number) => kj / kjPerKcal;
 
-export function pointGap(point: Unchecked) {
+export function pointGap(point: { celsius?: number; ee: number }) {
   const temperature =
     point.celsius === undefined ? assumedKelvin : kelvin(point.celsius);
   return {
@@ -291,55 +307,63 @@ export function pointGap(point: Unchecked) {
   };
 }
 
-function validateRadicalData(data: Unchecked) {
-  const text = (v: Unchecked) => typeof v === "string" && v.trim().length > 0;
-  const require = (condition: Unchecked, field: Unchecked) => {
+function validateRadicalData(data: unknown): asserts data is RadicalData {
+  const text = (v: unknown): v is string =>
+    typeof v === "string" && v.trim().length > 0;
+  function require(condition: unknown, field: string): asserts condition {
     if (!condition) throw new Error(`自由基数据 ${field} 无效`);
-  };
-  require(data &&
+  }
+  require(isObject(data) &&
     text(data.sourceLabel) &&
     Array.isArray(data.alkanes) &&
     data.alkanes.length > 0 &&
     Array.isArray(data.halogens) &&
     data.halogens.length > 0 &&
     Array.isArray(data.measured), "dataset");
-  const alkanes = new Map(),
+  const alkanes = new Map<unknown, RadicalAlkane>(),
     halogens = new Set();
   for (const a of data.alkanes) {
-    require(a &&
+    require(isObject(a) &&
       text(a.id) &&
       !alkanes.has(a.id) &&
       text(a.name) &&
-      a.counts &&
-      a.products, "alkane");
-    const keys = Object.keys(a.counts);
+      isObject(a.counts) &&
+      isObject(a.products), "alkane");
+    const counts = a.counts,
+      products = a.products;
+    const keys = Object.keys(counts);
     require(keys.includes("primary") &&
       keys.every(
         (k) =>
           order.includes(k) &&
-          Number.isInteger(a.counts[k]) &&
-          a.counts[k] > 0 &&
-          text(a.products[k]),
+          isInteger(counts[k]) &&
+          counts[k] > 0 &&
+          text(products[k]),
       ) &&
       Object.keys(a.products).every((k) =>
         keys.includes(k),
       ), "counts/products");
-    alkanes.set(a.id, a);
+    alkanes.set(a.id, {
+      id: a.id,
+      name: a.name,
+      counts: counts as Record<string, number>,
+      products: products as Record<string, string>,
+    });
   }
   for (const h of data.halogens) {
-    require(h &&
+    require(isObject(h) &&
       text(h.id) &&
       !halogens.has(h.id) &&
       text(h.label) &&
       text(h.source) &&
-      h.offered, "halogen");
+      isObject(h.offered), "halogen");
     halogens.add(h.id);
   }
   const pairs = new Set();
   for (const m of data.measured) {
     const a = alkanes.get(m?.alkane),
       pair = JSON.stringify([m?.alkane, m?.halogen]);
-    require(a &&
+    require(isObject(a) &&
       halogens.has(m.halogen) &&
       !pairs.has(pair) &&
       text(m.page) &&
@@ -350,13 +374,13 @@ function validateRadicalData(data: Unchecked) {
     const keys = Object.keys(m.shares);
     require(keys.length === Object.keys(a.counts).length &&
       keys.every((k) => k in a.counts), "share keys");
-    for (const share of Object.values<Unchecked>(m.shares))
-      require(share &&
-        ["=", "<", ">"].includes(share.op) &&
-        Number.isFinite(share.value) &&
-        share.value > 0 &&
-        share.value <= 100, "share");
-    const shares = Object.values<Unchecked>(m.shares);
+    for (const share of Object.values(m.shares))
+      require(isObject(share) &&
+        (["=", "<", ">"] as readonly unknown[]).includes(share!.op) &&
+        isFiniteNumber(share!.value) &&
+        share!.value > 0 &&
+        share!.value <= 100, "share");
+    const shares = Object.values(m.shares) as RadicalShare[];
     if (shares.every((s) => s.op === "="))
       require(Math.abs(shares.reduce((sum, s) => sum + s.value, 0) - 100) <
         1e-9, "share total");
@@ -376,29 +400,31 @@ function validateRadicalData(data: Unchecked) {
   for (const h of data.halogens) {
     for (const type of ["secondary", "tertiary"]) {
       const descriptor = h.offered[type];
-      require(descriptor &&
-        ["printed", "measured"].includes(descriptor.kind), "factor kind");
+      require(isObject(descriptor) &&
+        (["printed", "measured"] as readonly unknown[]).includes(
+          descriptor.kind,
+        ), "factor kind");
       if (descriptor.kind === "printed")
-        require(Number.isFinite(descriptor.value) &&
+        require(isFiniteNumber(descriptor.value) &&
           descriptor.value > 0, "printed factor");
       else {
-        const m = measuredFor(descriptor.alkane, h.id, data.measured);
+        const m = measuredFor(descriptor.alkane as string, h.id, data.measured);
         require(m && alkanes.has(descriptor.alkane), "factor reference");
-        const result = derive(m, alkanes.get(descriptor.alkane).counts).find(
+        const result = derive(m!, alkanes.get(descriptor.alkane)!.counts).find(
           (d) => d.type === type,
         );
         require(result && result.op === "=", "exact factor");
       }
     }
   }
-  require(data.defaults &&
+  require(isObject(data.defaults) &&
     alkanes.has(data.defaults.estimateAlkane) &&
     alkanes.has(data.defaults.offeredAlkane) &&
     halogens.has(data.defaults.halogen), "defaults");
 }
 
 Object.assign(organicChemistryModels, {
-  "enantioselectivity-energy": {
+  "enantioselectivity-energy": lab({
     inputs: [
       numberInput("celsius", "温度（°C）", -150, 150, -20),
       numberInput("targetEe", "目标 ee（%）", 0, 99.99, 94),
@@ -446,23 +472,23 @@ Object.assign(organicChemistryModels, {
         ],
       };
     },
-  },
-  "enantioselectivity-estimate": {
+  }),
+  "enantioselectivity-estimate": lab({
     inputs: [numberInput("guess", "你的估计（kJ/mol）", 0, 100, 5)],
     run({ guess }: { guess: number }) {
       return {
         summary: `你估计的 ${guess} kJ/mol，在 −20 °C 给出 ${eeFromDdG(guess, kelvin(-20)).toFixed(1)}% ee。`,
       };
     },
-  },
-  "radical-selectivity": {
+  }),
+  "radical-selectivity": lab<RadicalData>({
     validateData: validateRadicalData,
-    inputs: (data: Unchecked) => [
+    inputs: (data) => [
       {
         id: "alkaneId",
         label: "烷烃",
         kind: "select",
-        options: data.alkanes.map((a: Unchecked) => ({
+        options: data.alkanes.map((a) => ({
           value: a.id,
           label: a.name,
         })),
@@ -472,7 +498,7 @@ Object.assign(organicChemistryModels, {
         id: "halogen",
         label: "自由基",
         kind: "select",
-        options: data.halogens.map((h: Unchecked) => ({
+        options: data.halogens.map((h) => ({
           value: h.id,
           label: h.label,
         })),
@@ -493,10 +519,10 @@ Object.assign(organicChemistryModels, {
         secondary: number;
         tertiary: number;
       },
-      data: Unchecked,
+      data,
     ) {
-      const a = data.alkanes.find((a: Unchecked) => a.id === alkaneId);
-      const h = data.halogens.find((h: Unchecked) => h.id === halogen);
+      const a = data.alkanes.find((a) => a.id === alkaneId)!;
+      const h = data.halogens.find((h) => h.id === halogen)!;
       if (!a || !h) throw new Error("请选择烷烃与自由基");
       const estimate = distribution(a.counts, { secondary, tertiary }),
         measurement = measuredFor(alkaneId, halogen, data.measured);
@@ -506,15 +532,15 @@ Object.assign(organicChemistryModels, {
       }));
       let revealed;
       if (measurement) {
-        const factors = derive(measurement, a.counts);
+        const factors = derive(measurement!, a.counts);
         let summary = `${data.sourceLabel} ${measurement.page}：${a.name}与 ${h.label}（${measurement.condition}）。`;
         summary += measurement.note;
         revealed = {
           summary,
-          readouts: Object.entries<Unchecked>(measurement.shares).map(
+          readouts: Object.entries(measurement!.shares).map(
             ([type, share]) => ({
               label: hydrogenLabel[type],
-              value: `${data.sourceLabel}的产物比例 ${share.op === "=" ? "" : share.op}${share.value}%；由此算出的逐氢活性 ${
+              value: `${data.sourceLabel}的产物比例 ${share!.op === "=" ? "" : share!.op}${share!.value}%；由此算出的逐氢活性 ${
                 type === "primary"
                   ? "1（参照）"
                   : factors
@@ -531,15 +557,15 @@ Object.assign(organicChemistryModels, {
         };
       return { summary: "你的估计", readouts, revealed };
     },
-  },
-  "radical-distribution": {
+  }),
+  "radical-distribution": lab<RadicalData>({
     validateData: validateRadicalData,
-    inputs: (data: Unchecked) => [
+    inputs: (data) => [
       {
         id: "alkaneId",
         label: "烷烃",
         kind: "select",
-        options: data.alkanes.map((a: Unchecked) => ({
+        options: data.alkanes.map((a) => ({
           value: a.id,
           label: a.name,
         })),
@@ -549,19 +575,16 @@ Object.assign(organicChemistryModels, {
         id: "halogen",
         label: "自由基",
         kind: "select",
-        options: data.halogens.map((h: Unchecked) => ({
+        options: data.halogens.map((h) => ({
           value: h.id,
           label: h.label,
         })),
         default: data.defaults.halogen,
       },
     ],
-    run(
-      { alkaneId, halogen }: { alkaneId: string; halogen: string },
-      data: Unchecked,
-    ) {
-      const a = data.alkanes.find((a: Unchecked) => a.id === alkaneId);
-      const h = data.halogens.find((h: Unchecked) => h.id === halogen);
+    run({ alkaneId, halogen }: { alkaneId: string; halogen: string }, data) {
+      const a = data.alkanes.find((a) => a.id === alkaneId)!;
+      const h = data.halogens.find((h) => h.id === halogen)!;
       if (!a || !h) throw new Error("请选择烷烃与自由基");
       const f = offered(halogen, data),
         shares = distribution(a.counts, f);
@@ -575,17 +598,17 @@ Object.assign(organicChemistryModels, {
         },
       };
     },
-  },
+  }),
 });
 
 /** Two-state equilibrium only. ΔG = G(axial) − G(equatorial), kJ/mol.
  * Constant ΔG; ignores solvent, multiple conformers and temperature dependence. */
 export function chairEquilibrium(deltaG: number, kelvin: number) {
   if (
-    !Number.isFinite(deltaG) ||
+    !isFiniteNumber(deltaG) ||
     deltaG < -25 ||
     deltaG > 25 ||
-    !Number.isFinite(kelvin) ||
+    !isFiniteNumber(kelvin) ||
     kelvin < 250 ||
     kelvin > 350
   )
@@ -594,21 +617,22 @@ export function chairEquilibrium(deltaG: number, kelvin: number) {
   return { ratio, equatorial: ratio / (1 + ratio), axial: 1 / (1 + ratio) };
 }
 
-organicChemistryModels["saturated-chair"] = {
-  validateData(data) {
-    const text = (v: Unchecked) => typeof v === "string" && v.trim().length > 0;
+organicChemistryModels["saturated-chair"] = lab<ChairData>({
+  validateData(data): asserts data is ChairData {
+    const text = (v: unknown): v is string =>
+      typeof v === "string" && v.trim().length > 0;
     if (
-      !data ||
+      !isObject(data) ||
       !Array.isArray(data.rows) ||
       data.rows.length === 0 ||
       !text(data.referenceLabel)
     )
       throw new Error("缺少构象参考数据");
     if (
-      !Number.isFinite(data.referenceTemperature) ||
+      !isFiniteNumber(data.referenceTemperature) ||
       data.referenceTemperature < 250 ||
       data.referenceTemperature > 350 ||
-      !Number.isFinite(data.defaultDeltaG) ||
+      !isFiniteNumber(data.defaultDeltaG) ||
       data.defaultDeltaG < -25 ||
       data.defaultDeltaG > 25
     )
@@ -618,11 +642,11 @@ organicChemistryModels["saturated-chair"] = {
       if (
         !row ||
         !text(row.substituent) ||
-        !Number.isFinite(row.deltaG) ||
+        !isFiniteNumber(row.deltaG) ||
         energies.has(row.deltaG) ||
-        !Number.isFinite(row.k) ||
+        !isFiniteNumber(row.k) ||
         row.k <= 0 ||
-        !Number.isFinite(row.percent) ||
+        !isFiniteNumber(row.percent) ||
         row.percent < 0 ||
         row.percent > 100 ||
         (row.lowerBound !== undefined && typeof row.lowerBound !== "boolean")
@@ -643,12 +667,12 @@ organicChemistryModels["saturated-chair"] = {
     ),
     numberInput("t", "温度（K）", 250, 350, 298.15),
   ],
-  calculate: chairEquilibrium,
+
   run({ dg, t }: { dg: number; t: number }, data) {
     const v = chairEquilibrium(dg, t),
       printed =
         t === data.referenceTemperature
-          ? data.rows.find((row: Unchecked) => row.deltaG === dg)
+          ? data.rows.find((row) => row.deltaG === dg)
           : undefined;
     return {
       summary: `平伏:直立 = ${v.ratio.toFixed(2)}:1；平伏 ${(v.equatorial * 100).toFixed(2)}%，直立 ${(v.axial * 100).toFixed(2)}%。`,
@@ -662,27 +686,9 @@ organicChemistryModels["saturated-chair"] = {
         : [],
     };
   },
-};
+});
 
 // Pure numerical helpers shared by model tests.
-organicChemistryModels["enantioselectivity-energy"].calculate = {
-  assumedKelvin,
-  ddG,
-  eeFromDdG,
-  eeToEr,
-  erToEe,
-  kelvin,
-  pointGap,
-  toKcal,
-};
-organicChemistryModels["radical-selectivity"].calculate = {
-  closureRatio,
-  derive,
-  distribution,
-  factor,
-  offered,
-  winner,
-};
 
 /** The two scales Table 1.1 of C&S prints side by side; values never cross between them. */
 
@@ -693,7 +699,7 @@ export const scales = [
 
 /** One printed number and where it is printed; a scale may list several when the sources disagree. */
 
-function checkValues(id: string, values: Unchecked) {
+function checkValues(id: string, values: object) {
   const entries = Object.entries(values);
   if (!entries.length) throw new Error(`${id} has no printed value`);
   for (const [scale, list] of entries) {
@@ -703,7 +709,7 @@ function checkValues(id: string, values: Unchecked) {
       throw new Error(`${id} lists no value on ${scale}`);
     for (const { value, source } of list)
       if (
-        !Number.isFinite(value) ||
+        !isFiniteNumber(value) ||
         typeof source !== "string" ||
         !source.trim()
       )
@@ -711,10 +717,14 @@ function checkValues(id: string, values: Unchecked) {
   }
 }
 
-function validatePkaData(data: Unchecked, scale: Unchecked) {
-  const text = (v: Unchecked) => typeof v === "string" && v.trim().length > 0;
+function validatePkaData(
+  data: unknown,
+  scale: string,
+): asserts data is PkaData {
+  const text = (v: unknown): v is string =>
+    typeof v === "string" && v.trim().length > 0;
   if (
-    !data ||
+    !isObject(data) ||
     !Array.isArray(data.donors) ||
     !data.donors.length ||
     !Array.isArray(data.bases) ||
@@ -725,7 +735,7 @@ function validatePkaData(data: Unchecked, scale: Unchecked) {
   for (const [items, label] of [
     [data.donors, "name"],
     [data.bases, "acid"],
-  ]) {
+  ] as const) {
     for (const item of items) {
       if (
         !item ||
@@ -743,23 +753,20 @@ function validatePkaData(data: Unchecked, scale: Unchecked) {
   for (const [key, items] of [
     ["donorId", data.donors],
     ["baseId", data.bases],
-  ])
+  ] as const)
     if (
       !onScale(items, scale).some(
-        (item: Unchecked) => item.id === data.defaults?.[key],
+        (item) => item.id === (data.defaults as JsonObject | undefined)?.[key],
       )
     )
       throw new Error("pKa 默认选项须在当前标尺上有值");
 }
 
 /** Entries that have a printed value on the scale, in ascending order of their first value. */
-export function onScale(items: Unchecked[], scale: string) {
+export function onScale(items: PkaEntry[], scale: string) {
   return items
-    .filter((item: Unchecked) => item.values[scale])
-    .sort(
-      (a: Unchecked, b: Unchecked) =>
-        a.values[scale][0].value - b.values[scale][0].value,
-    );
+    .filter((item) => item.values[scale])
+    .sort((a, b) => a.values[scale]![0].value - b.values[scale]![0].value);
 }
 
 /** ΔpKa at or beyond this many units counts as complete or negligible (textbook threshold of 3 to 4 units). */
@@ -770,7 +777,7 @@ export const margin = 3;
  * must come from the same scale; ion pairing and aggregation are not modelled.
  */
 export function deprotonation(donorPka: number, acidPka: number) {
-  if (!Number.isFinite(donorPka) || !Number.isFinite(acidPka))
+  if (!isFiniteNumber(donorPka) || !isFiniteNumber(acidPka))
     throw new Error("pKa 必须是有限数值");
   const delta = acidPka - donorPka;
   const outcome =
@@ -779,9 +786,9 @@ export function deprotonation(donorPka: number, acidPka: number) {
 }
 
 /** Every printed donor value paired with every printed base value on one scale. */
-export function readings(donor: Unchecked, base: Unchecked, scale: string) {
-  return (donor.values[scale] ?? []).flatMap((d: Unchecked) =>
-    (base.values[scale] ?? []).map((b: Unchecked) => ({
+export function readings(donor: PkaEntry, base: PkaEntry, scale: string) {
+  return (donor.values[scale] ?? []).flatMap((d) =>
+    (base.values[scale] ?? []).map((b) => ({
       donor: d,
       base: b,
       ...deprotonation(d.value, b.value),
@@ -815,14 +822,16 @@ const pkaPower = (k: number) => {
     .join("")}`;
 };
 for (const scale of scales) {
-  organicChemistryModels[`enolates-pka-${scale.id}`] = {
-    validateData: (data) => validatePkaData(data, scale.id),
+  organicChemistryModels[`enolates-pka-${scale.id}`] = lab<PkaData>({
+    validateData(data): asserts data is PkaData {
+      validatePkaData(data, scale.id);
+    },
     inputs: (data) => [
       {
         id: "donorId",
         label: "供体（C–H 酸）",
         kind: "select",
-        options: onScale(data.donors, scale.id).map((d: Unchecked) => ({
+        options: onScale(data.donors, scale.id).map((d) => ({
           value: d.id,
           label: d.label,
         })),
@@ -832,35 +841,29 @@ for (const scale of scales) {
         id: "baseId",
         label: "碱",
         kind: "select",
-        options: onScale(data.bases, scale.id).map((b: Unchecked) => ({
+        options: onScale(data.bases, scale.id).map((b) => ({
           value: b.id,
           label: b.label,
         })),
         default: data.defaults.baseId,
       },
     ],
-    calculate: {
-      deprotonation,
-      readings,
-      onScale,
-      margin,
-      scales,
-    },
-    run({ donorId, baseId }: { donorId: string; baseId: number }, data) {
-      const d = data.donors.find((d: Unchecked) => d.id === donorId),
-        b = data.bases.find((b: Unchecked) => b.id === baseId);
+
+    run({ donorId, baseId }: { donorId: string; baseId: string }, data) {
+      const d = data.donors.find((d) => d.id === donorId),
+        b = data.bases.find((b) => b.id === baseId);
       if (!d || !b) throw new Error("请选择供体与碱");
       const result = readings(d, b, scale.id);
       if (!result.length)
         return { summary: "所选的供体和碱在这把标尺上没有同时印出的值。" };
       return {
-        readouts: result.map((r: Unchecked, i: number) => ({
+        readouts: result.map((r, i: number) => ({
           label: `${i + 1} · ${d.name} pKa ${r.donor.value}（${r.donor.source}）；${b.acid} pKa ${r.base.value}（${r.base.source}）。`,
           value: `ΔpKa = ${r.base.value} − ${r.donor.value} = ${r.delta >= 0 ? "+" : "−"}${Math.abs(r.delta).toFixed(1)}，K = ${pkaPower(r.K)}：${pkaOutcomeText[r.outcome]}。`,
         })),
       };
     },
-  };
+  });
 }
 
 export const strategyHammett = (() => {
@@ -870,8 +873,8 @@ export const strategyHammett = (() => {
    * the pKa of the substituted acid, so a withdrawing group (a stronger acid)
    * has a positive σ.
    */
-  function finite(value: Unchecked, what: Unchecked) {
-    if (!Number.isFinite(value))
+  function finite(value: unknown, what: string) {
+    if (!isFiniteNumber(value))
       throw new Error(`${what} must be a finite number`);
   }
 
@@ -893,10 +896,13 @@ export const strategyHammett = (() => {
     return 10 ** logRelativeRate(rho, sigmaValue);
   }
 
-  function pka(s: Unchecked, position: string) {
+  function pka(s: HammettData["substituents"][number], position: string) {
     return position === "para" ? s.pkaPara : s.pkaMeta;
   }
-  function printedSigma(s: Unchecked, position: string) {
+  function printedSigma(
+    s: HammettData["substituents"][number],
+    position: string,
+  ) {
     return position === "para" ? s.sigmaPara : s.sigmaMeta;
   }
 
@@ -922,9 +928,10 @@ export const strategyHammett = (() => {
   };
 })();
 
-function validateHammettData(data: Unchecked) {
-  const text = (v: Unchecked) => typeof v === "string" && v.trim().length > 0;
-  if (!data || !Number.isFinite(data.referencePka))
+function validateHammettData(data: unknown): asserts data is HammettData {
+  const text = (v: unknown): v is string =>
+    typeof v === "string" && v.trim().length > 0;
+  if (!isObject(data) || !isFiniteNumber(data.referencePka))
     throw new Error("缺少 Hammett 参照 pKa");
   const tables: [string, string[]][] = [
     ["substituents", ["pkaPara", "pkaMeta", "sigmaPara", "sigmaMeta"]],
@@ -940,31 +947,42 @@ function validateHammettData(data: Unchecked) {
         !text(item.id) ||
         ids.has(item.id) ||
         !text(item.name) ||
-        !fields.every((field: Unchecked) => Number.isFinite(item[field]))
+        !fields.every((field) => isFiniteNumber(item[field]))
       )
         throw new Error("Hammett 条目无效或重复");
       ids.add(item.id);
     }
   }
   if (
-    !data.substituents.some((s: Unchecked) => s.id === data.defaults?.subId) ||
-    !data.reactions.some((r: Unchecked) => r.id === data.defaults?.reaction) ||
-    !["para", "meta"].includes(data.defaults?.sigmaPosition) ||
-    !["para", "meta"].includes(data.defaults?.ratePosition)
+    !(data.substituents as HammettData["substituents"]).some(
+      (s) => s.id === (data.defaults as JsonObject | undefined)?.subId,
+    ) ||
+    !(data.reactions as HammettData["reactions"]).some(
+      (r) => r.id === (data.defaults as JsonObject | undefined)?.reaction,
+    ) ||
+    !(["para", "meta"] as readonly unknown[]).includes(
+      (data.defaults as JsonObject | undefined)?.sigmaPosition,
+    ) ||
+    !(["para", "meta"] as readonly unknown[]).includes(
+      (data.defaults as JsonObject | undefined)?.ratePosition,
+    )
   )
     throw new Error("Hammett 默认选项无效");
 }
-const strategySubInput = (data: Unchecked) => ({
+const strategySubInput = (data: HammettData): LabInput => ({
   id: "subId",
   label: "取代基",
   kind: "select",
-  options: data.substituents.map((s: Unchecked) => ({
+  options: data.substituents.map((s) => ({
     value: s.id,
     label: s.name,
   })),
   default: data.defaults.subId,
 });
-const strategyPositionInput = {
+const strategyPositionInput: Omit<
+  Extract<LabInput, { kind: "select" }>,
+  "default"
+> = {
   id: "position",
   label: "位置",
   kind: "select",
@@ -974,24 +992,24 @@ const strategyPositionInput = {
   ],
 };
 Object.assign(organicChemistryModels, {
-  "strategy-hammett-sigma": {
+  "strategy-hammett-sigma": lab<HammettData>({
     validateData: validateHammettData,
-    inputs: (data: Unchecked) => [
+    inputs: (data) => [
       strategySubInput(data),
       { ...strategyPositionInput, default: data.defaults.sigmaPosition },
       numberInput("guess", "你算出的 σ", -10, 10, 0, 0.01),
     ],
-    calculate: strategyHammett,
+
     run(
       {
         subId,
         position,
         guess,
       }: { subId: string; position: string; guess: number },
-      data: Unchecked,
+      data,
     ) {
-      const s = data.substituents.find((s: Unchecked) => s.id === subId);
-      if (!s || !["para", "meta"].includes(position) || !Number.isFinite(guess))
+      const s = data.substituents.find((s) => s.id === subId);
+      if (!s || !["para", "meta"].includes(position) || !isFiniteNumber(guess))
         throw new Error("请选择取代基、位置，并输入有限数值");
       const acid = strategyHammett.pka(s, position),
         value = strategyHammett.sigma(data.referencePka, acid);
@@ -1002,15 +1020,15 @@ Object.assign(organicChemistryModels, {
         },
       };
     },
-  },
-  "strategy-hammett-rate": {
+  }),
+  "strategy-hammett-rate": lab<HammettData>({
     validateData: validateHammettData,
-    inputs: (data: Unchecked) => [
+    inputs: (data) => [
       {
         id: "reaction",
         label: "反应",
         kind: "select",
-        options: data.reactions.map((r: Unchecked) => ({
+        options: data.reactions.map((r) => ({
           value: r.id,
           label: `${r.name}（ρ = ${r.rho}）`,
         })),
@@ -1019,29 +1037,29 @@ Object.assign(organicChemistryModels, {
       strategySubInput(data),
       { ...strategyPositionInput, default: data.defaults.ratePosition },
     ],
-    calculate: strategyHammett,
+
     run(
       {
         reaction,
         subId,
         position,
       }: { reaction: string; subId: string; position: string },
-      data: Unchecked,
+      data,
     ) {
-      const r = data.reactions.find((r: Unchecked) => r.id === reaction),
-        s = data.substituents.find((s: Unchecked) => s.id === subId);
+      const r = data.reactions.find((r) => r.id === reaction),
+        s = data.substituents.find((s) => s.id === subId);
       if (!r || !s || !["para", "meta"].includes(position))
         throw new Error("请选择反应、取代基和位置");
       const value = strategyHammett.printedSigma(s, position),
         ratio = strategyHammett.relativeRate(r.rho, value);
       const points = data.substituents
-        .flatMap((s: Unchecked) =>
+        .flatMap((s) =>
           ["para", "meta"].map((p) => {
             const x = strategyHammett.printedSigma(s, p);
             return { x, y: r.rho * x };
           }),
         )
-        .sort((a: Unchecked, b: Unchecked) => a.x - b.x);
+        .sort((a, b) => a.x - b.x);
       return {
         summary: `ρ = ${r.rho > 0 ? "+" : ""}${r.rho}，σ = ${value}：kX/kH = 10^${(r.rho * value).toFixed(2)} ≈ ${Number(ratio.toPrecision(2))}`,
         charts: [
@@ -1059,19 +1077,19 @@ Object.assign(organicChemistryModels, {
         ],
       };
     },
-  },
+  }),
 });
 
 export const safety = (() => {
   /** Concentrations are molar; mass concentration needs a molecular weight and is rejected. */
   const scales: Record<string, number> = { µM: 1, nM: 0.001, mM: 1000 };
   function toMicromolar(value: number, unit: string) {
-    if (!Number.isFinite(value) || value < 0)
+    if (!isFiniteNumber(value) || value < 0)
       throw new Error("浓度须为有限非负数");
     const scale = scales[unit];
     if (scale === undefined) throw new Error("仅支持 µM、nM、mM");
     const result = value * scale;
-    if (!Number.isFinite(result)) throw new Error("浓度超出计算范围");
+    if (!isFiniteNumber(result)) throw new Error("浓度超出计算范围");
     return result;
   }
   /** hERG IC50 / unbound Cmax, both converted to µM. No universal pass/fail cutoff. */
@@ -1086,7 +1104,7 @@ export const safety = (() => {
     if (numerator <= 0 || denominator <= 0)
       throw new Error("IC50 与游离 Cmax 必须大于零");
     const result = numerator / denominator;
-    if (!Number.isFinite(result)) throw new Error("倍数超出计算范围");
+    if (!isFiniteNumber(result)) throw new Error("倍数超出计算范围");
     return result;
   }
   /** Linear PK, constant bioavailability, competitive reversible inhibition of one clearance pathway.
@@ -1103,7 +1121,7 @@ export const safety = (() => {
     )
       throw new Error("Iu ≥ 0、Ki > 0，fm 在 0–1 之间");
     const result = 1 / (1 - fm + fm / (1 + iu / ki));
-    if (!Number.isFinite(result)) throw new Error("AUC 倍数超出计算范围");
+    if (!isFiniteNumber(result)) throw new Error("AUC 倍数超出计算范围");
     return result;
   }
 
@@ -1223,13 +1241,13 @@ export const safety = (() => {
   }
 
   /** Mean and standard error of the mean (sample SD / √n), as the source's SEM. */
-  function meanSem(values: Unchecked) {
+  function meanSem(values: number[]) {
     if (values.length < 2 || !values.every(Number.isFinite))
       throw new Error("至少需要两个有限数值");
     const mean =
-      values.reduce((sum: number, v: Unchecked) => sum + v, 0) / values.length;
+      values.reduce((sum: number, v: number) => sum + v, 0) / values.length;
     const variance =
-      values.reduce((sum: number, v: Unchecked) => sum + (v - mean) ** 2, 0) /
+      values.reduce((sum: number, v: number) => sum + (v - mean) ** 2, 0) /
       (values.length - 1);
     return { mean, sem: Math.sqrt(variance / values.length) };
   }
@@ -1251,8 +1269,8 @@ export const routeComparison = (() => {
   function calculatePmi(totalInputKg: number | null, productKg: number | null) {
     if (totalInputKg === null || productKg === null) return null;
     if (
-      !Number.isFinite(totalInputKg) ||
-      !Number.isFinite(productKg) ||
+      !isFiniteNumber(totalInputKg) ||
+      !isFiniteNumber(productKg) ||
       totalInputKg < 0 ||
       productKg <= 0 ||
       productKg > totalInputKg
@@ -1261,16 +1279,16 @@ export const routeComparison = (() => {
     return totalInputKg / productKg;
   }
   /** Isolated yields for a single continuous branch only, each as a fraction. */
-  function linearYield(yields: Unchecked) {
+  function linearYield(yields: number[]) {
     if (
       !yields.length ||
-      yields.some((y: number) => !Number.isFinite(y) || y < 0 || y > 1)
+      yields.some((y: number) => !isFiniteNumber(y) || y < 0 || y > 1)
     )
       throw new Error("各步收率须在0到1之间，至少提供一步");
-    return yields.reduce((product: Unchecked, y: number) => product * y, 1);
+    return yields.reduce((product: number, y: number) => product * y, 1);
   }
   /** Cumulative product after each step of a continuous branch, each yield a fraction. */
-  function runningProduct(yields: Unchecked) {
+  function runningProduct(yields: number[]) {
     linearYield(yields);
     let product = 1;
     return yields.map((y: number) => (product *= y));
@@ -1295,7 +1313,7 @@ export const routeComparison = (() => {
   }
   /** Molar yield as a fraction: grams isolated, their formula weight, and mol that went in. */
   function molarYield(grams: number, weight: number, startMol: number) {
-    if (![grams, weight, startMol].every((x) => Number.isFinite(x) && x > 0))
+    if (![grams, weight, startMol].every((x) => isFiniteNumber(x) && x > 0))
       throw new Error("质量、分子量和起始物质的量都须大于零");
     return grams / weight / startMol;
   }
@@ -1305,8 +1323,8 @@ export const routeComparison = (() => {
    * has the same molecular weight and the API itself is not counted, as in the
    * model of Anderson, Practical Process Research and Development, Figure 3.14.
    */
-  function intermediateMass(apiKg: number, stepYields: Unchecked) {
-    if (!Number.isFinite(apiKg) || apiKg <= 0)
+  function intermediateMass(apiKg: number, stepYields: number[]) {
+    if (!isFiniteNumber(apiKg) || apiKg <= 0)
       throw new Error("API 的质量须大于零");
     if (stepYields.some((y: number) => y <= 0))
       throw new Error("各步收率须大于零");
@@ -1327,10 +1345,9 @@ export const routeComparison = (() => {
     apiKg: number,
     resolutionYield: number,
     otherYield: number,
-    steps: Unchecked,
+    steps: number,
   ) {
-    if (!Number.isInteger(steps) || steps < 1)
-      throw new Error("步数须是正整数");
+    if (!isInteger(steps) || steps < 1) throw new Error("步数须是正整数");
     return Array.from({ length: steps }, (_, position) =>
       intermediateMass(
         apiKg,
@@ -1352,7 +1369,7 @@ export const routeComparison = (() => {
   };
 })();
 
-const safetyUnit = (id: string, label: string, value: Unchecked) => ({
+const safetyUnit = (id: string, label: string, value: string): LabInput => ({
   id,
   label,
   kind: "select",
@@ -1360,14 +1377,14 @@ const safetyUnit = (id: string, label: string, value: Unchecked) => ({
   default: value,
 });
 Object.assign(organicChemistryModels, {
-  "safety-window": {
+  "safety-window": lab({
     inputs: [
       numberInput("ic50", "hERG IC50", 0, 1e9, 0.95, 0.01),
       safetyUnit("icUnit", "IC50 单位", "µM"),
       numberInput("cmax", "游离 Cmax", 0, 1e9, 9, 0.01),
       safetyUnit("cmaxUnit", "Cmax 单位", "nM"),
     ],
-    calculate: safety,
+
     run({
       ic50,
       icUnit,
@@ -1383,31 +1400,31 @@ Object.assign(organicChemistryModels, {
         summary: `安全窗口：${Number(safety.safetyWindow(ic50, icUnit, cmax, cmaxUnit).toPrecision(5))} 倍`,
       };
     },
-  },
-  "safety-cyp": {
+  }),
+  "safety-cyp": lab({
     inputs: [
       numberInput("iu", "Iu（µM）", 0, 1e6, 1),
       numberInput("ki", "Ki（µM）", 0, 1e6, 1),
       numberInput("fm", "fm（0–1）", 0, 1, 0.8),
     ],
-    calculate: safety,
+
     run({ iu, ki, fm }: { iu: number; ki: number; fm: number }) {
       return {
         summary: `AUC 倍数：${Number(safety.aucRatio(iu, ki, fm).toPrecision(4))}`,
       };
     },
-  },
-  "safety-qtc": {
+  }),
+  "safety-qtc": lab({
     inputs: [
       numberInput("rr", "RR（ms）", 0, 10000, 1000, 1),
       numberInput("qt", "QT（ms）", 0, 10000, 440, 1),
     ],
-    calculate: safety,
+
     run({ rr, qt }: { rr: number; qt: number }) {
       return { summary: `QTc = ${safety.bazett(qt, rr).toFixed(1)} ms` };
     },
-  },
-  "route-pmi": {
+  }),
+  "route-pmi": lab({
     inputs: [
       numberInput("input", "总投入（kg）", 0, 1e9, 1000, 1),
       numberInput("product", "隔离产品（kg）", 0, 1e9, 20, 1),
@@ -1422,7 +1439,7 @@ Object.assign(organicChemistryModels, {
         default: "complete",
       },
     ],
-    calculate: routeComparison,
+
     run({
       input,
       product,
@@ -1443,8 +1460,8 @@ Object.assign(organicChemistryModels, {
             : `PMI = ${result.toFixed(1)} kg/kg`,
       };
     },
-  },
-  "route-resolution": {
+  }),
+  "route-resolution": lab({
     inputs: [
       numberInput("api", "生产的 API（kg）", 1, 1e6, 100, 10),
       numberInput("other", "其余各步的收率（%）", 1, 100, 90, 1),
@@ -1460,7 +1477,7 @@ Object.assign(organicChemistryModels, {
         default: 1,
       },
     ],
-    calculate: routeComparison,
+
     run({
       api,
       other,
@@ -1478,7 +1495,7 @@ Object.assign(organicChemistryModels, {
         other / 100,
         7,
       );
-      if (!Number.isInteger(Number(position)) || position < 1 || position > 7)
+      if (!isInteger(Number(position)) || position < 1 || position > 7)
         throw new Error("请选择第1至7步");
       return {
         summary: `拆分放在第 ${position} 步：${totals[position - 1].toFixed(0)} kg。放在第 7 步比放在第 1 步多 ${((totals[6] / totals[0] - 1) * 100).toFixed(0)}%。`,
@@ -1496,17 +1513,18 @@ Object.assign(organicChemistryModels, {
         ],
       };
     },
-  },
-  "route-ledger": {
-    validateData(data: Unchecked) {
-      const object = (v: Unchecked) =>
+  }),
+  "route-ledger": lab<RouteData>({
+    validateData(data): asserts data is RouteData {
+      const object = (v: unknown): v is JsonObject =>
         v !== null && typeof v === "object" && !Array.isArray(v);
-      const text = (v: Unchecked) =>
+      const text = (v: unknown): v is string =>
         typeof v === "string" && v.trim().length > 0;
-      const fraction = (v: Unchecked) => Number.isFinite(v) && v >= 0 && v <= 1;
-      const require = (condition: Unchecked, field: Unchecked) => {
+      const fraction = (v: unknown): v is number =>
+        isFiniteNumber(v) && v >= 0 && v <= 1;
+      function require(condition: unknown, field: string): asserts condition {
         if (!condition) throw new Error(`路线数据 ${field} 无效`);
-      };
+      }
       require(object(data), "ledger");
       require(text(data.inputLabel), "inputLabel");
       require(Array.isArray(data.routes) && data.routes.length > 0, "routes");
@@ -1533,23 +1551,21 @@ Object.assign(organicChemistryModels, {
       for (const field of ["startGrams", "startMol", "productGrams"])
         positive(m[field], field);
     },
-    inputs: (data: Unchecked) => [
-      numberInput("assumed", data.inputLabel, 0, 100, 100, 1),
-    ],
-    calculate: routeComparison,
-    run({ assumed }: { assumed: number }, data: Unchecked) {
+    inputs: (data) => [numberInput("assumed", data.inputLabel, 0, 100, 100, 1)],
+
+    run({ assumed }: { assumed: number }, data) {
       const percent = (x: number) => `${(x * 100).toFixed(1)}%`;
       const tables: NonNullable<LabResult["tables"]> = [];
-      const readouts = data.routes.flatMap((route: Unchecked) => {
-        const yields = route.steps.map((s: Unchecked) =>
+      const readouts = data.routes.flatMap((route) => {
+        const yields = route.steps.map((s) =>
             s.assumed ? assumed / 100 : s.yield,
           ),
           cumulative = routeComparison.runningProduct(yields),
-          product = cumulative.at(-1);
+          product = cumulative.at(-1)!;
         tables.push({
           caption: route.title,
           columns: ["步骤", "收率", "累计", "原文备注"],
-          rows: route.steps.map((step: Unchecked, i: number) => [
+          rows: route.steps.map((step, i: number) => [
             step.name,
             percent(yields[i]),
             percent(cumulative[i]),
@@ -1572,5 +1588,5 @@ Object.assign(organicChemistryModels, {
       });
       return { readouts, tables };
     },
-  },
+  }),
 });

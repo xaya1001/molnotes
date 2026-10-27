@@ -1,3 +1,6 @@
+import type { TopicContent } from "../src/ui/topic/content.ts";
+import type { TopicBlock } from "../src/ui/topic/blocks.ts";
+import type { MoleculeData } from "../src/ui/chemistry/types.ts";
 // Renders the figures of content units as a reader will see them, without
 // publishing: timelines, flows and structures from the content directory,
 // drawn by this checkout's components at desktop and phone width. Prints
@@ -20,13 +23,12 @@ import { layoutProblems } from "./molecule-layout.ts";
 import { setting } from "../shared/settings.ts";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
-import type { Unchecked } from "../shared/unchecked.ts";
 
 /** A figure to draw: a timeline or flow model, or a list of structures. */
 interface Figure {
   where: string;
   kind: "timeline" | "flow" | "molecule";
-  value: Unchecked;
+  value: unknown;
   caption: string;
 }
 
@@ -86,19 +88,23 @@ function noteFigures(source: string, file: string, errors: string[]) {
 
 /** The figures of a topic's blocks, tabs included. */
 // `topic` is a content.json the preview reads as written; it is not validated.
-function topicFigures(topic: Unchecked, file: string, errors: string[]) {
+function topicFigures(topic: TopicContent, file: string, errors: string[]) {
   const figures: Figure[] = [];
-  const visit = (blocks: Unchecked[], where: string) =>
+  const visit = (blocks: TopicBlock[], where: string) =>
     blocks.forEach((block, i) => {
       const at = `${where} 第 ${i + 1} 块`;
       if (block.type === "tabs")
-        block.items.forEach((item: Unchecked) =>
+        block.items.forEach((item) =>
           visit(item.blocks, `${at}「${item.label}」`),
         );
       if (block.type === "timeline" || block.type === "flow") {
         try {
           const kind: "timeline" | "flow" = block.type;
-          const value = resolveData(block[kind], topic.data, at);
+          const value = resolveData(
+            block.type === "timeline" ? block.timeline : block.flow,
+            topic.data,
+            at,
+          );
           define[kind](value);
           figures.push({
             where: at,
@@ -121,7 +127,7 @@ function topicFigures(topic: Unchecked, file: string, errors: string[]) {
         figures.push({
           where: at,
           kind: "molecule",
-          value: resolveData<Unchecked[]>(block.items, topic.data, at).map(
+          value: resolveData<MoleculeData[]>(block.items, topic.data, at).map(
             (m) => ({
               smiles: m.smiles,
               caption: m.name,
@@ -130,7 +136,7 @@ function topicFigures(topic: Unchecked, file: string, errors: string[]) {
           caption: "",
         });
     });
-  topic.chapters.forEach((chapter: Unchecked, c: number) =>
+  topic.chapters.forEach((chapter, c: number) =>
     visit(chapter.blocks ?? [], `${file} 第 ${c + 1} 章「${chapter.title}」`),
   );
   return figures;
@@ -294,17 +300,19 @@ try {
 const toolkit = await moleculeToolkit();
 for (const entry of report)
   if (entry.kind === "molecule")
-    entry.value.forEach(({ smiles }: { smiles: string }, k: number) => {
-      // A SMILES RDKit cannot read already shows as a render failure above.
-      const mol = toolkit.get_mol(smiles);
-      if (!mol) return;
-      mol.delete();
-      const problems = layoutProblems(toolkit, smiles);
-      if (problems.length)
-        entry.warnings.push(
-          `第 ${k + 1} 个结构：${problems.join("，")}；用 npm run molecule:layout 生成坐标`,
-        );
-    });
+    (entry.value as { smiles: string }[]).forEach(
+      ({ smiles }: { smiles: string }, k: number) => {
+        // A SMILES RDKit cannot read already shows as a render failure above.
+        const mol = toolkit.get_mol(smiles);
+        if (!mol) return;
+        mol.delete();
+        const problems = layoutProblems(toolkit, smiles);
+        if (problems.length)
+          entry.warnings.push(
+            `第 ${k + 1} 个结构：${problems.join("，")}；用 npm run molecule:layout 生成坐标`,
+          );
+      },
+    );
 let warned = 0;
 for (const [i, entry] of report.entries()) {
   console.log(`\n${i + 1}. ${entry.kind}  ${entry.where}`);

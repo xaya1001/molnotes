@@ -28,7 +28,6 @@ import type {
   Snapshot,
   SnapshotSite,
 } from "../../shared/snapshot.ts";
-import type { Unchecked } from "../../shared/unchecked.ts";
 import type { TopicContent } from "../../src/ui/topic/content.ts";
 
 /** Everything a build reads, before the notes are compiled. */
@@ -121,7 +120,7 @@ async function validateTopics(data: PublishData, ctx: BuildContext) {
             item &&
             !(
               key === "image" &&
-              Object.values<Unchecked>(topic.content.data?.sources ?? {}).some(
+              Object.values(topic.content.data?.sources ?? {}).some(
                 (source) => source.image === item,
               )
             ) &&
@@ -149,7 +148,7 @@ async function validateTopics(data: PublishData, ctx: BuildContext) {
       }
     }
     await visit(topic.content, "content");
-    for (const collection of Object.values<Unchecked>(
+    for (const collection of Object.values(
       topic.content.data?.collections ?? {},
     ))
       for (const field of collection.fields ?? [])
@@ -299,14 +298,14 @@ export async function buildSnapshot(
       })),
       directories: data.directories.map((directory) => ({
         ...directory,
-        compiled: directories.get(directory.dir),
+        compiled: directories.get(directory.dir)!,
       })),
       notes: data.notes.map(({ dir, slug, author, source }) => ({
         dir,
         slug,
         author,
         source,
-        compiled: notes.get(`${dir}/${author}/${slug}`),
+        compiled: notes.get(`${dir}/${author}/${slug}`)!,
       })),
       glossary,
       registry,

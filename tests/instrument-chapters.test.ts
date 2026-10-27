@@ -1,4 +1,4 @@
-import type { Unchecked } from "../shared/unchecked.ts";
+import type FixtureFixture from "./fixtures/content/sites/instruments/content.json";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -8,7 +8,7 @@ import {
   chapterPredictions,
 } from "../shared/topic-content.ts";
 
-const fixture = JSON.parse(
+const fixture: typeof FixtureFixture = JSON.parse(
   await readFile(
     new URL(
       "./fixtures/content/sites/instruments/content.json",
@@ -26,17 +26,21 @@ test("focused browser chapters preserve the composed sample, records and publica
   assert.deepEqual(content.chapters[0], before.chapters[0]);
   assert.deepEqual(content.data, before.data);
   assert.deepEqual(
-    content.chapters.flatMap((chapter: Unchecked) =>
-      chapterPredictions(chapter).map(({ id }) => id),
+    content.chapters.flatMap((chapter) =>
+      chapterPredictions(
+        chapter as import("../src/ui/topic/content.ts").TopicChapter,
+      ).map(({ id }) => id),
     ),
-    before.chapters.flatMap((chapter: Unchecked) =>
-      chapterPredictions(chapter).map(({ id }) => id),
+    before.chapters.flatMap((chapter) =>
+      chapterPredictions(
+        chapter as import("../src/ui/topic/content.ts").TopicChapter,
+      ).map(({ id }) => id),
     ),
   );
   const focused = content.chapters.slice(before.chapters.length);
   assert.ok(
     focused.every(
-      (chapter: Unchecked) =>
+      (chapter) =>
         chapter.blocks.length > 0 &&
         chapter.blocks.length < before.chapters[0].blocks.length,
     ),
@@ -45,15 +49,15 @@ test("focused browser chapters preserve the composed sample, records and publica
   // on the composed smoke page. Duplicates would hide accidental group overlap.
   assert.deepEqual(
     focused
-      .flatMap((chapter: Unchecked) =>
+      .flatMap((chapter) =>
         chapter.blocks
-          .filter((block: Unchecked) => block.type === "lab")
-          .map((block: Unchecked) => block.model),
+          .filter((block) => block.type === "lab")
+          .map((block) => block.model),
       )
       .sort(),
     before.chapters[0].blocks
-      .filter((block: Unchecked) => block.type === "lab" && block.data)
-      .map((block: Unchecked) => block.model)
+      .filter((block) => block.type === "lab" && block.data)
+      .map((block) => block.model)
       .sort(),
   );
 });

@@ -1,4 +1,5 @@
-import type { Unchecked } from "../shared/unchecked.ts";
+import type { TopicContent } from "../src/ui/topic/content.ts";
+import type FixtureFixture from "./fixtures/content/sites/instruments/content.json";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -25,7 +26,7 @@ import {
   toKcal,
   winner,
 } from "../src/ui/models/organic-chemistry.ts";
-const fixture = () =>
+const fixture = (): typeof FixtureFixture & TopicContent =>
   JSON.parse(
     readFileSync(
       new URL(
@@ -35,30 +36,28 @@ const fixture = () =>
       "utf8",
     ),
   );
-const near = (a: Unchecked, b: Unchecked, tol = 1e-9) => Math.abs(a - b) <= tol;
+const near = (a: number, b: number, tol = 1e-9) => Math.abs(a - b) <= tol;
 const sample = () => fixture().data.radicalSample;
 
 test("per-hydrogen arithmetic preserves exact factors and one-sided bounds", () => {
   const data = sample();
-  const results = data.measured.map((m: Unchecked) =>
-    derive(m, data.alkanes.find((a: Unchecked) => a.id === m.alkane).counts),
+  const results = data.measured.map((m) =>
+    derive(m, data.alkanes.find((a) => a.id === m.alkane)!.counts),
   );
   assert.equal(results[0][0].working, "(60/2) ÷ (40/4) = 3");
   assert.equal(results[1][0].working, "(40/2) ÷ (60/6) = 2");
   assert.deepEqual(
-    results[2].map(({ type, op, value }: Unchecked) => ({ type, op, value })),
+    results[2].map(({ type, op, value }) => ({ type, op, value })),
     [{ type: "tertiary", op: ">", value: 147 }],
   );
 });
 
 test("exact derived factors recover source shares and distributions sum to100", () => {
   const data = sample();
-  for (const m of data.measured.filter((m: Unchecked) => m.halogen === "X")) {
-    const counts = data.alkanes.find(
-      (a: Unchecked) => a.id === m.alkane,
-    ).counts;
+  for (const m of data.measured.filter((m) => m.halogen === "X")) {
+    const counts = data.alkanes.find((a) => a.id === m.alkane)!.counts;
     const factors = Object.fromEntries(
-      derive(m, counts).map((d: Unchecked) => [d.type, d.value]),
+      derive(m, counts).map((d) => [d.type, d.value]),
     );
     const shares = distribution(counts, factors);
     assert.ok(
@@ -67,7 +66,7 @@ test("exact derived factors recover source shares and distributions sum to100", 
         100,
       ),
     );
-    for (const [type, share] of Object.entries<Unchecked>(m.shares))
+    for (const [type, share] of Object.entries(m.shares))
       assert.ok(near(shares[type], share.value));
   }
 });
@@ -78,7 +77,7 @@ test("offered factors follow explicit measured references or separate printed so
   assert.deepEqual(offered("Y", data), { secondary: 200, tertiary: 900 });
   const shares = distribution(data.alkanes[2].counts, offered("X", data));
   assert.ok(near(shares.primary, (100 * 3) / 11));
-  assert.ok(near(shares.tertiary, (100 * 2) / 11));
+  assert.ok(near(shares.tertiary!, (100 * 2) / 11));
   const bound = derive(data.measured[2], data.alkanes[1].counts)[0].value;
   assert.ok(offered("Y", data).tertiary > bound);
   assert.ok(
@@ -112,7 +111,7 @@ test("ring selection respects found-ratio direction and closure ratios reject ze
     ["=", 0.2, "endo"],
     ["<", 0.5, "endo"],
     [">", 4, "exo"],
-  ])
+  ] as const)
     assert.equal(winner({ foundRatio: { op, value } }), result);
   assert.equal(closureRatio({ main: 8, minor: 2 }), 4);
   assert.throws(() => closureRatio({ main: 8, minor: 0 }));
@@ -169,9 +168,9 @@ test("shared lab defaults reproduce the original page readouts", () => {
   ]) {
     const model = labModels[name];
     assert.equal(
-      model.run(
+      model().run(
         Object.fromEntries(
-          (model.inputs as LabInput[]).map((input) => [
+          (model().inputs as LabInput[]).map((input) => [
             input.id,
             input.default,
           ]),
@@ -190,7 +189,7 @@ test("radical content controls preserve unrevealed predictions and source eviden
   );
   assert.equal(values.alkaneId, "sample-b");
   assert.equal(values.halogen, "X");
-  const result = model.run(values, data);
+  const result = model(data).run(values);
   assert.deepEqual(
     result.readouts!.map((r) => r.value),
     ["75.0%", "25.0%"],
@@ -198,14 +197,14 @@ test("radical content controls preserve unrevealed predictions and source eviden
   assert.ok(result.revealed!.summary!.includes(data.measured[1].note));
   assert.match(result.revealed!.readouts![1].value, /40%.*= 2/);
   assert.equal(
-    model.run({ ...values, tertiary: 5 }, data).readouts![1].value,
+    model(data).run({ ...values, tertiary: 5 }).readouts![1].value,
     "62.5%",
   );
   const offeredModel = labModels["radical-distribution"];
-  const predicted = offeredModel.run(
-    { alkaneId: "sample-c", halogen: "X" },
-    data,
-  );
+  const predicted = offeredModel(data).run({
+    alkaneId: "sample-c",
+    halogen: "X",
+  });
   assert.deepEqual(
     predicted.revealed!.readouts!.map((r) => r.value),
     ["27.3%", "54.5%", "18.2%"],
@@ -216,41 +215,58 @@ test("radical content controls preserve unrevealed predictions and source eviden
 test("publication refuses inconsistent radical datasets and non-exact offered references", () => {
   validateTopicContent(fixture());
   const mutations = [
-    (d: Unchecked) => (d.alkanes = []),
-    (d: Unchecked) => d.alkanes.push(d.alkanes[0]),
-    (d: Unchecked) => (d.alkanes[0].counts.primary = 0),
-    (d: Unchecked) => (d.alkanes[0].counts.secondary = 0.5),
-    (d: Unchecked) => delete d.alkanes[0].products.secondary,
-    (d: Unchecked) => (d.alkanes[0].products.tertiary = "extra"),
-    (d: Unchecked) => d.halogens.push(d.halogens[0]),
-    (d: Unchecked) => d.measured.push(d.measured[0]),
-    (d: Unchecked) => (d.measured[0].alkane = "missing"),
-    (d: Unchecked) => (d.measured[0].halogen = "missing"),
-    (d: Unchecked) => delete d.measured[0].shares.secondary,
-    (d: Unchecked) => (d.measured[0].shares.secondary.value = 50),
-    (d: Unchecked) => (d.measured[0].shares.secondary.op = "<="),
-    (d: Unchecked) => (d.measured[0].shares.primary.op = "<"),
-    (d: Unchecked) => (d.measured[2].shares.tertiary.value = 100),
-    (d: Unchecked) => (d.measured[0].page = ""),
-    (d: Unchecked) => (d.sourceLabel = ""),
-    (d: Unchecked) => (d.halogens[0].offered.tertiary.alkane = "sample-a"),
-    (d: Unchecked) =>
-      (d.halogens[1].offered.secondary = {
+    (d: ReturnType<typeof sample>) => Reflect.set(d, "alkanes", []),
+    (d: ReturnType<typeof sample>) => d.alkanes.push(d.alkanes[0]),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.alkanes[0].counts, "primary", 0),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.alkanes[0].counts, "secondary", 0.5),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.deleteProperty(d.alkanes[0].products, "secondary"),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.alkanes[0].products, "tertiary", "extra"),
+    (d: ReturnType<typeof sample>) => d.halogens.push(d.halogens[0]),
+    (d: ReturnType<typeof sample>) => d.measured.push(d.measured[0]),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.measured[0], "alkane", "missing"),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.measured[0], "halogen", "missing"),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.deleteProperty(d.measured[0].shares, "secondary"),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.measured[0].shares.secondary!, "value", 50),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.measured[0].shares.secondary!, "op", "<="),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.measured[0].shares.primary, "op", "<"),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.measured[2].shares.tertiary!, "value", 100),
+    (d: ReturnType<typeof sample>) => Reflect.set(d.measured[0], "page", ""),
+    (d: ReturnType<typeof sample>) => Reflect.set(d, "sourceLabel", ""),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.halogens[0].offered.tertiary, "alkane", "sample-a"),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.halogens[1].offered, "secondary", {
         kind: "measured",
         alkane: "sample-a",
       }),
-    (d: Unchecked) =>
-      (d.halogens[1].offered.tertiary = {
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.halogens[1].offered, "tertiary", {
         kind: "measured",
         alkane: "sample-b",
       }),
-    (d: Unchecked) => (d.halogens[0].offered.secondary.kind = "unknown"),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.halogens[0].offered.secondary, "kind", "unknown"),
     ...[0, -1, Infinity].map(
-      (v) => (d: Unchecked) => (d.halogens[1].offered.tertiary.value = v),
+      (v) => (d: ReturnType<typeof sample>) =>
+        Reflect.set(d.halogens[1].offered.tertiary, "value", v),
     ),
-    (d: Unchecked) => (d.defaults.estimateAlkane = "missing"),
-    (d: Unchecked) => (d.defaults.offeredAlkane = "missing"),
-    (d: Unchecked) => (d.defaults.halogen = "missing"),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.defaults, "estimateAlkane", "missing"),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.defaults, "offeredAlkane", "missing"),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.defaults, "halogen", "missing"),
   ];
   for (const mutate of mutations) {
     const doc = fixture();

@@ -1,4 +1,3 @@
-import type { Unchecked } from "../shared/unchecked.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -13,7 +12,7 @@ const samples = JSON.parse(
     "utf8",
   ),
 ).data;
-const data: Record<string, Unchecked> = {
+const data: Record<string, unknown> = {
   "strategy-hammett-sigma": samples.hammettSample,
   "strategy-hammett-rate": samples.hammettSample,
   "enolates-pka-dmso": samples.pkaSample,
@@ -32,7 +31,10 @@ const data: Record<string, Unchecked> = {
   "fbdd-depth": { rounds: 3, library: 1000000, copies: 100, reads: 10000 },
 };
 
-const defaults = (model: Unchecked, values: Unchecked) =>
+const defaults = (
+  model: import("../src/ui/models/model.ts").LabEntry,
+  values: unknown,
+) =>
   Object.fromEntries(
     modelInputs(model, values).map((input) => [input.id, input.default]),
   );
@@ -56,26 +58,28 @@ test("every lab model's defaults are inside its own input ranges", () => {
 test("every lab model runs with defaults and minimal inline data", () => {
   for (const [name, model] of Object.entries(labModels))
     assert.doesNotThrow(
-      () => model.run(defaults(model, data[name]), data[name]),
+      () => model(data[name]).run(defaults(model, data[name])),
       name,
     );
   assert.match(
-    labModels["assay-correlation"].run(
-      { x: "alpha", y: "beta", agreedOnly: "yes" },
-      data["assay-correlation"],
-    ).summary!,
+    labModels["assay-correlation"](data["assay-correlation"]).run({
+      x: "alpha",
+      y: "beta",
+      agreedOnly: "yes",
+    }).summary!,
     /1.00（n = 3）/,
   );
   assert.match(
-    labModels["atp-selectivity"].run({ exponent: 3 }, data["atp-selectivity"])
+    labModels["atp-selectivity"](data["atp-selectivity"]).run({ exponent: 3 })
       .summary!,
     /11.8 倍/,
   );
   assert.equal(
-    labModels["fbdd-depth"].run(
-      { exponent: 2, rounds: 3, threshold: 4 },
-      data["fbdd-depth"],
-    ).readouts![1].value,
+    labModels["fbdd-depth"](data["fbdd-depth"]).run({
+      exponent: 2,
+      rounds: 3,
+      threshold: 4,
+    }).readouts![1].value,
     "1.00",
   );
 });
@@ -86,7 +90,7 @@ const run = (
   acids: number,
   amines: number,
   controls: number,
-) => plate.run({ capacity, acids, amines, controls });
+) => plate().run({ capacity, acids, amines, controls });
 
 test("plate capacity: reserved controls reduce capacity before a library is scheduled", () => {
   assert.equal(

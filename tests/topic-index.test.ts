@@ -1,10 +1,10 @@
-import type { Unchecked } from "../shared/unchecked.ts";
+import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildTopicIndex } from "../shared/topic-index.ts";
 import { validateTopicContent } from "../shared/topic-content.ts";
 
-function chapter(id: string, number: Unchecked, extra = {}) {
+function chapter(id: string, number: unknown, extra = {}) {
   return {
     id,
     number,
@@ -52,7 +52,10 @@ function topic(overrides = {}) {
   };
 }
 
-function checkout(_t: Unchecked, sites: Record<string, Unchecked>) {
+function checkout(
+  _t: TestContext,
+  sites: Record<string, { order: number; content: unknown }>,
+) {
   return Object.entries(sites).map(([slug, site]) => ({
     slug,
     title: `专题 ${slug}`,

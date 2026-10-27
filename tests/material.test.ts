@@ -1,4 +1,4 @@
-import type { Unchecked } from "../shared/unchecked.ts";
+import type { MaterialResult } from "../scripts/content/citations.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -22,7 +22,7 @@ const script = resolve(import.meta.dirname, "../scripts/material.py");
 // A small epub: two chapters whose spine order is the reverse of the archive
 // order, a glossary with entities and a <style> block, plus a 20 MB image, a
 // font and an audio file that a reader must never load.
-const buildEpub = (target: Unchecked) => {
+const buildEpub = (target: string) => {
   const result = spawnSync(
     "python3",
     [
@@ -139,7 +139,7 @@ test("cite renders neighbouring pages and extracts a whitelisted article", () =>
     cpSync(resolve(import.meta.dirname, "fixtures/shelf"), shelf, {
       recursive: true,
     });
-    const cite = (...requests: unknown[]) => {
+    const cite = (...requests: unknown[]): MaterialResult[] => {
       const result = spawnSync("python3", ["-I", script, "cite"], {
         encoding: "utf8",
         input: JSON.stringify({ requests }),
@@ -161,22 +161,22 @@ test("cite renders neighbouring pages and extracts a whitelisted article", () =>
     );
     assert.equal(middle.pages, 4);
     assert.deepEqual(
-      middle.shown.map(({ page, size }: Unchecked) => [page, size]),
+      middle.shown.map(({ page, size }) => [page, size]),
       [1, 2, 3, 4].map((page) => [page, [612, 792]]),
     );
     assert.deepEqual(
-      start.shown.map(({ page }: Unchecked) => page),
+      start.shown.map(({ page }) => page),
       [1, 2],
     );
     assert.deepEqual(
-      end.shown.map(({ page }: Unchecked) => page),
+      end.shown.map(({ page }) => page),
       [3, 4],
     );
     assert.equal(
       readFileSync(middle.shown[0].image).subarray(8, 12).toString(),
       "WEBP",
     );
-    assert.match(outside.error, /pages 4-5 outside 1-4/);
+    assert.match(outside.error!, /pages 4-5 outside 1-4/);
     // MuPDF reports a font it cannot load and still renders the page; the
     // report goes to stderr so stdout stays the JSON answer.
     const [broken] = cite({
@@ -185,7 +185,7 @@ test("cite renders neighbouring pages and extracts a whitelisted article", () =>
       last: 1,
     });
     assert.deepEqual(
-      broken.shown.map(({ page }: Unchecked) => page),
+      broken.shown.map(({ page }) => page),
       [1],
     );
 
@@ -224,10 +224,10 @@ test("cite renders neighbouring pages and extracts a whitelisted article", () =>
       { file: "reports/other/page.html" },
       { file: "textbooks/missing.pdf", first: 1, last: 1 },
     );
-    assert.match(drift.error, /SHA-256 differs from manifest.json/);
-    assert.match(unlisted.error, /not listed in manifest.json/);
-    assert.match(other.error, /declares no article element/);
-    assert.match(missing.error, /not on the shelf/);
+    assert.match(drift.error!, /SHA-256 differs from manifest.json/);
+    assert.match(unlisted.error!, /not listed in manifest.json/);
+    assert.match(other.error!, /declares no article element/);
+    assert.match(missing.error!, /not on the shelf/);
     const entries = JSON.parse(readFileSync(manifest, "utf8"));
     const listed = (html: string) => {
       writeFileSync(page, html);
@@ -237,12 +237,12 @@ test("cite renders neighbouring pages and extracts a whitelisted article", () =>
     };
     assert.match(
       listed(original.replace('class="article-body', 'class="article-other'))
-        .error,
+        .error!,
       /no article text found/,
     );
     assert.match(
       listed(original.replace("sample/figure-1.png", "sample/figure-2.png"))
-        .error,
+        .error!,
       /figure-2.png has no archived copy/,
     );
   } finally {
@@ -303,12 +303,7 @@ test("cite extracts an epub chapter with its images and section markers", () => 
       2: "2.2 细节",
       2.1: "小结",
     });
-    const image = (
-      n: number,
-      alt: Unchecked,
-      width: Unchecked,
-      height: Unchecked,
-    ) =>
+    const image = (n: number, alt: string, width: number, height: number) =>
       `<img src="IMAGE:${n}" alt="${alt}" width="${width}" height="${height}" loading="lazy">`;
     const overview = Array.from(
       { length: 30 },
@@ -355,7 +350,7 @@ test("cite extracts an epub chapter with its images and section markers", () => 
     assert.deepEqual(first.images, []);
     assert.match(cover.error, /chapter 1 has no text/);
     assert.match(vector.error, /diagram\.svg is not PNG, JPEG, GIF or WebP/);
-    assert.match(missing.error, /no chapter 9 in the navigation/);
+    assert.match(missing.error!, /no chapter 9 in the navigation/);
 
     // An EPUB 2 book without a navigation document is read from its NCX.
     const rewrite = (name: string, from: string, to: string) => {

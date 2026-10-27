@@ -32,9 +32,9 @@ test("engagement obeys the exponential half-time and unit conversion", () => {
 test("GTPase and covalent engagement default readouts match the original page", () => {
   const run = (name: string) => {
     const m = labModels[name];
-    return m.run(
+    return m().run(
       Object.fromEntries(
-        (m.inputs as LabInput[]).map((i) => [i.id, i.default]),
+        (m().inputs as LabInput[]).map((i) => [i.id, i.default]),
       ),
     );
   };

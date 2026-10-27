@@ -6,7 +6,6 @@ import { citedSource } from "../../shared/source-citations.ts";
 import { contentType, sha256 } from "../../shared/assets.ts";
 import type { Citations } from "../../shared/snapshot.ts";
 import type { SourceRegistry } from "../../shared/source-citations.ts";
-import type { Unchecked } from "../../shared/unchecked.ts";
 import type { CitationOccurrence, UnitAsset } from "./content-files.ts";
 
 /** The materials shelf and its render cache (MOLNOTES_MATERIALS_DIR, MOLNOTES_MATERIALS_CACHE). */
@@ -20,6 +19,17 @@ interface ShownPage {
   size: [number, number];
   image: string;
 }
+export interface MaterialResult {
+  error?: string;
+  pages: number;
+  shown: ShownPage[];
+  html: string;
+  images: string[];
+  sections: Record<string, string>;
+  chapter: string;
+  url: string;
+  downloaded: string;
+}
 type ShelfRequest =
   | { file: string; first: number; last: number | undefined }
   | { file: string; chapter: string }
@@ -32,7 +42,7 @@ const script = fileURLToPath(new URL("../material.py", import.meta.url));
 function material(
   requests: ShelfRequest[],
   shelf: Shelf,
-): Promise<Unchecked[]> {
+): Promise<MaterialResult[]> {
   return new Promise((resolve, reject) => {
     const env = { ...process.env };
     if (shelf.materials) env.MOLNOTES_MATERIALS_DIR = shelf.materials;
@@ -148,7 +158,7 @@ export async function resolveCitations(
         if (first !== undefined) {
           const firstPage = result.shown.find(
             (page: ShownPage) => page.page === first,
-          );
+          )!;
           if (
             rect &&
             (rect[2] > firstPage.size[0] || rect[3] > firstPage.size[1])

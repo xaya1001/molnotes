@@ -1,4 +1,3 @@
-import type { Unchecked } from "../shared/unchecked.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -241,7 +240,11 @@ test("an alternate sits beside the listed value, in the source unit, and the plo
 
 test("an alternate in a unit the column does not have, or without a source, is refused", () => {
   // Alternates of any shape, including ones the table must refuse.
-  const withAlt = (alternate: Unchecked) => ({
+  const withAlt = (alternate: {
+    raw: string;
+    unit?: string;
+    where: string;
+  }) => ({
     ...input,
     rows: [
       {
@@ -347,7 +350,7 @@ test("axes: log spans whole decades, a linear range is kept or rounded from the 
 
 test("a table that contradicts itself is refused when it is defined", () => {
   const rows = input.rows;
-  const bad = (change: Unchecked) => () =>
+  const bad = (change: object) => () =>
     defineDataTable({ ...input, ...change });
   assert.throws(bad({ rows: [...rows, rows[0]] }), /Duplicate row/);
   assert.throws(

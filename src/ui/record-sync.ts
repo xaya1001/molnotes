@@ -1,9 +1,8 @@
-import type { Unchecked } from "../../shared/unchecked.ts";
 const equal = (a: unknown, b: unknown) =>
   JSON.stringify(a) === JSON.stringify(b);
 const conflictMessage =
   "conflict: 同一项记录已在其他页面修改。当前输入仍保留，请核对后再保存。";
-const object = (v: unknown) =>
+const object = (v: unknown): v is Record<string, unknown> =>
   v !== null && typeof v === "object" && !Array.isArray(v);
 /** Three-way merge; only chapter membership arrays have set semantics. */
 export function mergeRecords<T>(
@@ -15,19 +14,23 @@ export function mergeRecords<T>(
 ): T;
 // Records are JSON documents, merged field by field.
 export function mergeRecords(
-  base: Unchecked,
-  local: Unchecked,
-  remote: Unchecked,
+  base: unknown,
+  local: unknown,
+  remote: unknown,
   key = "",
   resolve = false,
-): Unchecked {
+): unknown {
   if (key === "recent" && object(local) && object(remote))
-    return local.opened >= remote.opened ? local : remote;
+    return (local.opened as number) >= (remote.opened as number)
+      ? local
+      : remote;
   if (equal(local, base)) return remote;
   if (equal(remote, base) || equal(local, remote)) return local;
   if (
     ["complete", "bookmarks"].includes(key) &&
-    [base, local, remote].every(Array.isArray)
+    Array.isArray(base) &&
+    Array.isArray(local) &&
+    Array.isArray(remote)
   ) {
     return [...new Set([...base, ...local, ...remote])].filter((id) =>
       local.includes(id) === base.includes(id)

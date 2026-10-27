@@ -1,5 +1,4 @@
 import type { Server } from "node:http";
-import type { Unchecked } from "../../shared/unchecked.ts";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -46,7 +45,7 @@ try {
     ),
   );
   const releases = join(directory, "releases");
-  await publishSnapshot(releases, async (snapshot: Unchecked) =>
+  await publishSnapshot(releases, async (snapshot) =>
     writeSnapshot(
       snapshot,
       await buildSnapshot(content, {

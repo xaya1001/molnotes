@@ -1,4 +1,3 @@
-import type { Unchecked } from "../shared/unchecked.ts";
 import { expect, test } from "./helpers/test.ts";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -68,7 +67,7 @@ test("generated chapters compose the shared shell and the block catalogue", asyn
       '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="80"><rect width="160" height="80" fill="teal"/></svg>',
     );
     await writeFile(join(fixture, "glossary.json"), "[]");
-    await publishSnapshot(releases, async (snapshot: Unchecked) =>
+    await publishSnapshot(releases, async (snapshot) =>
       writeSnapshot(snapshot, await buildSnapshot(fixture)),
     );
     server.listen(0, "127.0.0.1");

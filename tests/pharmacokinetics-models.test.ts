@@ -1,4 +1,3 @@
-import type { Unchecked } from "../shared/unchecked.ts";
 import { labModels } from "../src/ui/models/catalog.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -17,7 +16,7 @@ const {
 
 const p = { dose: 100, f: 0.5, ka: 1, cl: 5, vd: 50, tau: 12 };
 
-const near = (actual: Unchecked, expected: Unchecked, tol = 1e-8) =>
+const near = (actual: number, expected: number, tol = 1e-8) =>
   assert.ok(Math.abs(actual - expected) < tol, `${actual} != ${expected}`);
 
 test("monoprotic logD at pKa and ionization direction", () => {
@@ -49,11 +48,11 @@ test("geometric accumulation and oral steady state agree with repeated dosing", 
 
 test("shared PK and property defaults retain original readouts", () => {
   assert.match(
-    labModels["lead-pk"].run(p).summary!,
+    labModels["lead-pk"]().run(p).summary!,
     /t½ = 6.93 h；单剂 AUC = 10.00/,
   );
   assert.equal(
-    labModels["lead-properties"].run({ kind: "base", pKa: 7, logP: 3 })
+    labModels["lead-properties"]().run({ kind: "base", pKa: 7, logP: 3 })
       .summary!,
     "pH = 7.4 时 logD = 2.85；pH = pKa 时 logD = 2.70。",
   );

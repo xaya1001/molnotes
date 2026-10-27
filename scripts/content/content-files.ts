@@ -1,6 +1,6 @@
+import { isObject, isInteger } from "../../shared/json.ts";
 import { readFile, readdir, lstat } from "node:fs/promises";
 import type { Dirent } from "node:fs";
-import type { Unchecked } from "../../shared/unchecked.ts";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { join } from "node:path";
@@ -61,7 +61,7 @@ export function unitName(unit: string): {
   return { kind, slug };
 }
 // Parsed content files are checked by the validators they are handed to.
-const json = async (file: string): Promise<Unchecked> =>
+const json = async (file: string): Promise<unknown> =>
   JSON.parse(await readFile(file, "utf8"));
 async function files(root: string, relative = ""): Promise<string[]> {
   const found: string[] = [];
@@ -81,6 +81,21 @@ async function files(root: string, relative = ""): Promise<string[]> {
     else if (entry.isFile()) found.push(path);
   }
   return found;
+}
+function checkDirectoryMetadata(
+  metadata: unknown,
+  unit: string,
+): asserts metadata is DirectoryMetadata {
+  if (
+    !isObject(metadata) ||
+    Object.keys(metadata).sort().join(",") !== "intro,order,title" ||
+    typeof metadata.title !== "string" ||
+    !metadata.title.trim() ||
+    typeof metadata.intro !== "string" ||
+    !isInteger(metadata.order) ||
+    metadata.order < 1
+  )
+    throw new Error(`${unit}/directory.json: invalid directory metadata`);
 }
 export async function readUnit(
   root: string,
@@ -118,20 +133,22 @@ export async function readUnit(
     const metadata = await json(join(folder, "site.json"));
     const site: SnapshotSite = { ...parseSiteManifest(slug, metadata) };
     for (const key of ["label"] as const) {
-      if (metadata[key] !== undefined) {
+      if (isObject(metadata) && metadata[key] !== undefined) {
         if (typeof metadata[key] !== "string" || !metadata[key].trim())
           throw new Error(`${unit}/site.json: invalid ${key}`);
         site[key] = metadata[key];
       }
     }
-    const content = await json(join(folder, "content.json"));
-    validateTopicContent(content, `${unit}/content.json`);
-    if (content.glossary !== undefined)
+    const content = validateTopicContent(
+      await json(join(folder, "content.json")),
+      `${unit}/content.json`,
+    );
+    if ("glossary" in content && content.glossary !== undefined)
       throw new Error(
         `${unit}/content.json: define terms in glossary.json and list them in chapter terms`,
       );
     for (const source of content.sources ?? [])
-      if (source.file !== undefined)
+      if ("file" in source && source.file !== undefined)
         throw new Error(
           `${unit}/content.json: source ${source.id} names a shelf file; register it in sources.json and cite it`,
         );
@@ -139,16 +156,7 @@ export async function readUnit(
     return { unit, kind, slug, site, content, assets, occurrences };
   }
   const metadata = await json(join(folder, "directory.json"));
-  if (
-    !metadata ||
-    Object.keys(metadata).sort().join(",") !== "intro,order,title" ||
-    typeof metadata.title !== "string" ||
-    !metadata.title.trim() ||
-    typeof metadata.intro !== "string" ||
-    !Number.isInteger(metadata.order) ||
-    metadata.order < 1
-  )
-    throw new Error(`${unit}/directory.json: invalid directory metadata`);
+  checkDirectoryMetadata(metadata, unit);
   const notes: NotesUnit["notes"] = [];
   const occurrences: CitationOccurrence[] = noteCitations(
     metadata.intro,
@@ -181,7 +189,15 @@ export async function readUnit(
       );
     await read(entry.name, true);
   }
-  return { unit, kind, slug, metadata, notes, assets, occurrences };
+  return {
+    unit,
+    kind,
+    slug,
+    metadata,
+    notes,
+    assets,
+    occurrences,
+  };
 }
 /** The source registry in the content directory, or null when there is none. */
 export async function readRegistry(root: string) {

@@ -1,4 +1,3 @@
-import type { Unchecked } from "../shared/unchecked.ts";
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -17,7 +16,10 @@ afterEach(async () => {
 });
 
 // `overrides` replaces parts of the server with test fakes.
-async function fixture(check = "passed", overrides: Unchecked = {}) {
+async function fixture(
+  check = "passed",
+  overrides: Partial<Parameters<typeof createSystemServer>[0]> = {},
+) {
   const directory = await mkdtemp(join(tmpdir(), "il-system-api-"));
   const socket = join(directory, "server.sock");
   const target = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -44,7 +46,16 @@ async function fixture(check = "passed", overrides: Unchecked = {}) {
   async function request(
     path: string,
     options: RequestOptions = {},
-  ): Promise<{ status: number; body: Unchecked }> {
+  ): Promise<{
+    status: number;
+    body: {
+      canUpdate: boolean;
+      running: { revision: string; health: string };
+      latest: { revision: string; check: string };
+      update: { state: string; target: string | null; message?: string };
+      error?: string;
+    };
+  }> {
     const { request } = await import("node:http");
     return new Promise((resolve, reject) => {
       const req = request({ socketPath: socket, path, ...options }, (res) => {
@@ -142,7 +153,7 @@ test("reserves an update before status resolves and isolates operation callbacks
     starts = 0,
     blocked = true;
   const status = {
-    running: { health: "healthy", revision: "old" },
+    running: { image: null, health: "healthy", revision: "old" },
     latest: { revision: "new", check: "passed" },
   };
   const f = await fixture("passed", {
@@ -204,7 +215,7 @@ test("status, validation and start failures release reservation; stale callbacks
     readStatus: async () => {
       if (mode === "status") throw new Error("offline");
       return {
-        running: { health: "healthy", revision: "old" },
+        running: { image: null, health: "healthy", revision: "old" },
         latest: {
           revision: "new",
           check: mode === "invalid" ? "pending" : "passed",

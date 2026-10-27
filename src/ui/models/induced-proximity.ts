@@ -1,18 +1,23 @@
+import {
+  isObject,
+  isFiniteNumber,
+  type JsonObject,
+} from "../../../shared/json.ts";
+import { lab, type LabEntry } from "./model.ts";
 /**
  * Binding and induced-proximity teaching models. Concentrations are nM, time is h. Equilibrium,
  * mass conservation and constant synthesis assumptions define these teaching models.
  * Slider inputs marked log10 are exponents; calculations use 10 ** input.
  */
-import type { LabInput, LabModel, LabResult } from "./catalog.ts";
-import type { Unchecked } from "../../../shared/unchecked.ts";
-function samples(from: Unchecked, to: Unchecked, count = 180) {
+import type { LabInput, LabResult } from "./model.ts";
+function samples(from: number, to: number, count = 180) {
   return Array.from(
     { length: count + 1 },
     (_, index) => from + ((to - from) * index) / count,
   );
 }
 /** Compact number formatting used by labels and read-outs. */
-function formatValue(value: Unchecked) {
+function formatValue(value: number) {
   if (value === 0) return "0";
   if (value >= 1e4) return (value / 1e3).toFixed(value % 1e3 ? 1 : 0) + "k";
   if (value >= 100) return value.toFixed(0);
@@ -159,14 +164,14 @@ function degradationKinetics(halfLife: number, kdeg: number, washout: number) {
  * Protein level (%) `hours` after the drug is gone, from `start` (%): constant
  * synthesis and first-order loss with the basal half-life `halfLife`.
  */
-function washoutRecovery(start: Unchecked, halfLife: number, hours: number) {
+function washoutRecovery(start: number, halfLife: number, hours: number) {
   return 100 - (100 - start) * Math.exp((-Math.LN2 / halfLife) * hours);
 }
 /**
  * Basal half-life (h) that lets the level climb from `start` (%) to `target`
  * (%) within `hours`, in the same model as washoutRecovery.
  */
-function halfLifeForRecovery(start: Unchecked, target: number, hours: number) {
+function halfLifeForRecovery(start: number, target: number, hours: number) {
   if (!(start < target && target < 100))
     throw new RangeError("target must lie between start and 100 %");
   return (Math.LN2 * hours) / -Math.log((100 - target) / (100 - start));
@@ -470,31 +475,60 @@ interface MeasuredOverlaySeries {
   name: string;
 }
 
-function validateOverlays(data: Unchecked, group: string, kinds: string[]) {
-  const text = (v: Unchecked) => typeof v === "string" && v.trim().length > 0;
-  const require = (valid: unknown, field: string) => {
+interface OverlayChoice {
+  value: string;
+  label: string;
+  series: MeasuredOverlaySeries[];
+}
+interface OverlayConfig {
+  label: string;
+  choices: OverlayChoice[];
+}
+interface OverlayData {
+  overlays: Record<string, OverlayConfig>;
+  [dataset: string]: unknown;
+}
+interface MeasuredDataset {
+  dose: number[];
+  signal: number[];
+  hours: number[];
+  level: number[];
+  pretreatHours: number;
+  start: number;
+}
+function validateOverlays(
+  data: unknown,
+  group: string,
+  kinds: string[],
+): asserts data is OverlayData {
+  const text = (v: unknown): v is string =>
+    typeof v === "string" && v.trim().length > 0;
+  function require(valid: unknown, field: string): asserts valid {
     if (!valid) throw new Error(`实测叠加数据 ${field} 无效`);
-  };
-  const config = data?.overlays?.[group];
-  require(config &&
+  }
+  const config =
+    isObject(data) && isObject(data.overlays)
+      ? data.overlays[group]
+      : undefined;
+  require(isObject(config) &&
     text(config.label) &&
     Array.isArray(config.choices) &&
     config.choices.length > 0, group);
   const values = new Set(["none"]);
   for (const choice of config.choices) {
-    require(choice &&
+    require(isObject(choice) &&
       text(choice.value) &&
       !values.has(choice.value) &&
       text(choice.label), "choice");
     values.add(choice.value);
     require(Array.isArray(choice.series) && choice.series.length > 0, "series");
     for (const descriptor of choice.series) {
-      require(descriptor &&
-        kinds.includes(descriptor.kind) &&
+      require(isObject(descriptor) &&
+        (kinds as readonly unknown[]).includes(descriptor.kind) &&
         text(descriptor.name) &&
         text(descriptor.dataset) &&
-        Object.hasOwn(data, descriptor.dataset), "descriptor");
-      const r = data[descriptor.dataset];
+        Object.hasOwn(data as object, descriptor.dataset), "descriptor");
+      const r = (data as JsonObject)[descriptor.dataset] as MeasuredDataset;
       const dose =
         descriptor.kind === "signal-peak" ||
         descriptor.kind === "protein-decrease-peak";
@@ -505,27 +539,25 @@ function validateOverlays(data: Unchecked, group: string, kinds: string[]) {
         Array.isArray(y) &&
         x.length === y.length, "paired arrays");
       require(x.every(
-        (v: Unchecked) =>
-          Number.isFinite(v) &&
+        (v: unknown) =>
+          isFiniteNumber(v) &&
           (descriptor.kind === "signal-peak" ? v > 0 : v >= 0),
       ) &&
-        y.every(
-          (v: Unchecked) => Number.isFinite(v) && v >= 0,
-        ), "measurements");
+        y.every((v: unknown) => isFiniteNumber(v) && v >= 0), "measurements");
       if (descriptor.kind === "signal-peak")
         require(Math.max(...r.signal) > 0, "signal peak");
       if (descriptor.kind === "protein-decrease-peak")
-        require(Math.max(...r.level.map((v: Unchecked) => 100 - v)) >
+        require(Math.max(...r.level.map((v: number) => 100 - v)) >
           0, "maximum protein decrease");
       if (descriptor.kind === "protein-washout")
         require([r.start, r.pretreatHours].every(
-          (v: Unchecked) => Number.isFinite(v) && v >= 0,
+          (v: unknown) => isFiniteNumber(v) && v >= 0,
         ), "washout start/offset");
     }
   }
 }
 
-function overlayInputs(numeric: LabInput[], config: Unchecked): LabInput[] {
+function overlayInputs(numeric: LabInput[], config: OverlayConfig): LabInput[] {
   return [
     ...numeric,
     {
@@ -534,7 +566,7 @@ function overlayInputs(numeric: LabInput[], config: Unchecked): LabInput[] {
       kind: "select",
       options: [
         { value: "none", label: "不叠加" },
-        ...config.choices.map(({ value, label }: Unchecked) => ({
+        ...config.choices.map(({ value, label }) => ({
           value,
           label,
         })),
@@ -545,21 +577,21 @@ function overlayInputs(numeric: LabInput[], config: Unchecked): LabInput[] {
 }
 
 /** Transform the raw measurement without replacing its source values. */
-function measuredSeries(descriptor: MeasuredOverlaySeries, data: Unchecked) {
-  const r = data[descriptor.dataset];
+function measuredSeries(descriptor: MeasuredOverlaySeries, data: OverlayData) {
+  const r = data[descriptor.dataset] as MeasuredDataset;
   let pairs: number[][];
   switch (descriptor.kind) {
     case "signal-peak": {
       const top = Math.max(...r.signal);
-      pairs = r.dose.map((d: Unchecked, i: number) => [
+      pairs = r.dose.map((d: number, i: number) => [
         Math.log10(d),
         (r.signal[i] / top) * 100,
       ]);
       break;
     }
     case "protein-decrease-peak": {
-      const top = Math.max(...r.level.map((v: Unchecked) => 100 - v));
-      pairs = r.dose.flatMap((d: Unchecked, i: number) =>
+      const top = Math.max(...r.level.map((v: number) => 100 - v));
+      pairs = r.dose.flatMap((d: number, i: number) =>
         d > 0 ? [[Math.log10(d), ((100 - r.level[i]) / top) * 100]] : [],
       );
       break;
@@ -580,15 +612,15 @@ function measuredSeries(descriptor: MeasuredOverlaySeries, data: Unchecked) {
   return series(descriptor.name, pairs, true);
 }
 
-function measuredOverlays(selected: string, data: Unchecked, group: string) {
+function measuredOverlays(selected: string, data: OverlayData, group: string) {
   if (selected === "none") return [];
   return data.overlays[group].choices
-    .find((choice: Unchecked) => choice.value === selected)
-    .series.map((descriptor: Unchecked) => measuredSeries(descriptor, data));
+    .find((choice) => choice.value === selected)!
+    .series.map((descriptor) => measuredSeries(descriptor, data));
 }
 
-export const inducedProximityModels: Record<string, LabModel> = {
-  "binding-occupancy": {
+export const inducedProximityModels: Record<string, LabEntry> = {
+  "binding-occupancy": lab({
     inputs: proximityInputs.Binding,
     run({ kd, ligand }: { kd: number; ligand: number }) {
       kd = 10 ** kd;
@@ -615,8 +647,8 @@ export const inducedProximityModels: Record<string, LabModel> = {
           "横轴为对数浓度。降低 Kd 会使曲线左移，但不会自动证明这是拮抗剂。",
       };
     },
-  },
-  "binding-association-washout": {
+  }),
+  "binding-association-washout": lab({
     inputs: proximityInputs.Association,
     run({ konA, konB }: { konA: number; konB: number }) {
       const a = associationCurve(10 ** konA),
@@ -643,13 +675,14 @@ export const inducedProximityModels: Record<string, LabModel> = {
         ],
       };
     },
-  },
-  "ternary-equilibrium": {
-    validateData: (data) =>
+  }),
+  "ternary-equilibrium": lab<OverlayData>({
+    validateData(data): asserts data is OverlayData {
       validateOverlays(data, "concentration", [
         "signal-peak",
         "protein-decrease-peak",
-      ]),
+      ]);
+    },
     inputs: (data) =>
       overlayInputs(proximityInputs.Ternary, data.overlays.concentration),
     run(
@@ -729,8 +762,8 @@ export const inducedProximityModels: Record<string, LabModel> = {
         ],
       };
     },
-  },
-  "degradation-response": {
+  }),
+  "degradation-response": lab({
     inputs: proximityInputs.Degradation,
     run({ dmax, halfMax }: { dmax: number; halfMax: number }) {
       halfMax = 10 ** halfMax;
@@ -769,10 +802,11 @@ export const inducedProximityModels: Record<string, LabModel> = {
         ],
       };
     },
-  },
-  "degradation-recovery": {
-    validateData: (data) =>
-      validateOverlays(data, "time", ["protein-time", "protein-washout"]),
+  }),
+  "degradation-recovery": lab<OverlayData>({
+    validateData(data): asserts data is OverlayData {
+      validateOverlays(data, "time", ["protein-time", "protein-washout"]);
+    },
     inputs: (data) =>
       overlayInputs(proximityInputs.Kinetics, data.overlays.time),
     run(
@@ -815,8 +849,8 @@ export const inducedProximityModels: Record<string, LabModel> = {
         ],
       };
     },
-  },
-  "ternary-selectivity": {
+  }),
+  "ternary-selectivity": lab({
     inputs: proximityInputs.Selectivity,
     run({
       tumor,
@@ -829,7 +863,7 @@ export const inducedProximityModels: Record<string, LabModel> = {
     }) {
       const t = riptacDistribution(tumor, 10 ** drug),
         n = riptacDistribution(normal, 10 ** drug),
-        percent = (v: Unchecked) => ((v / 50) * 100).toFixed(1) + "%";
+        percent = (v: number) => ((v / 50) * 100).toFixed(1) + "%";
       return {
         readouts: [
           readout("肿瘤背景模型：EP 进入三元", percent(t.ternary)),
@@ -840,8 +874,8 @@ export const inducedProximityModels: Record<string, LabModel> = {
         summary: `同样的游离药物，不同的复合物分布。两模型的 EP 单端结合比例分别为 ${percent(t.effectorBinary)} 与 ${percent(n.effectorBinary)}。即使将正常背景 TP 调为 0，仍可出现 EP–药物二元结合。三元读数是复合物占 EP 的比例，细胞死亡百分比和正常组织的安全性要另外测。`,
       };
     },
-  },
-  "pkpd-turnover": {
+  }),
+  "pkpd-turnover": lab({
     inputs: proximityInputs.PkPd,
     run({
       pkHalfLife,
@@ -868,5 +902,5 @@ export const inducedProximityModels: Record<string, LabModel> = {
         ],
       };
     },
-  },
+  }),
 };

@@ -1,6 +1,12 @@
+import {
+  isFiniteNumber,
+  isInteger,
+  type JsonObject,
+} from "../../../shared/json.ts";
+import type { AtpData, PanelData, EliminationData } from "./data.ts";
+import { lab, type LabEntry } from "./model.ts";
 /** Protein degradation teaching models. Time h; rate h^-1; concentration nM; protein %. */
-import type { LabInput, LabModel } from "./catalog.ts";
-import type { Unchecked } from "../../../shared/unchecked.ts";
+import type { LabInput } from "./model.ts";
 export function degradation(dmax: number, halfMax: number, drug: number) {
   return (dmax * drug) / (halfMax + drug);
 }
@@ -23,7 +29,7 @@ export function proteinAt(
       : 1 + (atWashout - 1) * Math.exp(-basal * (time - washout)))
   );
 }
-const proteinTurnover: LabModel = {
+const proteinTurnover = lab({
   inputs: [
     {
       id: "halfLife",
@@ -82,8 +88,8 @@ const proteinTurnover: LabModel = {
       ],
     };
   },
-};
-const proteinLossCurve: LabModel = {
+});
+const proteinLossCurve = lab({
   inputs: [
     {
       id: "dmax",
@@ -124,7 +130,7 @@ const proteinLossCurve: LabModel = {
       ],
     };
   },
-};
+});
 /** Two-state RAS teaching model; rates min^-1, no synthesis or feedback. */
 export const rasSteady = (exchange: number, hydrolysis: number) =>
   exchange + hydrolysis === 0 ? 0 : exchange / (exchange + hydrolysis);
@@ -134,7 +140,7 @@ export const engagement = (rate: number, minutes: number) =>
   -Math.expm1(-rate * minutes);
 export const lowConcentrationRate = (efficiency: number, inhibitor: number) =>
   efficiency * inhibitor * 1e-6 * 60;
-const gtpaseSteadyState: LabModel = {
+const gtpaseSteadyState = lab({
   inputs: [
     {
       id: "exchange",
@@ -174,8 +180,8 @@ const gtpaseSteadyState: LabModel = {
       ],
     };
   },
-};
-const covalentEngagement: LabModel = {
+});
+const covalentEngagement = lab({
   inputs: [
     {
       id: "mode",
@@ -267,7 +273,7 @@ const covalentEngagement: LabModel = {
       ],
     };
   },
-};
+});
 
 /**
  * Apparent inhibition constant of a reversible ATP-competitive inhibitor,
@@ -283,7 +289,7 @@ export function panelRatio(wildType: number, mutant: number) {
 }
 
 /** A reading without exponent: whole numbers from 100 (1309), one decimal from 10 (70.3), two from 1 (9.32), two significant figures below (0.46). */
-export function readout(value: Unchecked) {
+export function readout(value: number) {
   if (value >= 100) return String(Math.round(value));
   if (value >= 10) return value.toFixed(1);
   if (value >= 1) return value.toFixed(2);
@@ -295,17 +301,18 @@ export function atpLabel(atpUm: number) {
   return atpUm >= 1000 ? `${atpUm / 1000} mM` : `${atpUm} µM`;
 }
 
-const atpCompetition: LabModel = {
-  validateData(data) {
+const atpCompetition = lab<AtpData>({
+  validateData(data): asserts data is AtpData {
     requireCase(caseObject(data), "ATP experiment");
-    for (const key of ["variants", "inhibitors"]) {
+    const lists: Partial<Pick<AtpData, "variants" | "inhibitors">> = {};
+    for (const key of ["variants", "inhibitors"] as const) {
+      const values = data[key];
       requireCase(
-        Array.isArray(data[key]) &&
-          data[key].length > 0 &&
-          data[key].every(caseText),
+        Array.isArray(values) && values.length > 0 && values.every(caseText),
         key,
       );
-      requireCase(new Set(data[key]).size === data[key].length, key);
+      requireCase(new Set(values).size === values.length, key);
+      lists[key] = values;
     }
     requireCase(
       caseObject(data.inhibitorLabels) &&
@@ -313,19 +320,19 @@ const atpCompetition: LabModel = {
         caseObject(data.km),
       "ATP datasets",
     );
-    for (const inhibitor of data.inhibitors) {
+    for (const inhibitor of lists.inhibitors!) {
       requireCase(
         caseText(data.inhibitorLabels[inhibitor]) &&
           caseObject(data.kd[inhibitor]),
         "inhibitor",
       );
-      for (const variant of data.variants) {
+      for (const variant of lists.variants!) {
         for (const value of [data.kd[inhibitor][variant], data.km[variant]]) {
           requireCase(
             caseObject(value) &&
-              Number.isFinite(value.value) &&
+              isFiniteNumber(value.value) &&
               value.value > 0 &&
-              Number.isFinite(value.sd) &&
+              isFiniteNumber(value.sd) &&
               value.sd >= 0,
             "measurement",
           );
@@ -336,18 +343,22 @@ const atpCompetition: LabModel = {
       requireCase(
         Array.isArray(data[key]) &&
           data[key].length > 0 &&
-          data[key].every((v) => Number.isFinite(v) && v >= 0),
+          data[key].every((v) => isFiniteNumber(v) && v >= 0),
         key,
       );
     requireCase(
-      Number.isInteger(data.defaultStep) &&
+      isInteger(data.defaultStep) &&
         data.defaultStep >= 0 &&
-        data.defaultStep < data.atpSteps.length,
+        data.defaultStep < (data.atpSteps as number[]).length,
       "defaultStep",
     );
     requireCase(caseObject(data.roles), "roles");
+    const roles = data.roles;
     for (const role of ["reference", "numerator", "denominator"])
-      requireCase(data.variants.includes(data.roles[role]), role);
+      requireCase(
+        lists.variants!.some((value) => value === roles[role]),
+        role,
+      );
     requireCase(
       data.roles.numerator !== data.roles.denominator,
       "comparison roles",
@@ -375,7 +386,7 @@ const atpCompetition: LabModel = {
       label: "抑制剂",
       kind: "select",
       default: data.inhibitors[0],
-      options: data.inhibitors.map((value: Unchecked) => ({
+      options: data.inhibitors.map((value) => ({
         value,
         label: data.inhibitorLabels[value],
       })),
@@ -444,17 +455,17 @@ const atpCompetition: LabModel = {
       ],
     };
   },
-};
-const caseText = (value: Unchecked) =>
+});
+const caseText = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
-const caseObject = (value: Unchecked) =>
+const caseObject = (value: unknown): value is JsonObject =>
   value !== null && typeof value === "object" && !Array.isArray(value);
-function requireCase(condition: Unchecked, field: Unchecked) {
+function requireCase(condition: unknown, field: unknown): asserts condition {
   if (!condition) throw new Error(`模型数据 ${field} 无效`);
 }
 
-const assayPanel: LabModel = {
-  validateData(data: Unchecked) {
+const assayPanel = lab<PanelData>({
+  validateData(data): asserts data is PanelData {
     requireCase(caseObject(data), "panel");
     requireCase(caseText(data.caption), "caption");
     requireCase(
@@ -487,41 +498,42 @@ const assayPanel: LabModel = {
         requireCase(
           Array.isArray(values) &&
             values.length === endpoint.columns.length - 2 &&
-            values.every((v) => Number.isFinite(v) && v >= 0),
+            values.every((v) => isFiniteNumber(v) && v >= 0),
           "row.values",
         );
         for (const index of [data.ratio.numerator, data.ratio.denominator])
           requireCase(
-            Number.isInteger(index) && index >= 0 && index < values.length,
+            isInteger(index) && index >= 0 && index < values.length,
             "ratio index",
           );
-        requireCase(values[data.ratio.denominator] > 0, "ratio denominator");
+        requireCase(
+          values[data.ratio.denominator as number] > 0,
+          "ratio denominator",
+        );
       }
     }
   },
-  inputs: (data: Unchecked) => [
+  inputs: (data) => [
     {
       id: "endpoint",
       label: "测定终点",
       kind: "select",
       default: data.endpoints[0].value,
-      options: data.endpoints.map(({ value, label }: Unchecked) => ({
+      options: data.endpoints.map(({ value, label }) => ({
         value,
         label,
       })),
     },
   ],
-  run({ endpoint }: { endpoint: number }, data: Unchecked) {
-    const selected = data.endpoints.find(
-      (item: Unchecked) => item.value === endpoint,
-    );
+  run({ endpoint }: { endpoint: string }, data) {
+    const selected = data.endpoints.find((item) => item.value === endpoint)!;
     return {
       tables: [
         {
           caption: data.caption,
           columns: selected.columns,
-          rows: data.rows.map((row: Unchecked) => {
-            const values = row[endpoint];
+          rows: data.rows.map((row) => {
+            const values = row[endpoint] as number[];
             return [
               row.name,
               ...values.map(String),
@@ -535,16 +547,16 @@ const assayPanel: LabModel = {
       ],
     };
   },
-};
+});
 /** Teaching model: instantaneous normalized input, one compartment, first-order elimination.
  * timeHours and halfLifeHours are hours; output is percent of C(0), not measured exposure.
  * No absorption, distribution, repeat dosing, receptor binding or active metabolites.
  */
 export function remainingPercent(timeHours: number, halfLifeHours: number) {
   if (
-    !Number.isFinite(timeHours) ||
+    !isFiniteNumber(timeHours) ||
     timeHours < 0 ||
-    !Number.isFinite(halfLifeHours) ||
+    !isFiniteNumber(halfLifeHours) ||
     halfLifeHours <= 0
   )
     throw new RangeError("时间须为非负数，半衰期须为正数");
@@ -563,8 +575,8 @@ export function eliminationCurve(halfLifeHours: number, horizonHours = 168) {
     .sort((a, b) => a - b)
     .map((t) => [t, remainingPercent(t, halfLifeHours)]);
 }
-const firstOrderElimination: LabModel = {
-  validateData(data) {
+const firstOrderElimination = lab<EliminationData>({
+  validateData(data): asserts data is EliminationData {
     requireCase(
       caseObject(data) &&
         Array.isArray(data.presets) &&
@@ -577,12 +589,12 @@ const firstOrderElimination: LabModel = {
         "preset",
       );
       requireCase(
-        Number.isFinite(preset.halfLife) && preset.halfLife > 0,
+        isFiniteNumber(preset.halfLife) && preset.halfLife > 0,
         "preset.halfLife",
       );
       requireCase(
         caseText(preset.source) ||
-          (Number.isInteger(preset.source) && preset.source > 0),
+          (isInteger(preset.source) && preset.source > 0),
         "preset.source",
       );
     }
@@ -593,7 +605,7 @@ const firstOrderElimination: LabModel = {
       label: "药物预设",
       kind: "select",
       default: 0,
-      options: data.presets.map((p: Unchecked, i: number) => ({
+      options: data.presets.map((p, i: number) => ({
         value: i,
         label: p.name,
       })),
@@ -646,8 +658,8 @@ const firstOrderElimination: LabModel = {
       ],
     };
   },
-};
-const degradationDoseResponse: LabModel = {
+});
+const degradationDoseResponse = lab({
   inputs: [
     {
       id: "dmax",
@@ -705,7 +717,7 @@ const degradationDoseResponse: LabModel = {
       ],
     };
   },
-};
+});
 /** Single-site aqueous acid/base teaching models, no coupled ionizations. */
 
 /** Fraction protonated (HA or BH+); pH and pKa are dimensionless. */
@@ -781,7 +793,7 @@ export function permeability(
   return z / (1 + z);
 }
 /** Copies in a uniform volume (pL) converted to nM using exact SI NA. */
-export function copiesToNm(copies: Unchecked, volumePl: number) {
+export function copiesToNm(copies: number, volumePl: number) {
   return (copies / (6.02214076e23 * volumePl * 1e-12)) * 1e9;
 }
 /** First-order dissociation: koff in s^-1 from the dissociative half-life in s. */
@@ -846,7 +858,7 @@ const bioScaleObjects: [string, number, string][] = [
   ["细胞", 20000, "约 20 µm 的教学示例，细胞尺寸差别很大"],
   ["人发直径", 100000, "100 µm 参照；未在指定章节核得，非教材测量值"],
 ];
-const bioScale: LabModel = {
+const bioScale = lab({
   inputs: [
     numberInput("exponent", "log10(长度/nm)", 0, 5, 0.1, 3),
     numberInput("copiesLog", "log10(蛋白拷贝数)", 3, 6, 0.1, 4),
@@ -877,7 +889,7 @@ const bioScale: LabModel = {
       ],
     };
   },
-};
+});
 const bioSidechains: [string, number, string][] = [
   ["Asp · 羧酸", 3.65, "acid"],
   ["Glu · 羧酸", 4.25, "acid"],
@@ -887,7 +899,7 @@ const bioSidechains: [string, number, string][] = [
   ["Lys · 胺", 10.53, "base"],
   ["Arg · 胍", 12.48, "base"],
 ];
-const bioIonization: LabModel = {
+const bioIonization = lab({
   inputs: [
     {
       id: "selected",
@@ -925,8 +937,8 @@ const bioIonization: LabModel = {
       ],
     };
   },
-};
-const bioBinding: LabModel = {
+});
+const bioBinding = lab({
   inputs: [
     numberInput("kd", "Kd（nM）", 1, 100, 1, 10),
     numberInput("logL", "log10(L/nM)", -1, 4, 0.1, 1),
@@ -980,14 +992,14 @@ const bioBinding: LabModel = {
       ],
     };
   },
-};
+});
 const bioModes = [
   ["none", "无抑制"],
   ["competitive", "竞争性"],
   ["noncompetitive", "纯非竞争性"],
   ["uncompetitive", "反竞争性"],
 ];
-const bioEnzyme: LabModel = {
+const bioEnzyme = lab({
   inputs: [
     {
       id: "mode",
@@ -1041,7 +1053,7 @@ const bioEnzyme: LabModel = {
           value:
             now === undefined
               ? "选一种抑制模式后显示 IC50；无抑制剂时没有 IC50。"
-              : Number.isFinite(now)
+              : isFiniteNumber(now)
                 ? "[S]/Km = " +
                   ratio.toFixed(2) +
                   " 时，IC50 = " +
@@ -1100,8 +1112,8 @@ const bioEnzyme: LabModel = {
       ],
     };
   },
-};
-const bioPermeability: LabModel = {
+});
+const bioPermeability = lab({
   inputs: [
     {
       id: "kind",
@@ -1147,7 +1159,7 @@ const bioPermeability: LabModel = {
       ],
     };
   },
-};
+});
 /** Two-state teaching model; all rates min^-1, time min, total Ras conserved. */
 export function signalingRasSteady(
   gef: number,
@@ -1181,7 +1193,7 @@ export function tumorTgi(v0: number, k: number, t: number, effect: number) {
     : 100 * (1 - (v0 * Math.expm1(k * (1 - effect) * t)) / controlGrowth);
 }
 
-const signalingRas: LabModel = {
+const signalingRas = lab({
   inputs: [
     numberInput("gef", "GEF 速率（min⁻¹）", 0, 1, 0.01, 0.3),
     numberInput("gap", "GAP 速率（min⁻¹）", 0, 1, 0.01, 0.6),
@@ -1221,8 +1233,8 @@ const signalingRas: LabModel = {
       ],
     };
   },
-};
-const signalingTumor: LabModel = {
+});
+const signalingTumor = lab({
   inputs: [
     numberInput("v0", "起始体积（mm³）", 50, 200, 10, 100),
     numberInput("k", "对照增长率（day⁻¹）", 0, 0.12, 0.01, 0.08),
@@ -1273,7 +1285,7 @@ const signalingTumor: LabModel = {
       ],
     };
   },
-};
+});
 /** nM and minutes. Rapid equilibrium, excess inhibitor, constant free concentration. */
 export function inactivationRate(
   concentration: number,
@@ -1294,7 +1306,7 @@ export function residence(koff: number) {
   return 1 / koff;
 }
 
-const covalentInactivation: LabModel = {
+const covalentInactivation = lab({
   inputs: [
     numberInput("concentration", "游离抑制剂 [I]（nM）", 0, 1000, 10, 100),
     numberInput("KI", "KI（nM）", 10, 500, 10, 100),
@@ -1329,8 +1341,8 @@ const covalentInactivation: LabModel = {
       ],
     };
   },
-};
-const bindingDissociation: LabModel = {
+});
+const bindingDissociation = lab({
   inputs: [
     {
       id: "mode",
@@ -1366,8 +1378,8 @@ const bindingDissociation: LabModel = {
       ],
     };
   },
-};
-export const biochemicalKineticsModels: Record<string, LabModel> = {
+});
+export const biochemicalKineticsModels: Record<string, LabEntry> = {
   "covalent-inactivation": covalentInactivation,
   "binding-dissociation": bindingDissociation,
   "signaling-ras": signalingRas,

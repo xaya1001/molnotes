@@ -1,4 +1,3 @@
-import type { Unchecked } from "../../../shared/unchecked.ts";
 import { inducedProximityModels } from "./induced-proximity.ts";
 import { organicChemistryModels } from "./organic-chemistry.ts";
 import { biochemicalKineticsModels } from "./biochemical-kinetics.ts";
@@ -10,66 +9,17 @@ import { medicinalChemistryModels } from "./medicinal-chemistry.ts";
 // message for an input combination it cannot answer. The content check
 // (shared/topic-blocks.ts) and the runtime share one catalogue.
 
-export type LabInput =
-  | {
-      id: string;
-      label: string;
-      kind: "number";
-      /** A slider instead of a number field. */
-      control?: "range";
-      min: number;
-      max: number;
-      step?: number;
-      unit?: string;
-      default: number;
-    }
-  | {
-      id: string;
-      label: string;
-      kind: "select";
-      options: { value: string | number; label: string }[];
-      default: string | number;
-    };
-export interface LabResult {
-  /** Shown only after the reader presses the block's `reveal` button. */
-  revealed?: Omit<LabResult, "revealed">;
-  summary?: string;
-  readouts?: { label: string; value: string }[];
-  charts?: {
-    title?: string;
-    xLabel: string;
-    yLabel: string;
-    /** One line, or `series` for several lines and scattered readings. */
-    points?: { x: number; y: number }[];
-    series?: {
-      name: string;
-      points: { x: number; y: number }[];
-      scatter?: boolean;
-    }[];
-    xDomain?: [number, number];
-    yDomain?: [number, number];
-  }[];
-  tables?: {
-    caption: string;
-    columns: string[];
-    rows: string[][];
-    note?: string;
-  }[];
-}
-export type LabValues = Record<string, number | string>;
-/** A model's `data` is topic JSON that its `validateData` checks before use. */
-export interface LabModel {
-  inputs: LabInput[] | ((data: Unchecked) => LabInput[]);
-  validateData?(data: Unchecked): void;
-  /** Throws a reader-facing message for inputs it cannot answer. */
-  run(values: LabValues, data?: Unchecked): LabResult;
-}
-
-/** Resolve controls at the content boundary before rendering or checking defaults. */
-export function modelInputs(model: LabModel, data?: unknown): LabInput[] {
-  model.validateData?.(data);
-  return typeof model.inputs === "function" ? model.inputs(data) : model.inputs;
-}
+import { lab, type LabModel, type LabEntry } from "./model.ts";
+export { modelInputs } from "./model.ts";
+export type {
+  LabInput,
+  LabResult,
+  LabValues,
+  LabModel,
+  DataLabModel,
+  BoundLab,
+  LabEntry,
+} from "./model.ts";
 
 const plateCapacity: LabModel = {
   inputs: [
@@ -138,10 +88,10 @@ const plateCapacity: LabModel = {
   },
 };
 
-export const labModels: Record<string, LabModel> = {
+export const labModels: Record<string, LabEntry> = {
   ...inducedProximityModels,
   ...organicChemistryModels,
   ...biochemicalKineticsModels,
-  "plate-capacity": plateCapacity,
+  "plate-capacity": lab(plateCapacity),
   ...medicinalChemistryModels,
 };

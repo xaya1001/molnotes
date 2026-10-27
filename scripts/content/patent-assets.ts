@@ -1,6 +1,7 @@
+import { isObject } from "../../shared/json.ts";
+import type { BodyRef, Assignment } from "../../src/ui/topic/patent.ts";
 import { moleculeToolkit } from "../../shared/molecule-toolkit.ts";
 import { patentBlocks } from "../../shared/patent-contract.ts";
-import type { Unchecked } from "../../shared/unchecked.ts";
 import type { TopicContent } from "../../src/ui/topic/content.ts";
 import type { UnitAsset } from "./content-files.ts";
 let toolkit: Awaited<ReturnType<typeof moleculeToolkit>> | undefined;
@@ -13,14 +14,14 @@ export async function validatePatentAssets(
   if (!patentBlocks(content).length) return;
   // The patent data passed validatePatentData; its resources are checked here.
   const where = `sites/${slug}/content.json`,
-    data: Unchecked = content.data;
+    data = content.data!;
   const get = (path: string) => {
     const found = assets.find((a) => `/${a.scope}/${a.path}` === path);
     if (!found) throw new Error(`${where}: missing resource ${path}`);
     return found;
   };
   const jsonCache = new Map<string, unknown>();
-  async function json(path: string): Promise<Unchecked> {
+  async function json(path: string): Promise<unknown> {
     if (!jsonCache.has(path)) {
       const { bytes } = get(path);
       try {
@@ -31,7 +32,7 @@ export async function validatePatentAssets(
     }
     return jsonCache.get(path);
   }
-  for (const source of Object.values<Unchecked>(data.sources ?? {})) {
+  for (const source of Object.values(data.sources ?? {})) {
     for (let n = 1; n <= source.pages; n++)
       get(source.image.replace("{page}", String(n)));
     const text = await json(source.text);
@@ -42,31 +43,32 @@ export async function validatePatentAssets(
     )
       throw new Error(`${where}: OCR text must contain one string per page`);
   }
-  for (const collection of Object.values<Unchecked>(data.collections ?? {}))
+  for (const collection of Object.values(data.collections ?? {}))
     for (const record of collection.records)
       for (const field of collection.fields) {
         const value = record[field.key];
         if (value === undefined) continue;
         if (field.kind === "body") {
-          const body = await json(value.url);
+          const bodyRef = value as BodyRef;
+          const body = await json(bodyRef.url);
           if (
-            !body ||
-            !Object.hasOwn(body, value.key) ||
-            typeof body[value.key] !== "string"
+            !isObject(body) ||
+            !Object.hasOwn(body, bodyRef.key) ||
+            typeof body[bodyRef.key] !== "string"
           )
             throw new Error(
-              `${where}: body key ${value.key} missing from ${value.url}`,
+              `${where}: body key ${bodyRef.key} missing from ${bodyRef.url}`,
             );
         }
         if (field.kind === "assignments")
-          for (const a of value) {
+          for (const a of value as Assignment[]) {
             if (a.basis !== "chemical-pattern") continue;
             const cache = `smarts:${a.pattern}`;
             if (!checked.has(cache)) {
               toolkit ??= await moleculeToolkit();
               let mol;
               try {
-                mol = toolkit.get_qmol(a.pattern);
+                mol = toolkit.get_qmol(a.pattern!);
                 if (!mol?.is_valid()) throw new Error();
               } catch {
                 throw new Error(
@@ -84,7 +86,7 @@ export async function validatePatentAssets(
             toolkit ??= await moleculeToolkit();
             let mol;
             try {
-              mol = toolkit.get_mol(value);
+              mol = toolkit.get_mol(value as string);
               if (!mol?.is_valid()) throw new Error();
             } catch {
               throw new Error(
@@ -97,9 +99,9 @@ export async function validatePatentAssets(
           }
         }
       }
-  for (const set of Object.values<Unchecked>(data.claims ?? {}))
+  for (const set of Object.values(data.claims ?? {}))
     for (const claim of set.claims) {
-      for (const segment of claim.segments) get(segment.asset);
+      for (const segment of claim.segments) get(segment.asset!);
       if (claim.scope) {
         const cache = `smarts:${claim.scope.smarts}`;
         if (!checked.has(cache)) {

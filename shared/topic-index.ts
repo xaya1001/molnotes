@@ -1,4 +1,4 @@
-import type { Unchecked } from "./unchecked.ts";
+import type { TopicChapter, TopicContent } from "../src/ui/topic/content.ts";
 import type { TopicPrediction } from "../src/ui/topic/content.ts";
 import type { ProblemBlock } from "../src/ui/topic/blocks.ts";
 import { topicProblems } from "../src/ui/topic/problem.ts";
@@ -43,7 +43,7 @@ export interface TopicIndex {
 }
 
 /** Searchable text of a chapter: its lead and the prose of its blocks. */
-function chapterSearchText(chapter: Unchecked, content: Unchecked) {
+function chapterSearchText(chapter: TopicChapter, content: TopicContent) {
   return [chapter.lead, ...blockSearchText(chapter.blocks, content.data)]
     .filter((part) => typeof part === "string" && part)
     .join(" ")
@@ -65,41 +65,33 @@ interface TopicSite {
   slug: string;
   title: string;
   group?: string;
-  content: Unchecked;
+  content: unknown;
 }
 
-export function buildReviewIndex(
-  topics: TopicSite[],
+function reviewIndex(
+  topics: (Omit<TopicSite, "content"> & { content: TopicContent })[],
 ): Omit<TopicIndex, "search"> {
   const chapters: IndexedTopic[] = [];
   const quiz: IndexedQuestion[] = [];
   for (const site of topics) {
-    const content = validateTopicContent(
-      site.content,
-      `sites/${site.slug}/content.json`,
-    );
+    const content = site.content;
     chapters.push({
       slug: site.slug,
       title: site.title,
-      chapters: content.chapters.map((chapter: Unchecked) => ({
+      chapters: content.chapters.map((chapter) => ({
         id: chapter.id,
         number: chapter.number,
         title: chapter.title,
         path: `${topicBasePath(site)}${chapterRoutePath(content, chapter)}`,
       })),
-      predictions: topicPredictions<
-        TopicPrediction | { kind: "matrix" | "quiz" }
-      >(content).filter(
+      predictions: topicPredictions(content).filter(
         (entry): entry is IndexedTopic["predictions"][number] =>
           entry.prediction.kind !== "matrix" &&
           entry.prediction.kind !== "quiz",
       ),
       problems: topicProblems(content),
       answerKey: Object.fromEntries(
-        (content.quiz ?? []).map((question: Unchecked) => [
-          question.id,
-          question.answer,
-        ]),
+        (content.quiz ?? []).map((question) => [question.id, question.answer]),
       ),
     });
     for (const question of content.quiz ?? [])
@@ -116,11 +108,26 @@ export function buildReviewIndex(
   return { chapters, quiz };
 }
 
+function checkedSites(topics: TopicSite[]) {
+  return topics.map((site) => ({
+    ...site,
+    content: validateTopicContent(
+      site.content,
+      `sites/${site.slug}/content.json`,
+    ),
+  }));
+}
+export function buildReviewIndex(
+  topics: TopicSite[],
+): Omit<TopicIndex, "search"> {
+  return reviewIndex(checkedSites(topics));
+}
 export function buildTopicIndex(topics: TopicSite[]): TopicIndex {
+  const checked = checkedSites(topics);
   return {
-    ...buildReviewIndex(topics),
-    search: topics.flatMap((site) =>
-      site.content.chapters.map((chapter: Unchecked) => ({
+    ...reviewIndex(checked),
+    search: checked.flatMap((site) =>
+      site.content.chapters.map((chapter) => ({
         slug: site.slug,
         chapterId: chapter.id,
         text: chapterSearchText(chapter, site.content),

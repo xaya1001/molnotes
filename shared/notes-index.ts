@@ -1,4 +1,4 @@
-import type { Unchecked } from "./unchecked.ts";
+import { isInteger } from "./json.ts";
 import MarkdownIt from "markdown-it";
 import type { Env } from "markdown-it";
 import markdownItCjkFriendly from "markdown-it-cjk-friendly";
@@ -55,6 +55,18 @@ export interface NoteDirectory {
   path: string;
   citations?: Record<string, Citation>;
 }
+type NoteOutput =
+  "html" | "text" | "sections" | "molecules" | "diagrams" | "citations";
+export type NoteDraft = Omit<Note, NoteOutput> &
+  Partial<Pick<Note, NoteOutput>> & {
+    body?: string;
+    offset?: number;
+    file?: string;
+    author?: boolean;
+  };
+type DirectoryDraft = Omit<NoteDirectory, "html" | "summary"> &
+  Partial<Pick<NoteDirectory, "html" | "summary">>;
+
 export interface NotesIndex {
   directories: NoteDirectory[];
   notes: Note[];
@@ -82,7 +94,7 @@ type NoteEnv = {
   directory: string;
   path: string;
   molecules: NoteMolecules[];
-  diagrams: object[];
+  diagrams: NoteDiagram[];
   text: string[];
   citations: Record<string, Citation>;
   cited: Set<string>;
@@ -93,10 +105,20 @@ const noteEnv = (env: Env | undefined) => env as NoteEnv;
 // Fences drawn as figures: the YAML inside is the block's value plus a caption.
 const diagramKinds: Record<
   string,
-  { define: (value: unknown) => unknown; words: (model: Unchecked) => string[] }
+  { render: (value: unknown) => { model: Timeline | Flow; words: string[] } }
 > = {
-  timeline: { define: defineTimeline, words: timelineText },
-  flow: { define: defineFlow, words: flowText },
+  timeline: {
+    render(value) {
+      const model = defineTimeline(value);
+      return { model, words: timelineText(model) };
+    },
+  },
+  flow: {
+    render(value) {
+      const model = defineFlow(value);
+      return { model, words: flowText(model) };
+    },
+  },
 };
 
 function fail(file: string, line: number, message: string): never {
@@ -104,11 +126,11 @@ function fail(file: string, line: number, message: string): never {
 }
 let toolkit: Awaited<ReturnType<typeof moleculeToolkit>> | undefined;
 function fields(
-  value: Unchecked,
+  value: unknown,
   required: string[],
   optional: string[],
   file: string,
-) {
+): asserts value is Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))
     fail(file, 1, "Expected a mapping");
   for (const key of required)
@@ -135,18 +157,23 @@ export function parseNote(source: string, file: string) {
       (doc.errors[0].linePos?.[0]?.line ?? 1) + 1,
       doc.errors[0].message,
     );
-  const metadata = doc.toJS();
+  const metadata: unknown = doc.toJS();
   fields(metadata, ["title", "summary", "date", "order"], ["updated"], file);
   for (const key of ["title", "summary"])
     if (typeof metadata[key] !== "string" || !metadata[key].trim())
       fail(file, 1, `Invalid ${key}`);
-  if (!Number.isInteger(metadata.order))
-    fail(file, 1, "order must be an integer");
+  if (!isInteger(metadata.order)) fail(file, 1, "order must be an integer");
   for (const key of ["date", "updated"])
     if (key in metadata && !date(metadata[key]))
       fail(file, 1, `Invalid ${key}: expected YYYY-MM-DD`);
   return {
-    ...metadata,
+    ...(metadata as {
+      title: string;
+      summary: string;
+      date: string;
+      updated?: string;
+      order: number;
+    }),
     body: source.slice(match[0].length),
     offset: match[0].split("\n").length - 1,
   };
@@ -230,8 +257,8 @@ export async function compileNotes({
   assetExists,
   citations = {},
 }: {
-  directories: Unchecked[];
-  notes: Unchecked[];
+  directories: DirectoryDraft[];
+  notes: NoteDraft[];
   terms: Record<string, GlossaryTerm>;
   routes: Set<string>;
   assetExists: (directory: string, href: string) => boolean;
@@ -268,9 +295,9 @@ export async function compileNotes({
       const { caption, ...input } = value;
       if (caption !== undefined && (typeof caption !== "string" || !caption))
         fail(env.file, env.line, `${kind} caption must be text`);
-      let model;
+      let rendered;
       try {
-        model = diagramKinds[kind].define(input);
+        rendered = diagramKinds[kind].render(input);
       } catch (error) {
         fail(
           env.file,
@@ -279,8 +306,22 @@ export async function compileNotes({
         );
       }
       const id = `note-diagram-${env.diagrams.length}`;
-      env.diagrams.push({ id, kind, [kind]: model, caption: caption ?? "" });
-      env.text.push(caption ?? "", ...diagramKinds[kind].words(model));
+      env.diagrams.push(
+        kind === "timeline"
+          ? {
+              id,
+              kind,
+              timeline: rendered.model as Timeline,
+              caption: caption ?? "",
+            }
+          : {
+              id,
+              kind: "flow",
+              flow: rendered.model as Flow,
+              caption: caption ?? "",
+            },
+      );
+      env.text.push(caption ?? "", ...rendered.words);
       return `<div id="${id}" class="note-diagram"></div>`;
     }
     if (kind !== "molecule")
@@ -451,8 +492,10 @@ export async function compileNotes({
   for (const note of notes) {
     Object.assign(
       note,
-      await compile(note.body, {
+      await compile(note.body!, {
         ...note,
+        offset: note.offset!,
+        file: note.file!,
         molecules: [],
         diagrams: [],
         citations: citations[note.directory] ?? {},
@@ -463,5 +506,9 @@ export async function compileNotes({
     delete note.offset;
     delete note.file;
   }
-  return { directories, notes, terms };
+  return {
+    directories: directories as NoteDirectory[],
+    notes: notes as (Note & { author?: boolean })[],
+    terms,
+  };
 }

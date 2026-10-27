@@ -1,4 +1,4 @@
-import type { Unchecked } from "../../shared/unchecked.ts";
+import { isObject, isFiniteNumber } from "../../shared/json.ts";
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { problemField, topicProblems } from "../../src/ui/topic/problem.ts";
@@ -38,18 +38,16 @@ export function topicRecordsCodec(content: TopicContent) {
   });
 }
 function parseNotesRecords(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("阅读记录格式错误");
+  if (!isObject(value)) throw new Error("阅读记录格式错误");
   const result: Record<string, NotesRecord> = {};
   // Each entry is checked field by field below.
-  for (const [path, item] of Object.entries<Unchecked>(value)) {
+  for (const [path, item] of Object.entries<unknown>(value)) {
     if (
       !/^\/notes\/[a-z0-9]+(?:-[a-z0-9]+)*\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(
         path,
       ) ||
-      !item ||
-      typeof item !== "object" ||
-      !Number.isFinite(item.opened) ||
+      !isObject(item) ||
+      !isFiniteNumber(item.opened) ||
       item.opened < 0 ||
       typeof item.read !== "boolean" ||
       Object.keys(item).some((key) => !["opened", "read"].includes(key))

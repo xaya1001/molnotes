@@ -1,38 +1,39 @@
 #!/usr/bin/env node
 // Authoring checks in addition to the authoritative content build validation.
+import type { TopicContent } from "../../src/ui/topic/content.ts";
+import type { BodyRef } from "../../src/ui/topic/patent.ts";
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { Unchecked } from "../../shared/unchecked.ts";
 const [directory] = process.argv.slice(2);
 if (!directory) throw new Error("Usage: node preflight.ts sites/<slug>");
 const root = path.resolve(directory);
 // The topic's content.json as written; the content build validates it, these checks only read it.
-const content: Unchecked = JSON.parse(
+const content: TopicContent = JSON.parse(
   await fs.readFile(path.join(root, "content.json"), "utf8"),
 );
 const errors: string[] = [];
 const counts: Record<string, { records: number; withSmiles: number }> = {};
-for (const [id, collection] of Object.entries<Unchecked>(
+for (const [id, collection] of Object.entries(
   content.data?.collections ?? {},
 )) {
   let withSmiles = 0;
   const structureFields = collection.fields.filter(
-    (field: Unchecked) => field.kind === "smiles",
+    (field) => field.kind === "smiles",
   );
   for (const record of collection.records) {
     for (const field of structureFields) {
       if (record[field.key]) withSmiles++;
       else if (
         !record.notes?.some(
-          (note: Unchecked) => note.field === field.key && note.text?.trim(),
+          (note) => note.field === field.key && note.text?.trim(),
         )
       )
         errors.push(`${id}/${record.id}: blank ${field.key} needs a reason`);
     }
     for (const field of collection.fields.filter(
-      (field: Unchecked) => field.kind === "body",
+      (field) => field.kind === "body",
     )) {
-      const body = record[field.key];
+      const body = record[field.key] as BodyRef | undefined;
       if (!body) continue;
       const prefix = `/sites/${path.basename(root)}/static/`;
       if (!body.url?.startsWith(prefix)) {
@@ -55,9 +56,7 @@ for (const [id, collection] of Object.entries<Unchecked>(
   }
   counts[id] = { records: collection.records.length, withSmiles };
 }
-for (const [id, source] of Object.entries<Unchecked>(
-  content.data?.sources ?? {},
-)) {
+for (const [id, source] of Object.entries(content.data?.sources ?? {})) {
   for (let page = 1; page <= source.pages; page++) {
     const prefix = `/sites/${path.basename(root)}/static/`;
     const url = source.image.replace("{page}", String(page));

@@ -1,4 +1,6 @@
-import type { Unchecked } from "./unchecked.ts";
+import type { TopicBlock } from "../src/ui/topic/blocks.ts";
+import type { PredictionEntry, TopicContent } from "../src/ui/topic/content.ts";
+import { isInteger, isList, isObject, type JsonObject } from "./json.ts";
 import { validatePatentData } from "./patent-contract.ts";
 import { contentCitations, parseCitation } from "./source-citations.ts";
 // The part of a topic's content.json every topic shares. Topics add their own
@@ -18,15 +20,11 @@ export {
   resolveData,
 } from "./topic-blocks.ts";
 
-function isObject(value: unknown) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function assert(condition: unknown, message: string) {
+function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-function text(value: unknown, where: string) {
+function text(value: unknown, where: string): asserts value is string {
   assert(typeof value === "string" && value.trim(), `${where} must be text`);
 }
 
@@ -38,8 +36,8 @@ const routePlaceholder = /\{(\w+)\}/g;
  * the chapter's `{id}` or `{number}`; without it chapters use `/<id>`. The root is the topic home.
  */
 export function chapterRoutePath(
-  content: { chapterRoute?: string; chapters: readonly { id: string }[] },
-  chapter: { id: string; number?: number; path?: string },
+  content: { chapterRoute?: string },
+  chapter: { id: string; number?: unknown; path?: string },
 ): string {
   if (chapter.path !== undefined) return chapter.path;
   if (content.chapterRoute === undefined) return `/${chapter.id}`;
@@ -50,16 +48,28 @@ export function chapterRoutePath(
 }
 
 /** Throws on the first contract violation; returns the content unchanged. */
-export function validateTopicContent<T>(content: T, name?: string): T;
+export function validateTopicContent(
+  content: unknown,
+  name = "content.json",
+): TopicContent {
+  checkTopicContent(content, name);
+  return content;
+}
+
+/** A chapter whose id, title and path the first pass has checked. */
+type ChapterHead = JsonObject & { id: string; path?: string };
+
 // `content` is parsed JSON; the checks below are its boundary.
-export function validateTopicContent(input: unknown, name = "content.json") {
-  const content: Unchecked = input;
+function checkTopicContent(
+  content: unknown,
+  name: string,
+): asserts content is TopicContent {
   assert(isObject(content), `${name} must be an object`);
-  assert(Array.isArray(content.chapters), `${name}: chapters must be an array`);
+  assert(isList(content.chapters), `${name}: chapters must be an array`);
   if (content.data !== undefined)
     assert(isObject(content.data), `${name}: data must be an object`);
-  validatePatentData(content, name);
-  const chapterIds = new Set();
+  validatePatentData({ chapters: content.chapters, data: content.data }, name);
+  const chapterIds = new Set<unknown>();
   // Cross references the blocks and predictions make, checked once the
   // excerpts and quiz are known.
   const found: BlockReferences = {
@@ -68,7 +78,7 @@ export function validateTopicContent(input: unknown, name = "content.json") {
     predictionIds: new Set(),
     pathPicker: false,
   };
-  for (const chapter of content.chapters) {
+  function chapterHead(chapter: unknown): asserts chapter is ChapterHead {
     assert(isObject(chapter), `${name}: each chapter must be an object`);
     text(chapter.id, `${name}: chapter id`);
     assert(
@@ -83,17 +93,27 @@ export function validateTopicContent(input: unknown, name = "content.json") {
         (typeof chapter.path === "string" && chapter.path.startsWith("/")),
       `${where} path must start with /`,
     );
-    validateBlocks(chapter, content.data, where, found);
+  }
+  const chapters: ChapterHead[] = [];
+  for (const chapter of content.chapters) {
+    chapterHead(chapter);
+    chapters.push(chapter);
+    validateBlocks(
+      { id: chapter.id, blocks: chapter.blocks },
+      content.data,
+      `${name}: chapter ${chapter.id}`,
+      found,
+    );
   }
 
   // Learning paths: named chapter orders a reader can choose; the first is
   // the default. Previous and next follow the chosen path.
   if (content.paths !== undefined) {
     assert(
-      Array.isArray(content.paths) && content.paths.length > 0,
+      isList(content.paths) && content.paths.length > 0,
       `${name}: paths must be a non-empty array`,
     );
-    const pathIds = new Set();
+    const pathIds = new Set<unknown>();
     for (const path of content.paths) {
       assert(isObject(path), `${name}: each path must be an object`);
       text(path.id, `${name}: path id`);
@@ -102,9 +122,9 @@ export function validateTopicContent(input: unknown, name = "content.json") {
       text(path.title, `${name}: path ${path.id} title`);
       text(path.summary, `${name}: path ${path.id} summary`);
       assert(
-        Array.isArray(path.chapters) &&
+        isList(path.chapters) &&
           path.chapters.length > 0 &&
-          path.chapters.every((id: Unchecked) => chapterIds.has(id)),
+          path.chapters.every((id) => chapterIds.has(id)),
         `${name}: path ${path.id} chapters must list known chapter ids`,
       );
     }
@@ -114,8 +134,8 @@ export function validateTopicContent(input: unknown, name = "content.json") {
     `${name}: a path-picker block needs top-level paths`,
   );
 
-  if (content.chapterRoute !== undefined) {
-    const route = content.chapterRoute;
+  const route = content.chapterRoute;
+  if (route !== undefined) {
     assert(
       typeof route === "string" &&
         route.startsWith("/") &&
@@ -126,36 +146,36 @@ export function validateTopicContent(input: unknown, name = "content.json") {
       `${name}: chapterRoute must start with / and use only {id} and {number}`,
     );
     if (route.includes("{number}"))
-      for (const chapter of content.chapters)
+      for (const chapter of chapters)
         assert(
-          Number.isInteger(chapter.number),
+          isInteger(chapter.number),
           `${name}: chapter ${chapter.id} needs a number for chapterRoute`,
         );
     const paths = new Set(
-      content.chapters.map((chapter: Unchecked) =>
-        chapterRoutePath(content, chapter),
+      chapters.map((chapter) =>
+        chapterRoutePath({ chapterRoute: route }, chapter),
       ),
     );
     assert(
-      !paths.has("/") && paths.size === content.chapters.length,
+      !paths.has("/") && paths.size === chapters.length,
       `${name}: chapterRoute gives two chapters the same path`,
     );
   }
   {
     const paths = new Set(
-      content.chapters.map((chapter: Unchecked) =>
-        chapterRoutePath(content, chapter),
+      chapters.map((chapter) =>
+        chapterRoutePath({ chapterRoute: route }, chapter),
       ),
     );
     assert(
-      !paths.has("/") && paths.size === content.chapters.length,
+      !paths.has("/") && paths.size === chapters.length,
       `${name}: chapter paths must be unique and cannot be /`,
     );
   }
 
-  const sourceIds = new Set();
+  const sourceIds = new Set<unknown>();
   const sources = content.sources ?? [];
-  assert(Array.isArray(sources), `${name}: sources must be an array`);
+  assert(isList(sources), `${name}: sources must be an array`);
   for (const source of sources) {
     assert(isObject(source), `${name}: each source must be an object`);
     assert(
@@ -185,9 +205,9 @@ export function validateTopicContent(input: unknown, name = "content.json") {
     );
     if (intro.paragraphs !== undefined)
       assert(
-        Array.isArray(intro.paragraphs) &&
+        isList(intro.paragraphs) &&
           intro.paragraphs.length > 0 &&
-          intro.paragraphs.every((p: Unchecked) => typeof p === "string" && p),
+          intro.paragraphs.every((p) => typeof p === "string" && p),
         `${name}: sourcesIntro paragraphs must be a list of text`,
       );
     else {
@@ -200,23 +220,20 @@ export function validateTopicContent(input: unknown, name = "content.json") {
       found.excerpts.push(...intros.excerpts);
     }
   }
-  const refs = (ids: Unchecked, where: string) => {
+  const refs = (ids: unknown, where: string) => {
     if (ids === undefined) return;
-    assert(Array.isArray(ids), `${where} refs must be an array`);
+    assert(isList(ids), `${where} refs must be an array`);
     for (const id of ids)
       assert(sourceIds.has(id), `${where} refers to unknown source ${id}`);
   };
-  for (const chapter of content.chapters) {
-    assert(
-      Array.isArray(chapter.refs),
-      `${name}: chapter ${chapter.id} needs refs`,
-    );
+  for (const chapter of chapters) {
+    assert(isList(chapter.refs), `${name}: chapter ${chapter.id} needs refs`);
     refs(chapter.refs, `${name}: chapter ${chapter.id}`);
   }
 
-  const excerptIds = new Set();
+  const excerptIds = new Set<unknown>();
   const excerpts = content.excerpts ?? [];
-  assert(Array.isArray(excerpts), `${name}: excerpts must be an array`);
+  assert(isList(excerpts), `${name}: excerpts must be an array`);
   for (const excerpt of excerpts) {
     assert(isObject(excerpt), `${name}: each excerpt must be an object`);
     text(excerpt.id, `${name}: excerpt id`);
@@ -236,10 +253,10 @@ export function validateTopicContent(input: unknown, name = "content.json") {
   }
   for (const [id, where] of found.excerpts)
     assert(excerptIds.has(id), `${where} refers to unknown excerpt ${id}`);
-  for (const chapter of content.chapters) {
+  for (const chapter of chapters) {
     if (chapter.excerpts === undefined) continue;
     assert(
-      Array.isArray(chapter.excerpts),
+      isList(chapter.excerpts),
       `${name}: chapter ${chapter.id} excerpts must be an array`,
     );
     for (const id of chapter.excerpts) {
@@ -256,30 +273,30 @@ export function validateTopicContent(input: unknown, name = "content.json") {
   }
 
   const quiz = content.quiz ?? [];
-  assert(Array.isArray(quiz), `${name}: quiz must be an array`);
+  assert(isList(quiz), `${name}: quiz must be an array`);
   const placement = content.placement ?? [];
-  assert(Array.isArray(placement), `${name}: placement must be an array`);
-  const quizIds = new Set();
+  assert(isList(placement), `${name}: placement must be an array`);
+  const quizIds = new Set<unknown>();
   [...quiz, ...placement].forEach((question, index) => {
-    const where = `${name}: quiz ${question?.id ?? index}`;
+    const where = `${name}: quiz ${(isObject(question) ? question.id : undefined) ?? index}`;
     assert(isObject(question), `${where} must be an object`);
     text(question.id, `${where} id`);
     assert(!quizIds.has(question.id), `${where} is a duplicate id`);
     quizIds.add(question.id);
     text(question.question, `${where} question`);
     assert(
-      Array.isArray(question.options) && question.options.length >= 2,
+      isList(question.options) && question.options.length >= 2,
       `${where} needs at least two options`,
     );
     assert(
-      Number.isInteger(question.answer) &&
+      isInteger(question.answer) &&
         question.answer >= 0 &&
         question.answer < question.options.length,
       `${where} answer is out of range`,
     );
     if (question.optionExplanations !== undefined)
       assert(
-        Array.isArray(question.optionExplanations) &&
+        isList(question.optionExplanations) &&
           question.optionExplanations.length === question.options.length,
         `${where} needs one explanation per option`,
       );
@@ -295,14 +312,12 @@ export function validateTopicContent(input: unknown, name = "content.json") {
     assert(quizIds.has(id), `${where} refers to unknown quiz question ${id}`);
 
   // The terms a chapter uses; their definitions live in the site glossary.
-  for (const chapter of content.chapters) {
+  for (const chapter of chapters) {
     if (chapter.terms === undefined) continue;
     const where = `${name}: chapter ${chapter.id} terms`;
     assert(
-      Array.isArray(chapter.terms) &&
-        chapter.terms.every(
-          (term: Unchecked) => typeof term === "string" && term,
-        ),
+      isList(chapter.terms) &&
+        chapter.terms.every((term) => typeof term === "string" && term),
       `${where} must be a list of term names`,
     );
     assert(
@@ -310,19 +325,15 @@ export function validateTopicContent(input: unknown, name = "content.json") {
       `${where} repeat a term`,
     );
   }
-  return content;
 }
 
 /** Every prediction of the topic with the id its records are kept under and its chapter. */
-export function topicPredictions<P>(content: {
-  chapters: readonly {
-    id: string;
-    blocks: readonly { type: string; id?: string }[];
-  }[];
+export function topicPredictions(content: {
+  chapters: readonly { id: string; blocks: readonly TopicBlock[] }[];
   data?: Record<string, unknown>;
-}): { id: string; chapter: string; prediction: P }[] {
+}): PredictionEntry[] {
   return content.chapters.flatMap((chapter) =>
-    chapterPredictions<P>(chapter, content.data).map((entry) => ({
+    chapterPredictions(chapter, content.data).map((entry) => ({
       ...entry,
       chapter: chapter.id,
     })),

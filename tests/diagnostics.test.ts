@@ -1,4 +1,4 @@
-import type { Unchecked } from "../shared/unchecked.ts";
+import type { StageTiming } from "../shared/stage-timing.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -30,15 +30,20 @@ test("deployment commands preserve output but classify failures without exposing
         `console.error(${JSON.stringify(message + " " + secret)}); process.exit(2)`,
         { input: secret },
       ),
-      (error: Unchecked) => {
-        assert.equal(error.message, category);
-        assert.deepEqual(error.diagnostic, {
-          category,
-          exitCode: 2,
-          signal: null,
-        });
+      (error: unknown) => {
+        assert.equal((error as Error).message, category);
+        assert.deepEqual(
+          (
+            error as import("../server/system/deploy-command.ts").DeploymentError
+          ).diagnostic,
+          {
+            category,
+            exitCode: 2,
+            signal: null,
+          },
+        );
         assert.ok(!JSON.stringify(error).includes(secret));
-        assert.ok(!error.stack.includes(secret));
+        assert.ok(!(error as Error).stack!.includes(secret));
         return true;
       },
     );
@@ -52,8 +57,8 @@ test("deployment commands preserve output but classify failures without exposing
 });
 
 test("stage timings preserve values and errors and report only stage, outcome and duration", async () => {
-  const events: Unchecked[] = [];
-  const report = (event: Unchecked) => events.push(event);
+  const events: StageTiming[] = [];
+  const report = (event: StageTiming) => events.push(event);
   const value = {};
   assert.equal(
     await measureStage("test.success", async () => value, report),
@@ -68,7 +73,7 @@ test("stage timings preserve values and errors and report only stage, outcome an
       },
       report,
     ),
-    (error) => error === failure,
+    (error: unknown) => error === failure,
   );
   assert.deepEqual(
     events.map(({ stage, result }) => ({ stage, result })),
@@ -88,7 +93,7 @@ test("stage timings preserve values and errors and report only stage, outcome an
 });
 
 test("query timing records cold builds only and never includes content identifiers", async () => {
-  const events: Unchecked[] = [];
+  const events: StageTiming[] = [];
   const root = await mkdtemp(join(tmpdir(), "il-query-timing-"));
   try {
     await writeFile(
