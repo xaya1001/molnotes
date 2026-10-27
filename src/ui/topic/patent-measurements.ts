@@ -1,4 +1,4 @@
-import type { Measurement, Assay } from "./patent";
+import type { Measurement, Assay } from "./patent.ts";
 export function measurementText(m: Measurement, assay: Assay) {
   if (m.status !== "reported")
     return `${m.status === "not-tested" ? "未测定" : m.status === "unresolved" ? "待核实" : "未报告"} · ${m.reason}`;

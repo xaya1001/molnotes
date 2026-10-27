@@ -1,12 +1,14 @@
 import { readFileSync } from "node:fs";
-import { expect, test } from "./helpers/test";
+import { expect, test } from "./helpers/test.ts";
 import { parse } from "yaml";
 
 // Every published kind of timeline and flow, at desktop and phone width:
 // the preview page must find nothing a reader would trip over.
-const gallery: { kind: string; caption: string; value: unknown }[] = parse(
-  readFileSync("tests/fixtures/diagrams/gallery.yaml", "utf8"),
-);
+const gallery: {
+  kind: "timeline" | "flow";
+  caption: string;
+  value: unknown;
+}[] = parse(readFileSync("tests/fixtures/diagrams/gallery.yaml", "utf8"));
 
 for (const [width, height] of [
   [1366, 900],

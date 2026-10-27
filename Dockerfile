@@ -16,4 +16,4 @@ COPY src/contracts ./src/contracts
 ENV MOLNOTES_RECORDS_FILE=/data/records.sqlite
 USER learning
 EXPOSE 8080
-CMD ["node", "server/web/web.mjs"]
+CMD ["node", "server/web/web.ts"]

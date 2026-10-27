@@ -9,7 +9,7 @@ import {
   type DataColumn,
   type DataRow,
   type Reading,
-} from "./values";
+} from "./values.ts";
 
 /**
  * One point per row with a drawable value in both chosen columns. A hollow

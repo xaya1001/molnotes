@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "./helpers/test";
+import { test, expect, type Page } from "./helpers/test.ts";
 
 const viewer = (page: Page) => page.getByRole("dialog");
 const pageImage = (page: Page, n: number) =>

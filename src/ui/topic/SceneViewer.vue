@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import type { SceneFrame } from "./blocks";
+import type { SceneFrame } from "./blocks.ts";
 
 /** A step-by-step picture: one frame at a time, each with its drawing, title and text. */
 defineProps<{ label: string; title?: string; frames: SceneFrame[] }>();

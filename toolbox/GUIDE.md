@@ -73,7 +73,7 @@
 
 章节避免占用生成的详情、比较和检索路径。中性完整样本见 `tests/fixtures/content/sites/fable-patent/`；发布布局见 [内容手册](../docs/content.md)。
 
-专题需要目录里没有的块时扩目录（`shared/topic-blocks.mjs` 的契约、`src/ui/topic/blocks.ts` 的类型、`ChapterBlocks.vue` 的渲染分支，`lab` 新模型加进 `catalog.ts` 并写单测），不在 `sites/<slug>/` 下写组件。
+专题需要目录里没有的块时扩目录（`shared/topic-blocks.ts` 的契约、`src/ui/topic/blocks.ts` 的类型、`ChapterBlocks.vue` 的渲染分支，`lab` 新模型加进 `catalog.ts` 并写单测），不在 `sites/<slug>/` 下写组件。
 
 发布到开发库后验证最重要的学习交互；共享代码使用中性样本运行浏览器测试。
 
@@ -98,7 +98,7 @@
 - 学习记录：`mountTopic` 经 API 建立，公共字段 `recent`（最近章节的 `{ chapter, opened }`，时间戳与笔记一致）、`complete`、`bookmarks`、`notes`、`answers`（按练习题 `id`）、`diagnostic`（起点自测，题目取自 `placement`，没有时取 `quiz`）、`predictions`（按预测 id，`{ option }`、`{ selected }`、`{ sets, choice? }`、`{ from, to, choice? }`、`{ value }` 或矩阵的 `{ cells }`，按该预测校验）；专题自有字段通过 `records: { 字段: { empty, parse } }` 注入并自行校验。`records` 对象提供 `records`、`storageError`、`toggle`、`retry`。
 - 目录与路由：第一条是专题首页，其后章节按 `parts` 分组（只有一组时用 `label`）；每章由共享章节页按 `blocks` 渲染，首页展示全部章节与来源说明。
 - `ChapterBody`（`id`：章节体，`ChapterBlocks` 按块目录渲染块序列，再接判断练习、原文区、阅读指引、本章来源与 `ChapterRecords`）、`ChapterBlocks`（`chapter`、`blocks`）、`ChapterPrediction`（`id` + `prediction`；`kind` 为 `choice`（默认）、`atoms`、`bonds`、`atom-set`、`arrows`；`molecules` 画在题目下，`context` 是题干补充，`excerpt` 随结果显示；首次提交写入 `records.predictions`，之后只显示结果）、`QuizQuestion`（`id`，`diagnostic` 写入起点自测；默认插槽放题目涉及的结构或图；题目有 `optionExplanations` 时逐项解释）、`ChapterRecords`、`TopicTerm`（正文中的术语，点开术语卡）、`TopicRefs`（句末来源编号，点开来源卡）；专题首页展示 `sourcesIntro`，章末资料来源按该章 `refs` 展示。
-- `lab` 模型（`src/ui/models/catalog.ts`）：每个模型声明 `inputs`（`id`、`label`、`kind: "number"` 的 `min`/`max`/`step`/`unit`/`default`，可选 `control: "range"` 用滑块，或 `kind: "select"` 的 `options`/`default`）；输入可以是静态数组，也可以是 `inputs(data)`，统一经 `modelInputs(model, data)` 解析并调用模型可选的 `validateData(data)`。纯函数 `run(values, data)` 返回 `{ summary?, readouts?: [{ label, value }], charts?: [{ title?, xLabel, yLabel, points 或 series: [{ name, points, scatter? }], xDomain?, yDomain? }], tables?: [{ caption, columns, rows, note? }], revealed?: 同样四项 }`（`revealed` 只在读者按块的 `reveal` 按钮后显示），不能回答的输入组合抛出面向读者的信息；`tests/ui-lab-models.test.mjs` 按每个专题的 `lab` 块（默认值、presets、data）运行对应模型，没被引用的模型按默认值运行一次，模型的数值由对应专题的 `tests/<slug>-models.test.mjs` 核对。模型按专题组放在 `src/ui/models/<组>.mjs`，在 `catalog.ts` 里登记一行。现有模型：`plate-capacity`（孔板容量）。
+- `lab` 模型（`src/ui/models/catalog.ts`）：每个模型声明 `inputs`（`id`、`label`、`kind: "number"` 的 `min`/`max`/`step`/`unit`/`default`，可选 `control: "range"` 用滑块，或 `kind: "select"` 的 `options`/`default`）；输入可以是静态数组，也可以是 `inputs(data)`，统一经 `modelInputs(model, data)` 解析并调用模型可选的 `validateData(data)`。纯函数 `run(values, data)` 返回 `{ summary?, readouts?: [{ label, value }], charts?: [{ title?, xLabel, yLabel, points 或 series: [{ name, points, scatter? }], xDomain?, yDomain? }], tables?: [{ caption, columns, rows, note? }], revealed?: 同样四项 }`（`revealed` 只在读者按块的 `reveal` 按钮后显示），不能回答的输入组合抛出面向读者的信息；`tests/ui-lab-models.test.ts` 按每个专题的 `lab` 块（默认值、presets、data）运行对应模型，没被引用的模型按默认值运行一次，模型的数值由对应专题的 `tests/<slug>-models.test.ts` 核对。模型按专题组放在 `src/ui/models/<组>.ts`，在 `catalog.ts` 里登记一行。现有模型：`plate-capacity`（孔板容量）。
 - 浏览器测试用 `tests/helpers/prediction.ts` 的 `expectBeforePrediction` / `expectAfterPrediction` 断言正文始终可见，题目的正确答案与解释只在作答后显示，并在刷新后恢复。
 
 数据表与预测矩阵（`src/ui/data/`、`src/ui/matrix/`，同样经 `@ui` 导入）承载两类至少两个专题共有的交互。数据由 `define…` 函数校验后传给组件，坏数据在模块加载时抛错；演示见 `/showcase/data` 与 `/showcase/matrix`。
@@ -237,7 +237,7 @@ import { records } from "../records";
 - props：`set`（`defineStructureSet` 的返回值）、可选 `ids`（要提供的条目及其顺序，默认全部；多于一个时出页签）。插槽 `readout({ entry, atoms })` 在预设按钮下方，放专题自有读数，例如配体各部分的 B 因子（用 `@ui` 的 `meanB`）。组件没有事件，也不读写浏览器存储。
 - `structure-lab` 是独立的章节内容，预设与距离读数从打开章节起可见。预测题的题面只提供作答所需信息，答案与解释放在题目结果区。
 - 纯逻辑 `pdb.ts`（`parsePdb`、`findAtom`、`distance`、`nearestAtom`、`residueAtoms`、`meanB`）与 `model.ts`（`presetDistances`、`verifyStructure`）不依赖 `@ui`，`node --test` 可直接导入。内容制作时对每个条目运行 `verifyStructure(entry, parsePdb(坐标文本))`：保留的链与范围同声明一致、`hetero` 与配体存在、无氢无水、每个图层与标签选得到原子、每个预设的两个原子各恰好命中一个、`expect` 与坐标算出的距离相差不超过 0.005 Å。
-- 取子集的脚本留在专题：把 `toolbox/structure/extract-subset.mjs` 复制到内容工作目录的 `sites/<slug>/tools/` 改写，脚本头记录来源 PDB 号、链、残基、取数日期和完整文件的 SHA-256，输出文件头写 REMARK。坐标文件放在内容目录的 `static/`，随内容快照发布。
+- 取子集的脚本留在专题：把 `toolbox/structure/extract-subset.ts` 复制到内容工作目录的 `sites/<slug>/tools/` 改写，脚本头记录来源 PDB 号、链、残基、取数日期和完整文件的 SHA-256，输出文件头写 REMARK。坐标文件放在内容目录的 `static/`，随内容快照发布。
 - 只在单个条目内量距。几个结构之间的位移（例如各结构里同一段螺旋的参照原子）要先叠合：专题脚本叠合并把变换后的坐标写进各自的子集（文件头 REMARK 注明），位移用 `pdb.ts` 的函数在专题模型里算，数值在发布前核对。
 
 专题通过 `structure-lab` 块引用 `content.json` 的结构集合，每个条目在 `url` 中指定已发布资源的路径：
@@ -266,7 +266,7 @@ import { records } from "../records";
 | 二维分子结构       | [二维结构 recipe](recipes/molecule-2d.md) 与 `toolbox/molecule-2d/render.py`                                | 来源可核对的 SVG             |
 | 蛋白或配体三维结构 | [三维结构 recipe](recipes/protein-3d.md)，`StructureLab`（量距）与 `src/showcase/ProteinViewer.vue`（旋转） | 按需加载的结构查看器         |
 | 资料书架查询       | `python3 -I scripts/material.py`                                                                            | 原文页图、章节文字与引用渲染 |
-| 文字自检           | `node scripts/prose-check.mjs [slug]`                                                                       | 免责式转折、套话与长句清单   |
+| 文字自检           | `node scripts/prose-check.ts [slug]`                                                                        | 免责式转折、套话与长句清单   |
 | 固定讲解视频       | [视频 recipe](recipes/explainer-video.md) 与 `npm run video:render`                                         | 嵌入章节的视频               |
 
 每个正式页面在内容工作目录的 `sites/<slug>/` 内保存其用户路径、内容依据、所用素材与数据、图示假设和验收方法。文字与图示表达同一来源。分步动画先确定静态关键帧及每帧含义，再添加过渡；参数模拟先确定计算函数和单位，再绘图。

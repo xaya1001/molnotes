@@ -1,8 +1,8 @@
-import type { Topic } from "./content";
-import type { TopicRecordsBase } from "../../contracts/records";
-import type { TopicPredictionRecords } from "./context";
-import { predictionMistaken } from "./prediction";
-import { topicProblems } from "./problem";
+import type { Topic } from "./content.ts";
+import type { TopicRecordsBase } from "../../contracts/records.ts";
+import type { TopicPredictionRecords } from "./context.ts";
+import { predictionMistaken } from "./prediction.ts";
+import { topicProblems } from "./problem.ts";
 
 export function chapterMistakes(
   content: Topic,

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { evidenceSource } from "../evidence";
-import { useTopic } from "./context";
-import { openSource } from "./overlay";
+import { evidenceSource } from "../evidence.ts";
+import { useTopic } from "./context.ts";
+import { openSource } from "./overlay.ts";
 
 /** Source numbers after a sentence; each opens that source's card. */
 const props = defineProps<{ ids: readonly (number | string)[] }>();

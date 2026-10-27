@@ -2,8 +2,8 @@
 import { PageHeading } from "@ui";
 import FlowFigure from "../../ui/diagrams/FlowFigure.vue";
 import TimelineFigure from "../../ui/diagrams/TimelineFigure.vue";
-import { defineFlow } from "../../ui/diagrams/flow";
-import { defineTimeline } from "../../ui/diagrams/model";
+import { defineFlow } from "../../ui/diagrams/flow.ts";
+import { defineTimeline } from "../../ui/diagrams/model.ts";
 
 // Neutral samples: the data shapes notes write as YAML and topics as JSON.
 const lanes = defineTimeline({

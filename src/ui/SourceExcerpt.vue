@@ -7,7 +7,7 @@ import {
   validateEvidence,
   type EvidenceSource,
   type Excerpt,
-} from "./evidence";
+} from "./evidence.ts";
 const props = defineProps<{
   excerpt: Excerpt;
   sources: readonly EvidenceSource[];

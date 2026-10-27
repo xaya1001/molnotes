@@ -1,5 +1,5 @@
-export { mountApp, mountPage } from "./app";
-export { mountTopic, type TopicOptions } from "./topic/mount";
+export { mountApp, mountPage } from "./app.ts";
+export { mountTopic, type TopicOptions } from "./topic/mount.ts";
 export {
   catalogSite,
   directories,
@@ -7,8 +7,8 @@ export {
   sites,
   type CatalogDirectory,
   type CatalogSite,
-} from "./catalog";
-export { downloadFile, showToast } from "./notify";
+} from "./catalog.ts";
+export { downloadFile, showToast } from "./notify.ts";
 export {
   exportSiteRecords,
   readNotesRecords,
@@ -16,11 +16,11 @@ export {
   type SiteRecordState,
   type SiteRecords,
   type SiteTopicRecords,
-} from "./site-records";
+} from "./site-records.ts";
 export { default as RecordStateNotice } from "./RecordStateNotice.vue";
-export type { NavGroup, NavItem } from "./sidebar";
+export type { NavGroup, NavItem } from "./sidebar.ts";
 export { default as SiteBar } from "./SiteBar.vue";
-export { pageTitle, type SiteSection } from "./site-sections";
+export { pageTitle, type SiteSection } from "./site-sections.ts";
 export { default as Formula } from "./Formula.vue";
 export { default as ImageViewer } from "./ImageViewer.vue";
 export { default as LineChart } from "./LineChart.vue";
@@ -44,7 +44,7 @@ export {
   type DataRow,
   type DataCell,
   type DataColumn,
-} from "./data/values";
+} from "./data/values.ts";
 export { default as PredictionMatrix } from "./matrix/PredictionMatrix.vue";
 export {
   defineMatrix,
@@ -55,7 +55,7 @@ export {
   type MatrixCell,
   type MatrixOutcome,
   type MatrixTone,
-} from "./matrix/model";
+} from "./matrix/model.ts";
 export { default as StructureLab } from "./structure/StructureLab.vue";
 export {
   defineStructureSet,
@@ -66,8 +66,8 @@ export {
   type StructurePreset,
   type StructureHetero,
   type StructureSelection,
-} from "./structure/model";
-export { meanB, type AtomRef, type PdbAtom } from "./structure/pdb";
+} from "./structure/model.ts";
+export { meanB, type AtomRef, type PdbAtom } from "./structure/pdb.ts";
 export { default as SourceExcerpt } from "./SourceExcerpt.vue";
 export { default as ReadingGuide } from "./ReadingGuide.vue";
 export type {
@@ -77,14 +77,14 @@ export type {
   ReactionStep as ReactionStepData,
   SynthesisRoute as SynthesisRouteData,
   MechanismFrame,
-} from "./chemistry/types";
+} from "./chemistry/types.ts";
 export {
   validateEvidence,
   evidenceSource,
   type Excerpt,
   type ReadingItem,
   type EvidenceSource,
-} from "./evidence";
+} from "./evidence.ts";
 export {
   defineTopicContent,
   type Topic,
@@ -95,16 +95,16 @@ export {
   type TopicPrediction,
   type PredictionAnswer,
   type PredictionEntry,
-} from "./topic/content";
-export { isObject, type RecordField } from "../contracts/records";
-export { useTopic, type TopicPredictionRecords } from "./topic/context";
-export { openTerm, openSource, closeOverlay } from "./topic/overlay";
+} from "./topic/content.ts";
+export { isObject, type RecordField } from "../contracts/records.ts";
+export { useTopic, type TopicPredictionRecords } from "./topic/context.ts";
+export { openTerm, openSource, closeOverlay } from "./topic/overlay.ts";
 export { default as TopicTerm } from "./topic/TopicTerm.vue";
 export { default as TopicRefs } from "./topic/TopicRefs.vue";
 export { default as TopicOverlays } from "./topic/TopicOverlays.vue";
 export { default as ChapterBody } from "./topic/ChapterBody.vue";
 export { default as ChapterBlocks } from "./topic/ChapterBlocks.vue";
-export type { TopicBlock } from "./topic/blocks";
+export type { TopicBlock } from "./topic/blocks.ts";
 export { labModels } from "./models/catalog.ts";
 export { default as ChapterPrediction } from "./topic/ChapterPrediction.vue";
 export { default as ChapterRecords } from "./topic/ChapterRecords.vue";

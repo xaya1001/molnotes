@@ -2,7 +2,7 @@
 import { computed, reactive, ref } from "vue";
 import MoleculeView from "../MoleculeView.vue";
 import MatrixCellEvidence from "./MatrixCellEvidence.vue";
-import { matrixCellId, type MatrixModel } from "./model";
+import { matrixCellId, type MatrixModel } from "./model.ts";
 
 /**
  * Guess first, then look. The reader answers each cell in `model.required`

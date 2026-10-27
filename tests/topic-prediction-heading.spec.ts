@@ -1,4 +1,4 @@
-import { expect, test } from "./helpers/test";
+import { expect, test } from "./helpers/test.ts";
 
 for (const adjacent of [true, false]) {
   test(`prediction heading respects adjacent author heading: ${adjacent}`, async ({

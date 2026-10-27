@@ -5,13 +5,13 @@ import RecordTray from "./RecordTray.vue";
 import { computed, watch } from "vue";
 import { useRoute } from "vue-router";
 import TopicShell from "../TopicShell.vue";
-import { catalogSite } from "../catalog";
-import { topicSection } from "../site-sections";
-import { flatItems, type NavGroup, type NavItem } from "../sidebar";
-import { useTopic } from "./context";
+import { catalogSite } from "../catalog.ts";
+import { topicSection } from "../site-sections.ts";
+import { flatItems, type NavGroup, type NavItem } from "../sidebar.ts";
+import { useTopic } from "./context.ts";
 import TopicOverlays from "./TopicOverlays.vue";
-import { updateTopicSnapshot } from "../site-records";
-import { chapterMistakes } from "./navigation";
+import { updateTopicSnapshot } from "../site-records.ts";
+import { chapterMistakes } from "./navigation.ts";
 
 /**
  * The default topic shell: the directory groups with each chapter's read

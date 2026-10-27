@@ -1,4 +1,9 @@
-import { entries, notesIndex, terms as glossary, topics } from "./content-data";
+import {
+  entries,
+  notesIndex,
+  terms as glossary,
+  topics,
+} from "./content-data.ts";
 
 /** A piece of result text; `hit` pieces match a search word. */
 export interface Fragment {

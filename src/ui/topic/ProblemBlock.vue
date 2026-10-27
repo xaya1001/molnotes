@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import ExerciseSource from "./ExerciseSource.vue";
 import { computed, ref } from "vue";
-import type { ProblemBlock } from "./blocks";
-import { useTopic } from "./context";
+import type { ProblemBlock } from "./blocks.ts";
+import { useTopic } from "./context.ts";
 import ProblemText from "./ProblemText.vue";
 import SourceExcerpt from "../SourceExcerpt.vue";
 const props = defineProps<{ block: ProblemBlock; chapter: string }>();

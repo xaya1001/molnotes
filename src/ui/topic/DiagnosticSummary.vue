@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { useTopic } from "./context";
+import { useTopic } from "./context.ts";
 
 /**
  * The entry self-test summed up: how many of its questions are answered, and

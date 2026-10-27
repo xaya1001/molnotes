@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import MoleculeView from "../MoleculeView.vue";
-import type { SpectrumBlock } from "./blocks";
-import { useTopic } from "./context";
+import type { SpectrumBlock } from "./blocks.ts";
+import { useTopic } from "./context.ts";
 
 /**
  * A peak list beside its molecule. The reader picks a peak to read its shift,

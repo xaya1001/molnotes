@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useTopic } from "./context";
+import { useTopic } from "./context.ts";
 
 /** Read and bookmark toggles plus the chapter note, kept in the topic's records. */
 defineProps<{ id: string }>();

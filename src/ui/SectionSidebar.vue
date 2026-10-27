@@ -9,14 +9,14 @@ import {
 } from "reka-ui";
 import { useRoute } from "vue-router";
 import SidebarGroup from "./SidebarGroup.vue";
-import { useMediaQuery } from "./media";
+import { useMediaQuery } from "./media.ts";
 import {
   currentItem,
   flatItems,
   type NavGroup,
   type NavItem,
   type SidebarState,
-} from "./sidebar";
+} from "./sidebar.ts";
 
 /**
  * The left sidebar of the notebook and of every topic. On wide screens it

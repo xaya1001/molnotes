@@ -1,4 +1,4 @@
-import { expect, test } from "./helpers/test";
+import { expect, test } from "./helpers/test.ts";
 
 test("a topic term opens the site definition", async ({ page }) => {
   await page.goto("/practice/sample/start");

@@ -1,5 +1,5 @@
-import { putRecords } from "./helpers/records";
-import { test, expect } from "./helpers/test";
+import { putRecords } from "./helpers/records.ts";
+import { test, expect } from "./helpers/test.ts";
 test.describe.configure({ mode: "serial" });
 test.beforeEach(async ({ request }) => {
   await putRecords(request, "/api/records/topics/sample", {

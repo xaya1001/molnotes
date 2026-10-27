@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { MatrixCell, MatrixOutcome } from "./model";
+import type { MatrixCell, MatrixOutcome } from "./model.ts";
 
 /** What the source says about one cell: result, system, locator and the source's own words. */
 defineProps<{

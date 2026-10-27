@@ -1,5 +1,5 @@
 import { Composition } from "remotion";
-import { ProximityDemo } from "./scene";
+import { ProximityDemo } from "./scene.tsx";
 
 export const VideoRoot = () => (
   <Composition

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useTopic } from "./context";
-import { patentData, sourceLink } from "./patent";
+import { useTopic } from "./context.ts";
+import { patentData, sourceLink } from "./patent.ts";
 import PageHeading from "../PageHeading.vue";
 import PageViewer from "../PageViewer.vue";
 const props = defineProps<{ source?: string; mode?: "page" | "search" }>();

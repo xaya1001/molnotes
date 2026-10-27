@@ -2,7 +2,7 @@ import {
   loadChemistry,
   type ChemistryToolkit,
   type MoleculeHandle,
-} from "../chemistry/rdkit";
+} from "../chemistry/rdkit.ts";
 export async function substructureMatches(
   query: string,
   rows: { id: string | number; smiles: string }[],

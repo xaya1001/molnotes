@@ -4,11 +4,11 @@ import {
   topicPredictions,
   validateTopicContent,
 } from "../../../shared/topic-content.ts";
-import type { MoleculeData } from "../chemistry/types";
-import type { EvidenceSource, Excerpt, ReadingItem } from "../evidence";
-import { validateEvidence } from "../evidence";
-import type { MatrixModel } from "../matrix/model";
-import type { DataRef, TopicBlock } from "./blocks";
+import type { MoleculeData } from "../chemistry/types.ts";
+import type { EvidenceSource, Excerpt, ReadingItem } from "../evidence.ts";
+import { validateEvidence } from "../evidence.ts";
+import type { MatrixModel } from "../matrix/model.ts";
+import type { DataRef, TopicBlock } from "./blocks.ts";
 
 interface PredictionBase {
   question: string;

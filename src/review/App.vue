@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { catalogSite, topicBase } from "../ui/catalog";
-import { isChoice } from "../ui/topic/prediction";
+import { catalogSite, topicBase } from "../ui/catalog.ts";
+import { isChoice } from "../ui/topic/prediction.ts";
 import { ref } from "vue";
-import { quiz } from "../ui/content-data";
-import { topics } from "../ui/content-data";
+import { quiz } from "../ui/content-data.ts";
+import { topics } from "../ui/content-data.ts";
 import {
   downloadFile,
   exportSiteRecords,

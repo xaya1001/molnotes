@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "./helpers/test";
+import { expect, test, type Page } from "./helpers/test.ts";
 
 const pages = [
   ["/showcase/", "工具箱示例"],

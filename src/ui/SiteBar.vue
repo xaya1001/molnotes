@@ -7,14 +7,14 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "reka-ui";
-import { useMediaQuery } from "./media";
+import { useMediaQuery } from "./media.ts";
 import SiteSearch from "./SiteSearch.vue";
-import { siteSections as sections, type SiteSection } from "./site-sections";
+import { siteSections as sections, type SiteSection } from "./site-sections.ts";
 
-import { showToast, toastMessage } from "./notify";
-import { loadCatalog } from "./content-data";
-import { sites } from "./catalog";
-import { loadSiteRecords, sectionHref } from "./site-records";
+import { showToast, toastMessage } from "./notify.ts";
+import { loadCatalog } from "./content-data.ts";
+import { sites } from "./catalog.ts";
+import { loadSiteRecords, sectionHref } from "./site-records.ts";
 const navigationReady = ref(false);
 onMounted(async () => {
   try {

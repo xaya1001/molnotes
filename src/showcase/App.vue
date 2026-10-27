@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { TopicShell } from "@ui";
-import { groups } from "./pages";
+import { groups } from "./pages.ts";
 </script>
 
 <template>

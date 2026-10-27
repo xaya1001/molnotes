@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import MoleculeView from "./MoleculeView.vue";
-import type { ReactionStep } from "./chemistry/types";
+import type { ReactionStep } from "./chemistry/types.ts";
 defineProps<{ step: ReactionStep }>();
 </script>
 <template>

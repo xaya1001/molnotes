@@ -3,7 +3,7 @@ import { computed, reactive, ref, watch } from "vue";
 import LineChart from "../LineChart.vue";
 import TopicTable from "./TopicTable.vue";
 import { labModels, modelInputs, type LabResult } from "../models/catalog.ts";
-import type { LabBlock } from "./blocks";
+import type { LabBlock } from "./blocks.ts";
 
 /**
  * A `lab` block: the reader sets the inputs a named model declares, the model

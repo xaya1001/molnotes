@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import ReactionStep from "./ReactionStep.vue";
-import type { SynthesisRoute } from "./chemistry/types";
+import type { SynthesisRoute } from "./chemistry/types.ts";
 const props = defineProps<{ routes: readonly SynthesisRoute[] }>();
 const routeIndex = ref(0),
   index = ref(0);

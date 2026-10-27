@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import MoleculeView from "../MoleculeView.vue";
-import type { MoleculeData } from "../chemistry/types";
+import type { MoleculeData } from "../chemistry/types.ts";
 
 type Item = MoleculeData & { highlightAtoms?: number[]; caption?: string };
 

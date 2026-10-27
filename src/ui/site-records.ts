@@ -1,11 +1,11 @@
 import { shallowReactive } from "vue";
-import { predictionField, predictionMistaken } from "./topic/prediction";
-import { problemField, type ProblemAnswer } from "./topic/problem";
-import type { PredictionAnswer } from "./topic/content";
-import { api } from "./api";
-import { topicBase, type CatalogSite } from "./catalog";
+import { predictionField, predictionMistaken } from "./topic/prediction.ts";
+import { problemField, type ProblemAnswer } from "./topic/problem.ts";
+import type { PredictionAnswer } from "./topic/content.ts";
+import { api } from "./api.ts";
+import { topicBase, type CatalogSite } from "./catalog.ts";
 import type { IndexedTopic } from "../../shared/topic-index.ts";
-import { isObject } from "../contracts/records";
+import { isObject } from "../contracts/records.ts";
 
 /**
  * `none`: nothing recorded yet; `outdated`: saved before the unified record

@@ -3,7 +3,7 @@ import type {
   PredictionAnswer,
   PredictionEntry,
   TopicPrediction,
-} from "./content";
+} from "./content.ts";
 import { isObject, type RecordField } from "../../contracts/records.ts";
 
 export function isChoice(

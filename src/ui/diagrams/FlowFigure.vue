@@ -8,8 +8,8 @@ import {
   watch,
 } from "vue";
 import DiagramText from "./DiagramText.vue";
-import { readsWell } from "./check";
-import { phrases } from "./model";
+import { readsWell } from "./check.ts";
+import { phrases } from "./model.ts";
 import {
   chainOrder,
   foldFlow,
@@ -22,7 +22,7 @@ import {
   type FlowDirection,
   type FlowSpacing,
   type Point,
-} from "./flow";
+} from "./flow.ts";
 
 const props = defineProps<{ flow: Flow; caption?: string }>();
 

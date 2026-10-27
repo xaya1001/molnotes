@@ -24,7 +24,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   use: { baseURL: `http://127.0.0.1:${port}`, screenshot: "only-on-failure" },
   webServer: {
-    command: `node tests/helpers/serve-content.mjs ${port} ${workers}`,
+    command: `node tests/helpers/serve-content.ts ${port} ${workers}`,
     url: `http://127.0.0.1:${port + workers - 1}/`,
     reuseExistingServer: false,
     gracefulShutdown: { signal: "SIGTERM", timeout: 10000 },

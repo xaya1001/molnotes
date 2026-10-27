@@ -1,6 +1,6 @@
 import scriptUrl from "@rdkit/rdkit?url";
 import wasmUrl from "@rdkit/rdkit/RDKit_minimal.wasm?url";
-import type { ChemistryToolkit } from "./rdkit";
+import type { ChemistryToolkit } from "./rdkit.ts";
 declare global {
   interface Window {
     initRDKitModule?: (options: {

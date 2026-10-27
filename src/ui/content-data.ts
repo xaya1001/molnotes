@@ -4,14 +4,14 @@ import type {
   NotesSearchIndex,
 } from "../../shared/notes-index.ts";
 import type { GlossaryTerm } from "../../shared/glossary.ts";
-import { api } from "./api";
+import { api } from "./api.ts";
 import {
   directories,
   groups,
   sites,
   type CatalogDirectory,
   type CatalogSite,
-} from "./catalog";
+} from "./catalog.ts";
 export const topics: TopicIndex["chapters"] = [];
 export const quiz: TopicIndex["quiz"] = [];
 export const entries: TopicIndex["search"] = [];

@@ -11,7 +11,7 @@
 ## 用 StructureLab 的步骤
 
 1. 在 RCSB 条目页核对标题、分辨率、链号、配体残基名和残基编号，不凭记忆写；多份拷贝时只取一份，写明是哪一条链。
-2. 把 `toolbox/structure/extract-subset.mjs` 复制到内容工作目录的 `sites/<slug>/tools/`，按专题改写，脚本头记录来源 PDB 号、链、残基、取数日期和完整文件的 SHA-256。运行后得到的子集去掉氢原子、水和第一个构象以外的原子，文件头 REMARK 写明来源；坐标文件放在内容工作目录的 `static/`，随内容快照发布。
+2. 把 `toolbox/structure/extract-subset.ts` 复制到内容工作目录的 `sites/<slug>/tools/`，按专题改写，脚本头记录来源 PDB 号、链、残基、取数日期和完整文件的 SHA-256。运行后得到的子集去掉氢原子、水和第一个构象以外的原子，文件头 REMARK 写明来源；坐标文件放在内容工作目录的 `static/`，随内容快照发布。
 3. 在 `content.json` 的 `data.structures` 写结构集合（`defineStructureSet` 的输入，`url` 指向本专题静态资源），例如：
 
 ```json

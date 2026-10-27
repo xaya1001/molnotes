@@ -1,8 +1,8 @@
-import type { ProblemAnswer } from "./problem";
-import type { PatentRecords } from "./patent";
+import type { ProblemAnswer } from "./problem.ts";
+import type { PatentRecords } from "./patent.ts";
 import { inject, provide, type InjectionKey } from "vue";
-import type { CheckedTopic, PredictionAnswer, Topic } from "./content";
-import type { TopicRecordsStore } from "./records";
+import type { CheckedTopic, PredictionAnswer, Topic } from "./content.ts";
+import type { TopicRecordsStore } from "./records.ts";
 import type { GlossaryTerm } from "../../../shared/glossary.ts";
 
 /** The record field every topic mounted by `mountTopic` keeps beside the shared ones. */

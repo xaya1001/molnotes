@@ -1,3 +1,4 @@
+import type { Unchecked } from "../../shared/unchecked.ts";
 const equal = (a: unknown, b: unknown) =>
   JSON.stringify(a) === JSON.stringify(b);
 const conflictMessage =
@@ -14,12 +15,12 @@ export function mergeRecords<T>(
 ): T;
 // Records are JSON documents, merged field by field.
 export function mergeRecords(
-  base: any,
-  local: any,
-  remote: any,
+  base: Unchecked,
+  local: Unchecked,
+  remote: Unchecked,
   key = "",
   resolve = false,
-): any {
+): Unchecked {
   if (key === "recent" && object(local) && object(remote))
     return local.opened >= remote.opened ? local : remote;
   if (equal(local, base)) return remote;

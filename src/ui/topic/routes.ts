@@ -1,7 +1,7 @@
-import { patentRoutes } from "./patent-routes";
+import { patentRoutes } from "./patent-routes.ts";
 import type { RouteRecordRaw } from "vue-router";
-import type { NavGroup } from "../sidebar";
-import type { Topic } from "./content";
+import type { NavGroup } from "../sidebar.ts";
+import type { Topic } from "./content.ts";
 import TopicChapterPage from "./TopicChapterPage.vue";
 import TopicHome from "./TopicHome.vue";
 

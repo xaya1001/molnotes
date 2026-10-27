@@ -12,7 +12,7 @@ import {
   type DataRow,
   type DataTable,
   type Reading,
-} from "./values";
+} from "./values.ts";
 
 /**
  * A table of numbers as a source printed them, with sorting, a filter by

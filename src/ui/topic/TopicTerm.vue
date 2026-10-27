@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { useTopic } from "./context";
-import { openTerm } from "./overlay";
+import { useTopic } from "./context.ts";
+import { openTerm } from "./overlay.ts";
 
 /** A glossary term inside prose; opens its card without leaving the page. */
 const props = defineProps<{ name: string }>();

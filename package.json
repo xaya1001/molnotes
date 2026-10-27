@@ -7,11 +7,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "worktree:setup": "node scripts/worktree-setup.mjs",
-    "site:new": "node scripts/new-site.mjs",
-    "patent:inventory": "node scripts/patent-inventory.mjs",
-    "patent:search": "node scripts/patent-search.mjs",
-    "check": "node --test tests/*.test.mjs && node scripts/check-staged-files.mjs --tracked && golar typecheck",
+    "worktree:setup": "node scripts/worktree-setup.ts",
+    "site:new": "node scripts/new-site.ts",
+    "patent:inventory": "node scripts/patent-inventory.ts",
+    "patent:search": "node scripts/patent-search.ts",
+    "check": "node --test tests/*.test.ts && node scripts/check-staged-files.ts --tracked && golar typecheck",
     "build": "vite build",
     "preview": "vite preview",
     "test:e2e": "playwright test",
@@ -19,10 +19,10 @@
     "format:check": "prettier --check . --cache --cache-strategy content",
     "format:staged": "lint-staged",
     "hooks:install": "bash scripts/install-git-hooks.sh",
-    "serve": "node server/web/web.mjs",
-    "content": "node scripts/content.mjs",
-    "content:preview": "node scripts/preview.mjs",
-    "molecule:layout": "node scripts/layout.mjs"
+    "serve": "node server/web/web.ts",
+    "content": "node scripts/content.ts",
+    "content:preview": "node scripts/preview.ts",
+    "molecule:layout": "node scripts/layout.ts"
   },
   "dependencies": {
     "@fontsource/noto-serif-sc": "5.3.1",
@@ -55,6 +55,6 @@
     "vite": "8.3.5"
   },
   "lint-staged": {
-    "*.{css,html,js,json,md,mjs,ts,vue,yaml,yml}": "prettier --write"
+    "*.{css,html,js,json,md,ts,vue,yaml,yml}": "prettier --write"
   }
 }

@@ -1,4 +1,4 @@
-import type { ProblemBlock, TopicBlock } from "./blocks";
+import type { ProblemBlock, TopicBlock } from "./blocks.ts";
 import { isObject, type RecordField } from "../../contracts/records.ts";
 
 export interface ProblemAnswer {

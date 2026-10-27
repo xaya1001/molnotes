@@ -1,3 +1,4 @@
+import type { Unchecked } from "./unchecked.ts";
 import type { PatentBlock } from "../src/ui/topic/blocks.ts";
 import { validateResearchData } from "./patent-research.ts";
 // Structural and referential validation shared by publishing and the browser.
@@ -12,35 +13,36 @@ const key = (v: unknown) =>
   typeof v === "string" &&
   /^[a-zA-Z0-9_-]+$/.test(v) &&
   !["__proto__", "constructor", "prototype"].includes(v);
-const id = (v: any) => (Number.isSafeInteger(v) && v > 0) || key(v);
-const list = (v: any, at: string): any[] => {
+const id = (v: Unchecked) => (Number.isSafeInteger(v) && v > 0) || key(v);
+const list = (v: Unchecked, at: string): Unchecked[] => {
   ok(Array.isArray(v), `${at}: expected array`);
   return v;
 };
-const entries = (v: any, at: string): [string, any][] => {
+const entries = (v: Unchecked, at: string): [string, Unchecked][] => {
   ok(object(v), `${at}: expected object`);
-  return Object.entries<any>(v);
+  return Object.entries<Unchecked>(v);
 };
 const unique = (v: unknown[], at: string) =>
   ok(new Set(v.map(String)).size === v.length, `${at}: duplicate id`);
-const asset = (v: any, at?: string) =>
+const asset = (v: Unchecked, at?: string) =>
   ok(
     typeof v === "string" &&
       /^\/sites\/[a-z0-9-]+\/static\/[\w/{}.\-]+$/.test(v) &&
       !v.includes(".."),
     `${at}: expected static resource path`,
   );
-export function patentBlocks(content: any): PatentBlock[] {
-  const walk = (blocks: any[] | undefined): any[] =>
+export function patentBlocks(input: unknown): PatentBlock[] {
+  const content: Unchecked = input;
+  const walk = (blocks: Unchecked[] | undefined): Unchecked[] =>
     (blocks ?? []).flatMap((block) => [
       block,
       ...(block.type === "tabs"
-        ? block.items.flatMap((item: any) => walk(item.blocks))
+        ? block.items.flatMap((item: Unchecked) => walk(item.blocks))
         : []),
     ]);
   return (content.chapters ?? [])
-    .flatMap((c: any) => walk(c.blocks))
-    .filter((b: any) =>
+    .flatMap((c: Unchecked) => walk(c.blocks))
+    .filter((b: Unchecked) =>
       [
         "source-pages",
         "record-collection",
@@ -50,7 +52,8 @@ export function patentBlocks(content: any): PatentBlock[] {
       ].includes(b.type),
     );
 }
-export function validatePatentData(content: any, where: string): void {
+export function validatePatentData(input: unknown, where: string): void {
+  const content: Unchecked = input;
   const blocks = patentBlocks(content);
   if (!blocks.length) return;
   const data = content.data ?? {};
@@ -58,7 +61,7 @@ export function validatePatentData(content: any, where: string): void {
     collections = data.collections ?? {},
     sets = data.claims ?? {},
     cases = data.sarCases ?? {};
-  for (const [kind, value] of Object.entries<any>({
+  for (const [kind, value] of Object.entries<Unchecked>({
     sources,
     collections,
     claims: sets,
@@ -87,7 +90,7 @@ export function validatePatentData(content: any, where: string): void {
       );
   }
   const defaultSource = blocks.find((b) => b.type === "source-pages")?.source;
-  const ref = (v: any, source?: string, at?: string) => {
+  const ref = (v: Unchecked, source?: string, at?: string) => {
     ok(object(v), `${at}: expected page reference`);
     const src = sources[v.source ?? source ?? defaultSource];
     ok(
@@ -119,7 +122,7 @@ export function validatePatentData(content: any, where: string): void {
     ok(
       Array.isArray(s.size) &&
         s.size.length === 2 &&
-        s.size.every((n: any) => Number.isFinite(n) && n > 0),
+        s.size.every((n: Unchecked) => Number.isFinite(n) && n > 0),
       `${name}: size must contain positive width and height in PDF points`,
     );
     ok(Number.isInteger(s.pages) && s.pages > 0, `${name}: invalid pages`);
@@ -132,15 +135,15 @@ export function validatePatentData(content: any, where: string): void {
         `${name}: invalid paragraph page`,
       );
   }
-  const claimIds = Object.values<any>(sets).flatMap((s) =>
+  const claimIds = Object.values<Unchecked>(sets).flatMap((s) =>
     list(s.claims, where).map((c) => c.id),
   );
   unique(claimIds, `${where}: claims`);
-  const targetIds = (name: any) =>
+  const targetIds = (name: Unchecked) =>
     name === "claims"
       ? claimIds
-      : collections[name]?.records.map((r: any) => r.id);
-  const refs = (values: any, name: any, at: any) => {
+      : collections[name]?.records.map((r: Unchecked) => r.id);
+  const refs = (values: Unchecked, name: Unchecked, at: Unchecked) => {
     const ids = targetIds(name);
     ok(
       ids && list(values, at).every((v) => ids.includes(v)),
@@ -158,16 +161,16 @@ export function validatePatentData(content: any, where: string): void {
     routes.push(c.route);
     list(c.fields, name);
     unique(
-      c.fields.map((f: any) => f.key),
+      c.fields.map((f: Unchecked) => f.key),
       name,
     );
     entries(c.scales ?? {}, name);
-    for (const [k, s] of Object.entries<any>(c.scales ?? {})) {
+    for (const [k, s] of Object.entries<Unchecked>(c.scales ?? {})) {
       text(s.blank, k);
       text(s.dash, k);
       list(s.bins, k);
       unique(
-        s.bins.map((b: any) => b.value),
+        s.bins.map((b: Unchecked) => b.value),
         k,
       );
       for (const b of s.bins) {
@@ -223,7 +226,7 @@ export function validatePatentData(content: any, where: string): void {
     }
     list(c.records, name);
     unique(
-      c.records.map((r: any) => r.id),
+      c.records.map((r: Unchecked) => r.id),
       name,
     );
     for (const r of c.records) {
@@ -251,7 +254,7 @@ export function validatePatentData(content: any, where: string): void {
           ok(
             v === "" ||
               v === "--" ||
-              c.scales[f.scale].bins.some((b: any) => b.value === v),
+              c.scales[f.scale].bins.some((b: Unchecked) => b.value === v),
             `${at}: unknown grade`,
           );
         if (f.kind === "ref") ref(v, r.source, at);
@@ -267,7 +270,7 @@ export function validatePatentData(content: any, where: string): void {
         text(n.text, at);
         if (n.field)
           ok(
-            c.fields.some((f: any) => f.key === n.field),
+            c.fields.some((f: Unchecked) => f.key === n.field),
             `${at}: unknown note field`,
           );
         if (n.ref) ref(n.ref, r.source, at);
@@ -308,7 +311,8 @@ export function validatePatentData(content: any, where: string): void {
   unique(allCases, `${where}: SAR cases`);
 }
 /** Concrete routes also used by publication's internal-link checker. */
-export function patentRoutePaths(content: any): string[] {
+export function patentRoutePaths(input: unknown): string[] {
+  const content: Unchecked = input;
   const data = content.data ?? {},
     paths = new Set<string>();
   for (const b of patentBlocks(content)) {
@@ -316,7 +320,8 @@ export function patentRoutePaths(content: any): string[] {
       paths.add("/search");
       for (
         let n = 1;
-        n <= Math.max(...Object.values<any>(data.sources).map((s) => s.pages));
+        n <=
+        Math.max(...Object.values<Unchecked>(data.sources).map((s) => s.pages));
         n++
       )
         paths.add(`/sources/pages/${n}`);

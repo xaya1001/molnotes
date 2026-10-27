@@ -1,14 +1,15 @@
-import { expect, test } from "./helpers/test";
+import type { Unchecked } from "../shared/unchecked.ts";
+import { expect, test } from "./helpers/test.ts";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { once } from "node:events";
 import { execFileSync } from "node:child_process";
-import { publishSnapshot } from "./helpers/content-snapshot.mjs";
-import { buildSnapshot } from "../scripts/content/content-publish.mjs";
-import { writeSnapshot } from "../scripts/content/content-snapshot.mjs";
-import { openRecords } from "../server/web/records.mjs";
-import { createWebServer } from "../server/web/web.mjs";
+import { publishSnapshot } from "./helpers/content-snapshot.ts";
+import { buildSnapshot } from "../scripts/content/content-publish.ts";
+import { writeSnapshot } from "../scripts/content/content-snapshot.ts";
+import { openRecords } from "../server/web/records.ts";
+import { createWebServer } from "../server/web/web.ts";
 
 test("generated chapters compose the shared shell and the block catalogue", async ({
   page,
@@ -27,7 +28,7 @@ test("generated chapters compose the shared shell and the block catalogue", asyn
     execFileSync(
       process.execPath,
       [
-        join(root, "scripts/new-site.mjs"),
+        join(root, "scripts/new-site.ts"),
         "authoring",
         title,
         "内容扩充验证",
@@ -67,7 +68,7 @@ test("generated chapters compose the shared shell and the block catalogue", asyn
       '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="80"><rect width="160" height="80" fill="teal"/></svg>',
     );
     await writeFile(join(fixture, "glossary.json"), "[]");
-    await publishSnapshot(releases, async (snapshot) =>
+    await publishSnapshot(releases, async (snapshot: Unchecked) =>
       writeSnapshot(snapshot, await buildSnapshot(fixture)),
     );
     server.listen(0, "127.0.0.1");
@@ -96,7 +97,9 @@ test("generated chapters compose the shared shell and the block catalogue", asyn
     await expect(page.locator("article .prose li")).toHaveCount(2);
     await page.getByRole("button", { name: "放大查看：示例图" }).click();
     const image = page.getByRole("dialog", { name: "示例图" }).locator("img");
-    await expect.poll(() => image.evaluate((el) => el.naturalWidth)).toBe(160);
+    await expect
+      .poll(() => image.evaluate((el) => (el as HTMLImageElement).naturalWidth))
+      .toBe(160);
     await page.getByRole("button", { name: "关闭图片" }).click();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole("button", { name: "目录", exact: true }).click();

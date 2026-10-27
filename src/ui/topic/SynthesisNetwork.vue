@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useTopic } from "./context";
-import { patentData, type CompoundRef } from "./patent";
+import { useTopic } from "./context.ts";
+import { patentData, type CompoundRef } from "./patent.ts";
 import {
   routeSteps,
   routeStats,
   sharedIntermediates,
-} from "./patent-synthesis";
+} from "./patent-synthesis.ts";
 import PageHeading from "../PageHeading.vue";
 import SourceRef from "./SourceRef.vue";
 const props = defineProps<{ network: string; mode?: boolean }>();

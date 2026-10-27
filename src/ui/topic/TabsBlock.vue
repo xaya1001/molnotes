@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { TabsRoot, TabsList, TabsTrigger, TabsContent } from "reka-ui";
-import type { TabsBlock } from "./blocks";
+import type { TabsBlock } from "./blocks.ts";
 import ChapterBlocks from "./ChapterBlocks.vue";
 
 /** Named alternatives (worked examples, cases) shown one at a time; each is a block sequence. */

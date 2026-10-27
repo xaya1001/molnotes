@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { catalogSite, topicBase } from "../ui/catalog";
-import { notebook, topics } from "../ui/content-data";
-import { readPosition } from "../ui/reading-position";
+import { catalogSite, topicBase } from "../ui/catalog.ts";
+import { notebook, topics } from "../ui/content-data.ts";
+import { readPosition } from "../ui/reading-position.ts";
 import {
   directories,
   PageHeading,

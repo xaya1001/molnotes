@@ -13,7 +13,7 @@ export interface ChemistryToolkit {
   get_qmol(smarts: string): MoleculeHandle | null;
 }
 export async function loadChemistry(): Promise<ChemistryToolkit> {
-  return (await import("./runtime")).loadToolkit();
+  return (await import("./runtime.ts")).loadToolkit();
 }
 export function molecule(toolkit: ChemistryToolkit, smiles: string) {
   const mol = toolkit.get_mol(smiles);

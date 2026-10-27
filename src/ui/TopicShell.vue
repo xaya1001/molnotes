@@ -3,19 +3,19 @@ import { computed, onBeforeUnmount, provide, ref } from "vue";
 import { START_LOCATION, useRoute, useRouter } from "vue-router";
 import SectionSidebar from "./SectionSidebar.vue";
 import SidebarShelf from "./SidebarShelf.vue";
-import { sites, topicBase } from "./catalog";
+import { sites, topicBase } from "./catalog.ts";
 import {
   chapterProgress,
   readChapterProgress,
   readSiteRecords,
-} from "./site-records";
-import { topics, loadIndex } from "./content-data";
+} from "./site-records.ts";
+import { topics, loadIndex } from "./content-data.ts";
 import SiteBar from "./SiteBar.vue";
-import { useMediaQuery } from "./media";
-import { showToast } from "./notify";
-import { flatItems, type NavGroup, type NavItem } from "./sidebar";
-import { pageTitle, type SiteSection } from "./site-sections";
-import { topicContextKey } from "./topic-context";
+import { useMediaQuery } from "./media.ts";
+import { showToast } from "./notify.ts";
+import { flatItems, type NavGroup, type NavItem } from "./sidebar.ts";
+import { pageTitle, type SiteSection } from "./site-sections.ts";
+import { topicContextKey } from "./topic-context.ts";
 
 const props = withDefaults(
   defineProps<{

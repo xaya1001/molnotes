@@ -1,4 +1,4 @@
-import { expect, test } from "./helpers/test";
+import { expect, test } from "./helpers/test.ts";
 
 test("a timeline places dates in proportion and labels apart; narrow screens read it as a list", async ({
   page,

@@ -1,4 +1,4 @@
-import { test, expect, type Locator, type Page } from "./helpers/test";
+import { test, expect, type Locator, type Page } from "./helpers/test.ts";
 // Evidence capture is optional; all scrolling and layout/interaction assertions
 // below run in both modes. Failures are captured by Playwright independently.
 async function captureEvidence(page: Page, path: string) {
@@ -72,7 +72,6 @@ test("shared data, matrix, spectrum, tabs and structure blocks render database c
   expect(errors).toEqual([]);
 });
 test("unknown topic and missing resource are distinct errors", async ({
-  page,
   request,
 }) => {
   expect((await request.get("/sites/no-such-topic/")).status()).toBe(404);

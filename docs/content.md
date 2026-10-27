@@ -85,7 +85,7 @@ edges:
 
 ## 专题
 
-`sites/<slug>/site.json` 含 `title`、`description`、正整数 `order` 与分组 `group`，可选 `label`。`group` 取 `靶点案例`、`药化进阶`、`专利拆解`、`合成与机理`、`谱图`、`读书复习`、`入门专题`、`练习` 之一（集合与顺序由 `shared/site-catalog.mjs` 的 `siteGroups` 定义），缺失或取值不在集合内时拒绝发布。`练习` 专题使用 `/practice/<slug>/`，笔记链接到的练习专题在首页显示为该套笔记的练习；其余专题使用 `/sites/<slug>/`，侧栏书架按分组展示，没有分组的已发布专题归入“其他”。`content.json` 在专题根目录，遵守 `shared/topic-content.ts` 与 `shared/topic-blocks.mjs` 契约；`static/` 放图、原页图和坐标文件。网站使用 `/sites/<slug>/static/<path>` 提供资源。专题以共享入口在浏览器加载。
+`sites/<slug>/site.json` 含 `title`、`description`、正整数 `order` 与分组 `group`，可选 `label`。`group` 取 `靶点案例`、`药化进阶`、`专利拆解`、`合成与机理`、`谱图`、`读书复习`、`入门专题`、`练习` 之一（集合与顺序由 `shared/site-catalog.ts` 的 `siteGroups` 定义），缺失或取值不在集合内时拒绝发布。`练习` 专题使用 `/practice/<slug>/`，笔记链接到的练习专题在首页显示为该套笔记的练习；其余专题使用 `/sites/<slug>/`，侧栏书架按分组展示，没有分组的已发布专题归入“其他”。`content.json` 在专题根目录，遵守 `shared/topic-content.ts` 与 `shared/topic-blocks.ts` 契约；`static/` 放图、原页图和坐标文件。网站使用 `/sites/<slug>/static/<path>` 提供资源。专题以共享入口在浏览器加载。
 
 专题根路径 `/` 是简介、全部章节与 `sourcesIntro`（专题级来源说明）的首页。章节默认路径是 `/<id>`，可用 `chapterRoute` 或章的 `path` 指定其他路径；章节路径必须唯一，不能是 `/`。章末的资料来源只展示该章 `refs` 中的条目及其 `cite` 原文定位。发布时站内链接必须命中当前栏目与章节路由，练习链接使用 `/practice/<slug>/…`。
 

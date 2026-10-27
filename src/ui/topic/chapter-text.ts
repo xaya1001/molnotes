@@ -1,4 +1,4 @@
-import type { TopicBlock } from "./blocks";
+import type { TopicBlock } from "./blocks.ts";
 
 export type ChapterPiece =
   | { kind: "text"; text: string }

@@ -6,9 +6,13 @@ export default defineConfig({
     include: [
       "src/**/*.{ts,vue}",
       "shared/**/*.ts",
-      "vite.config.ts",
-      "playwright.config.ts",
-      "golar.config.ts",
+      "server/**/*.ts",
+      "scripts/**/*.ts",
+      "tests/**/*.ts",
+      "toolbox/**/*.ts",
+      "*.ts",
     ],
+    // The video composition needs React's JSX types, which the project does not install.
+    exclude: ["toolbox/video/**", "tests/fixtures/**"],
   },
 });

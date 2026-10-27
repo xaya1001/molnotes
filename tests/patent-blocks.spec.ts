@@ -1,5 +1,5 @@
-import { putRecords } from "./helpers/records";
-import { test, expect } from "./helpers/test";
+import { putRecords } from "./helpers/records.ts";
+import { test, expect } from "./helpers/test.ts";
 import { readFile } from "node:fs/promises";
 const base = "/sites/fable-patent";
 const endpoint = "/api/records/topics/fable-patent";
