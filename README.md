@@ -8,17 +8,15 @@
 
 所有设置来自环境变量；带 `_FILE` 后缀的同名变量指向保存该值的文件。缺少必需设置时命令报错。
 
-| 变量                                                                                                         | 用途                                                                      |
-| ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| `MOLNOTES_DATABASE_URL`                                                                                      | 网站与内容命令使用的 PostgreSQL 连接                                      |
-| `MOLNOTES_CONTENT_SNAPSHOT`                                                                                  | 网站读取的内容快照目录，通常是指向当前快照的软链，默认 `/content/current` |
-| `MOLNOTES_TEST_DATABASE_URL`                                                                                 | 测试用连接，测试为每次运行创建并删除独立数据库                            |
-| `MOLNOTES_ASSET_STORE`                                                                                       | `r2`（默认）或 `dir:<绝对路径>`                                           |
-| `MOLNOTES_R2_ACCOUNT_ID`、`MOLNOTES_R2_ACCESS_KEY_ID`、`MOLNOTES_R2_SECRET_ACCESS_KEY`、`MOLNOTES_R2_BUCKET` | R2 资源存储                                                               |
-| `MOLNOTES_ASSET_CACHE`                                                                                       | 内容命令导出时缓存已校验资源的目录                                        |
-| `MOLNOTES_CONTENT_DIR`                                                                                       | 内容工作目录，见 [内容手册](docs/content.md)                              |
-| `MOLNOTES_MATERIALS_DIR`、`MOLNOTES_MATERIALS_CACHE`                                                         | 原始资料书架与渲染缓存，默认仓库的 `materials/`（不进入 Git）             |
-| `MOLNOTES_SYSTEM_SOCKET`                                                                                     | 可选：`/system/api/` 转发到的更新服务 Unix socket，未设置时该接口返回 503 |
+| 变量                                                 | 用途                                                                      |
+| ---------------------------------------------------- | ------------------------------------------------------------------------- |
+| `MOLNOTES_DATABASE_URL`                              | 网站使用的 PostgreSQL 连接（学习记录）                                    |
+| `MOLNOTES_CONTENT_SNAPSHOT`                          | 网站读取的内容快照目录，通常是指向当前快照的软链，默认 `/content/current` |
+| `MOLNOTES_TEST_DATABASE_URL`                         | 测试用连接，测试为每次运行创建并删除独立数据库                            |
+| `MOLNOTES_CONTENT_DIR`                               | 内容工作目录，见 [内容手册](docs/content.md)                              |
+| `MOLNOTES_CONTENT_RELEASES`                          | `content publish` 写入快照并维护 `current` 软链的发布根                   |
+| `MOLNOTES_MATERIALS_DIR`、`MOLNOTES_MATERIALS_CACHE` | 原始资料书架与渲染缓存，默认仓库的 `materials/`（不进入 Git）             |
+| `MOLNOTES_SYSTEM_SOCKET`                             | 可选：`/system/api/` 转发到的更新服务 Unix socket，未设置时该接口返回 503 |
 
 ## 开发
 
@@ -46,12 +44,12 @@ MOLNOTES_DATABASE_TESTS=1 node --test tests/content-db.test.mjs
 
 ```bash
 npm run site:new -- receptor-basics "受体基础" "通过互动图示认识受体" 靶点案例
-npm run content -- push sites/receptor-basics
-npm run content -- pull --all
-npm run content -- list
+npm run content -- build <输出目录>
+npm run content -- publish
+npm run content -- publish --rollback <提交号>
 ```
 
-`push` 校验后立即发布，刷新页面即可见；`pull` 导出可编辑的源文件与资源。内容契约见 [内容手册](docs/content.md)，块目录与制作工具见 [工具箱](toolbox/GUIDE.md)。
+`build` 把内容目录校验、编译成快照；`publish` 从已提交的 HEAD 构建快照并切换 `current`，网站在下一个请求读到新快照。内容契约见 [内容手册](docs/content.md)，块目录与制作工具见 [工具箱](toolbox/GUIDE.md)。
 
 ## 镜像与更新服务
 

@@ -4,7 +4,7 @@
 
 ## 新专题
 
-`npm run site:new -- <slug> "<title>" "<description>" <group>` 在 `MOLNOTES_CONTENT_DIR` 生成专题。`site.json` 提供标题、简介、排序、分组 `group`（取值见 [内容手册](../docs/content.md)）与可选的 `label`；根层 `content.json` 提供章节（含各章用到的全站术语名 `terms`）、预测、练习、来源与块序列；`static/` 存放资源。用 `npm run content -- push sites/<slug>` 发布，用 `pull sites/<slug>` 拉取；契约见 [内容手册](../docs/content.md)。
+`npm run site:new -- <slug> "<title>" "<description>" <group>` 在 `MOLNOTES_CONTENT_DIR` 生成专题。`site.json` 提供标题、简介、排序、分组 `group`（取值见 [内容手册](../docs/content.md)）与可选的 `label`；根层 `content.json` 提供章节（含各章用到的全站术语名 `terms`）、预测、练习、来源与块序列；`static/` 存放资源。提交后用 `npm run content -- publish` 发布；契约见 [内容手册](../docs/content.md)。
 
 专题只提供数据，所有交互由共享层渲染。一章是一个块序列，作者决定讲什么、先预测什么、拿哪些证据、按什么顺序；每种块对应共享层的一个组件和一份由 `scripts/topic-content.mjs` 在发布与挂载时校验的字段契约。正文、图表与实验从打开章节起可见。每道预测只在作答后显示自己的答案与解释；一章可以有多个 `prediction` 块，第一个的记录 id 默认是章节 id，其余自带 `id`。章末的判断练习、原文区、阅读指引、本章来源与记录由章节体自动接在块序列后，块里已显示的题与摘录不重复。大数据（机理帧、路线步骤、表行、曲线点）放在顶层 `data` 里按键命名，块以字符串引用。需要宽屏的章节设置 `layout: "wide"`。
 
@@ -237,7 +237,7 @@ import { records } from "../records";
 - props：`set`（`defineStructureSet` 的返回值）、可选 `ids`（要提供的条目及其顺序，默认全部；多于一个时出页签）。插槽 `readout({ entry, atoms })` 在预设按钮下方，放专题自有读数，例如配体各部分的 B 因子（用 `@ui` 的 `meanB`）。组件没有事件，也不读写浏览器存储。
 - `structure-lab` 是独立的章节内容，预设与距离读数从打开章节起可见。预测题的题面只提供作答所需信息，答案与解释放在题目结果区。
 - 纯逻辑 `pdb.ts`（`parsePdb`、`findAtom`、`distance`、`nearestAtom`、`residueAtoms`、`meanB`）与 `model.ts`（`presetDistances`、`verifyStructure`）不依赖 `@ui`，`node --test` 可直接导入。内容制作时对每个条目运行 `verifyStructure(entry, parsePdb(坐标文本))`：保留的链与范围同声明一致、`hetero` 与配体存在、无氢无水、每个图层与标签选得到原子、每个预设的两个原子各恰好命中一个、`expect` 与坐标算出的距离相差不超过 0.005 Å。
-- 取子集的脚本留在专题：把 `toolbox/structure/extract-subset.mjs` 复制到内容工作目录的 `sites/<slug>/tools/` 改写，脚本头记录来源 PDB 号、链、残基、取数日期和完整文件的 SHA-256，输出文件头写 REMARK。坐标文件放在内容目录的 `static/`，发布命令上传到私有对象存储。
+- 取子集的脚本留在专题：把 `toolbox/structure/extract-subset.mjs` 复制到内容工作目录的 `sites/<slug>/tools/` 改写，脚本头记录来源 PDB 号、链、残基、取数日期和完整文件的 SHA-256，输出文件头写 REMARK。坐标文件放在内容目录的 `static/`，随内容快照发布。
 - 只在单个条目内量距。几个结构之间的位移（例如各结构里同一段螺旋的参照原子）要先叠合：专题脚本叠合并把变换后的坐标写进各自的子集（文件头 REMARK 注明），位移用 `pdb.ts` 的函数在专题模型里算，数值在发布前核对。
 
 专题通过 `structure-lab` 块引用 `content.json` 的结构集合，每个条目在 `url` 中指定已发布资源的路径：

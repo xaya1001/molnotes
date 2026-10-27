@@ -9,7 +9,7 @@
   python3 -I scripts/material.py find <file.pdf|file.epub> <query>   # pages / chapters that mention it
   python3 -I scripts/material.py page <file.pdf> <page> [dpi]        # render one page to PNG, prints the path
   python3 -I scripts/material.py check <issue.md|->                  # every materials/ path in the text exists on the shelf
-  python3 -I scripts/material.py cite < request.json                 # content push: render cited pages, extract archived pages and epub chapters
+  python3 -I scripts/material.py cite < request.json                 # content build: render cited pages, extract archived pages and epub chapters
 
 PDF page numbers are the viewer's page index, not the printed folio; cite both.
 epub text is extracted chapter by chapter from the XHTML documents in the OPF spine

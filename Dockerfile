@@ -27,7 +27,7 @@ COPY --from=production-dependencies /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY server/web.mjs server/assets.mjs server/content-query.mjs server/content-cache.mjs server/stage-timing.mjs server/http-response.mjs server/database.mjs server/records.mjs server/main-module.mjs ./server/
 COPY server/schema ./server/schema
-COPY scripts/settings.mjs scripts/r2.mjs scripts/notes-reading.mjs scripts/topic-index.mjs scripts/topic-content.mjs scripts/topic-blocks.mjs scripts/patent-contract.mjs scripts/patent-research.mjs scripts/source-citations.mjs scripts/glossary.mjs scripts/site-catalog.mjs ./scripts/
+COPY scripts/settings.mjs scripts/notes-reading.mjs scripts/topic-index.mjs scripts/topic-content.mjs scripts/topic-blocks.mjs scripts/patent-contract.mjs scripts/patent-research.mjs scripts/source-citations.mjs scripts/glossary.mjs scripts/site-catalog.mjs ./scripts/
 COPY src/ui ./src/ui
 COPY src/contracts ./src/contracts
 USER learning

@@ -22,7 +22,6 @@
     "molecule:layout": "node scripts/layout.mjs"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "3.1156.0",
     "@fontsource/noto-serif-sc": "5.3.1",
     "@rdkit/rdkit": "2026.9.1",
     "3dmol": "2.5.5",

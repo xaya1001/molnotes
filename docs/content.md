@@ -1,6 +1,6 @@
 # 内容工作目录
 
-内容单元保存在 `MOLNOTES_CONTENT_DIR` 指定的内容目录中，内容目录位于一个 Git 仓库（或它的 worktree）里，网站从数据库读取已发布内容。仓库维护共享运行时、契约与中性测试样本。
+内容单元保存在 `MOLNOTES_CONTENT_DIR` 指定的内容目录中，内容目录位于一个 Git 仓库（或它的 worktree）里，网站读取由它构建的内容快照。仓库维护共享运行时、契约与中性测试样本。
 
 `notes/<dir>/` 是一个平面目录，`dir` 与篇目 slug 只用小写字母、数字和单个连字符（`[a-z0-9]+(?:-[a-z0-9]+)*`）。同一目录内 slug 唯一，不同目录可以使用同名篇目。
 
@@ -8,7 +8,7 @@
 
 每篇 `<slug>.md` 以 YAML front matter 开始，必填 `title`、`summary`（非空字符串）、`date`（YYYY-MM-DD）、`order`（整数），可选 `updated`（YYYY-MM-DD）。日期必须真实存在，未知字段与重复 YAML key 报错。篇目按 order、slug 排序，order 同时是侧栏里的篇号（0 不编号，用于导读）；页面标题来自 title，正文从 `##` 开始，禁止 `#`。`##`、`###` 生成小节目录，`## 资料来源` 默认收起。
 
-`notes/<dir>/author/` 存放这套笔记的作者资料：写作约定、写作规划、素材与检索记录、待核实清单和修订记录。Agent 写作或修订某套笔记前先读该目录的作者资料，`pull notes/<dir>` 会一并导出，`push` 的输出列出本次发布目录的作者资料。`author/` 里只放 `<slug>.md`，契约与篇目相同（front matter、术语、引用、结构式与图片同样校验，图片放目录的 `assets/`），`order` 只在作者资料内部排序，slug 可以与篇目同名。作者资料随目录存入数据库，仅供内容命令导出与修订使用；网站读取接口、阅读页面、侧栏、阅读记录、首页和搜索只提供读者篇目。作者资料里的站内链接 `<slug>` 指 `author/` 中的另一篇，`../<slug>` 指本目录的篇目。
+`notes/<dir>/author/` 存放这套笔记的作者资料：写作约定、写作规划、素材与检索记录、待核实清单和修订记录。Agent 写作或修订某套笔记前先读该目录的作者资料。`author/` 里只放 `<slug>.md`，契约与篇目相同（front matter、术语、引用、结构式与图片同样校验，图片放目录的 `assets/`），`order` 只在作者资料内部排序，slug 可以与篇目同名。作者资料随目录进入快照；网站读取接口、阅读页面、侧栏、阅读记录、首页和搜索只提供读者篇目。作者资料里的站内链接 `<slug>` 指 `author/` 中的另一篇，`../<slug>` 指本目录的篇目。
 
 正文支持 CommonMark 与 GFM 表格；原始 HTML 作为文字显示。强调按 CJK 友好规则识别，`**结论。**后文` 这类标点在标记内侧的写法同样加粗。基组等文字里的星号写成 `\*`（`6-31G\*`），否则会与附近的星号配成斜体。行内公式用 `$...$`，块公式用独立行的 `$$` 包围；行内公式里的 `\_` 按下标 `_` 处理。数值、单位和基团写成普通文字（如 −13.6 kJ/mol、–CH₂–），公式只用于真正的式子。站内链接可以写 `<slug>`、`../<dir>/<slug>`、`/notes/<dir>/<slug>` 或真实的专题章节路径。链接可带查询参数与小节锚点。未知笔记与专题章节在发布时报错。
 
@@ -65,7 +65,7 @@ edges:
 
 `npm run content:preview -- notes/<dir>[/<slug>] | sites/<slug>` 不发布，用当前 checkout 的组件把内容工作目录里这些单元的时间线、流程图和结构式在 1366 px 与 390 px 下各截一张图，输出截图路径（默认在 `~/.cache/molnotes/preview/`，可用 `MOLNOTES_PREVIEW_DIR` 指定）、写法错误（文件与行号）和版面警告：标签或框重叠、引线穿过标签、标签离它的点过远、竖线穿过标签、图例与图重叠、连线穿过框或文字、连线文字与框重叠、框过窄（含文字每行平均不到约 5 个字或超过 6 行）、文字溢出、字号过小、图比版面宽、结构式渲染失败。写好或改过一张图后先预览，警告清零再发布。选写法、各种形状的模板与每条警告的改法见 [时间线与流程图](../toolbox/recipes/figures.md)。
 
-图片写 `![说明](assets/<file>)`，说明显示在图下方作为图注（可带图号，如"图 1　……"），为空时不显示图注；文件名使用字母、数字、下划线、点和连字符。源文件放 `notes/<dir>/assets/`，网站以 `/notes/<dir>/assets/<file>` 提供；缺图拒绝发布。生成的图在 `notes/<dir>/prompts/<file>.md` 保存生成它的 prompt，`<file>` 与 `assets/` 中的图片文件名相同；prompt 随资源记录入库并由 `pull` 导出，网站不提供，没有对应图片或内容为空时拒绝发布。所有资源按 SHA-256 存在私有对象存储，数据库记录路径、哈希、大小与内容类型。
+图片写 `![说明](assets/<file>)`，说明显示在图下方作为图注（可带图号，如"图 1　……"），为空时不显示图注；文件名使用字母、数字、下划线、点和连字符。源文件放 `notes/<dir>/assets/`，网站以 `/notes/<dir>/assets/<file>` 提供；缺图拒绝发布。生成的图在 `notes/<dir>/prompts/<file>.md` 保存生成它的 prompt，`<file>` 与 `assets/` 中的图片文件名相同；prompt 随资源记录进入快照，网站不提供，没有对应图片或内容为空时拒绝发布。资源原样复制进快照，快照记录路径、SHA-256、大小与内容类型。
 
 ## 来源与引用
 
@@ -75,13 +75,13 @@ edges:
 
 笔记里引用写成链接 `[PDF 第 429–435 页](src:textbook#429-435)`，正文和"资料来源"都可以用，目录简介也可以；链接文字就是读者看到的按钮文字。专题里 `sources[]` 用 `cite`（引用数组）指向书架来源，摘录与阅读指引条目（顶层或章节内的 `excerpts`、`reading`）可各写一个 `cite`，读者点开 `locator` 看原文。专题来源不再写 `file`。
 
-`push` 发布时校验：登记表存在且合法、引用的来源已登记、文件在书架上、有清单时哈希一致、PDF 引用带页码且不越界、矩形在首页内、存档网页所在集合的 `manifest.json` 声明了正文元素（`article: { tag, class }`）并能抽出正文、正文图片在清单里有存档副本、EPUB 引用带章节且该条目存在、小节在章节之下且能定位、章节能抽出正文且不超过 50 万字符、章节图片是书内的 PNG、JPEG、GIF 或 WebP。任何一项失败整次发布不生效，错误给出文件与位置。被引页及前后各 1 页渲染为 WebP，存档网页与 EPUB 章节的正文与图一起作为 `cited/` 资源上传；这些资源由书架重新生成，`pull` 不导出。覆盖来源登记表前校验本次发布后全站全部单元的引用（含作者资料与目录介绍），仍在使用的来源缺失或类型不匹配时拒绝发布。`pull --all` 同时导出 `sources.json`。书架位置默认是仓库的 `materials/`，可用 `MOLNOTES_MATERIALS_DIR` 指定，渲染缓存可用 `MOLNOTES_MATERIALS_CACHE` 指定。
+每次构建都校验：登记表存在且合法、引用的来源已登记、文件在书架上、有清单时哈希一致、PDF 引用带页码且不越界、矩形在首页内、存档网页所在集合的 `manifest.json` 声明了正文元素（`article: { tag, class }`）并能抽出正文、正文图片在清单里有存档副本、EPUB 引用带章节且该条目存在、小节在章节之下且能定位、章节能抽出正文且不超过 50 万字符、章节图片是书内的 PNG、JPEG、GIF 或 WebP。任何一项失败整次发布不生效，错误给出文件与位置。被引页及前后各 1 页渲染为 WebP，存档网页与 EPUB 章节的正文与图一起作为 `cited/` 资源写入快照，每次构建都由书架重新生成（渲染按内容缓存）。全站全部单元的引用（含作者资料与目录介绍）都按当前登记表解析，来源缺失或类型不匹配时拒绝发布。书架位置默认是仓库的 `materials/`，可用 `MOLNOTES_MATERIALS_DIR` 指定，渲染缓存可用 `MOLNOTES_MATERIALS_CACHE` 指定。
 
 ## 术语表
 
 内容工作目录根部的 `glossary.json` 是全站唯一的术语表，是一个数组，每条为 `{ term, full, definition, confusion }`：`term` 是术语名（全站唯一，首尾无空白，不含 `]` 与换行），`full` 是英文原词或全称，`definition` 是释义，`confusion` 是易混点，四项都是非空字符串，未知字段报错。笔记用 `[[术语]]` 引用，专题章节用 `terms`（术语名数组，章内不重复）列出本章用到的术语；章节正文里这些术语首次出现时成为术语按钮。
 
-每次 `push` 都读取并校验 `glossary.json`，连同数据库中其他内容一起检查：引用的术语都在表里、字段完整、名称不重复。任何一项失败整次发布不生效；通过后术语表随这次发布存入数据库。只改术语表时，push 任一单元即可发布。`pull --all` 同时导出 `glossary.json`。专题的 `content.json` 不写 `glossary`，写了拒绝发布。全站术语页 `/glossary/` 列出全部术语，每条附用到它的笔记与专题章节。
+每次构建都读取并校验 `glossary.json`，与全部内容一起检查：引用的术语都在表里、字段完整、名称不重复。任何一项失败整次发布不生效；通过后术语表随快照发布。专题的 `content.json` 不写 `glossary`，写了拒绝发布。全站术语页 `/glossary/` 列出全部术语，每条附用到它的笔记与专题章节。
 
 ## 专题
 
@@ -117,27 +117,23 @@ edges:
 
 ## 内容命令
 
-`MOLNOTES_CONTENT_DIR` 指定内容仓库，未设置时内容命令报错。`npm run content -- push notes/<dir>` 或 `push sites/<slug>` 可接受多个单元（例如 `push sites/a sites/b notes/x`），在同一个事务中校验整组与数据库中其他内容的站内链接、术语、SMILES 和资源完整性，然后上传缺失资源并在一个事务内替换单元。校验错误给出文件与位置，数据库保持不变。发布时会重新编译受术语变化影响的笔记；索引在 API 的一致性快照内计算。
+`MOLNOTES_CONTENT_DIR` 指定内容目录，未设置时内容命令报错。内容命令每次读取内容目录里的全部单元，校验整站的站内链接、术语、SMILES、引用与资源完整性并编译笔记；校验错误给出文件与位置。删除单元就是在内容仓库删除并提交它，仍有内容引用它时发布拒绝并指出引用文件与位置。
 
-`npm run content -- build <输出目录>` 读取内容目录里的全部单元、`sources.json` 与 `glossary.json`，做与 `push` 相同的校验、引用解析和编译，把结果写成快照：`snapshot.json`（`format: 1`、`commit`、`builtAt`，以及 `topics`、`directories`、`notes`、`glossary`、`registry`、`assets`，各项与数据库对应表保存的行相同）和 `files/<单元>/<路径>`（内容资源原样复制，被引页渲染在 `<单元>/cited/`）。输出目录不能已存在；任何校验失败都不写出。`build` 不检查提交，`commit` 为 `null`。
+`npm run content -- build <输出目录>` 读取内容目录里的全部单元、`sources.json` 与 `glossary.json`，校验、解析引用并编译，把结果写成快照：`snapshot.json`（`format: 1`、`commit`、`builtAt`，以及 `topics`、`directories`、`notes`、`glossary`、`registry`、`assets`）和 `files/<单元>/<路径>`（内容资源原样复制，被引页渲染在 `<单元>/cited/`）。输出目录不能已存在；任何校验失败都不写出。`build` 不检查提交，`commit` 为 `null`。
 
 `npm run content -- publish` 要求内容目录在 HEAD 下没有未提交、未跟踪或被忽略的文件（构建前后各查一次），把 HEAD 的内容构建到 `MOLNOTES_CONTENT_RELEASES` 指定的发布根下的 `<提交号>/`，完成后以一次 rename 把 `current` 换成指向它的相对软链，再删除旧快照，连同 `current` 指向的共保留最近 5 个。同一提交再次发布时重新构建并替换该快照。`publish --rollback <提交号>`（可用唯一前缀）把 `current` 指回一个保留着的快照，不构建。
 
-`pull <单元>` 与 `pull --all` 导出源文件、JSON 与资源，同路径文件覆盖，用于建立新的内容仓库或核对线上状态，导出后与已提交内容的差异由 `git diff` 显示；本地已有且 SHA-256 相同的资源不再下载，其余资源经按哈希存放的本地缓存（默认 `~/.cache/molnotes/assets`，可用 `MOLNOTES_ASSET_CACHE` 指定）并行获取；`pull --all` 另外导出 `sources.json` 与 `glossary.json`。`remove <单元>` 在其他内容引用该单元时拒绝，并指出引用文件与位置。`list` 列出已发布单元。上传失败不会提交数据库；资源对象按哈希保留，不自动物理删除。
-
-内容目录可以是 Git 仓库的根目录，也可以是仓库里的一个子目录，正文、JSON 与资源文件都提交；`MOLNOTES_CONTENT_DIR` 不在 Git 工作树里时内容命令报错退出。提交号属于整个仓库，内容目录以外的改动不影响发布，未提交文件按仓库根目录的相对路径列出。`push` 只发布已提交的内容：要发布的单元以及根部的 `sources.json`、`glossary.json` 有未提交的改动、未跟踪或被忽略的文件时拒绝，并列出这些文件。库里为每个单元记下发布时的提交、时间与推送者；推送者由命令自动取 `<用户>@<主机>`，设置了 `MOLNOTES_PUSHER` 时附在其后（用于区分同一用户的不同会话）。`push` 在发布事务内持锁检查：库里记下的提交不是当前 HEAD 的祖先（或本仓库没有这个提交）时整次拒绝、数据库不变，列出这些单元和它们的提交、时间、推送者，合并后再推；库里还没有提交记录的单元，库里内容（`pull` 会导出的全部文件，JSON 按值、资源按哈希比较）与当前提交一致时直接发布并记下提交，不一致时拒绝，先 `pull` 该单元、用 `git diff` 核对并提交后再推。库里没有的单元按新建发布。`remove` 要求该单元已在当前提交中删除，同样做祖先检查，删除后库里记下这次删除的提交，没有合并这次删除的分支不能把单元推回来。`list` 每行列出单元、发布时的短提交、时间与推送者（没有记录的显示 `-`）。
-
-数据库连接取 `MOLNOTES_DATABASE_URL`，或 `MOLNOTES_DATABASE_URL_FILE` 指向的文件；两者都没有时报错。资源存储见 README 的配置表；本地测试可设置 `MOLNOTES_ASSET_STORE=dir:<绝对路径>`。
+内容目录可以是 Git 仓库的根目录，也可以是仓库里的一个子目录，正文、JSON 与资源文件都提交；`publish` 在内容目录不在 Git 工作树里时报错退出。提交号属于整个仓库，内容目录以外的改动不影响发布，未提交文件按仓库根目录的相对路径列出。发布根下除 `<提交号>/` 与 `current` 外只有发布过程中的临时目录；网站的 `MOLNOTES_CONTENT_SNAPSHOT` 指向 `current`。
 
 ## 协作流程
 
-每个改内容的任务在内容仓库的独立 worktree 与分支上修改并提交，只检出要改的单元（`git sparse-checkout set --cone <内容目录>/notes/<dir> <内容目录>/sites/<slug>`，内容目录与仓库根部的文件总会检出）；审阅后合并到 `main`，从 `main` 发布。按字审阅正文与作者资料：
+每个改内容的任务在内容仓库的独立 worktree 与分支上修改并提交，只检出要改的单元（`git sparse-checkout set --cone <内容目录>/notes/<dir> <内容目录>/sites/<slug>`，内容目录与仓库根部的文件总会检出）；审阅后合并到 `main`，在 `main` 的完整 checkout 上 `publish`（发布构建全部单元，稀疏检出的 worktree 缺少单元，不能发布）。按字审阅正文与作者资料：
 
 ```bash
 git diff --word-diff=plain --word-diff-regex='[A-Za-z0-9_]+|[^[:space:]]' main...<分支> -- '*.md'
 ```
 
-回滚是 `git revert <提交>` 后 `push` 涉及的单元。发布校验在一个事务里完成，失败不写入，所以不需要先向别的数据库试推。开发数据库只用于在浏览器里操作专题交互：交互会写入学习记录，不能在生产库上试。开发库不与生产同步，与内容仓库对不上而推不进去时，删除并重建这个数据库，再从内容仓库 `main` 分批推入全部单元。
+回滚是 `publish --rollback <提交号>` 把 `current` 指回上一个快照，或 `git revert <提交>` 后重新 `publish`。构建失败不写出快照，所以不需要先试发布。开发数据库只保存学习记录，用于在浏览器里操作专题交互：交互会写入学习记录，不能在生产库上试。
 
 ## 学习记录
 
@@ -155,7 +151,7 @@ git diff --word-diff=plain --word-diff-regex='[A-Za-z0-9_]+|[^[:space:]]' main..
 
 ## Agent 专利研究记录
 
-Agent 在私有内容工作目录补充数据，通过同一 `push` 事务发布；浏览器承担检索、阅读与比较。中性可运行样例是 `tests/fixtures/content/sites/fable-patent/content.json`，运行契约为 `scripts/patent-contract.mjs`、`scripts/patent-research.mjs` 和 `src/ui/topic/patent.ts`。原始专利、OCR、核对截图和真实数据不得进入源码仓库。已有分档、编号与学习记录可继续使用。
+Agent 在私有内容工作目录补充数据，随内容仓库提交后 `publish`；浏览器承担检索、阅读与比较。中性可运行样例是 `tests/fixtures/content/sites/fable-patent/content.json`，运行契约为 `scripts/patent-contract.mjs`、`scripts/patent-research.mjs` 和 `src/ui/topic/patent.ts`。原始专利、OCR、核对截图和真实数据不得进入源码仓库。已有分档、编号与学习记录可继续使用。
 
 collection 的内部 `id` 唯一且保持稳定。跨来源编号相同时使用如 `alpha-46`、`beta-46` 的内部 ID，并以普通 `text` 字段保留原编号；不得为新增来源改写全部旧 ID。化合物引用写 `{collection,id}`，引用的是该来源的实际化学身份；制备中的局部产物另建记录，不能用最终实施例代替中间产物。未核对的结构省略 SMILES，并在 notes 说明。路线链接优先显示记录的 `shortName` 文本字段，可用短中文名称标识局部产物；原文全名仍作为独立字段保留。
 

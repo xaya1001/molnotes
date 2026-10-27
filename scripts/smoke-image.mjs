@@ -1,12 +1,10 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, rm, chmod } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdtemp, rm, chmod, symlink } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { testDatabase } from "../tests/helpers/database.mjs";
-import {
-  buildSnapshot,
-  publishSnapshot,
-} from "../tests/helpers/content-snapshot.mjs";
+import { buildSnapshot } from "../server/content-publish.mjs";
+import { writeSnapshot } from "../server/content-snapshot.mjs";
 import { smokeBrowser } from "./smoke-browser.mjs";
 const image = process.argv[2];
 if (!/^ghcr\.io\/.+@sha256:[a-f0-9]{64}$/.test(image ?? ""))
@@ -33,13 +31,17 @@ async function docker(args, env = {}) {
 }
 try {
   await chmod(directory, 0o755);
-  await publishSnapshot(join(directory, "content"), (snapshot) =>
-    buildSnapshot(
-      "tests/fixtures/content",
-      ["sites/sample", "sites/instruments", "notes/reader-test"],
-      snapshot,
-    ),
+  // The candidate reads a snapshot built from the fixtures as `content publish` lays it out.
+  await writeSnapshot(
+    join(directory, "content/fixtures"),
+    await buildSnapshot("tests/fixtures/content", {
+      shelf: {
+        materials: resolve("tests/fixtures/shelf"),
+        cache: join(directory, "shelf-cache"),
+      },
+    }),
   );
+  await symlink("fixtures", join(directory, "content/current"));
   // The candidate reaches the test database published on the Docker host.
   const url = new URL(db.url);
   url.hostname = "host.docker.internal";
