@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createWebServer } from "../server/web.mjs";
 import { sha256 } from "../server/assets.mjs";
+import { openRecords } from "../server/records.mjs";
 
 /** Writes a snapshot directory `name` under `root` from table rows and files. */
 async function snapshot(root, name, data = {}, files = {}) {
@@ -188,7 +189,7 @@ test("a new snapshot target is served from the next request; a broken one keeps 
   const error = console.error;
   console.error = (message) => errors.push(message);
   const server = createWebServer({
-    pool: { query: async () => ({ rows: [] }) },
+    records: openRecords(":memory:"),
     snapshot: join(root, "current"),
   });
   const base = await listen(server);

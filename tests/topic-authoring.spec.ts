@@ -4,8 +4,10 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { once } from "node:events";
 import { execFileSync } from "node:child_process";
-import { testDatabase } from "./helpers/database.mjs";
-import { buildSnapshot, publishSnapshot } from "./helpers/content-snapshot.mjs";
+import { publishSnapshot } from "./helpers/content-snapshot.mjs";
+import { buildSnapshot } from "../server/content-publish.mjs";
+import { writeSnapshot } from "../server/content-snapshot.mjs";
+import { openRecords } from "../server/records.mjs";
 import { createWebServer } from "../server/web.mjs";
 
 test("generated chapters compose the shared shell and the block catalogue", async ({
@@ -14,10 +16,10 @@ test("generated chapters compose the shared shell and the block catalogue", asyn
   test.setTimeout(120_000);
   const root = resolve(import.meta.dirname, "..");
   const fixture = await mkdtemp(join(tmpdir(), "il-authoring-"));
-  const db = await testDatabase();
+  const records = openRecords(join(fixture, "records.sqlite"));
   const releases = join(fixture, "releases");
   const server = createWebServer({
-    pool: db.pool,
+    records,
     snapshot: join(releases, "current"),
   });
   try {
@@ -65,8 +67,8 @@ test("generated chapters compose the shared shell and the block catalogue", asyn
       '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="80"><rect width="160" height="80" fill="teal"/></svg>',
     );
     await writeFile(join(fixture, "glossary.json"), "[]");
-    await publishSnapshot(releases, (snapshot) =>
-      buildSnapshot(fixture, ["sites/authoring"], snapshot),
+    await publishSnapshot(releases, async (snapshot) =>
+      writeSnapshot(snapshot, await buildSnapshot(fixture)),
     );
     server.listen(0, "127.0.0.1");
     await once(server, "listening");
@@ -115,7 +117,7 @@ test("generated chapters compose the shared shell and the block catalogue", asyn
       server.close((error) => (error ? reject(error) : resolve()));
       server.closeAllConnections();
     });
-    await db.close();
+    records.close();
     await rm(fixture, { recursive: true, force: true });
   }
 });

@@ -133,7 +133,7 @@ edges:
 git diff --word-diff=plain --word-diff-regex='[A-Za-z0-9_]+|[^[:space:]]' main...<分支> -- '*.md'
 ```
 
-回滚是 `publish --rollback <提交号>` 把 `current` 指回上一个快照，或 `git revert <提交>` 后重新 `publish`。构建失败不写出快照，所以不需要先试发布。开发数据库只保存学习记录，用于在浏览器里操作专题交互：交互会写入学习记录，不能在生产库上试。
+回滚是 `publish --rollback <提交号>` 把 `current` 指回上一个快照，或 `git revert <提交>` 后重新 `publish`。构建失败不写出快照，所以不需要先试发布。在浏览器里操作专题交互会写入学习记录，本地试用时让 `MOLNOTES_RECORDS_FILE` 指向临时文件，不能用线上的记录文件。
 
 ## 学习记录
 

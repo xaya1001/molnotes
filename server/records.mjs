@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
 import { problemField, topicProblems } from "../src/ui/topic/problem.ts";
 import { patentRecordFields } from "../src/ui/topic/patent-records.ts";
 import { createRecordCodec, RECORD_VERSION } from "../src/contracts/records.ts";
@@ -48,44 +50,66 @@ export async function recordContext(content, slug) {
     : null;
 }
 
-export async function readRecord(pool, { scope, codec }) {
-  const saved = (
-    await pool.query(
-      "SELECT document, md5(document::text) AS revision FROM learning_records WHERE scope=$1",
-      [scope],
+/**
+ * Opens the record store at `file`, creating its table when the file is new.
+ * The parent directory must exist. A revision is the MD5 of the stored text.
+ */
+export function openRecords(file) {
+  const records = new DatabaseSync(file);
+  records.exec("PRAGMA journal_mode=WAL");
+  records.function("md5", { deterministic: true }, (text) =>
+    createHash("md5").update(text).digest("hex"),
+  );
+  records.exec(
+    "CREATE TABLE IF NOT EXISTS learning_records (scope TEXT PRIMARY KEY, document TEXT NOT NULL) STRICT",
+  );
+  return records;
+}
+
+export function readRecord(records, { scope, codec }) {
+  const saved = records
+    .prepare(
+      "SELECT document, md5(document) AS revision FROM learning_records WHERE scope=?",
     )
-  ).rows[0];
+    .get(scope);
   return {
-    document:
-      saved?.document ??
-      (codec ? { version: RECORD_VERSION, ...codec.empty() } : {}),
+    document: saved
+      ? JSON.parse(saved.document)
+      : codec
+        ? { version: RECORD_VERSION, ...codec.empty() }
+        : {},
     revision: saved?.revision ?? "absent",
   };
 }
 
 /** Atomic compare-and-set; null means another writer changed the baseline. */
-export async function writeRecord(pool, scope, document, revision) {
-  const result =
+export function writeRecord(records, scope, document, revision) {
+  const text = JSON.stringify(document);
+  const saved =
     revision === "absent"
-      ? await pool.query(
-          "INSERT INTO learning_records(scope,document) VALUES ($1,$2) ON CONFLICT(scope) DO NOTHING RETURNING md5(document::text) AS revision",
-          [scope, document],
-        )
-      : await pool.query(
-          "UPDATE learning_records SET document=$2 WHERE scope=$1 AND md5(document::text)=$3 RETURNING md5(document::text) AS revision",
-          [scope, document, revision],
-        );
-  return result.rows[0]?.revision ?? null;
+      ? records
+          .prepare(
+            "INSERT INTO learning_records(scope,document) VALUES (?,?) ON CONFLICT(scope) DO NOTHING RETURNING md5(document) AS revision",
+          )
+          .get(scope, text)
+      : records
+          .prepare(
+            "UPDATE learning_records SET document=? WHERE scope=? AND md5(document)=? RETURNING md5(document) AS revision",
+          )
+          .get(text, scope, revision);
+  return saved?.revision ?? null;
 }
 
-/** Rejects when the record store cannot answer. */
-export async function recordsReady(pool) {
-  await pool.query("SELECT 1");
+/** Throws when the record store cannot answer. */
+export function recordsReady(records) {
+  records.prepare("SELECT 1").get();
 }
 
-export async function allRecords(pool) {
-  const rows = (await pool.query("SELECT scope,document FROM learning_records"))
-    .rows;
+export function allRecords(records) {
+  const rows = records
+    .prepare("SELECT scope,document FROM learning_records")
+    .all()
+    .map((r) => ({ scope: r.scope, document: JSON.parse(r.document) }));
   return {
     topics: Object.fromEntries(
       rows
