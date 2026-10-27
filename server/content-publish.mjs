@@ -1,3 +1,5 @@
+import { readdir } from "node:fs/promises";
+import { join } from "node:path";
 import { measureStage } from "./stage-timing.mjs";
 import { moleculeToolkit } from "../scripts/molecule-toolkit.mjs";
 import { patentRoutePaths } from "../scripts/patent-contract.mjs";
@@ -312,20 +314,10 @@ export async function listUnits(pool) {
 }
 
 /**
- * `source` is the commit being published (`committedSource`); the content
- * command always passes it, and only fixtures seeding a test database
- * publish without it. `shelf` may name the materials and render cache
- * directories (MOLNOTES_MATERIALS_DIR, MOLNOTES_MATERIALS_CACHE).
+ * Reads `units` from the content directory with the glossary and source
+ * registry, and resolves their citations against the shelf.
  */
-export async function pushUnits(
-  pool,
-  store,
-  root,
-  units,
-  { source, shelf = {} } = {},
-) {
-  if (!units.length || new Set(units).size !== units.length)
-    throw new Error("Provide distinct content units");
+async function readInputs(root, units, shelf) {
   const inputs = [];
   await measureStage("publish.read", async () => {
     for (const unit of units) inputs.push(await readUnit(root, unit));
@@ -347,6 +339,54 @@ export async function pushUnits(
     input.assets.push(...resolved[i].assets);
     input.citations = resolved[i].citations;
   }
+  return { inputs, glossary, registry };
+}
+/** Replaces the topics, directories, notes and assets of each input's unit in `data`. */
+function replaceUnits(data, inputs) {
+  for (const input of inputs) {
+    const { unit } = input;
+    data.assets = [
+      ...data.assets.filter((a) => a.scope !== unit),
+      ...input.assets,
+    ];
+    if (input.kind === "sites")
+      data.topics = [
+        ...data.topics.filter((t) => t.slug !== input.slug),
+        { ...input.site, content: input.content },
+      ];
+    else {
+      data.directories = [
+        ...data.directories.filter((d) => d.dir !== input.slug),
+        {
+          dir: input.slug,
+          metadata: input.metadata,
+          citations: input.citations,
+        },
+      ];
+      data.notes = [
+        ...data.notes.filter((n) => n.dir !== input.slug),
+        ...input.notes.map((n) => ({ ...n, dir: input.slug })),
+      ];
+    }
+  }
+}
+
+/**
+ * `source` is the commit being published (`committedSource`); the content
+ * command always passes it, and only fixtures seeding a test database
+ * publish without it. `shelf` may name the materials and render cache
+ * directories (MOLNOTES_MATERIALS_DIR, MOLNOTES_MATERIALS_CACHE).
+ */
+export async function pushUnits(
+  pool,
+  store,
+  root,
+  units,
+  { source, shelf = {} } = {},
+) {
+  if (!units.length || new Set(units).size !== units.length)
+    throw new Error("Provide distinct content units");
+  const { inputs, glossary, registry } = await readInputs(root, units, shelf);
   return measureStage("publish.transaction", () =>
     transaction(pool, async (client) => {
       await measureStage("publish.lock-wait", () =>
@@ -360,32 +400,7 @@ export async function pushUnits(
       // objects are never deleted, so only new hashes need the store.
       const stored = new Set(data.assets.map((asset) => asset.sha256));
       data.glossary = glossary;
-      for (const input of inputs) {
-        const { unit } = input;
-        data.assets = [
-          ...data.assets.filter((a) => a.scope !== unit),
-          ...input.assets,
-        ];
-        if (input.kind === "sites")
-          data.topics = [
-            ...data.topics.filter((t) => t.slug !== input.slug),
-            { ...input.site, content: input.content },
-          ];
-        else {
-          data.directories = [
-            ...data.directories.filter((d) => d.dir !== input.slug),
-            {
-              dir: input.slug,
-              metadata: input.metadata,
-              citations: input.citations,
-            },
-          ];
-          data.notes = [
-            ...data.notes.filter((n) => n.dir !== input.slug),
-            ...input.notes.map((n) => ({ ...n, dir: input.slug })),
-          ];
-        }
-      }
+      replaceUnits(data, inputs);
       const notebook = await measureStage("publish.prepare-notes", () =>
         notebookSources(data),
       );
@@ -535,4 +550,86 @@ export async function removeUnit(pool, unit, { source } = {}) {
     await client.query("DELETE FROM assets WHERE scope=$1", [unit]);
     await saveCompilation(client, compiled);
   });
+}
+
+/** Every content unit in the content directory: `sites/<slug>` and `notes/<dir>`. */
+async function contentUnits(root) {
+  const units = [];
+  for (const kind of ["sites", "notes"]) {
+    let names;
+    try {
+      names = await readdir(join(root, kind));
+    } catch (error) {
+      if (error.code === "ENOENT") continue;
+      throw error;
+    }
+    units.push(...names.sort().map((name) => `${kind}/${name}`));
+  }
+  return units;
+}
+
+/**
+ * Reads, validates and compiles every unit of the content directory into the
+ * rows a snapshot holds, and the asset bytes by `<scope>/<path>`. `shelf` is
+ * as for `pushUnits`; `commit` is recorded in the snapshot.
+ */
+export async function buildSnapshot(root, { shelf = {}, commit = null } = {}) {
+  const units = await contentUnits(root);
+  const { inputs, glossary, registry } = await readInputs(root, units, shelf);
+  const data = { topics: [], directories: [], notes: [], assets: [], glossary };
+  replaceUnits(data, inputs);
+  const compiled = await measureStage("publish.compile", () => compile(data));
+  const directories = new Map(compiled.directories.map((d) => [d.slug, d]));
+  const notes = new Map(
+    compiled.notes.map(({ author, ...note }) => [
+      `${note.directory}/${author}/${note.slug}`,
+      note,
+    ]),
+  );
+  const files = new Map(
+    data.assets.map((asset) => [`${asset.scope}/${asset.path}`, asset.bytes]),
+  );
+  return {
+    snapshot: {
+      format: 1,
+      commit,
+      builtAt: new Date().toISOString(),
+      topics: inputs
+        .filter((input) => input.kind === "sites")
+        .map(({ slug, site, content, citations }) => ({
+          slug,
+          site,
+          content,
+          citations,
+        })),
+      directories: inputs
+        .filter((input) => input.kind === "notes")
+        .map(({ slug, metadata, citations }) => ({
+          dir: slug,
+          metadata,
+          citations,
+          compiled: directories.get(slug),
+        })),
+      notes: data.notes.map(({ dir, slug, author, source }) => ({
+        dir,
+        slug,
+        author,
+        source,
+        compiled: notes.get(`${dir}/${author}/${slug}`),
+      })),
+      glossary,
+      registry,
+      assets: data.assets.map(
+        ({ scope, path, sha256, size, content_type, prompt }) => ({
+          scope,
+          path,
+          sha256,
+          size,
+          content_type,
+          prompt,
+        }),
+      ),
+    },
+    files,
+  };
 }

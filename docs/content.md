@@ -119,6 +119,10 @@ edges:
 
 `MOLNOTES_CONTENT_DIR` 指定内容仓库，未设置时内容命令报错。`npm run content -- push notes/<dir>` 或 `push sites/<slug>` 可接受多个单元（例如 `push sites/a sites/b notes/x`），在同一个事务中校验整组与数据库中其他内容的站内链接、术语、SMILES 和资源完整性，然后上传缺失资源并在一个事务内替换单元。校验错误给出文件与位置，数据库保持不变。发布时会重新编译受术语变化影响的笔记；索引在 API 的一致性快照内计算。
 
+`npm run content -- build <输出目录>` 读取内容目录里的全部单元、`sources.json` 与 `glossary.json`，做与 `push` 相同的校验、引用解析和编译，把结果写成快照：`snapshot.json`（`format: 1`、`commit`、`builtAt`，以及 `topics`、`directories`、`notes`、`glossary`、`registry`、`assets`，各项与数据库对应表保存的行相同）和 `files/<单元>/<路径>`（内容资源原样复制，被引页渲染在 `<单元>/cited/`）。输出目录不能已存在；任何校验失败都不写出。`build` 不检查提交，`commit` 为 `null`。
+
+`npm run content -- publish` 要求内容目录在 HEAD 下没有未提交、未跟踪或被忽略的文件（构建前后各查一次），把 HEAD 的内容构建到 `MOLNOTES_CONTENT_RELEASES` 指定的发布根下的 `<提交号>/`，完成后以一次 rename 把 `current` 换成指向它的相对软链，再删除旧快照，连同 `current` 指向的共保留最近 5 个。同一提交再次发布时重新构建并替换该快照。`publish --rollback <提交号>`（可用唯一前缀）把 `current` 指回一个保留着的快照，不构建。
+
 `pull <单元>` 与 `pull --all` 导出源文件、JSON 与资源，同路径文件覆盖，用于建立新的内容仓库或核对线上状态，导出后与已提交内容的差异由 `git diff` 显示；本地已有且 SHA-256 相同的资源不再下载，其余资源经按哈希存放的本地缓存（默认 `~/.cache/molnotes/assets`，可用 `MOLNOTES_ASSET_CACHE` 指定）并行获取；`pull --all` 另外导出 `sources.json` 与 `glossary.json`。`remove <单元>` 在其他内容引用该单元时拒绝，并指出引用文件与位置。`list` 列出已发布单元。上传失败不会提交数据库；资源对象按哈希保留，不自动物理删除。
 
 内容目录可以是 Git 仓库的根目录，也可以是仓库里的一个子目录，正文、JSON 与资源文件都提交；`MOLNOTES_CONTENT_DIR` 不在 Git 工作树里时内容命令报错退出。提交号属于整个仓库，内容目录以外的改动不影响发布，未提交文件按仓库根目录的相对路径列出。`push` 只发布已提交的内容：要发布的单元以及根部的 `sources.json`、`glossary.json` 有未提交的改动、未跟踪或被忽略的文件时拒绝，并列出这些文件。库里为每个单元记下发布时的提交、时间与推送者；推送者由命令自动取 `<用户>@<主机>`，设置了 `MOLNOTES_PUSHER` 时附在其后（用于区分同一用户的不同会话）。`push` 在发布事务内持锁检查：库里记下的提交不是当前 HEAD 的祖先（或本仓库没有这个提交）时整次拒绝、数据库不变，列出这些单元和它们的提交、时间、推送者，合并后再推；库里还没有提交记录的单元，库里内容（`pull` 会导出的全部文件，JSON 按值、资源按哈希比较）与当前提交一致时直接发布并记下提交，不一致时拒绝，先 `pull` 该单元、用 `git diff` 核对并提交后再推。库里没有的单元按新建发布。`remove` 要求该单元已在当前提交中删除，同样做祖先检查，删除后库里记下这次删除的提交，没有合并这次删除的分支不能把单元推回来。`list` 每行列出单元、发布时的短提交、时间与推送者（没有记录的显示 `-`）。
