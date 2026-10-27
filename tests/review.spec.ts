@@ -1,5 +1,5 @@
 import { putRecords } from "./helpers/records";
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./helpers/test";
 test.describe.configure({ mode: "serial" });
 test.beforeEach(async ({ request }) => {
   await putRecords(request, "/api/records/topics/sample", {
@@ -210,7 +210,7 @@ test("open responses and prediction mistakes enter review and leave after correc
     .poll(
       async () =>
         (await (await page.request.get("/api/records/topics/sample")).json())
-          .predictions.start.option,
+          .predictions.start?.option,
       { intervals: [100] },
     )
     .toBe(0);

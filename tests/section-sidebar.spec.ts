@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./helpers/test";
 
 const toc = (page: Page) => page.getByRole("navigation", { name: "专题目录" });
 const current = (page: Page) => toc(page).locator('[aria-current="page"]');

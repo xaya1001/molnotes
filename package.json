@@ -1,6 +1,9 @@
 {
   "name": "molnotes",
   "private": true,
+  "engines": {
+    "node": ">=26"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -26,7 +29,7 @@
     "@rdkit/rdkit": "2026.9.1",
     "3dmol": "2.5.5",
     "echarts": "6.1.0",
-    "katex": "0.19.0",
+    "katex": "0.19.1",
     "markdown-it": "15.0.3",
     "markdown-it-cjk-friendly": "3.0.0",
     "motion-v": "2.8.0",

@@ -1,4 +1,4 @@
-import { test, expect, type Locator, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "./helpers/test";
 // Evidence capture is optional; all scrolling and layout/interaction assertions
 // below run in both modes. Failures are captured by Playwright independently.
 async function captureEvidence(page: Page, path: string) {

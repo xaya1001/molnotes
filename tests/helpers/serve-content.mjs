@@ -11,15 +11,24 @@ import { requireBrowserBuild } from "./browser-build.mjs";
 
 await requireBrowserBuild();
 const directory = await mkdtemp(join(tmpdir(), "il-content-browser-"));
-const records = openRecords(join(directory, "records.sqlite"));
-let server;
+// One server per Playwright worker on consecutive ports, each with its own
+// records file, all serving the same snapshot.
+const [firstPort, count] = process.argv.slice(2).map(Number);
+const records = Array.from({ length: count }, (_, i) =>
+  openRecords(join(directory, `records-${i}.sqlite`)),
+);
+let servers = [];
 let stopping = false;
 async function close() {
   if (stopping) return;
   stopping = true;
-  server?.closeAllConnections();
-  if (server) await new Promise((resolve) => server.close(resolve));
-  records.close();
+  await Promise.all(
+    servers.map((server) => {
+      server.closeAllConnections();
+      return new Promise((resolve) => server.close(resolve));
+    }),
+  );
+  for (const store of records) store.close();
   await rm(directory, { recursive: true, force: true });
 }
 for (const signal of ["SIGINT", "SIGTERM"])
@@ -46,11 +55,14 @@ try {
       }),
     ),
   );
-  server = createWebServer({
-    records,
-    snapshot: join(releases, "current"),
+  servers = records.map((store, i) => {
+    const server = createWebServer({
+      records: store,
+      snapshot: join(releases, "current"),
+    });
+    server.listen(firstPort + i, "127.0.0.1");
+    return server;
   });
-  server.listen(Number(process.argv[2]), "127.0.0.1");
 } catch (error) {
   console.error(error.message);
   await close();
