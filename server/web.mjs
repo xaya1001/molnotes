@@ -4,12 +4,7 @@ import { createServer, request as httpRequest } from "node:http";
 import { pipeline } from "node:stream/promises";
 import { open, readFile, stat } from "node:fs/promises";
 import { resolve, extname, sep } from "node:path";
-import {
-  openDatabase,
-  migrate,
-  databaseUrl,
-  databaseError,
-} from "./database.mjs";
+import { setting } from "../scripts/settings.mjs";
 import { contentType, byteRange } from "./assets.mjs";
 import {
   contentIndex,
@@ -21,6 +16,7 @@ import {
   readNote,
 } from "./content-query.mjs";
 import {
+  openRecords,
   recordContext,
   recordsReady,
   readRecord,
@@ -31,7 +27,7 @@ import {
 import { isMainModule } from "./main-module.mjs";
 
 export function createWebServer({
-  pool,
+  records,
   snapshot = process.env.MOLNOTES_CONTENT_SNAPSHOT || "/content/current",
   dist = resolve("dist"),
   socket = process.env.MOLNOTES_SYSTEM_SOCKET,
@@ -70,7 +66,7 @@ export function createWebServer({
       }
       if (path === "/healthz") {
         await content();
-        await recordsReady(pool);
+        recordsReady(records);
         send(res, 200, { status: "ok" });
         return;
       }
@@ -123,7 +119,7 @@ export function createWebServer({
         return;
       }
       if (path === "/api/records" && req.method === "GET") {
-        send(res, 200, await allRecords(pool));
+        send(res, 200, allRecords(records));
         return;
       }
       const recordMatch = /^\/api\/records\/(notes|topics\/([a-z0-9-]+))$/.exec(
@@ -137,7 +133,7 @@ export function createWebServer({
         }
         const { scope } = context;
         if (req.method === "GET") {
-          const { document, revision } = await readRecord(pool, context);
+          const { document, revision } = readRecord(records, context);
           res.setHeader("ETag", `"${revision}"`);
           send(res, 200, document);
           return;
@@ -156,8 +152,8 @@ export function createWebServer({
           send(res, 400, { error: error.message });
           return;
         }
-        const revision = await writeRecord(
-          pool,
+        const revision = writeRecord(
+          records,
           scope,
           document,
           expected.slice(1, -1),
@@ -301,25 +297,23 @@ export function createWebServer({
   });
 }
 if (isMainModule(import.meta.url)) {
-  const url = databaseUrl();
-  const pool = openDatabase(url);
+  let records;
   try {
-    await migrate(pool);
-    const server = createWebServer({ pool });
-    server.listen(
-      Number(process.env.PORT || 8080),
-      process.env.HOST || "0.0.0.0",
-    );
-    for (const signal of ["SIGINT", "SIGTERM"])
-      process.once(signal, () =>
-        server.close(async () => {
-          await pool.end();
-          process.exit(0);
-        }),
-      );
+    records = openRecords(setting("MOLNOTES_RECORDS_FILE"));
   } catch (error) {
-    console.error(databaseError(error, url).message);
-    await pool.end();
-    process.exitCode = 1;
+    console.error(`Record store: ${error.message}`);
+    process.exit(1);
   }
+  const server = createWebServer({ records });
+  server.listen(
+    Number(process.env.PORT || 8080),
+    process.env.HOST || "0.0.0.0",
+  );
+  for (const signal of ["SIGINT", "SIGTERM"])
+    process.once(signal, () =>
+      server.close(() => {
+        records.close();
+        process.exit(0);
+      }),
+    );
 }

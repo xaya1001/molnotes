@@ -1,15 +1,17 @@
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { testDatabase } from "./database.mjs";
-import { buildSnapshot, publishSnapshot } from "./content-snapshot.mjs";
+import { publishSnapshot } from "./content-snapshot.mjs";
+import { buildSnapshot } from "../../server/content-publish.mjs";
+import { writeSnapshot } from "../../server/content-snapshot.mjs";
+import { openRecords } from "../../server/records.mjs";
 import { createWebServer } from "../../server/web.mjs";
 import { withInstrumentChapters } from "./instrument-chapters.mjs";
 import { requireBrowserBuild } from "./browser-build.mjs";
 
 await requireBrowserBuild();
-const db = await testDatabase();
 const directory = await mkdtemp(join(tmpdir(), "il-content-browser-"));
+const records = openRecords(join(directory, "records.sqlite"));
 let server;
 let stopping = false;
 async function close() {
@@ -17,7 +19,7 @@ async function close() {
   stopping = true;
   server?.closeAllConnections();
   if (server) await new Promise((resolve) => server.close(resolve));
-  await db.close();
+  records.close();
   await rm(directory, { recursive: true, force: true });
 }
 for (const signal of ["SIGINT", "SIGTERM"])
@@ -33,29 +35,19 @@ try {
     ),
   );
   const releases = join(directory, "releases");
-  await publishSnapshot(releases, (snapshot) =>
-    buildSnapshot(
-      content,
-      [
-        "sites/sample",
-        "sites/minimal",
-        "sites/instruments",
-        "notes/reader-test",
-        "sites/fable-patent",
-        "notes/cited-reading",
-        "sites/cited-sources",
-      ],
+  await publishSnapshot(releases, async (snapshot) =>
+    writeSnapshot(
       snapshot,
-      {
+      await buildSnapshot(content, {
         shelf: {
           materials: resolve("tests/fixtures/shelf"),
           cache: join(directory, "shelf-cache"),
         },
-      },
+      }),
     ),
   );
   server = createWebServer({
-    pool: db.pool,
+    records,
     snapshot: join(releases, "current"),
   });
   server.listen(Number(process.argv[2]), "127.0.0.1");

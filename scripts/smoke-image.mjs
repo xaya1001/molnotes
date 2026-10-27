@@ -1,8 +1,7 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, rm, chmod, symlink } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, chmod, symlink } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { testDatabase } from "../tests/helpers/database.mjs";
 import { buildSnapshot } from "../server/content-publish.mjs";
 import { writeSnapshot } from "../server/content-snapshot.mjs";
 import { smokeBrowser } from "./smoke-browser.mjs";
@@ -10,12 +9,10 @@ const image = process.argv[2];
 if (!/^ghcr\.io\/.+@sha256:[a-f0-9]{64}$/.test(image ?? ""))
   throw new Error("Expected an immutable image digest");
 const name = `candidate-${process.env.GITHUB_RUN_ID || process.pid}-${process.env.GITHUB_RUN_ATTEMPT || 1}`;
-const db = await testDatabase();
 const directory = await mkdtemp(join(tmpdir(), "molnotes-smoke-"));
-async function docker(args, env = {}) {
+async function docker(args) {
   return new Promise((resolve, reject) => {
     const child = spawn("docker", args, {
-      env: { ...process.env, ...env },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let output = "";
@@ -42,34 +39,29 @@ try {
     }),
   );
   await symlink("fixtures", join(directory, "content/current"));
-  // The candidate reaches the test database published on the Docker host.
-  const url = new URL(db.url);
-  url.hostname = "host.docker.internal";
-  await docker(
-    [
-      "run",
-      "-d",
-      "--name",
-      name,
-      "--add-host",
-      "host.docker.internal:host-gateway",
-      "--publish",
-      "127.0.0.1::8080",
-      "--read-only",
-      "--cap-drop",
-      "ALL",
-      "--security-opt",
-      "no-new-privileges:true",
-      "--env",
-      "MOLNOTES_DATABASE_URL",
-      "--mount",
-      `type=bind,src=${directory}/content,dst=/content,readonly`,
-      "--tmpfs",
-      "/tmp",
-      image,
-    ],
-    { MOLNOTES_DATABASE_URL: url.href },
-  );
+  // The image's unprivileged user creates the record store in an empty directory.
+  await mkdir(join(directory, "data"));
+  await chmod(join(directory, "data"), 0o777);
+  await docker([
+    "run",
+    "-d",
+    "--name",
+    name,
+    "--publish",
+    "127.0.0.1::8080",
+    "--read-only",
+    "--cap-drop",
+    "ALL",
+    "--security-opt",
+    "no-new-privileges:true",
+    "--mount",
+    `type=bind,src=${directory}/content,dst=/content,readonly`,
+    "--mount",
+    `type=bind,src=${directory}/data,dst=/data`,
+    "--tmpfs",
+    "/tmp",
+    image,
+  ]);
   const address = await docker(["port", name, "8080/tcp"]);
   if (!/^127\.0\.0\.1:\d+$/.test(address))
     throw new Error("Candidate address unavailable");
@@ -82,7 +74,7 @@ try {
         break;
       }
     } catch {
-      /* Wait for migration/start. */
+      /* Wait for start. */
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
@@ -94,10 +86,15 @@ try {
   ])
     if (!(await fetch(base + path)).ok)
       throw new Error(`Candidate failed: ${path}`);
+  const saved = await fetch(base + "/api/records/notes", {
+    method: "PUT",
+    headers: { "If-Match": '"absent"' },
+    body: "{}",
+  });
+  if (!saved.ok) throw new Error("Candidate failed to save a record");
   await smokeBrowser(base, "/practice/sample/", "/notes/reader-test/first");
   console.log("Candidate catalog, topic and note rendered successfully");
 } finally {
   await docker(["rm", "-f", name]).catch(() => {});
-  await db.close();
   await rm(directory, { recursive: true, force: true });
 }
