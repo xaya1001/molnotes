@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
-import { useTopic } from "./context";
-import { patentData, sourceLink } from "./patent";
+import { useTopic } from "./context.ts";
+import { patentData, sourceLink } from "./patent.ts";
 import UiDialog from "../UiDialog.vue";
 const data = patentData(useTopic().content),
   router = useRouter();

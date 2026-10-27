@@ -1,6 +1,6 @@
 import { reactive, ref } from "vue";
 import { recordSync } from "../ui/record-sync.ts";
-import { readPosition, savePosition } from "../ui/reading-position";
+import { readPosition, savePosition } from "../ui/reading-position.ts";
 interface Reading {
   opened: number;
   scroll: number;

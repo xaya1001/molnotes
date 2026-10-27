@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { PageHeading } from "@ui";
-import { groups } from "../pages";
+import { groups } from "../pages.ts";
 
 const demos = groups.flatMap((group) => group.items).slice(1);
 </script>

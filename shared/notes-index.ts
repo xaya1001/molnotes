@@ -1,9 +1,10 @@
+import type { Unchecked } from "./unchecked.ts";
 import MarkdownIt from "markdown-it";
 import type { Env } from "markdown-it";
 import markdownItCjkFriendly from "markdown-it-cjk-friendly";
 import { parseDocument } from "yaml";
 import katex from "katex";
-import { moleculeToolkit } from "./molecule-toolkit.mjs";
+import { moleculeToolkit } from "./molecule-toolkit.ts";
 import { defineFlow, flowText, type Flow } from "../src/ui/diagrams/flow.ts";
 import {
   defineTimeline,
@@ -92,7 +93,7 @@ const noteEnv = (env: Env | undefined) => env as NoteEnv;
 // Fences drawn as figures: the YAML inside is the block's value plus a caption.
 const diagramKinds: Record<
   string,
-  { define: (value: unknown) => unknown; words: (model: any) => string[] }
+  { define: (value: unknown) => unknown; words: (model: Unchecked) => string[] }
 > = {
   timeline: { define: defineTimeline, words: timelineText },
   flow: { define: defineFlow, words: flowText },
@@ -103,7 +104,7 @@ function fail(file: string, line: number, message: string): never {
 }
 let toolkit: Awaited<ReturnType<typeof moleculeToolkit>> | undefined;
 function fields(
-  value: any,
+  value: Unchecked,
   required: string[],
   optional: string[],
   file: string,
@@ -229,8 +230,8 @@ export async function compileNotes({
   assetExists,
   citations = {},
 }: {
-  directories: any[];
-  notes: any[];
+  directories: Unchecked[];
+  notes: Unchecked[];
   terms: Record<string, GlossaryTerm>;
   routes: Set<string>;
   assetExists: (directory: string, href: string) => boolean;

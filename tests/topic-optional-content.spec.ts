@@ -1,4 +1,4 @@
-import { expect, test } from "./helpers/test";
+import { expect, test } from "./helpers/test.ts";
 
 test("chapters render when glossary and quiz are omitted", async ({ page }) => {
   const errors: string[] = [];

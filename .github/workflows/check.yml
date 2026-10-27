@@ -46,12 +46,12 @@ jobs:
           else
             git diff --name-only -z "${BASE_SHA}" "${HEAD_SHA}" > "${RUNNER_TEMP}/changed-files"
           fi
-          node scripts/ci-plan.mjs "${RUNNER_TEMP}/changed-files" >> "${GITHUB_OUTPUT}"
+          node scripts/ci-plan.ts "${RUNNER_TEMP}/changed-files" >> "${GITHUB_OUTPUT}"
       - run: npm ci
       - run: npm run format:check
       - run: npm run check
         if: steps.plan.outputs.mode != 'docs'
-      - run: node --test tests/ci-plan.test.mjs tests/checked-workflow.test.mjs
+      - run: node --test tests/ci-plan.test.ts tests/checked-workflow.test.ts
         if: steps.plan.outputs.mode == 'docs'
       - run: npm run build
         if: steps.plan.outputs.mode != 'docs'
@@ -85,13 +85,13 @@ jobs:
         if: steps.plan.outputs.mode != 'docs'
       - name: Summarize browser timings
         if: always() && hashFiles('test-results/results.json') != ''
-        run: node scripts/test-timings.mjs test-results/results.json >> "${GITHUB_STEP_SUMMARY}"
+        run: node scripts/test-timings.ts test-results/results.json >> "${GITHUB_STEP_SUMMARY}"
       - name: Verify the parent image passed Check
         if: github.event_name == 'push' && steps.plan.outputs.mode == 'docs'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PARENT_SHA: ${{ github.event.before }}
-        run: node scripts/checked-workflow.mjs "${PARENT_SHA}"
+        run: node scripts/checked-workflow.ts "${PARENT_SHA}"
       - name: Build, publish, and verify the exact image
         if: github.event_name == 'push'
         env:
@@ -116,7 +116,7 @@ jobs:
             # smoke-tested image so the update service can deploy this revision.
             parent="${repository}:${PARENT_SHA}"
             docker pull "${parent}"
-            node scripts/resolve-published-image.mjs "${repository}" "${PARENT_SHA}" "${parent}" >/dev/null
+            node scripts/resolve-published-image.ts "${repository}" "${PARENT_SHA}" "${parent}" >/dev/null
             printf 'FROM %s\n' "${parent}" | docker build \
               --label "org.opencontainers.image.revision=${GITHUB_SHA}" -t "${tag}" -
           else
@@ -126,6 +126,6 @@ jobs:
           fi
           docker push "${tag}"
           docker pull "${tag}"
-          image="$(node scripts/resolve-published-image.mjs "${repository}" "${GITHUB_SHA}" "${tag}")"
-          if test "${MODE}" != docs; then node scripts/smoke-image.mjs "${image}"; fi
+          image="$(node scripts/resolve-published-image.ts "${repository}" "${GITHUB_SHA}" "${tag}")"
+          if test "${MODE}" != docs; then node scripts/smoke-image.ts "${image}"; fi
           printf 'Published and smoke-tested %s\n' "${image}" >> "${GITHUB_STEP_SUMMARY}"

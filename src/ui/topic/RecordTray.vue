@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRoute } from "vue-router";
-import { useTopic } from "./context";
-import { patentData } from "./patent";
+import { useTopic } from "./context.ts";
+import { patentData } from "./patent.ts";
 const { content, records } = useTopic(),
   route = useRoute();
 const collections = patentData(content).collections ?? {};

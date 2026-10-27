@@ -1,14 +1,14 @@
 import { defineComponent, h } from "vue";
-import { mountApp } from "../ui/app";
+import { mountApp } from "../ui/app.ts";
 import SiteBar from "../ui/SiteBar.vue";
 import TopicNotFound from "../ui/TopicNotFound.vue";
-import { pageTitle } from "../ui/site-sections";
-import { mountTopic } from "../ui/topic/mount";
-import { api, boot, ApiError } from "../ui/api";
-import type { CatalogSite } from "../ui/catalog";
-import { loadCatalog } from "../ui/content-data";
-import { loadSiteRecords } from "../ui/site-records";
-import type { Citation } from "../ui/citations";
+import { pageTitle } from "../ui/site-sections.ts";
+import { mountTopic } from "../ui/topic/mount.ts";
+import { api, boot, ApiError } from "../ui/api.ts";
+import type { CatalogSite } from "../ui/catalog.ts";
+import { loadCatalog } from "../ui/content-data.ts";
+import { loadSiteRecords } from "../ui/site-records.ts";
+import type { Citation } from "../ui/citations.ts";
 import type { GlossaryTerm } from "../../shared/glossary.ts";
 import "../ui/styles/index.css";
 boot(async () => {

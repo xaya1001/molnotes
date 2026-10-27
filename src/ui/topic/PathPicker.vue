@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useTopic } from "./context";
+import { useTopic } from "./context.ts";
 
 /**
  * The topic's learning paths as a choice. The pick is kept in

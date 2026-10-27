@@ -6,7 +6,7 @@ import ChapterBlocks from "./ChapterBlocks.vue";
 import ChapterRecords from "./ChapterRecords.vue";
 import QuizQuestion from "./QuizQuestion.vue";
 import ChapterSources from "./ChapterSources.vue";
-import { useTopic } from "./context";
+import { useTopic } from "./context.ts";
 
 /** Chapter blocks followed by questions, excerpts, reading and records; placed content is not repeated. */
 const props = defineProps<{ id: string }>();

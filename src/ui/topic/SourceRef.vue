@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { sourceLink, patentData, type PageRef } from "./patent";
-import { useTopic } from "./context";
+import { sourceLink, patentData, type PageRef } from "./patent.ts";
+import { useTopic } from "./context.ts";
 import UiFigure from "../UiFigure.vue";
 const props = defineProps<{
   reference: PageRef;

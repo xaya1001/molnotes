@@ -6,7 +6,7 @@ import TimelineFigure from "./diagrams/TimelineFigure.vue";
 import ImageViewer from "./ImageViewer.vue";
 import TermDefinition from "./TermDefinition.vue";
 import CitedSource from "./CitedSource.vue";
-import type { Citation } from "./citations";
+import type { Citation } from "./citations.ts";
 import type { NoteDiagram, NoteMolecules } from "../../shared/notes-index.ts";
 import type { GlossaryTerm } from "../../shared/glossary.ts";
 const props = withDefaults(

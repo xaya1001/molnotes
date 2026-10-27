@@ -1,4 +1,4 @@
-import type { NotesIndex, NotesSearchIndex } from "./notes-index.ts";
+import type { NotesSearchIndex } from "./notes-index.ts";
 
 /** The terms a compiled note's HTML marks, in order of first use. */
 export function noteTerms(html: string): string[] {
@@ -13,7 +13,7 @@ export function noteTerms(html: string): string[] {
 }
 
 /** Search consumers never receive rendered HTML, structures or the glossary. */
-export function notesSearchIndex(index: NotesIndex): NotesSearchIndex {
+export function notesSearchIndex(index: NotesSearchIndex): NotesSearchIndex {
   return {
     directories: index.directories.map(({ title, summary, path }) => ({
       title,

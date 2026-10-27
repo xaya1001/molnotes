@@ -1,17 +1,17 @@
-// The block catalogue as the runtime reads it. shared/topic-blocks.mjs is
+// The block catalogue as the runtime reads it. shared/topic-blocks.ts is
 // the definition and checks every topic's content.json against it; these
 // types mirror it so the renderer and the pages read checked data.
 import type {
   MechanismFrame,
   MoleculeData,
   SynthesisRoute,
-} from "../chemistry/types";
-import type { DataTableInput } from "../data/values";
-import type { FlowInput } from "../diagrams/flow";
-import type { TimelineInput } from "../diagrams/model";
-import type { MatrixInput } from "../matrix/model";
-import type { StructureSetInput } from "../structure/model";
-import type { TopicPrediction } from "./content";
+} from "../chemistry/types.ts";
+import type { DataTableInput } from "../data/values.ts";
+import type { FlowInput } from "../diagrams/flow.ts";
+import type { TimelineInput } from "../diagrams/model.ts";
+import type { MatrixInput } from "../matrix/model.ts";
+import type { StructureSetInput } from "../structure/model.ts";
+import type { TopicPrediction } from "./content.ts";
 
 interface BlockBase {
   /** Names the block; a prediction's records are kept under it (the chapter id when absent). */

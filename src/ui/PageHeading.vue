@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from "vue";
-import { useTopicContext } from "./topic-context";
+import { useTopicContext } from "./topic-context.ts";
 
 const props = defineProps<{
   title: string;

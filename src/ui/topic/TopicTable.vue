@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import type { TableCell } from "./blocks";
-import { paragraphPieces, sourceIdsOf } from "./chapter-text";
-import { useTopic } from "./context";
+import type { TableCell } from "./blocks.ts";
+import { paragraphPieces, sourceIdsOf } from "./chapter-text.ts";
+import { useTopic } from "./context.ts";
 import TopicRefs from "./TopicRefs.vue";
 
 /**

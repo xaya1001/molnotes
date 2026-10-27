@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import CiteButton from "../CiteButton.vue";
-import { useTopic } from "./context";
+import { useTopic } from "./context.ts";
 const props = defineProps<{ id: string }>();
 const { content } = useTopic();
 const sources = computed(() =>

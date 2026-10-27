@@ -1,5 +1,5 @@
 import { defineComponent, h } from "vue";
-import { api, boot } from "../ui/api";
+import { api, boot } from "../ui/api.ts";
 import { mountPage } from "@ui";
 import type { GlossaryEntry } from "../../shared/glossary.ts";
 import App from "./App.vue";

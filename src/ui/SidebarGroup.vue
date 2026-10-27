@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { flatItems, type NavGroup, type SidebarState } from "./sidebar";
+import { flatItems, type NavGroup, type SidebarState } from "./sidebar.ts";
 
 /** A labelled section and its entries, with reading and practice state. */
 const props = withDefaults(

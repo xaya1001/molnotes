@@ -5,7 +5,7 @@
 // reader is asked about the cells in `required`, one by one, and the answers
 // are choice positions kept by the caller.
 
-import type { RecordField } from "../../contracts/records";
+import type { RecordField } from "../../contracts/records.ts";
 
 /**
  * How a result looks in the grid. `untested` is a cell the source did not

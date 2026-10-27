@@ -8,11 +8,11 @@ import {
   watch,
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { api } from "../ui/api";
-import { loadIndex } from "../ui/content-data";
+import { api } from "../ui/api.ts";
+import { loadIndex } from "../ui/content-data.ts";
 import type { Note, NoteDirectory } from "../../shared/notes-index.ts";
 import type { GlossaryTerm } from "../../shared/glossary.ts";
-import { notebook as index } from "../ui/content-data";
+import { notebook as index } from "../ui/content-data.ts";
 import { PageHeading, UiDialog } from "@ui";
 import SiteBar from "@ui/SiteBar.vue";
 import { pageTitle } from "@ui/site-sections";
@@ -28,7 +28,7 @@ import {
   storageError,
   storageConflict,
   retryReading,
-} from "./records";
+} from "./records.ts";
 const route = useRoute(),
   router = useRouter();
 const path = computed(() => `/notes${route.path}`);

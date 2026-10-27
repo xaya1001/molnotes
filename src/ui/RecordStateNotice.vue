@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { catalogSite, topicBase } from "./catalog";
-import type { SiteRecordState } from "./site-records";
+import { catalogSite, topicBase } from "./catalog.ts";
+import type { SiteRecordState } from "./site-records.ts";
 
 /** Why a topic's records are not shown, with where to fix it. */
 defineProps<{ slug: string; state: SiteRecordState }>();

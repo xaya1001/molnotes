@@ -1,17 +1,17 @@
-import { catalogSite, topicBase } from "../catalog";
-import { problemField, topicProblems } from "./problem";
-import { patentRecordFields } from "./patent-records";
+import { catalogSite, topicBase } from "../catalog.ts";
+import { problemField, topicProblems } from "./problem.ts";
+import { patentRecordFields } from "./patent-records.ts";
 import { defineComponent, h } from "vue";
-import { mountApp } from "../app";
-import { defineTopicContent, type CheckedContent } from "./content";
-import { provideTopic, type TopicPredictionRecords } from "./context";
-import { pathField, predictionField } from "./prediction";
-import { createTopicRecords } from "./records";
-import type { RecordFields } from "../../contracts/records";
-import { defineTopicRoutes } from "./routes";
+import { mountApp } from "../app.ts";
+import { defineTopicContent, type CheckedContent } from "./content.ts";
+import { provideTopic, type TopicPredictionRecords } from "./context.ts";
+import { pathField, predictionField } from "./prediction.ts";
+import { createTopicRecords } from "./records.ts";
+import type { RecordFields } from "../../contracts/records.ts";
+import { defineTopicRoutes } from "./routes.ts";
 import TopicApp from "./TopicApp.vue";
-import { openCitation } from "./overlay";
-import { provideCitations, type Citation } from "../citations";
+import { openCitation } from "./overlay.ts";
+import { provideCitations, type Citation } from "../citations.ts";
 import type { GlossaryTerm } from "../../../shared/glossary.ts";
 
 export interface TopicOptions {

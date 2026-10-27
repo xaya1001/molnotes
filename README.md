@@ -51,6 +51,6 @@ npm run content -- publish --rollback <提交号>
 
 ## 镜像与更新服务
 
-`main` 的 Check 把 `npm run build` 产出的 `dist/` 打包为 ARM64 镜像（本地构建镜像同样先运行 `npm run build`，再 `docker build .`），以准确 revision 标签推送到本仓库的 GHCR，并用样本快照与临时记录目录做浏览器冒烟。容器运行 `node server/web/web.mjs`，监听 8080，只读挂载快照发布根到 `/content`，学习记录写入可写的 `/data`；`/healthz` 检查快照与记录文件可用。
+`main` 的 Check 把 `npm run build` 产出的 `dist/` 打包为 ARM64 镜像（本地构建镜像同样先运行 `npm run build`，再 `docker build .`），以准确 revision 标签推送到本仓库的 GHCR，并用样本快照与临时记录目录做浏览器冒烟。容器运行 `node server/web/web.ts`，监听 8080，只读挂载快照发布根到 `/content`，学习记录写入可写的 `/data`；`/healthz` 检查快照与记录文件可用。
 
-`server/system/server.mjs` 是可选的主机更新服务：读取运行中的镜像与远端 `main` 的 Check 结果，在 `/system/` 页面上把站点更新到已通过检查的准确镜像 digest，失败时回滚到上一镜像。它的设置由服务进程的环境提供：`MOLNOTES_CHECKOUT`、`MOLNOTES_GITHUB_REPOSITORY`、`MOLNOTES_ORIGIN`、`MOLNOTES_CONTAINER`、`MOLNOTES_COMPOSE_FILE`、`MOLNOTES_SYSTEM_SOCKET`、`MOLNOTES_DEPLOY_LOG_DIR`、`MOLNOTES_RELEASE_ROOT`。设置了 `MOLNOTES_AUTO_DEPLOY_SECONDS`（不少于 60）时，服务按这个间隔检查，`main` 出现通过检查的新提交且没有更新在进行就自动部署；自动部署失败的提交不再自动重试，仍可在 `/system/` 手动更新。
+`server/system/server.ts` 是可选的主机更新服务：读取运行中的镜像与远端 `main` 的 Check 结果，在 `/system/` 页面上把站点更新到已通过检查的准确镜像 digest，失败时回滚到上一镜像。它的设置由服务进程的环境提供：`MOLNOTES_CHECKOUT`、`MOLNOTES_GITHUB_REPOSITORY`、`MOLNOTES_ORIGIN`、`MOLNOTES_CONTAINER`、`MOLNOTES_COMPOSE_FILE`、`MOLNOTES_SYSTEM_SOCKET`、`MOLNOTES_DEPLOY_LOG_DIR`、`MOLNOTES_RELEASE_ROOT`。设置了 `MOLNOTES_AUTO_DEPLOY_SECONDS`（不少于 60）时，服务按这个间隔检查，`main` 出现通过检查的新提交且没有更新在进行就自动部署；自动部署失败的提交不再自动重试，仍可在 `/system/` 手动更新。

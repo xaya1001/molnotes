@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
-import { loadChemistry, properties } from "./chemistry/rdkit";
+import { loadChemistry, properties } from "./chemistry/rdkit.ts";
 const props = defineProps<{ smiles: string }>();
 const values = ref<ReturnType<typeof properties>>();
 const error = ref("");

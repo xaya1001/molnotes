@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
-import { useTopic } from "./context";
-import { patentData } from "./patent";
+import { useTopic } from "./context.ts";
+import { patentData } from "./patent.ts";
 import SourceRef from "./SourceRef.vue";
 import RecordValue from "./RecordValue.vue";
 import PageHeading from "../PageHeading.vue";

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { TimelineMark } from "./model";
+import type { TimelineMark } from "./model.ts";
 
 // One event's point, drawn inside an <svg>: the figure's line and its legend use the same shapes.
 const props = defineProps<{

@@ -1,4 +1,4 @@
-import { expect, test } from "./helpers/test";
+import { expect, test } from "./helpers/test.ts";
 
 test("the system page shows the running version and starts an available update", async ({
   page,

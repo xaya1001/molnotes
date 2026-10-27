@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { phrases } from "./model";
+import { phrases } from "./model.ts";
 
 const props = defineProps<{ text: string }>();
 const lines = computed(() => phrases(props.text));

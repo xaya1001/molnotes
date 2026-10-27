@@ -1,12 +1,12 @@
-import { boot } from "../ui/api";
-import { loadContent } from "../ui/content-data";
+import { boot } from "../ui/api.ts";
+import { loadContent } from "../ui/content-data.ts";
 import { createApp } from "vue";
 import { createRouter, createWebHistory } from "vue-router";
 import "@ui/styles/index.css";
 import "katex/dist/katex.min.css";
-import { notebook as index } from "../ui/content-data";
+import { notebook as index } from "../ui/content-data.ts";
 import App from "./App.vue";
-import { loadReading, reading } from "./records";
+import { loadReading, reading } from "./records.ts";
 boot(async () => {
   await loadContent(true);
   await loadReading();

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, useId, watch } from "vue";
-import { loadChemistry, molecule } from "./chemistry/rdkit";
-import type { ElectronArrow, StructureAnchor } from "./chemistry/types";
+import { loadChemistry, molecule } from "./chemistry/rdkit.ts";
+import type { ElectronArrow, StructureAnchor } from "./chemistry/types.ts";
 const props = withDefaults(
   defineProps<{
     smiles: string;

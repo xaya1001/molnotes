@@ -2,9 +2,9 @@
 import SourceText from "./SourceText.vue";
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useTopic } from "./context";
-import { patentData } from "./patent";
-import { checkScopes } from "./patent-chemistry";
+import { useTopic } from "./context.ts";
+import { patentData } from "./patent.ts";
+import { checkScopes } from "./patent-chemistry.ts";
 import SourceRef from "./SourceRef.vue";
 import PageHeading from "../PageHeading.vue";
 const props = defineProps<{

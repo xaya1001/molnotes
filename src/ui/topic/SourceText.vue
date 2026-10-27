@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { useTopic } from "./context";
-import { patentData, sourceLink } from "./patent";
+import { useTopic } from "./context.ts";
+import { patentData, sourceLink } from "./patent.ts";
 const props = defineProps<{ text: string; source?: string }>();
 const data = patentData(useTopic().content);
 const parts = computed(() =>

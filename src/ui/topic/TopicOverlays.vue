@@ -4,9 +4,9 @@ import UiDialog from "../UiDialog.vue";
 import CiteButton from "../CiteButton.vue";
 import CitedSource from "../CitedSource.vue";
 import TermDefinition from "../TermDefinition.vue";
-import { useCitations } from "../citations";
-import { useTopic } from "./context";
-import { closeOverlay, overlay } from "./overlay";
+import { useCitations } from "../citations.ts";
+import { useTopic } from "./context.ts";
+import { closeOverlay, overlay } from "./overlay.ts";
 
 /** The term card and source card opened from TopicTerm and TopicRefs, and the viewer of a cited original. */
 const { content, glossary } = useTopic();

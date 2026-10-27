@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import PredictionMatrix from "../matrix/PredictionMatrix.vue";
-import type { MatrixBlock } from "./blocks";
-import { useTopic } from "./context";
+import type { MatrixBlock } from "./blocks.ts";
+import { useTopic } from "./context.ts";
 import TopicRefs from "./TopicRefs.vue";
 
 /**

@@ -6,7 +6,7 @@ import {
   CollapsibleContent,
 } from "reka-ui";
 import { RouterLink } from "vue-router";
-import type { ShelfItem } from "./sidebar";
+import type { ShelfItem } from "./sidebar.ts";
 const props = defineProps<{
   label: string;
   items: ShelfItem[];

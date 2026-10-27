@@ -11,14 +11,14 @@ import {
   type StructureEntry,
   type StructureLayer,
   type StructureSet,
-} from "./model";
+} from "./model.ts";
 import {
   distanceBetween,
   findAtom,
   parsePdb,
   type AtomRef,
   type PdbAtom,
-} from "./pdb";
+} from "./pdb.ts";
 
 /**
  * Real coordinates from a committed subset of a PDB entry, drawn with 3Dmol.js

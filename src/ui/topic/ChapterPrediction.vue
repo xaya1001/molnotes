@@ -6,14 +6,14 @@ import ImagePoints from "./ImagePoints.vue";
 import { labModels, modelInputs } from "../models/catalog.ts";
 import PredictionExercise from "../PredictionExercise.vue";
 import SourceExcerpt from "../SourceExcerpt.vue";
-import type { PredictionAnswer, TopicPrediction } from "./content";
-import { useTopic } from "./context";
+import type { PredictionAnswer, TopicPrediction } from "./content.ts";
+import { useTopic } from "./context.ts";
 import {
   designAtomsRight,
   isChoice,
   predictionCorrect,
   selectionRange,
-} from "./prediction";
+} from "./prediction.ts";
 
 /**
  * One prediction from content.json: a choice; one atom or bond picked on a

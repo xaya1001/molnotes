@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { citationLabel, useCitations } from "./citations";
+import { citationLabel, useCitations } from "./citations.ts";
 
 /** A citation href that opens the original in the page's viewer; `label` replaces the location text. */
 const props = defineProps<{ href: string; label?: string }>();

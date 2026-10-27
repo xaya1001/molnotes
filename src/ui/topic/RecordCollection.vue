@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useTopic } from "./context";
-import { patentData, type RecordId, type Assignment } from "./patent";
-import { filterRecords, queryText, recordsCsv } from "./patent-filter";
-import { substructureMatches } from "./patent-chemistry";
+import { useTopic } from "./context.ts";
+import { patentData, type RecordId, type Assignment } from "./patent.ts";
+import { filterRecords, queryText, recordsCsv } from "./patent-filter.ts";
+import { substructureMatches } from "./patent-chemistry.ts";
 import RecordValue from "./RecordValue.vue";
 import SourceRef from "./SourceRef.vue";
 import PageHeading from "../PageHeading.vue";
-import { downloadFile } from "../notify";
+import { downloadFile } from "../notify.ts";
 const props = defineProps<{
   collection: string;
   mode?: "list" | "detail" | "compare";

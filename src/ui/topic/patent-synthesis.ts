@@ -1,4 +1,4 @@
-import type { CompoundRef, SynthesisNetwork, ResearchRoute } from "./patent";
+import type { CompoundRef, SynthesisNetwork, ResearchRoute } from "./patent.ts";
 export const compoundKey = (c: CompoundRef) =>
   JSON.stringify([c.collection, c.id]);
 export function routeSteps(network: SynthesisNetwork, route: ResearchRoute) {

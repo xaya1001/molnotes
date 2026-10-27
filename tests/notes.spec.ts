@@ -1,5 +1,5 @@
-import { putRecords } from "./helpers/records";
-import { test, expect } from "./helpers/test";
+import { putRecords } from "./helpers/records.ts";
+import { test, expect } from "./helpers/test.ts";
 test("read, inspect a term and retain reading state across browser contexts", async ({
   page,
   browser,

@@ -7,10 +7,10 @@ import {
   ref,
   watch,
 } from "vue";
-import { longestLeader } from "./check";
+import { longestLeader } from "./check.ts";
 import DiagramText from "./DiagramText.vue";
 import TimelineMark from "./TimelineMark.vue";
-import type { Timeline, TimelineEvent, TimelineSpan } from "./model";
+import type { Timeline, TimelineEvent, TimelineSpan } from "./model.ts";
 
 const props = defineProps<{ timeline: Timeline; caption?: string }>();
 

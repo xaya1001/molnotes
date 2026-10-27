@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import MoleculeView from "./MoleculeView.vue";
 import MolecularProperties from "./MolecularProperties.vue";
-import type { MoleculeData } from "./chemistry/types";
+import type { MoleculeData } from "./chemistry/types.ts";
 const props = defineProps<{
   site: string;
   variants: readonly MoleculeData[];

@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import PageViewer from "./PageViewer.vue";
 import UiDialog from "./UiDialog.vue";
-import { citationLabel, type Citation } from "./citations";
+import { citationLabel, type Citation } from "./citations.ts";
 
 /** The original behind a citation: cited PDF pages with their neighbours, an archived article or an epub chapter. */
 const props = defineProps<{ citation?: Citation }>();

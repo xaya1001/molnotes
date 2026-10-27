@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { paragraphPieces, sourceIdsOf } from "./chapter-text";
-import { useTopic } from "./context";
+import { paragraphPieces, sourceIdsOf } from "./chapter-text.ts";
+import { useTopic } from "./context.ts";
 import SourceText from "./SourceText.vue";
 import TopicRefs from "./TopicRefs.vue";
 import TopicTerm from "./TopicTerm.vue";

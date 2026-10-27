@@ -4,7 +4,7 @@ import {
   evidenceSource,
   type EvidenceSource,
   type ReadingItem,
-} from "./evidence";
+} from "./evidence.ts";
 import CiteButton from "./CiteButton.vue";
 const props = defineProps<{
   items: readonly ReadingItem[];

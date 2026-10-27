@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { measurementText } from "./patent-measurements";
-import type { Measurement, Assignment } from "./patent";
+import { measurementText } from "./patent-measurements.ts";
+import type { Measurement, Assignment } from "./patent.ts";
 import SourceText from "./SourceText.vue";
 import { ref, watch } from "vue";
 import MoleculeView from "../MoleculeView.vue";
@@ -12,7 +12,7 @@ import {
   type CollectionRecord,
   type PageRef,
   type BodyRef,
-} from "./patent";
+} from "./patent.ts";
 const props = defineProps<{
   collection: RecordCollection;
   field: RecordField;

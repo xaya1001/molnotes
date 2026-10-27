@@ -1,13 +1,14 @@
-import { inducedProximityModels } from "./induced-proximity.mjs";
-import { organicChemistryModels } from "./organic-chemistry.mjs";
-import { biochemicalKineticsModels } from "./biochemical-kinetics.mjs";
-import { medicinalChemistryModels } from "./medicinal-chemistry.mjs";
+import type { Unchecked } from "../../../shared/unchecked.ts";
+import { inducedProximityModels } from "./induced-proximity.ts";
+import { organicChemistryModels } from "./organic-chemistry.ts";
+import { biochemicalKineticsModels } from "./biochemical-kinetics.ts";
+import { medicinalChemistryModels } from "./medicinal-chemistry.ts";
 // The models a `lab` block can run, by name. A model declares its inputs
 // (what the reader can set, with the ranges the topic's figures stay valid
 // for) and a pure `run` that turns the values into what the lab shows: a
 // summary line, readouts, or series to plot. A model throws a reader-facing
 // message for an input combination it cannot answer. The content check
-// (shared/topic-blocks.mjs) and the runtime share one catalogue.
+// (shared/topic-blocks.ts) and the runtime share one catalogue.
 
 export type LabInput =
   | {
@@ -55,11 +56,13 @@ export interface LabResult {
     note?: string;
   }[];
 }
+export type LabValues = Record<string, number | string>;
+/** A model's `data` is topic JSON that its `validateData` checks before use. */
 export interface LabModel {
-  inputs: LabInput[] | ((data: unknown) => LabInput[]);
-  validateData?(data: unknown): void;
+  inputs: LabInput[] | ((data: Unchecked) => LabInput[]);
+  validateData?(data: Unchecked): void;
   /** Throws a reader-facing message for inputs it cannot answer. */
-  run(values: Record<string, number | string>, data?: unknown): LabResult;
+  run(values: LabValues, data?: Unchecked): LabResult;
 }
 
 /** Resolve controls at the content boundary before rendering or checking defaults. */

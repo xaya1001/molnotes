@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import UiDialog from "./UiDialog.vue";
-import { loadIndex } from "./content-data";
-import { searchNotes, searchSite, snippet } from "./site-search";
+import { loadIndex } from "./content-data.ts";
+import { searchNotes, searchSite, snippet } from "./site-search.ts";
 
 /** Site-wide search over notes, topic chapters and glossary terms; the index loads on first open. */
 const open = defineModel<boolean>("open", { required: true });

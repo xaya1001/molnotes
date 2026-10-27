@@ -8,7 +8,7 @@ if [[ ! -x node_modules/.bin/lint-staged ]]; then
   exit 1
 fi
 
-node scripts/check-staged-files.mjs --staged
-node scripts/check-private-terms.mjs --staged
+node scripts/check-staged-files.ts --staged
+node scripts/check-private-terms.ts --staged
 npm run format:staged
 git diff --cached --check

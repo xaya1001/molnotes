@@ -3,9 +3,9 @@ import { nextTick, onMounted, ref } from "vue";
 import MoleculeView from "../../ui/MoleculeView.vue";
 import FlowFigure from "../../ui/diagrams/FlowFigure.vue";
 import TimelineFigure from "../../ui/diagrams/TimelineFigure.vue";
-import { figureWarnings } from "../../ui/diagrams/check";
-import { defineFlow, type Flow } from "../../ui/diagrams/flow";
-import { defineTimeline, type Timeline } from "../../ui/diagrams/model";
+import { figureWarnings } from "../../ui/diagrams/check.ts";
+import { defineFlow, type Flow } from "../../ui/diagrams/flow.ts";
+import { defineTimeline, type Timeline } from "../../ui/diagrams/model.ts";
 
 // The content preview command injects the figures of one unit and reads the
 // warnings back; the page is not linked from the showcase.

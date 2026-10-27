@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import MoleculeView from "./MoleculeView.vue";
-import type { MechanismFrame } from "./chemistry/types";
+import type { MechanismFrame } from "./chemistry/types.ts";
 defineProps<{ frames: readonly MechanismFrame[] }>();
 const index = ref(0);
 </script>

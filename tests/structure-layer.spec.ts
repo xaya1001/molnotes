@@ -1,4 +1,4 @@
-import { expect, test } from "./helpers/test";
+import { expect, test } from "./helpers/test.ts";
 test.setTimeout(90_000);
 test("molecule selection supports mouse and keyboard; result is absent until submission", async ({
   page,

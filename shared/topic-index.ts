@@ -1,3 +1,4 @@
+import type { Unchecked } from "./unchecked.ts";
 import type { TopicPrediction } from "../src/ui/topic/content.ts";
 import type { ProblemBlock } from "../src/ui/topic/blocks.ts";
 import { topicProblems } from "../src/ui/topic/problem.ts";
@@ -42,7 +43,7 @@ export interface TopicIndex {
 }
 
 /** Searchable text of a chapter: its lead and the prose of its blocks. */
-function chapterSearchText(chapter: any, content: any) {
+function chapterSearchText(chapter: Unchecked, content: Unchecked) {
   return [chapter.lead, ...blockSearchText(chapter.blocks, content.data)]
     .filter((part) => typeof part === "string" && part)
     .join(" ")
@@ -64,7 +65,7 @@ interface TopicSite {
   slug: string;
   title: string;
   group?: string;
-  content: any;
+  content: Unchecked;
 }
 
 export function buildReviewIndex(
@@ -80,7 +81,7 @@ export function buildReviewIndex(
     chapters.push({
       slug: site.slug,
       title: site.title,
-      chapters: content.chapters.map((chapter: any) => ({
+      chapters: content.chapters.map((chapter: Unchecked) => ({
         id: chapter.id,
         number: chapter.number,
         title: chapter.title,
@@ -95,7 +96,7 @@ export function buildReviewIndex(
       ),
       problems: topicProblems(content),
       answerKey: Object.fromEntries(
-        (content.quiz ?? []).map((question: any) => [
+        (content.quiz ?? []).map((question: Unchecked) => [
           question.id,
           question.answer,
         ]),
@@ -119,7 +120,7 @@ export function buildTopicIndex(topics: TopicSite[]): TopicIndex {
   return {
     ...buildReviewIndex(topics),
     search: topics.flatMap((site) =>
-      site.content.chapters.map((chapter: any) => ({
+      site.content.chapters.map((chapter: Unchecked) => ({
         slug: site.slug,
         chapterId: chapter.id,
         text: chapterSearchText(chapter, site.content),

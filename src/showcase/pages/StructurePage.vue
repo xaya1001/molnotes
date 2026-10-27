@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { PageHeading, StructureLab } from "@ui";
-import { structures } from "../structures";
+import { structures } from "../structures.ts";
 </script>
 
 <template>

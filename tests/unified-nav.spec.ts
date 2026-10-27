@@ -1,4 +1,4 @@
-import { test, expect } from "./helpers/test";
+import { test, expect } from "./helpers/test.ts";
 import { mkdir } from "node:fs/promises";
 
 const empty = {
