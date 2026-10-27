@@ -121,9 +121,9 @@ edges:
 
 `npm run content -- build <输出目录>` 读取内容目录里的全部单元、`sources.json` 与 `glossary.json`，校验、解析引用并编译，把结果写成快照：`snapshot.json`（`format: 1`、`commit`、`builtAt`，以及 `topics`、`directories`、`notes`、`glossary`、`registry`、`assets`）和 `files/<单元>/<路径>`（内容资源原样复制，被引页渲染在 `<单元>/cited/`）。输出目录不能已存在；任何校验失败都不写出。`build` 不检查提交，`commit` 为 `null`。
 
-`npm run content -- publish` 要求内容目录在 HEAD 下没有未提交、未跟踪或被忽略的文件（构建前后各查一次），把 HEAD 的内容构建到 `MOLNOTES_CONTENT_RELEASES` 指定的发布根下的 `<提交号>/`，完成后以一次 rename 把 `current` 换成指向它的相对软链，再删除旧快照，连同 `current` 指向的共保留最近 5 个。同一提交再次发布时重新构建并替换该快照。`publish --rollback <提交号>`（可用唯一前缀）把 `current` 指回一个保留着的快照，不构建。
+`npm run content -- publish` 要求内容目录在 HEAD 下没有未提交、未跟踪或被忽略的文件（构建前后各查一次），把 HEAD 的内容构建到 `MOLNOTES_CONTENT_RELEASES` 指定的发布根下的 `<提交号>-<构建时间>/`（构建时间为 UTC，如 `20261027T012345678Z`，每次构建一个新目录），完成后以一次 rename 把 `current` 换成指向它的相对软链，再删除旧快照，连同 `current` 指向的共保留最近 5 个。同一提交再次发布时另建一个快照，`current` 换到新目录，网站随之重新加载。`publish --rollback <提交号>`（可用只匹配一个提交的前缀）把 `current` 指回该提交保留着的最新快照，不构建。
 
-内容目录可以是 Git 仓库的根目录，也可以是仓库里的一个子目录，正文、JSON 与资源文件都提交；`publish` 在内容目录不在 Git 工作树里时报错退出。提交号属于整个仓库，内容目录以外的改动不影响发布，未提交文件按仓库根目录的相对路径列出。发布根下除 `<提交号>/` 与 `current` 外只有发布过程中的临时目录；网站的 `MOLNOTES_CONTENT_SNAPSHOT` 指向 `current`。
+内容目录可以是 Git 仓库的根目录，也可以是仓库里的一个子目录，正文、JSON 与资源文件都提交；`publish` 在内容目录不在 Git 工作树里时报错退出。提交号属于整个仓库，内容目录以外的改动不影响发布，未提交文件按仓库根目录的相对路径列出。发布根下除快照目录与 `current` 外只有发布过程中的临时目录；网站的 `MOLNOTES_CONTENT_SNAPSHOT` 指向 `current`。
 
 ## 协作流程
 

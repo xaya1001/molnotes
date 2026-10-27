@@ -8,6 +8,7 @@ import {
   readFile,
   readdir,
   readlink,
+  realpath,
   rename,
   rm,
   writeFile,
@@ -130,15 +131,21 @@ test("publish switches current to the committed snapshot, keeps five and rolls b
     );
   const current = () => readlink(join(releases, "current"));
   const kept = async () =>
-    (await readdir(releases)).filter((name) => /^[0-9a-f]{40}$/.test(name));
+    (await readdir(releases)).filter((name) =>
+      /^[0-9a-f]{40}-\d{8}T\d{9}Z$/.test(name),
+    );
+  const commitOf = (name) => name.slice(0, 40);
 
   const first = await git("rev-parse", "HEAD");
   // Changes outside the content directory do not block publishing.
   await writeFile(join(repo, "README.md"), "edited\n");
-  assert.match((await content(root, "publish")).stdout, /current: /);
-  assert.equal(await current(), first);
+  const [, firstName] = /current: (\S+)/.exec(
+    (await content(root, "publish")).stdout,
+  );
+  assert.equal(commitOf(firstName), first);
+  assert.equal(await current(), firstName);
   const snapshot = JSON.parse(
-    await readFile(join(releases, first, "snapshot.json"), "utf8"),
+    await readFile(join(releases, firstName, "snapshot.json"), "utf8"),
   );
   assert.equal(snapshot.commit, first);
 
@@ -157,16 +164,16 @@ test("publish switches current to the committed snapshot, keeps five and rolls b
     /\?\? content\/notes\/reader-test\/draft\.md/,
   );
   await rm(join(repo, "content/notes/reader-test/draft.md"));
-  assert.equal(await current(), first);
+  assert.equal(await current(), firstName);
 
   // Older snapshots beyond the newest five are removed.
   const shelf = { materials, cache: join(root, "shelf-cache") };
-  const published = [first];
+  const publish = () =>
+    publishSnapshot(join(repo, "content"), releases, { shelf });
+  const published = [firstName];
   for (let i = 0; i < keptSnapshots; i++) {
     await commit();
-    published.push(
-      await publishSnapshot(join(repo, "content"), releases, { shelf }),
-    );
+    published.push(await publish());
   }
   assert.equal(await current(), published.at(-1));
   assert.deepEqual(
@@ -174,16 +181,24 @@ test("publish switches current to the committed snapshot, keeps five and rolls b
     published.slice(-keptSnapshots).sort(),
   );
 
-  // Publishing the same commit again replaces its snapshot in place.
-  await publishSnapshot(join(repo, "content"), releases, { shelf });
-  assert.equal(await current(), published.at(-1));
+  // Publishing the same commit again builds a new directory, so the
+  // reader sees `current` change; the earlier build stays kept.
+  const before = await realpath(join(releases, "current"));
+  const again = await publish();
+  assert.equal(commitOf(again), commitOf(published.at(-1)));
+  assert.notEqual(await realpath(join(releases, "current")), before);
+  assert.equal(await current(), again);
+  assert.ok((await kept()).includes(published.at(-1)));
   assert.equal((await kept()).length, keptSnapshots);
 
   const back = published.at(-3);
-  await content(root, "publish", "--rollback", back.slice(0, 7));
+  await content(root, "publish", "--rollback", commitOf(back).slice(0, 7));
   assert.equal(await current(), back);
+  // A commit with several kept builds rolls back to the newest.
+  await rollbackSnapshot(releases, commitOf(again));
+  assert.equal(await current(), again);
   await assert.rejects(rollbackSnapshot(releases, first), /no kept snapshot/);
-  assert.equal(await current(), back);
+  assert.equal(await current(), again);
 });
 
 test("a build that fails validation writes nothing", async (t) => {

@@ -15,7 +15,19 @@ import { committedSource } from "./content-files.mjs";
 
 /** Snapshots a release root keeps besides the one `current` names. */
 export const keptSnapshots = 5;
-const snapshotName = /^[0-9a-f]{40}$/;
+/** `<commit>-<build time>`: every build gets its own directory, so `current` always changes path. */
+const snapshotName = /^([0-9a-f]{40})-(\d{8}T\d{9}Z)$/;
+/** The snapshot directory name of a build of `commit` at `builtAt`. */
+const nameOf = (commit, builtAt) =>
+  `${commit}-${builtAt.replace(/[-:.]/g, "")}`;
+/** Kept snapshot directories, newest first. */
+async function snapshots(releases) {
+  return (await readdir(releases))
+    .map((name) => snapshotName.exec(name))
+    .filter(Boolean)
+    .map(([name, commit, built]) => ({ name, commit, built }))
+    .sort((a, b) => b.built.localeCompare(a.built));
+}
 
 /**
  * Writes a built snapshot to `output`, which must not exist yet: the files
@@ -68,61 +80,44 @@ async function currentName(releases) {
 /** Removes all but the newest `keptSnapshots` snapshots, never the current one. */
 async function prune(releases) {
   const current = await currentName(releases);
-  const snapshots = [];
-  for (const name of await readdir(releases))
-    if (snapshotName.test(name) && name !== current)
-      snapshots.push({
-        name,
-        built: (await stat(join(releases, name, "snapshot.json"))).mtimeMs,
-      });
-  snapshots.sort((a, b) => b.built - a.built);
-  for (const { name } of snapshots.slice(keptSnapshots - 1))
+  const old = (await snapshots(releases)).filter(
+    ({ name }) => name !== current,
+  );
+  for (const { name } of old.slice(keptSnapshots - 1))
     await rm(join(releases, name), { recursive: true, force: true });
 }
 
 /**
- * Builds the committed content at `root` into `<releases>/<commit>/` and
- * switches `current` to it. The content directory must be clean at HEAD,
- * before and after the build. Returns the commit.
+ * Builds the committed content at `root` into `<releases>/<commit>-<build
+ * time>/` and switches `current` to it. The content directory must be clean
+ * at HEAD, before and after the build. Returns the snapshot directory name.
  */
 export async function publishSnapshot(root, releases, { shelf } = {}) {
   const source = await committedSource(root, ["."]);
   const built = await buildSnapshot(root, { shelf, commit: source.commit });
   await source.verify();
   await mkdir(releases, { recursive: true });
-  const target = join(releases, source.commit);
-  const staged = join(releases, `.build.${randomUUID()}`);
-  await writeSnapshot(staged, built);
-  // A commit published again (for example after a compiler change) replaces its snapshot.
-  const replaced = join(releases, `.replaced.${randomUUID()}`);
-  let replacing = true;
-  try {
-    await rename(target, replaced);
-  } catch (error) {
-    if (error.code !== "ENOENT") throw error;
-    replacing = false;
-  }
-  await rename(staged, target);
-  await switchCurrent(releases, source.commit);
-  if (replacing) await rm(replaced, { recursive: true, force: true });
+  const name = nameOf(source.commit, built.snapshot.builtAt);
+  await writeSnapshot(join(releases, name), built);
+  await switchCurrent(releases, name);
   await prune(releases);
-  return source.commit;
+  return name;
 }
 
-/** Switches `current` back to a kept snapshot named by its commit or a unique prefix of it. */
+/**
+ * Switches `current` back to the newest kept snapshot of a commit, named in
+ * full or by a prefix that only one commit matches.
+ */
 export async function rollbackSnapshot(releases, commit) {
   if (!/^[0-9a-f]{4,40}$/.test(commit ?? ""))
     throw new Error("Expected a commit");
-  const matches = (await readdir(releases)).filter(
-    (name) => snapshotName.test(name) && name.startsWith(commit),
+  const matches = (await snapshots(releases)).filter((snapshot) =>
+    snapshot.commit.startsWith(commit),
   );
-  if (matches.length !== 1)
-    throw new Error(
-      matches.length
-        ? `${commit}: matches several snapshots`
-        : `${commit}: no kept snapshot`,
-    );
-  const [name] = matches;
+  if (!matches.length) throw new Error(`${commit}: no kept snapshot`);
+  if (new Set(matches.map((snapshot) => snapshot.commit)).size > 1)
+    throw new Error(`${commit}: matches several commits`);
+  const [{ name }] = matches;
   await stat(join(releases, name, "snapshot.json"));
   await switchCurrent(releases, name);
   return name;

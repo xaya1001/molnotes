@@ -27,13 +27,13 @@ try {
       setting("MOLNOTES_CONTENT_RELEASES"),
       args[1],
     );
-    console.log(`current: ${name.slice(0, 7)}`);
+    console.log(`current: ${name}`);
   } else {
-    const commit = await publishSnapshot(
+    const name = await publishSnapshot(
       setting("MOLNOTES_CONTENT_DIR"),
       setting("MOLNOTES_CONTENT_RELEASES"),
     );
-    console.log(`current: ${commit.slice(0, 7)}`);
+    console.log(`current: ${name}`);
   }
 } catch (error) {
   console.error(error.message);
