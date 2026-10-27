@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { contentCache } from "../server/content-cache.mjs";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { contentSnapshot } from "../server/content-cache.mjs";
 
 test("reading and record validation load without browser state or publication compilers", () => {
   execFileSync(
@@ -29,56 +32,68 @@ test("reading and record validation load without browser state or publication co
   );
 });
 
-test("content cache shares builds and isolates failures across publication revisions", async () => {
-  let revision = 1;
-  let releases = 0;
-  const query = async () => ({ rows: [{ revision }] });
-  const cache = contentCache({
-    query,
-    connect: async () => ({
-      query,
-      release() {
-        releases++;
-      },
-    }),
-  });
-  let rejectOld;
-  let started;
-  const ready = new Promise((resolve) => {
-    started = resolve;
-  });
-  const oldBuild = () => {
-    started();
-    return new Promise((_, reject) => {
-      rejectOld = reject;
+test("content responses are shared per snapshot and failed builds are retried", async () => {
+  const root = await mkdtemp(join(tmpdir(), "il-content-cache-"));
+  try {
+    for (const name of ["one", "two"]) {
+      await mkdir(join(root, name));
+      await writeFile(
+        join(root, name, "snapshot.json"),
+        JSON.stringify({
+          format: 1,
+          topics: [],
+          directories: [],
+          notes: [],
+          glossary: [],
+          registry: null,
+          assets: [],
+        }),
+      );
+    }
+    await symlink("one", join(root, "current"));
+    const content = contentSnapshot(join(root, "current"));
+    const one = await content();
+    let rejectOld;
+    let started;
+    const ready = new Promise((resolve) => {
+      started = resolve;
     });
-  };
-  const old = cache("topic", oldBuild);
-  const rejected = assert.rejects(old, /publication failed/);
-  await ready;
-  revision++;
-  let builds = 0;
-  const build = async () => {
-    builds++;
-    return { title: "current" };
-  };
-  const [first, second] = await Promise.all([
-    cache("topic", build),
-    cache("topic", build),
-  ]);
-  assert.equal(first, second);
-  assert.equal(builds, 1);
-  rejectOld(new Error("publication failed"));
-  await rejected;
-  assert.equal(await cache("topic", build), first);
-  assert.equal(builds, 1);
-  assert.equal(releases, 2);
-  await assert.rejects(
-    cache("retry", async () => {
-      throw new Error("unavailable");
-    }),
-    /unavailable/,
-  );
-  assert.deepEqual(await cache("retry", build), { title: "current" });
-  assert.equal(builds, 2);
+    const old = one.cached("topic", () => {
+      started();
+      return new Promise((_, reject) => {
+        rejectOld = reject;
+      });
+    });
+    const rejected = assert.rejects(old, /build failed/);
+    await ready;
+    await rm(join(root, "current"));
+    await symlink("two", join(root, "current"));
+    const two = await content();
+    assert.notEqual(two, one);
+    let builds = 0;
+    const build = async () => {
+      builds++;
+      return { title: "current" };
+    };
+    const [first, second] = await Promise.all([
+      two.cached("topic", build),
+      two.cached("topic", build),
+    ]);
+    assert.equal(first, second);
+    assert.equal(builds, 1);
+    rejectOld(new Error("build failed"));
+    await rejected;
+    assert.equal(await (await content()).cached("topic", build), first);
+    assert.equal(builds, 1);
+    await assert.rejects(
+      two.cached("retry", async () => {
+        throw new Error("unavailable");
+      }),
+      /unavailable/,
+    );
+    assert.deepEqual(await two.cached("retry", build), { title: "current" });
+    assert.equal(builds, 2);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

@@ -1,10 +1,70 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  writeFile,
+  rm,
+  rename,
+  symlink,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createWebServer } from "../server/web.mjs";
+import { sha256 } from "../server/assets.mjs";
+
+/** Writes a snapshot directory `name` under `root` from table rows and files. */
+async function snapshot(root, name, data = {}, files = {}) {
+  const directory = join(root, name);
+  await mkdir(directory, { recursive: true });
+  const assets = [];
+  for (const [key, bytes] of Object.entries(files)) {
+    const [scope, path] = [
+      key.split("/").slice(0, 2).join("/"),
+      key.split("/").slice(2).join("/"),
+    ];
+    await mkdir(join(directory, "files", scope, path, ".."), {
+      recursive: true,
+    });
+    await writeFile(join(directory, "files", key), bytes);
+    assets.push({
+      scope,
+      path,
+      sha256: sha256(bytes),
+      size: bytes.length,
+      content_type: "video/mp4",
+    });
+  }
+  await writeFile(
+    join(directory, "snapshot.json"),
+    JSON.stringify({
+      format: 1,
+      commit: "0".repeat(40),
+      builtAt: "2026-01-01T00:00:00.000Z",
+      topics: [],
+      directories: [],
+      notes: [],
+      glossary: [],
+      registry: null,
+      assets,
+      ...data,
+    }),
+  );
+}
+async function point(root, name) {
+  await symlink(name, join(root, "next"));
+  await rename(join(root, "next"), join(root, "current"));
+}
+async function listen(server) {
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  return `http://127.0.0.1:${server.address().port}`;
+}
+async function stop(server) {
+  server.closeAllConnections();
+  await new Promise((resolve) => server.close(resolve));
+}
 
 test("static WebAssembly supports streaming with the wasm MIME type", async () => {
   const dist = await mkdtemp(join(tmpdir(), "il-wasm-test-"));
@@ -32,42 +92,26 @@ test("static WebAssembly supports streaming with the wasm MIME type", async () =
 });
 
 test("asset HTTP methods, byte ranges, validators and aborted streams", async () => {
-  const { sha256 } = await import("../server/assets.mjs");
-  const cache = await mkdtemp(join(tmpdir(), "il-hardening-http-"));
+  const root = await mkdtemp(join(tmpdir(), "il-hardening-http-"));
   const bytes = Buffer.alloc(2_000_000, 65);
   bytes.write("0123456789");
-  const asset = {
-    sha256: sha256(bytes),
-    size: bytes.length,
-    content_type: "video/mp4",
-  };
-  let fetches = 0;
-  const server = createWebServer({
-    pool: { query: async () => ({ rows: [asset] }) },
-    store: {
-      fetchObject: async () => {
-        fetches++;
-        return bytes;
-      },
-    },
-    cache,
-  });
-  server.listen(0, "127.0.0.1");
-  await once(server, "listening");
-  const url = `http://127.0.0.1:${server.address().port}/sites/test/static/movie.mp4`;
-  const tag = `"${asset.sha256}"`;
+  await snapshot(root, "one", {}, { "sites/test/static/movie.mp4": bytes });
+  await point(root, "one");
+  const server = createWebServer({ snapshot: join(root, "current") });
+  const url = (await listen(server)) + "/sites/test/static/movie.mp4";
+  const tag = `"${sha256(bytes)}"`;
   try {
     const post = await fetch(url, { method: "POST" });
     assert.equal(post.status, 405);
-    assert.equal(fetches, 0);
     const head = await fetch(url, {
       method: "HEAD",
       headers: { Range: "bytes=0-3" },
     });
     assert.equal(head.status, 200);
     assert.equal(head.headers.get("content-length"), String(bytes.length));
+    assert.equal(head.headers.get("content-type"), "video/mp4");
+    assert.equal(head.headers.get("etag"), tag);
     assert.equal((await head.arrayBuffer()).byteLength, 0);
-    assert.equal(fetches, 0);
     for (const [range, start, end] of [
       ["bytes=1-3", 1, 3],
       ["bytes=1999997-", 1999997, 1999999],
@@ -86,7 +130,6 @@ test("asset HTTP methods, byte ranges, validators and aborted streams", async ()
         bytes.subarray(start, end + 1),
       );
     }
-    assert.equal(fetches, 1);
     const invalid = await fetch(url, { headers: { Range: "bytes=2000000-" } });
     assert.equal(invalid.status, 416);
     assert.equal(
@@ -114,67 +157,116 @@ test("asset HTTP methods, byte ranges, validators and aborted streams", async ()
     await reader.cancel().catch(() => {});
     const after = await fetch(url, { headers: { Range: "bytes=0-9" } });
     assert.equal(await after.text(), "0123456789");
-    assert.equal(fetches, 1);
+    // Only files the snapshot lists are served.
+    await writeFile(join(root, "one/files/sites/test/static/extra.mp4"), "x");
+    assert.equal((await fetch(url.replace("movie", "extra"))).status, 404);
   } finally {
-    server.closeAllConnections();
-    await new Promise((resolve) => server.close(resolve));
-    await rm(cache, { recursive: true, force: true });
+    await stop(server);
+    await rm(root, { recursive: true, force: true });
   }
 });
 
-test("notebook metadata cache does not read topics or build the search index", async () => {
-  let reads = 0;
-  const query = async (sql) => {
-    if (sql === "SELECT revision FROM content_revision")
-      return { rows: [{ revision: 1 }] };
-    if (
-      [
-        "BEGIN",
-        "COMMIT",
-        "ROLLBACK",
-        "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ",
-      ].includes(sql)
-    )
-      return { rows: [] };
-    if (sql.includes("FROM note_directories")) {
-      reads++;
-      return {
-        rows: [
-          {
-            compiled: {
-              slug: "book",
-              path: "/notes/book/",
-              title: "Book",
-              summary: "Summary",
-              order: 1,
-            },
-          },
-        ],
-      };
-    }
-    if (sql.includes("FROM notes"))
-      return {
-        rows: [
-          {
-            compiled: {
-              slug: "one",
-              directory: "book",
-              path: "/notes/book/one",
-              title: "One",
-              summary: "Summary",
-              order: 1,
-            },
-          },
-        ],
-      };
-    throw new Error("unrelated content unavailable");
-  };
-  const server = createWebServer({
-    pool: { query, connect: async () => ({ query, release() {} }) },
+test("a new snapshot target is served from the next request; a broken one keeps the previous", async () => {
+  const root = await mkdtemp(join(tmpdir(), "il-snapshot-switch-"));
+  const directory = (title) => ({
+    directories: [
+      {
+        dir: "book",
+        metadata: { title, order: 1, intro: "" },
+        citations: {},
+        compiled: {
+          slug: "book",
+          path: "/notes/book/",
+          title,
+          order: 1,
+          html: "",
+        },
+      },
+    ],
   });
-  server.listen(0, "127.0.0.1");
-  await once(server, "listening");
-  const base = `http://127.0.0.1:${server.address().port}`;
+  const errors = [];
+  const error = console.error;
+  console.error = (message) => errors.push(message);
+  const server = createWebServer({
+    pool: { query: async () => ({ rows: [] }) },
+    snapshot: join(root, "current"),
+  });
+  const base = await listen(server);
+  const title = async () =>
+    (await (await fetch(base + "/api/notes")).json()).directories[0].title;
+  try {
+    assert.equal((await fetch(base + "/healthz")).status, 503);
+    assert.equal((await fetch(base + "/api/notes")).status, 503);
+    await mkdir(join(root, "empty"));
+    await point(root, "empty");
+    assert.equal((await fetch(base + "/healthz")).status, 503);
+    await snapshot(root, "one", directory("First"));
+    await point(root, "one");
+    assert.equal((await fetch(base + "/healthz")).status, 200);
+    assert.equal(await title(), "First");
+    await snapshot(root, "two", directory("Second"));
+    await point(root, "two");
+    assert.equal(await title(), "Second");
+    await mkdir(join(root, "broken"));
+    await writeFile(join(root, "broken/snapshot.json"), "{");
+    await point(root, "broken");
+    assert.equal(await title(), "Second");
+    assert.equal(await title(), "Second");
+    assert.equal((await fetch(base + "/healthz")).status, 200);
+    assert.equal(errors.filter((e) => e.includes("broken")).length, 1);
+    await point(root, "one");
+    assert.equal(await title(), "First");
+  } finally {
+    console.error = error;
+    await stop(server);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("notebook metadata leaves out bodies and is built once per snapshot", async () => {
+  const root = await mkdtemp(join(tmpdir(), "il-notebook-cache-"));
+  await snapshot(root, "one", {
+    directories: [
+      {
+        dir: "book",
+        metadata: { title: "Book", order: 1, intro: "" },
+        citations: {},
+        compiled: {
+          slug: "book",
+          path: "/notes/book/",
+          title: "Book",
+          summary: "Summary",
+          order: 1,
+          html: "<p>intro</p>",
+        },
+      },
+    ],
+    notes: [
+      {
+        dir: "book",
+        slug: "one",
+        author: false,
+        source: "",
+        compiled: {
+          slug: "one",
+          directory: "book",
+          path: "/notes/book/one",
+          title: "One",
+          summary: "Summary",
+          order: 1,
+          html: "<p>body</p>",
+        },
+      },
+    ],
+  });
+  await point(root, "one");
+  const events = [];
+  const timings = process.env.MOLNOTES_TIMINGS;
+  const error = console.error;
+  process.env.MOLNOTES_TIMINGS = "1";
+  console.error = (line) => events.push(JSON.parse(line));
+  const server = createWebServer({ snapshot: join(root, "current") });
+  const base = await listen(server);
   try {
     for (let i = 0; i < 2; i++) {
       const response = await fetch(base + "/api/notes");
@@ -182,12 +274,17 @@ test("notebook metadata cache does not read topics or build the search index", a
       const notebook = await response.json();
       assert.equal(notebook.notes[0].path, "/notes/book/one");
       assert.ok(!("html" in notebook.notes[0]));
+      assert.ok(!("html" in notebook.directories[0]));
     }
-    assert.equal(reads, 1);
-    assert.equal((await fetch(base + "/api/index")).status, 503);
-    assert.equal((await fetch(base + "/api/notes")).status, 200);
+    assert.deepEqual(
+      events.map((e) => e.stage),
+      ["query.build.notebook"],
+    );
   } finally {
-    server.closeAllConnections();
-    await new Promise((resolve) => server.close(resolve));
+    console.error = error;
+    if (timings === undefined) delete process.env.MOLNOTES_TIMINGS;
+    else process.env.MOLNOTES_TIMINGS = timings;
+    await stop(server);
+    await rm(root, { recursive: true, force: true });
   }
 });
