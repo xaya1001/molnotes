@@ -1,2 +1,2 @@
-pymupdf==1.28.2
-Pillow==12.2.0
+pymupdf==2.0
+Pillow==13.0.0
