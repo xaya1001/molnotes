@@ -82,9 +82,9 @@ test("shared lab defaults reproduce the original page readouts", () => {
   ]) {
     const model = labModels[name];
     assert.equal(
-      model.run(
+      model().run(
         Object.fromEntries(
-          (model.inputs as LabInput[]).map((input) => [
+          (model().inputs as LabInput[]).map((input) => [
             input.id,
             input.default,
           ]),

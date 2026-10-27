@@ -1,4 +1,5 @@
-import type { Unchecked } from "../shared/unchecked.ts";
+import type { TopicContent } from "../src/ui/topic/content.ts";
+import type FixtureFixture from "./fixtures/content/sites/instruments/content.json";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -11,7 +12,7 @@ import {
 import { labModels, modelInputs } from "../src/ui/models/catalog.ts";
 import { validateTopicContent } from "../shared/topic-content.ts";
 
-const fixture = () =>
+const fixture = (): typeof FixtureFixture & TopicContent =>
   JSON.parse(
     readFileSync(
       new URL(
@@ -43,15 +44,15 @@ test("readings preserve rounding and ATP unit conversion", () => {
 test("ATP controls, measurements, roles and comparison concentrations come from content", () => {
   const data = fixture().data.atpSample;
   const model = labModels["atp-competition"];
-  const inputs: Unchecked[] = modelInputs(model, data);
-  assert.deepEqual(inputs[0].options, [
+  const inputs = modelInputs(model, data);
+  assert.deepEqual("options" in inputs[0] ? inputs[0].options : undefined, [
     { value: "compound-x", label: "样本 X" },
     { value: "compound-y", label: "样本 Y" },
   ]);
   assert.equal(inputs[0].default, "compound-x");
-  assert.equal(inputs[1].max, 2);
+  assert.equal("max" in inputs[1] ? inputs[1].max : undefined, 2);
   assert.equal(inputs[1].default, 1);
-  const out = model.run({ inhibitor: "compound-x", step: 1 }, data);
+  const out = model(data).run({ inhibitor: "compound-x", step: 1 });
   assert.deepEqual(out.tables![0], {
     caption: data.parameterCaption,
     columns: data.parameterColumns,
@@ -67,8 +68,8 @@ test("ATP controls, measurements, roles and comparison concentrations come from 
   ]);
   assert.ok(out.summary!.endsWith(data.referenceWarning));
   assert.ok(
-    !model
-      .run({ inhibitor: "compound-y", step: 1 }, data)
+    !model(data)
+      .run({ inhibitor: "compound-y", step: 1 })
       .summary!.endsWith(data.referenceWarning),
   );
   data.roles = {
@@ -77,7 +78,7 @@ test("ATP controls, measurements, roles and comparison concentrations come from 
     denominator: "Variant B",
   };
   modelInputs(model, data);
-  const changed = model.run({ inhibitor: "compound-x", step: 0 }, data);
+  const changed = model(data).run({ inhibitor: "compound-x", step: 0 });
   assert.equal(changed.tables![0].rows[0][4], "0.50");
   assert.equal(changed.tables![1].rows[0][3], "0.67");
 });
@@ -86,11 +87,11 @@ test("drug-action comparison selects declared roles independently of row order",
   const data = fixture().data.competitionSample;
   const model = labModels["atp-selectivity"];
   modelInputs(model, data);
-  assert.equal(model.run({ exponent: 1 }, data).tables![0].rows[2][4], "18.0");
+  assert.equal(model(data).run({ exponent: 1 }).tables![0].rows[2][4], "18.0");
   data.variants.reverse();
   data.comparison = { numerator: "Variant A", denominator: "Variant B" };
   modelInputs(model, data);
-  const output = model.run({ exponent: 1 }, data);
+  const output = model(data).run({ exponent: 1 });
   assert.equal(output.tables![0].rows[0][0], "Variant B");
   assert.match(output.summary!, /0.2 倍/);
   assert.equal(output.tables![0].caption, data.caption);
@@ -101,54 +102,89 @@ test("publication rejects missing datasets, ambiguous roles and invalid measurem
   validateTopicContent(fixture());
   const changes = {
     atpSample: [
-      (d: Unchecked) => (d.variants = []),
-      (d: Unchecked) => d.variants.push(d.variants[0]),
-      (d: Unchecked) => (d.inhibitors = []),
-      (d: Unchecked) => d.inhibitors.push(d.inhibitors[0]),
-      (d: Unchecked) => delete d.inhibitorLabels["compound-x"],
-      (d: Unchecked) => delete d.kd["compound-x"]["Variant A"],
-      (d: Unchecked) => (d.km["Variant A"].value = 0),
-      (d: Unchecked) => (d.km["Reference"].sd = -1),
+      (d: (typeof FixtureFixture)["data"]["atpSample"]) =>
+        Reflect.set(d, "variants", []),
+      (d: (typeof FixtureFixture)["data"]["atpSample"]) =>
+        d.variants.push(d.variants[0]),
+      (d: (typeof FixtureFixture)["data"]["atpSample"]) =>
+        Reflect.set(d, "inhibitors", []),
+      (d: (typeof FixtureFixture)["data"]["atpSample"]) =>
+        d.inhibitors.push(d.inhibitors[0]),
+      (d: (typeof FixtureFixture)["data"]["atpSample"]) =>
+        Reflect.deleteProperty(d.inhibitorLabels, "compound-x"),
+      (d: (typeof FixtureFixture)["data"]["atpSample"]) =>
+        Reflect.deleteProperty(d.kd["compound-x"], "Variant A"),
+      (d: (typeof FixtureFixture)["data"]["atpSample"]) =>
+        Reflect.set(d.km["Variant A"], "value", 0),
+      (d: (typeof FixtureFixture)["data"]["atpSample"]) =>
+        Reflect.set(d.km["Reference"], "sd", -1),
       ...[0, -1, Infinity, "2"].map(
-        (v) => (d: Unchecked) => (d.kd["compound-x"].Reference.value = v),
+        (v) => (d: (typeof FixtureFixture)["data"]["atpSample"]) =>
+          Reflect.set(d.kd["compound-x"].Reference, "value", v),
       ),
-      (d: Unchecked) => (d.kd["compound-x"].Reference.sd = NaN),
-      (d: Unchecked) => (d.atpSteps = []),
-      (d: Unchecked) => (d.atpSteps[0] = -1),
-      (d: Unchecked) => (d.comparisonAtp = [Infinity]),
-      (d: Unchecked) => (d.defaultStep = 3),
-      (d: Unchecked) => (d.defaultStep = 0.5),
-      (d: Unchecked) => (d.roles = null),
-      (d: Unchecked) => (d.roles.numerator = "missing"),
-      (d: Unchecked) => (d.roles.denominator = d.roles.numerator),
-      (d: Unchecked) => (d.roles.reference = "missing"),
-      (d: Unchecked) => (d.parameterCaption = ""),
-      (d: Unchecked) => d.parameterColumns.pop(),
-      (d: Unchecked) => (d.comparisonCaption = ""),
-      (d: Unchecked) => (d.comparisonColumns[0] = ""),
-      (d: Unchecked) => (d.referenceWarning = ""),
+      (d: (typeof FixtureFixture)["data"]["atpSample"]) =>
+        Reflect.set(d.kd["compound-x"].Reference, "sd", NaN),
+      (d: (typeof FixtureFixture)["data"]["atpSample"]) =>
+        Reflect.set(d, "atpSteps", []),
+      (d: (typeof FixtureFixture)["data"]["atpSample"]) =>
+        Reflect.set(d.atpSteps, 0, -1),
+      (d: (typeof FixtureFixture)["data"]["atpSample"]) =>
+        Reflect.set(d, "comparisonAtp", [Infinity]),
+      (d: (typeof FixtureFixture)["data"]["atpSample"]) =>
+        Reflect.set(d, "defaultStep", 3),
+      (d: (typeof FixtureFixture)["data"]["atpSample"]) =>
+        Reflect.set(d, "defaultStep", 0.5),
+      (d: (typeof FixtureFixture)["data"]["atpSample"]) =>
+        Reflect.set(d, "roles", null),
+      (d: (typeof FixtureFixture)["data"]["atpSample"]) =>
+        Reflect.set(d.roles, "numerator", "missing"),
+      (d: (typeof FixtureFixture)["data"]["atpSample"]) =>
+        Reflect.set(d.roles, "denominator", d.roles.numerator),
+      (d: (typeof FixtureFixture)["data"]["atpSample"]) =>
+        Reflect.set(d.roles, "reference", "missing"),
+      (d: (typeof FixtureFixture)["data"]["atpSample"]) =>
+        Reflect.set(d, "parameterCaption", ""),
+      (d: (typeof FixtureFixture)["data"]["atpSample"]) =>
+        d.parameterColumns.pop(),
+      (d: (typeof FixtureFixture)["data"]["atpSample"]) =>
+        Reflect.set(d, "comparisonCaption", ""),
+      (d: (typeof FixtureFixture)["data"]["atpSample"]) =>
+        Reflect.set(d.comparisonColumns, 0, ""),
+      (d: (typeof FixtureFixture)["data"]["atpSample"]) =>
+        Reflect.set(d, "referenceWarning", ""),
     ],
     competitionSample: [
-      (d: Unchecked) => (d.variants = []),
-      (d: Unchecked) => d.variants.push(d.variants[0]),
-      (d: Unchecked) => (d.variants[0] = null),
-      (d: Unchecked) => (d.variants[0].name = ""),
-      (d: Unchecked) => (d.variants[0].kd = 0),
-      (d: Unchecked) => (d.variants[0].km = Infinity),
-      (d: Unchecked) => (d.comparison = null),
-      (d: Unchecked) => (d.comparison.numerator = "missing"),
-      (d: Unchecked) => (d.comparison.denominator = d.comparison.numerator),
-      (d: Unchecked) => (d.caption = ""),
-      (d: Unchecked) => d.columns.pop(),
+      (d: (typeof FixtureFixture)["data"]["competitionSample"]) =>
+        Reflect.set(d, "variants", []),
+      (d: (typeof FixtureFixture)["data"]["competitionSample"]) =>
+        d.variants.push(d.variants[0]),
+      (d: (typeof FixtureFixture)["data"]["competitionSample"]) =>
+        Reflect.set(d.variants, 0, null),
+      (d: (typeof FixtureFixture)["data"]["competitionSample"]) =>
+        Reflect.set(d.variants[0], "name", ""),
+      (d: (typeof FixtureFixture)["data"]["competitionSample"]) =>
+        Reflect.set(d.variants[0], "kd", 0),
+      (d: (typeof FixtureFixture)["data"]["competitionSample"]) =>
+        Reflect.set(d.variants[0], "km", Infinity),
+      (d: (typeof FixtureFixture)["data"]["competitionSample"]) =>
+        Reflect.set(d, "comparison", null),
+      (d: (typeof FixtureFixture)["data"]["competitionSample"]) =>
+        Reflect.set(d.comparison, "numerator", "missing"),
+      (d: (typeof FixtureFixture)["data"]["competitionSample"]) =>
+        Reflect.set(d.comparison, "denominator", d.comparison.numerator),
+      (d: (typeof FixtureFixture)["data"]["competitionSample"]) =>
+        Reflect.set(d, "caption", ""),
+      (d: (typeof FixtureFixture)["data"]["competitionSample"]) =>
+        d.columns.pop(),
     ],
   };
   for (const [key, mutations] of Object.entries(changes)) {
     const missing = fixture();
-    delete missing.data[key];
+    Reflect.deleteProperty(missing.data, key);
     assert.throws(() => validateTopicContent(missing));
     for (const mutate of mutations) {
       const doc = fixture();
-      mutate(doc.data[key]);
+      Reflect.apply(mutate, undefined, [doc.data[key as keyof typeof changes]]);
       assert.throws(() => validateTopicContent(doc));
     }
   }

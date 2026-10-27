@@ -1,4 +1,5 @@
-import type { Unchecked } from "../shared/unchecked.ts";
+import type { TopicContent } from "../src/ui/topic/content.ts";
+import type FixtureFixture from "./fixtures/content/sites/fable-patent/content.json";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -8,7 +9,7 @@ import { filterRecords, recordsCsv } from "../src/ui/topic/patent-filter.ts";
 import { topicRecordsCodec } from "../server/web/records.ts";
 import { validatePatentAssets } from "../scripts/content/patent-assets.ts";
 import { readUnit, type SiteUnit } from "../scripts/content/content-files.ts";
-const fixture = () =>
+const fixture = (): typeof FixtureFixture & TopicContent =>
   JSON.parse(
     readFileSync(
       new URL(
@@ -19,7 +20,7 @@ const fixture = () =>
     ),
   );
 test("patent records preserve missing grades, numeric filters, ids and ordered bins", () => {
-  const c = fixture().data.collections.examples;
+  const c = validateTopicContent(fixture()).data!.collections!.examples;
   assert.deepEqual(
     filterRecords(c, { activity: "unlisted" }).map((r) => r.id),
     [10],
@@ -56,18 +57,36 @@ test("patent records preserve missing grades, numeric filters, ids and ordered b
 test("content rejects bad cross references and page locations", () => {
   validateTopicContent(fixture());
   for (const mutate of [
-    (c: Unchecked) =>
-      c.data.collections.examples.records[0].refs.examples.push(99),
-    (c: Unchecked) =>
-      (c.data.collections.examples.records[0].structure.page = 4),
-    (c: Unchecked) => c.data.claims.main.claims[0].refs.push(99),
-    (c: Unchecked) => c.data.claims.main.claims[0].examples.push(99),
-    (c: Unchecked) => (c.data.collections.examples.records[0].activity = "Z"),
-    (c: Unchecked) =>
-      (c.data.collections.examples.records[0].structure.rect = [
-        0, 0, 900, 900,
-      ]),
-    (c: Unchecked) => (c.data.sources.alpha.paragraphs["0005"] = 4),
+    (c: typeof FixtureFixture) =>
+      Reflect.apply(
+        c.data.collections.examples.records[0].refs.examples.push,
+        c.data.collections.examples.records[0].refs.examples,
+        [99],
+      ),
+    (c: typeof FixtureFixture) =>
+      Reflect.set(c.data.collections.examples.records[0].structure, "page", 4),
+    (c: typeof FixtureFixture) =>
+      Reflect.apply(
+        c.data.claims.main.claims[0].refs.push,
+        c.data.claims.main.claims[0].refs,
+        [99],
+      ),
+    (c: typeof FixtureFixture) =>
+      Reflect.apply(
+        c.data.claims.main.claims[0].examples.push,
+        c.data.claims.main.claims[0].examples,
+        [99],
+      ),
+    (c: typeof FixtureFixture) =>
+      Reflect.set(c.data.collections.examples.records[0], "activity", "Z"),
+    (c: typeof FixtureFixture) =>
+      Reflect.set(
+        c.data.collections.examples.records[0].structure,
+        "rect",
+        [0, 0, 900, 900],
+      ),
+    (c: typeof FixtureFixture) =>
+      Reflect.set(c.data.sources.alpha.paragraphs, "0005", 4),
   ]) {
     const c = fixture();
     mutate(c);
@@ -84,16 +103,16 @@ test("content rejects bad cross references and page locations", () => {
     ["595", 842],
   ]) {
     const c = fixture();
-    c.data.sources.beta.size = size;
+    Reflect.set(c.data.sources.beta, "size", size);
     assert.throws(() => validateTopicContent(c), /size must contain/);
   }
   const a4 = fixture();
   const record = a4.data.collections.examples.records[0];
   record.source = "beta";
-  record.structure = { page: 1, rect: [0, 0, 595, 842] };
+  Reflect.set(record, "structure", { page: 1, rect: [0, 0, 595, 842] });
   const field = a4.data.collections.examples.fields.find(
-    (f: Unchecked) => f.key === "activity",
-  );
+    (f) => f.key === "activity",
+  )!;
   field.ref = { source: "beta", page: 1, rect: [0, 800, 595, 842] };
   validateTopicContent(a4);
   for (const target of [record.structure, field.ref]) {
@@ -107,7 +126,7 @@ test("content rejects bad cross references and page locations", () => {
     }
     target.rect = valid;
   }
-  record.structure.source = "alpha";
+  Reflect.set(record.structure, "source", "alpha");
   assert.throws(() => validateTopicContent(a4), /invalid rectangle/);
   const paths = patentRoutePaths(fixture());
   assert.ok(paths.includes("/examples/compare"));
@@ -143,13 +162,18 @@ test("publication checks molecules, scopes, assets and lazy JSON keys", async ()
   )) as SiteUnit;
   await validatePatentAssets(unit.content, "fable-patent", unit.assets);
   for (const mutate of [
-    (c: Unchecked) => (c.data.collections.examples.records[0].smiles = "C("),
-    (c: Unchecked) => (c.data.claims.main.claims[0].scope.smarts = "["),
-    (c: Unchecked) =>
-      (c.data.collections.examples.records[0].body.key = "absent"),
-    (c: Unchecked) =>
-      (c.data.claims.main.claims[0].segments[0].asset =
-        "/sites/fable-patent/static/missing.svg"),
+    (c: typeof FixtureFixture) =>
+      Reflect.set(c.data.collections.examples.records[0], "smiles", "C("),
+    (c: typeof FixtureFixture) =>
+      Reflect.set(c.data.claims.main.claims[0].scope!, "smarts", "["),
+    (c: typeof FixtureFixture) =>
+      Reflect.set(c.data.collections.examples.records[0].body, "key", "absent"),
+    (c: typeof FixtureFixture) =>
+      Reflect.set(
+        c.data.claims.main.claims[0].segments[0],
+        "asset",
+        "/sites/fable-patent/static/missing.svg",
+      ),
   ]) {
     const c = fixture();
     mutate(c);
@@ -158,8 +182,9 @@ test("publication checks molecules, scopes, assets and lazy JSON keys", async ()
 });
 
 test("measurement filters retain assay context, interval meaning, missing states and units", () => {
-  const c = fixture().data.collections.examples;
-  const ids = (q: Unchecked) => filterRecords(c, q).map((r) => r.id);
+  const c = validateTopicContent(fixture()).data!.collections!.examples;
+  const ids = (q: Parameters<typeof filterRecords>[1]) =>
+    filterRecords(c, q).map((r) => r.id);
   assert.deepEqual(
     ids({ "potency.assay": "alpha-potency", "potency.max": "25" }),
     [1, 2],
@@ -176,7 +201,7 @@ test("measurement filters retain assay context, interval meaning, missing states
   assert.deepEqual(ids({ "potency.status": "unreported" }), [6]);
   assert.deepEqual(
     ids({ sort: "potency", order: "desc" }),
-    c.records.map((r: Unchecked) => r.id),
+    c.records.map((r) => r.id),
   );
   assert.deepEqual(
     ids({
@@ -194,35 +219,63 @@ test("measurement filters retain assay context, interval meaning, missing states
 
 test("research publication rejects missing measurement semantics, ungrounded grouping and invalid route graphs", () => {
   for (const mutate of [
-    (c: Unchecked) => delete c.data.collections.examples.records[0].potency,
-    (c: Unchecked) =>
-      (c.data.collections.examples.records[0].potency.assay = "absent"),
-    (c: Unchecked) =>
-      (c.data.collections.examples.records[0].potency.qualifier = "approx"),
-    (c: Unchecked) =>
-      (c.data.collections.examples.records[3].potency.upper = 10),
-    (c: Unchecked) =>
-      (c.data.collections.examples.records[5].potency.value = 0),
-    (c: Unchecked) =>
-      (c.data.collections.examples.records[0].scaffold[0].evidence = []),
-    (c: Unchecked) =>
-      (c.data.collections.examples.records[0].scaffold[0].claims = [999]),
-    (c: Unchecked) => (c.data.synthesis.fable.steps[0].products[0].id = 999),
-    (c: Unchecked) =>
-      (c.data.synthesis.fable.steps[0].yield = {
+    (c: typeof FixtureFixture) =>
+      Reflect.deleteProperty(c.data.collections.examples.records[0], "potency"),
+    (c: typeof FixtureFixture) =>
+      Reflect.set(
+        c.data.collections.examples.records[0].potency,
+        "assay",
+        "absent",
+      ),
+    (c: typeof FixtureFixture) =>
+      Reflect.set(
+        c.data.collections.examples.records[0].potency,
+        "qualifier",
+        "approx",
+      ),
+    (c: typeof FixtureFixture) =>
+      Reflect.set(c.data.collections.examples.records[3].potency, "upper", 10),
+    (c: typeof FixtureFixture) =>
+      Reflect.set(c.data.collections.examples.records[5].potency, "value", 0),
+    (c: typeof FixtureFixture) =>
+      Reflect.set(
+        c.data.collections.examples.records[0].scaffold[0],
+        "evidence",
+        [],
+      ),
+    (c: typeof FixtureFixture) =>
+      Reflect.set(
+        c.data.collections.examples.records[0].scaffold[0],
+        "claims",
+        [999],
+      ),
+    (c: typeof FixtureFixture) =>
+      Reflect.set(c.data.synthesis.fable.steps[0].products[0], "id", 999),
+    (c: typeof FixtureFixture) =>
+      Reflect.set(c.data.synthesis.fable.steps[0], "yield", {
         status: "reported",
         value: 24,
         unit: "g",
       }),
-    (c: Unchecked) => (c.data.synthesis.fable.steps[2].procedure = "absent"),
-    (c: Unchecked) => delete c.data.synthesis.fable.steps[2].overrideEvidence,
-    (c: Unchecked) =>
-      (c.data.synthesis.fable.steps[0].reactants = [
+    (c: typeof FixtureFixture) =>
+      Reflect.set(c.data.synthesis.fable.steps[2], "procedure", "absent"),
+    (c: typeof FixtureFixture) =>
+      Reflect.deleteProperty(
+        c.data.synthesis.fable.steps[2],
+        "overrideEvidence",
+      ),
+    (c: typeof FixtureFixture) =>
+      Reflect.set(c.data.synthesis.fable.steps[0], "reactants", [
         { collection: "examples", id: 3 },
       ]),
-    (c: Unchecked) => c.data.synthesis.fable.routes[0].steps.push("partner"),
-    (c: Unchecked) =>
-      (c.data.synthesis.fable.routes[0].target = {
+    (c: typeof FixtureFixture) =>
+      Reflect.apply(
+        c.data.synthesis.fable.routes[0].steps.push,
+        c.data.synthesis.fable.routes[0].steps,
+        ["partner"],
+      ),
+    (c: typeof FixtureFixture) =>
+      Reflect.set(c.data.synthesis.fable.routes[0], "target", {
         collection: "examples",
         id: 4,
       }),
@@ -236,7 +289,7 @@ test("research publication rejects missing measurement semantics, ungrounded gro
 test("connected synthesis counts convergent steps separately from longest path", async () => {
   const { routeStats, routeSteps, sharedIntermediates } =
     await import("../src/ui/topic/patent-synthesis.ts");
-  const n = fixture().data.synthesis.fable;
+  const n = validateTopicContent(fixture()).data!.synthesis!.fable;
   assert.deepEqual(routeStats(n, n.routes[1]), { total: 3, longest: 2 });
   assert.deepEqual(
     routeSteps(n, n.routes[1]).map((s) => s.id),
@@ -249,24 +302,38 @@ test("connected synthesis counts convergent steps separately from longest path",
 
 test("global research evidence requires source, mass stays separate, procedure links cannot cycle", () => {
   for (const mutate of [
-    (c: Unchecked) =>
-      delete c.data.collections.examples.assays["alpha-potency"].evidence[0]
-        .source,
-    (c: Unchecked) => delete c.data.synthesis.fable.steps[0].evidence[0].source,
-    (c: Unchecked) =>
-      delete c.data.synthesis.fable.routes[0].reportedYield.ref.source,
-    (c: Unchecked) =>
-      (c.data.synthesis.fable.steps[0].isolatedMass.product.id = 4),
-    (c: Unchecked) =>
-      c.data.synthesis.fable.routes[0].reportedYield.scopeStepIds.reverse(),
-    (c: Unchecked) => (c.data.synthesis.fable.routes[0].startingMaterials = []),
-    (c: Unchecked) =>
-      (c.data.synthesis.fable.procedures["method-a"].yield = {
+    (c: typeof FixtureFixture) =>
+      Reflect.deleteProperty(
+        c.data.collections.examples.assays["alpha-potency"].evidence[0],
+        "source",
+      ),
+    (c: typeof FixtureFixture) =>
+      Reflect.deleteProperty(
+        c.data.synthesis.fable.steps[0].evidence[0],
+        "source",
+      ),
+    (c: typeof FixtureFixture) =>
+      Reflect.deleteProperty(
+        c.data.synthesis.fable.routes[0].reportedYield!.ref,
+        "source",
+      ),
+    (c: typeof FixtureFixture) =>
+      Reflect.set(
+        c.data.synthesis.fable.steps[0].isolatedMass!.product,
+        "id",
+        4,
+      ),
+    (c: typeof FixtureFixture) =>
+      c.data.synthesis.fable.routes[0].reportedYield!.scopeStepIds.reverse(),
+    (c: typeof FixtureFixture) =>
+      Reflect.set(c.data.synthesis.fable.routes[0], "startingMaterials", []),
+    (c: typeof FixtureFixture) =>
+      Reflect.set(c.data.synthesis.fable.procedures["method-a"], "yield", {
         status: "reported",
         value: 70,
       }),
-    (c: Unchecked) =>
-      (c.data.synthesis.fable.references = [
+    (c: typeof FixtureFixture) =>
+      Reflect.set(c.data.synthesis.fable, "references", [
         {
           record: { collection: "examples", id: 1 },
           procedure: "method-a",
@@ -285,7 +352,10 @@ test("global research evidence requires source, mass stays separate, procedure l
     assert.throws(() => validateTopicContent(c));
   }
   const c = fixture();
-  delete c.data.collections.examples.records[0].potency.assay;
+  Reflect.deleteProperty(
+    c.data.collections.examples.records[0].potency,
+    "assay",
+  );
   assert.throws(
     () => validateTopicContent(c),
     /collections.examples.records.1.potency/,
@@ -298,23 +368,35 @@ test("publication validates assignment patterns and new nested evidence assets",
     "sites/fable-patent",
   )) as SiteUnit;
   for (const mutate of [
-    (c: Unchecked) =>
+    (c: typeof FixtureFixture) =>
       Object.assign(c.data.collections.examples.records[0].scaffold[0], {
         basis: "chemical-pattern",
         pattern: "[",
       }),
-    (c: Unchecked) =>
-      (c.data.collections.examples.records[0].potency.ref.asset =
-        "/sites/fable-patent/static/absent.svg"),
-    (c: Unchecked) =>
-      (c.data.collections.examples.records[0].scaffold[0].evidence[0].asset =
-        "/sites/fable-patent/static/absent.svg"),
-    (c: Unchecked) =>
-      (c.data.synthesis.fable.routes[0].evidence[0].asset =
-        "/sites/fable-patent/static/absent.svg"),
-    (c: Unchecked) =>
-      (c.data.synthesis.fable.steps[0].evidence[0].asset =
-        "/sites/fable-patent/static/absent.svg"),
+    (c: typeof FixtureFixture) =>
+      Reflect.set(
+        c.data.collections.examples.records[0].potency.ref!,
+        "asset",
+        "/sites/fable-patent/static/absent.svg",
+      ),
+    (c: typeof FixtureFixture) =>
+      Reflect.set(
+        c.data.collections.examples.records[0].scaffold[0].evidence[0],
+        "asset",
+        "/sites/fable-patent/static/absent.svg",
+      ),
+    (c: typeof FixtureFixture) =>
+      Reflect.set(
+        c.data.synthesis.fable.routes[0].evidence[0],
+        "asset",
+        "/sites/fable-patent/static/absent.svg",
+      ),
+    (c: typeof FixtureFixture) =>
+      Reflect.set(
+        c.data.synthesis.fable.steps[0].evidence[0],
+        "asset",
+        "/sites/fable-patent/static/absent.svg",
+      ),
   ]) {
     const c = fixture();
     mutate(c);

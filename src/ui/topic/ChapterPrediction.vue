@@ -213,7 +213,7 @@ const readout = computed(() => {
       modelInputs(model).map((input) => [input.id, input.default]),
     );
     values[p.readout.input] = typedValue.value;
-    return { result: model.run(values), error: "" };
+    return { result: model().run(values), error: "" };
   } catch (reason) {
     return {
       result: null,

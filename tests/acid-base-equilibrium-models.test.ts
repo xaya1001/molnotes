@@ -1,4 +1,5 @@
-import type { Unchecked } from "../shared/unchecked.ts";
+import type { TopicContent } from "../src/ui/topic/content.ts";
+import type FixtureFixture from "./fixtures/content/sites/instruments/content.json";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -11,7 +12,7 @@ import {
   onScale,
   readings,
 } from "../src/ui/models/organic-chemistry.ts";
-const fixture = () =>
+const fixture = (): typeof FixtureFixture & TopicContent =>
   JSON.parse(
     readFileSync(
       new URL(
@@ -47,11 +48,11 @@ test("scales sort by first reading and retain independent source combinations an
   const data = sample(),
     [a, b] = data.donors;
   assert.deepEqual(
-    onScale(data.donors, "dmso").map((d: Unchecked) => d.id),
+    onScale(data.donors, "dmso").map((d) => d.id),
     ["donor-c", "donor-a", "donor-b"],
   );
   assert.deepEqual(
-    onScale(data.donors, "water").map((d: Unchecked) => d.id),
+    onScale(data.donors, "water").map((d) => d.id),
     ["donor-c", "donor-a"],
   );
   assert.equal(readings(a, data.bases[0], "dmso")[0].outcome, "full");
@@ -59,7 +60,7 @@ test("scales sort by first reading and retain independent source combinations an
   assert.deepEqual(readings(b, data.bases[0], "water"), []);
   const results = readings(b, data.bases[1], "dmso");
   assert.deepEqual(
-    results.map((r: Unchecked) => [r.donor.value, r.base.value, r.delta]),
+    results.map((r) => [r.donor.value, r.base.value, r.delta]),
     [
       [11, 12, 1],
       [11, 13, 2],
@@ -68,7 +69,7 @@ test("scales sort by first reading and retain independent source combinations an
     ],
   );
   assert.deepEqual(
-    results.map((r: Unchecked) => [r.donor.source, r.base.source]),
+    results.map((r) => [r.donor.source, r.base.source]),
     [
       ["记录丙", "记录壬"],
       ["记录丙", "记录癸"],
@@ -86,7 +87,7 @@ test("pKa labs use content defaults, exact format and each scale without borrowi
       modelInputs(model, data).map((i) => [i.id, i.default]),
     );
     assert.deepEqual(values, data.defaults);
-    const result = model.run(values, data);
+    const result = model(data).run(values);
     assert.equal(result.readouts!.length, 1);
     assert.ok(
       result.readouts![0].value.includes(
@@ -94,23 +95,23 @@ test("pKa labs use content defaults, exact format and each scale without borrowi
       ),
     );
     assert.equal(
-      model.run({ ...values, baseId: "base-b" }, data).readouts!.length,
+      model(data).run({ ...values, baseId: "base-b" }).readouts!.length,
       2,
     );
-    assert.throws(() => model.run({ ...values, donorId: "missing" }, data));
-    assert.throws(() => model.run({ ...values, baseId: "missing" }, data));
+    assert.throws(() => model(data).run({ ...values, donorId: "missing" }));
+    assert.throws(() => model(data).run({ ...values, baseId: "missing" }));
   }
   assert.equal(
-    labModels["enolates-pka-dmso"].run(
-      { donorId: "donor-b", baseId: "base-b" },
-      data,
-    ).readouts!.length,
+    labModels["enolates-pka-dmso"](data).run({
+      donorId: "donor-b",
+      baseId: "base-b",
+    }).readouts!.length,
     4,
   );
-  const missing = labModels["enolates-pka-water"].run(
-    { donorId: "donor-b", baseId: "base-a" },
-    data,
-  );
+  const missing = labModels["enolates-pka-water"](data).run({
+    donorId: "donor-b",
+    baseId: "base-a",
+  });
   assert.equal(missing.readouts!, undefined);
   assert.equal(typeof missing.summary!, "string");
 });
@@ -118,22 +119,30 @@ test("pKa labs use content defaults, exact format and each scale without borrowi
 test("publication rejects incomplete readings, duplicate entries and defaults absent from either selected scale", () => {
   validateTopicContent(fixture());
   for (const mutate of [
-    (d: Unchecked) => delete d.defaults,
-    (d: Unchecked) => (d.defaults.donorId = "donor-b"),
-    (d: Unchecked) => (d.defaults.baseId = "missing"),
-    (d: Unchecked) => (d.donors = []),
-    (d: Unchecked) => (d.bases = []),
-    (d: Unchecked) => d.donors.push(d.donors[0]),
-    (d: Unchecked) => (d.bases[0].id = d.donors[0].id),
-    (d: Unchecked) => (d.donors[0].label = ""),
-    (d: Unchecked) => (d.donors[0].name = ""),
-    (d: Unchecked) => (d.bases[0].acid = ""),
-    (d: Unchecked) => (d.donors[0].values = {}),
-    (d: Unchecked) =>
-      (d.donors[0].values.other = [{ value: 1, source: "source" }]),
-    (d: Unchecked) => (d.donors[0].values.dmso = []),
-    (d: Unchecked) => (d.donors[0].values.dmso[0].value = Infinity),
-    (d: Unchecked) => (d.donors[0].values.dmso[0].source = ""),
+    (d: ReturnType<typeof sample>) => Reflect.deleteProperty(d, "defaults"),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.defaults, "donorId", "donor-b"),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.defaults, "baseId", "missing"),
+    (d: ReturnType<typeof sample>) => Reflect.set(d, "donors", []),
+    (d: ReturnType<typeof sample>) => Reflect.set(d, "bases", []),
+    (d: ReturnType<typeof sample>) => d.donors.push(d.donors[0]),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.bases[0], "id", d.donors[0].id),
+    (d: ReturnType<typeof sample>) => Reflect.set(d.donors[0], "label", ""),
+    (d: ReturnType<typeof sample>) => Reflect.set(d.donors[0], "name", ""),
+    (d: ReturnType<typeof sample>) => Reflect.set(d.bases[0], "acid", ""),
+    (d: ReturnType<typeof sample>) => Reflect.set(d.donors[0], "values", {}),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.donors[0].values, "other", [
+        { value: 1, source: "source" },
+      ]),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.donors[0].values, "dmso", []),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.donors[0].values.dmso[0], "value", Infinity),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.donors[0].values.dmso[0], "source", ""),
   ]) {
     const content = fixture();
     mutate(content.data.pkaSample);

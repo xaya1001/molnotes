@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from "vue";
 import LineChart from "../LineChart.vue";
 import TopicTable from "./TopicTable.vue";
-import { labModels, modelInputs, type LabResult } from "../models/catalog.ts";
+import { labModels, type LabResult } from "../models/catalog.ts";
 import type { LabBlock } from "./blocks.ts";
 
 /**
@@ -12,9 +12,10 @@ import type { LabBlock } from "./blocks.ts";
  * its message as an alert.
  */
 const props = defineProps<{ block: LabBlock; data?: unknown }>();
-const model = labModels[props.block.model];
-if (!model) throw new Error(`Unknown lab model: ${props.block.model}`);
-const inputs = modelInputs(model, props.data);
+const entry = labModels[props.block.model];
+if (!entry) throw new Error(`Unknown lab model: ${props.block.model}`);
+const model = entry(props.data);
+const inputs = model.inputs;
 const values = reactive<Record<string, number | string>>(
   Object.fromEntries(
     inputs.map((input) => [
@@ -39,7 +40,7 @@ const defaults = Object.fromEntries(
 );
 const outcome = computed<{ result: LabResult | null; error: string }>(() => {
   try {
-    return { result: model.run({ ...values }, props.data), error: "" };
+    return { result: model.run({ ...values }), error: "" };
   } catch (reason) {
     return {
       result: null,

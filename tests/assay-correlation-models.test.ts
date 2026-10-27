@@ -1,4 +1,5 @@
-import type { Unchecked } from "../shared/unchecked.ts";
+import type { TopicContent } from "../src/ui/topic/content.ts";
+import type FixtureFixture from "./fixtures/content/sites/instruments/content.json";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -10,8 +11,8 @@ import {
   spearman,
 } from "../src/ui/models/medicinal-chemistry.ts";
 
-const near = (actual: Unchecked, expected: Unchecked, places = 2) =>
-  assert.equal(actual.toFixed(places), expected.toFixed(places));
+const near = (actual: number | null, expected: number, places = 2) =>
+  assert.equal(actual!.toFixed(places), expected.toFixed(places));
 
 test("Spearman correlation averages ties and refuses tiny samples", () => {
   assert.equal(
@@ -60,7 +61,7 @@ test("Spearman correlation averages ties and refuses tiny samples", () => {
 });
 
 test("correlation and fold changes exclude missing and censored readings", () => {
-  const row = (x: Unchecked, y: Unchecked, op = "=") => ({
+  const row = (x: number, y: number, op = "=") => ({
     values: { x: { value: x, op }, y: { value: y, op: "=" } },
   });
   const rows = [
@@ -76,7 +77,7 @@ test("correlation and fold changes exclude missing and censored readings", () =>
   assert.equal(foldChange(rows[0], rows[4], "x"), undefined);
 });
 
-const fixture = () =>
+const fixture = (): typeof FixtureFixture & TopicContent =>
   JSON.parse(
     readFileSync(
       new URL(
@@ -91,23 +92,41 @@ test("correlation controls derive ordered axes and source labels from the shared
   const data = fixture().data.correlationSample;
   const model = labModels["assay-correlation"];
   // The tests read the inputs as the page receives them.
-  const inputs: Unchecked[] = modelInputs(model, data);
+  const inputs = modelInputs(model, data);
   for (const input of inputs.slice(0, 2))
     assert.deepEqual(
-      input.options,
-      data.columns.map((c: Unchecked) => ({ value: c.key, label: c.label })),
+      (
+        input as Extract<
+          import("../src/ui/models/catalog.ts").LabInput,
+          { kind: "select" }
+        >
+      ).options,
+      data.columns.map((c) => ({ value: c.key, label: c.label })),
     );
   assert.equal(inputs[0].default, "alpha");
   assert.equal(inputs[1].default, "beta");
   assert.equal(inputs[2].default, "yes");
   assert.equal(
-    inputs[2].options[1].label,
+    (
+      inputs[2] as Extract<
+        import("../src/ui/models/catalog.ts").LabInput,
+        { kind: "select" }
+      >
+    ).options[1].label,
     `${data.alternates.alternate}与 ${data.alternates.listed}`,
   );
   data.columns.reverse();
   data.correlation.defaultX = "outside";
-  const changed: Unchecked[] = modelInputs(model, data);
-  assert.equal(changed[0].options[0].value, "outside");
+  const changed = modelInputs(model, data);
+  assert.equal(
+    (
+      changed[0] as Extract<
+        import("../src/ui/models/catalog.ts").LabInput,
+        { kind: "select" }
+      >
+    ).options[0].value,
+    "outside",
+  );
   assert.equal(changed[0].default, "outside");
 });
 
@@ -115,10 +134,10 @@ test("shared cohorts require all exact columns while mixed axes remain pairwise"
   const data = fixture().data.correlationSample;
   const model = labModels["assay-correlation"];
   modelInputs(model, data);
-  const shared = model.run({ x: "alpha", y: "beta", agreedOnly: "yes" }, data);
+  const shared = model(data).run({ x: "alpha", y: "beta", agreedOnly: "yes" });
   // Row6 has an alternate outside the selected axes/cohort: the whole row must still be excluded.
   assert.ok(shared.summary!.includes("1.00（n = 3）"));
-  const both = model.run({ x: "alpha", y: "beta", agreedOnly: "no" }, data);
+  const both = model(data).run({ x: "alpha", y: "beta", agreedOnly: "no" });
   assert.ok(
     both.summary!.includes(`${data.alternates.alternate} 1.00（n = 4）`),
   );
@@ -128,17 +147,18 @@ test("shared cohorts require all exact columns while mixed axes remain pairwise"
       `只用${data.correlation.cohort.description}的化合物。`,
     ),
   );
-  const pairwise = model.run(
-    { x: "alpha", y: "outside", agreedOnly: "yes" },
-    data,
-  );
+  const pairwise = model(data).run({
+    x: "alpha",
+    y: "outside",
+    agreedOnly: "yes",
+  });
   assert.ok(pairwise.summary!.includes("1.00（n = 5）"));
   assert.ok(!pairwise.summary!.includes(data.correlation.cohort.description));
   data.correlation.cohort.keys = ["alpha", "beta"];
   modelInputs(model, data);
   assert.ok(
-    model
-      .run({ x: "alpha", y: "beta", agreedOnly: "yes" }, data)
+    model(data)
+      .run({ x: "alpha", y: "beta", agreedOnly: "yes" })
       .summary!.includes("0.40（n = 5）"),
   );
 });
@@ -146,20 +166,34 @@ test("shared cohorts require all exact columns while mixed axes remain pairwise"
 test("publication rejects unknown or ambiguous correlation configuration", () => {
   validateTopicContent(fixture());
   const mutations = [
-    (d: Unchecked) => delete d.correlation,
-    (d: Unchecked) => (d.correlation.defaultX = "unknown"),
-    (d: Unchecked) => (d.correlation.defaultY = "unknown"),
-    (d: Unchecked) => (d.correlation.cohort = null),
-    (d: Unchecked) => (d.correlation.cohort.keys = []),
-    (d: Unchecked) => (d.correlation.cohort.keys = ["alpha"]),
-    (d: Unchecked) => (d.correlation.cohort.keys = ["alpha", "alpha"]),
-    (d: Unchecked) => (d.correlation.cohort.keys = ["alpha", "unknown"]),
-    (d: Unchecked) => (d.correlation.cohort.description = ""),
-    (d: Unchecked) => (d.alternates = null),
-    (d: Unchecked) => (d.alternates.alternate = ""),
-    (d: Unchecked) => (d.alternates.listed = ""),
-    (d: Unchecked) => (d.columns[0].label = ""),
-    (d: Unchecked) => (d.columns[1].key = "alpha"),
+    (d: (typeof FixtureFixture)["data"]["correlationSample"]) =>
+      Reflect.deleteProperty(d, "correlation"),
+    (d: (typeof FixtureFixture)["data"]["correlationSample"]) =>
+      Reflect.set(d.correlation, "defaultX", "unknown"),
+    (d: (typeof FixtureFixture)["data"]["correlationSample"]) =>
+      Reflect.set(d.correlation, "defaultY", "unknown"),
+    (d: (typeof FixtureFixture)["data"]["correlationSample"]) =>
+      Reflect.set(d.correlation, "cohort", null),
+    (d: (typeof FixtureFixture)["data"]["correlationSample"]) =>
+      Reflect.set(d.correlation.cohort, "keys", []),
+    (d: (typeof FixtureFixture)["data"]["correlationSample"]) =>
+      Reflect.set(d.correlation.cohort, "keys", ["alpha"]),
+    (d: (typeof FixtureFixture)["data"]["correlationSample"]) =>
+      Reflect.set(d.correlation.cohort, "keys", ["alpha", "alpha"]),
+    (d: (typeof FixtureFixture)["data"]["correlationSample"]) =>
+      Reflect.set(d.correlation.cohort, "keys", ["alpha", "unknown"]),
+    (d: (typeof FixtureFixture)["data"]["correlationSample"]) =>
+      Reflect.set(d.correlation.cohort, "description", ""),
+    (d: (typeof FixtureFixture)["data"]["correlationSample"]) =>
+      Reflect.set(d, "alternates", null),
+    (d: (typeof FixtureFixture)["data"]["correlationSample"]) =>
+      Reflect.set(d.alternates, "alternate", ""),
+    (d: (typeof FixtureFixture)["data"]["correlationSample"]) =>
+      Reflect.set(d.alternates, "listed", ""),
+    (d: (typeof FixtureFixture)["data"]["correlationSample"]) =>
+      Reflect.set(d.columns[0], "label", ""),
+    (d: (typeof FixtureFixture)["data"]["correlationSample"]) =>
+      Reflect.set(d.columns[1], "key", "alpha"),
   ];
   for (const mutate of mutations) {
     const doc = fixture();

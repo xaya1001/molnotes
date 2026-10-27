@@ -1,29 +1,38 @@
+import type Fixture from "../fixtures/content/sites/instruments/content.json";
+type Block = (typeof Fixture)["chapters"][number]["blocks"][number];
 // Keep the published sample and its record IDs intact. Only browser setup adds
 // focused chapters so each interaction test mounts the blocks it exercises.
-import type { Unchecked } from "../../shared/unchecked.ts";
-export function withInstrumentChapters(content: Unchecked) {
+export function withInstrumentChapters(content: typeof Fixture) {
   const original = content.chapters.find(
     ({ id }: { id: string }) => id === "instruments",
-  );
+  )!;
   const groups = {
-    tabs: (block: Unchecked) => block.type === "tabs",
-    datasets: (block: Unchecked) =>
-      ["first-order-elimination", "assay-panel-ratio"].includes(block.model),
-    readouts: (block: Unchecked) => block.model === "route-ledger",
-    atp: (block: Unchecked) =>
-      ["atp-competition", "atp-selectivity"].includes(block.model),
-    correlation: (block: Unchecked) =>
+    tabs: (block: Block) => block.type === "tabs",
+    datasets: (block: Block) =>
+      ["first-order-elimination", "assay-panel-ratio"].includes(
+        block.model ?? "",
+      ),
+    readouts: (block: Block) => block.model === "route-ledger",
+    atp: (block: Block) =>
+      ["atp-competition", "atp-selectivity"].includes(block.model ?? ""),
+    correlation: (block: Block) =>
       block.model === "assay-correlation" ||
       (block.type === "data-table" && block.label === "配对数据"),
-    overlays: (block: Unchecked) =>
-      ["ternary-equilibrium", "degradation-recovery"].includes(block.model),
-    chair: (block: Unchecked) => block.model === "saturated-chair",
-    radical: (block: Unchecked) =>
-      ["radical-selectivity", "radical-distribution"].includes(block.model),
-    pka: (block: Unchecked) =>
-      ["enolates-pka-dmso", "enolates-pka-water"].includes(block.model),
-    hammett: (block: Unchecked) =>
-      ["strategy-hammett-sigma", "strategy-hammett-rate"].includes(block.model),
+    overlays: (block: Block) =>
+      ["ternary-equilibrium", "degradation-recovery"].includes(
+        block.model ?? "",
+      ),
+    chair: (block: Block) => block.model === "saturated-chair",
+    radical: (block: Block) =>
+      ["radical-selectivity", "radical-distribution"].includes(
+        block.model ?? "",
+      ),
+    pka: (block: Block) =>
+      ["enolates-pka-dmso", "enolates-pka-water"].includes(block.model ?? ""),
+    hammett: (block: Block) =>
+      ["strategy-hammett-sigma", "strategy-hammett-rate"].includes(
+        block.model ?? "",
+      ),
   };
   const chapters = Object.entries(groups).map(([id, includes], index) => ({
     ...original,

@@ -1,12 +1,11 @@
-import type { Unchecked } from "../shared/unchecked.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fbddMath as m } from "../src/ui/models/medicinal-chemistry.ts";
 
 const near = (
-  actual: Unchecked,
-  expected: Unchecked,
-  tolerance: Unchecked,
+  actual: number,
+  expected: number,
+  tolerance: number,
   label: string,
 ) =>
   assert.ok(

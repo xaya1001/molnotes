@@ -1,4 +1,5 @@
-import type { Unchecked } from "../shared/unchecked.ts";
+import type { TopicContent } from "../src/ui/topic/content.ts";
+import type FixtureFixture from "./fixtures/content/sites/instruments/content.json";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -7,7 +8,7 @@ import { validateTopicContent } from "../shared/topic-content.ts";
 import { strategyHammett } from "../src/ui/models/organic-chemistry.ts";
 const { bandOf, logRelativeRate, pka, printedSigma, relativeRate, sigma } =
   strategyHammett;
-const fixture = () =>
+const fixture = (): typeof FixtureFixture & TopicContent =>
   JSON.parse(
     readFileSync(
       new URL(
@@ -59,11 +60,11 @@ test("sigma exercise uses reference pKa independently of printed values and keep
   assert.equal(pka(data.substituents[0], "para"), 4.7);
   assert.equal(printedSigma(data.substituents[0], "para"), 0.4);
   assert.match(
-    model.run({ ...values, guess: 0.3 }, data).revealed!.summary!,
+    model(data).run({ ...values, guess: 0.3 }).revealed!.summary!,
     /5 − 4.7 = 0.3/,
   );
-  const resultFor = (guess: Unchecked) =>
-    model.run({ subId: "group-c", position: "para", guess }, data);
+  const resultFor = (guess: number) =>
+    model(data).run({ subId: "group-c", position: "para", guess });
   const exact = resultFor(0),
     incorrect = resultFor(1);
   assert.notDeepEqual(exact, incorrect);
@@ -77,7 +78,7 @@ test("sigma exercise uses reference pKa independently of printed values and keep
     { guess: NaN },
     { guess: Infinity },
   ])
-    assert.throws(() => model.run({ ...values, ...patch }, data));
+    assert.throws(() => model(data).run({ ...values, ...patch }));
 });
 test("rate uses printed sigma, ordered source entries, actual point count and original chart domains", () => {
   const data = sample(),
@@ -91,7 +92,7 @@ test("rate uses printed sigma, ordered source entries, actual point count and or
     position: "meta",
   });
   for (const reaction of data.reactions) {
-    const result = model.run({ ...values, reaction: reaction.id }, data),
+    const result = model(data).run({ ...values, reaction: reaction.id }),
       chart = result.charts![0];
     assert.deepEqual(chart.xDomain, [-0.8, 0.9]);
     assert.deepEqual(chart.yDomain, [
@@ -104,33 +105,41 @@ test("rate uses printed sigma, ordered source entries, actual point count and or
     );
     assert.equal(chart.points.length, 6);
   }
-  assert.match(model.run(values, data).summary!, /σ = -0.2.*10\^-0.40/);
+  assert.match(model(data).run(values).summary!, /σ = -0.2.*10\^-0.40/);
   for (const patch of [
     { reaction: "missing" },
     { subId: "missing" },
     { position: "other" },
   ])
-    assert.throws(() => model.run({ ...values, ...patch }, data));
+    assert.throws(() => model(data).run({ ...values, ...patch }));
 });
 test("publication refuses missing reference, malformed entries and unknown defaults without forcing printed-computed agreement", () => {
   validateTopicContent(fixture());
   for (const mutate of [
-    (d: Unchecked) => delete d.referencePka,
-    (d: Unchecked) => (d.referencePka = Infinity),
-    (d: Unchecked) => (d.substituents = []),
-    (d: Unchecked) => (d.reactions = []),
-    (d: Unchecked) => d.substituents.push(d.substituents[0]),
-    (d: Unchecked) => d.reactions.push(d.reactions[0]),
-    (d: Unchecked) => (d.substituents[0].name = ""),
-    (d: Unchecked) => (d.reactions[0].name = ""),
-    (d: Unchecked) => (d.substituents[0].pkaPara = NaN),
-    (d: Unchecked) => delete d.substituents[0].sigmaMeta,
-    (d: Unchecked) => (d.reactions[0].rho = Infinity),
-    (d: Unchecked) => delete d.defaults,
-    (d: Unchecked) => (d.defaults.subId = "missing"),
-    (d: Unchecked) => (d.defaults.reaction = "missing"),
-    (d: Unchecked) => (d.defaults.sigmaPosition = "other"),
-    (d: Unchecked) => (d.defaults.ratePosition = "other"),
+    (d: ReturnType<typeof sample>) => Reflect.deleteProperty(d, "referencePka"),
+    (d: ReturnType<typeof sample>) => Reflect.set(d, "referencePka", Infinity),
+    (d: ReturnType<typeof sample>) => Reflect.set(d, "substituents", []),
+    (d: ReturnType<typeof sample>) => Reflect.set(d, "reactions", []),
+    (d: ReturnType<typeof sample>) => d.substituents.push(d.substituents[0]),
+    (d: ReturnType<typeof sample>) => d.reactions.push(d.reactions[0]),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.substituents[0], "name", ""),
+    (d: ReturnType<typeof sample>) => Reflect.set(d.reactions[0], "name", ""),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.substituents[0], "pkaPara", NaN),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.deleteProperty(d.substituents[0], "sigmaMeta"),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.reactions[0], "rho", Infinity),
+    (d: ReturnType<typeof sample>) => Reflect.deleteProperty(d, "defaults"),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.defaults, "subId", "missing"),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.defaults, "reaction", "missing"),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.defaults, "sigmaPosition", "other"),
+    (d: ReturnType<typeof sample>) =>
+      Reflect.set(d.defaults, "ratePosition", "other"),
   ]) {
     const content = fixture();
     mutate(content.data.hammettSample);

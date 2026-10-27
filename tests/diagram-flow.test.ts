@@ -1,4 +1,3 @@
-import type { Unchecked } from "../shared/unchecked.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readsWell } from "../src/ui/diagrams/check.ts";
@@ -93,13 +92,16 @@ test("a malformed flow is rejected with what to change", () => {
 });
 
 const space = { rank: 28, cross: 16, side: 22, pad: 6, thread: 12 };
-const sized = (flow: Unchecked, w = 100) =>
-  flow.nodes.map((n: Unchecked, i: number) => ({
+const sized = (flow: import("../src/ui/diagrams/flow.ts").Flow, w = 100) =>
+  flow.nodes.map((n, i: number) => ({
     w,
     h: 40 + (i % 3) * 12,
     tag: n.tag ? 16 : 0,
   }));
-const overlaps = (a: Unchecked, b: Unchecked) =>
+const overlaps = (
+  a: { x: number; y: number; w: number; h: number },
+  b: { x: number; y: number; w: number; h: number },
+) =>
   a.x < b.x + b.w - 0.5 &&
   b.x < a.x + a.w - 0.5 &&
   a.y < b.y + b.h - 0.5 &&
@@ -133,14 +135,15 @@ test("a laid-out flow moves forward along every edge and no two boxes overlap", 
     const sizes = sized(flow);
     const layout = layoutFlow(flow, direction, sizes, labels, space);
     const boxes = layout.nodes.map((p, i) => ({ ...p, ...sizes[i] }));
-    const along = (b: Unchecked) => (direction === "right" ? b.x : b.y);
-    const end = (b: Unchecked) =>
+    const along = (b: (typeof boxes)[number]) =>
+      direction === "right" ? b.x : b.y;
+    const end = (b: (typeof boxes)[number]) =>
       direction === "right" ? b.x + b.w : b.y + b.h;
     flow.edges.forEach((e, i) => {
       const from = boxes[flow.nodes.findIndex((n) => n.id === e.from)];
       const to = boxes[flow.nodes.findIndex((n) => n.id === e.to)];
       // Main edges run from one rank to a later one; a side node sits level with its source.
-      const mid = (b: Unchecked) =>
+      const mid = (b: (typeof boxes)[number]) =>
         direction === "right" ? b.x + b.w / 2 : b.y + (b.tag + b.h) / 2;
       if (e.side) assert.ok(Math.abs(mid(from) - mid(to)) < 1, direction);
       else assert.ok(end(from) < along(to), `${direction} ${e.from} > ${e.to}`);

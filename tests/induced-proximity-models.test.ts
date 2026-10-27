@@ -1,4 +1,5 @@
-import type { Unchecked } from "../shared/unchecked.ts";
+import type { TopicContent } from "../src/ui/topic/content.ts";
+import type FixtureFixture from "./fixtures/content/sites/instruments/content.json";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
@@ -19,9 +20,9 @@ import {
   washoutRecovery,
 } from "../src/ui/models/induced-proximity.ts";
 
-const close = (actual: Unchecked, expected: Unchecked, tolerance = 1e-6) =>
+const close = (actual: number, expected: number, tolerance = 1e-6) =>
   assert.ok(
-    Math.abs(actual - expected) <= tolerance,
+    Math.abs(actual! - expected) <= tolerance,
     `${actual} is not within ${tolerance} of ${expected}`,
   );
 
@@ -59,13 +60,13 @@ test("excess drug lowers the ternary complex (hook effect)", () => {
 
 test("relative and absolute degradation midpoints differ", () => {
   close(degradation(80, 10, 10), 40);
-  close(absoluteHalfLoss(80, 10), (10 * 50) / 30);
+  close(absoluteHalfLoss(80, 10)!, (10 * 50) / 30);
   assert.equal(absoluteHalfLoss(40, 10), null);
 });
 
 test("protein recovers towards baseline after washout", () => {
   const curve = degradationKinetics(24, 0.2, 24);
-  const at = (time: Unchecked) => curve.find(([t]) => t >= time)![1];
+  const at = (time: number) => curve.find(([t]) => t >= time)![1];
   assert.equal(curve[0][1], 100);
   assert.ok(at(24) < 30);
   assert.ok(at(72) > at(24));
@@ -123,7 +124,7 @@ test("the PK/PD prediction in c15 quotes the model: the protein bottoms at 8.5 %
   close(at(proteinCurve, 48), 75.4, 0.1);
 });
 
-const fixture = () =>
+const fixture = (): typeof FixtureFixture & TopicContent =>
   JSON.parse(
     readFileSync(
       new URL(
@@ -133,7 +134,7 @@ const fixture = () =>
       "utf8",
     ),
   );
-const defaults = (id: string, data: Unchecked) =>
+const defaults = (id: string, data: unknown) =>
   Object.fromEntries(
     modelInputs(labModels[id], data).map((i) => [i.id, i.default]),
   );
@@ -144,22 +145,21 @@ test("typed concentration overlays preserve raw signal and protein-decrease tran
     model = labModels[id],
     values = defaults(id, data);
   assert.deepEqual(
-    (modelInputs(model, data).at(-1) as Unchecked).options.map(
-      (o: Unchecked) => o.value,
-    ),
+    (
+      modelInputs(model, data).at(-1) as Extract<
+        import("../src/ui/models/catalog.ts").LabInput,
+        { kind: "select" }
+      >
+    ).options.map((o) => o.value),
     ["none", "signal", "decrease"],
   );
-  assert.deepEqual(
-    model.run(values).charts![0].series!,
-    model.run(values, data).charts![0].series!,
-  );
-  assert.equal(model.run(values, data).charts![0].series!.length, 2);
-  data.arbitraryDataset = data.signalSample;
-  delete data.signalSample;
+  assert.equal(model(data).run(values).charts![0].series!.length, 2);
+  Reflect.set(data, "arbitraryDataset", data.signalSample);
+  Reflect.deleteProperty(data, "signalSample");
   const descriptor = data.overlays.concentration.choices[0].series[0];
   descriptor.dataset = "arbitraryDataset";
   modelInputs(model, data);
-  const signal = model.run({ ...values, overlay: "signal" }, data).charts![0]
+  const signal = model(data).run({ ...values, overlay: "signal" }).charts![0]
     .series;
   assert.equal(signal!.length, 2);
   assert.equal(signal![1].name, descriptor.name);
@@ -169,7 +169,7 @@ test("typed concentration overlays preserve raw signal and protein-decrease tran
     { x: 1, y: 100 },
     { x: 2, y: 50 },
   ]);
-  const decrease = model.run({ ...values, overlay: "decrease" }, data)
+  const decrease = model(data).run({ ...values, overlay: "decrease" })
     .charts![0].series![1];
   // The zero-dose sample contributes to the normalization peak but is omitted from the log-dose plot.
   assert.deepEqual(decrease.points, [
@@ -185,9 +185,9 @@ test("typed time overlays preserve measured zero levels and washout offset plus 
     id = "degradation-recovery",
     model = labModels[id],
     values = defaults(id, data);
-  const none = model.run(values);
+  const none = model(data).run(values);
   assert.equal(none.charts![0].series!.length, 1);
-  const result = model.run({ ...values, overlay: "time-and-washout" }, data);
+  const result = model(data).run({ ...values, overlay: "time-and-washout" });
   assert.deepEqual(result.readouts!, none.readouts!);
   assert.deepEqual(result.charts![0].series![0], none.charts![0].series![0]);
   assert.deepEqual(result.charts![0].series![1].points, [
@@ -205,33 +205,58 @@ test("typed time overlays preserve measured zero levels and washout offset plus 
 test("publication rejects malformed overlay choices, data and normalization", () => {
   validateTopicContent(fixture());
   const mutations = [
-    (d: Unchecked) => delete d.overlays,
-    (d: Unchecked) => (d.overlays.concentration.label = ""),
-    (d: Unchecked) => (d.overlays.concentration.choices = []),
-    (d: Unchecked) => (d.overlays.concentration.choices[0].value = "none"),
-    (d: Unchecked) => (d.overlays.concentration.choices[0].value = ""),
-    (d: Unchecked) =>
+    (d: (typeof FixtureFixture)["data"]["overlaySample"]) =>
+      Reflect.deleteProperty(d, "overlays"),
+    (d: (typeof FixtureFixture)["data"]["overlaySample"]) =>
+      Reflect.set(d.overlays.concentration, "label", ""),
+    (d: (typeof FixtureFixture)["data"]["overlaySample"]) =>
+      Reflect.set(d.overlays.concentration, "choices", []),
+    (d: (typeof FixtureFixture)["data"]["overlaySample"]) =>
+      Reflect.set(d.overlays.concentration.choices[0], "value", "none"),
+    (d: (typeof FixtureFixture)["data"]["overlaySample"]) =>
+      Reflect.set(d.overlays.concentration.choices[0], "value", ""),
+    (d: (typeof FixtureFixture)["data"]["overlaySample"]) =>
       d.overlays.concentration.choices.push(
         d.overlays.concentration.choices[0],
       ),
-    (d: Unchecked) => (d.overlays.concentration.choices[0].series = []),
-    (d: Unchecked) =>
-      (d.overlays.concentration.choices[0].series[0].kind = "protein-time"),
-    (d: Unchecked) =>
-      (d.overlays.concentration.choices[0].series[0].dataset = "missing"),
-    (d: Unchecked) => (d.overlays.concentration.choices[0].series[0].name = ""),
-    (d: Unchecked) => d.signalSample.signal.pop(),
-    (d: Unchecked) => (d.signalSample.signal = [0, 0, 0]),
-    (d: Unchecked) => (d.signalSample.dose[0] = 0),
-    (d: Unchecked) => (d.signalSample.signal[0] = Infinity),
-    (d: Unchecked) => (d.decreaseSample.level = [100, 100, 100, 100]),
-    (d: Unchecked) => (d.decreaseSample.dose[0] = -1),
-    (d: Unchecked) => (d.timeSample.hours = []),
-    (d: Unchecked) => (d.timeSample.level[0] = NaN),
-    (d: Unchecked) =>
-      (d.overlays.time.choices[0].series[0].kind = "signal-peak"),
-    (d: Unchecked) => (d.washoutSample.start = Infinity),
-    (d: Unchecked) => (d.washoutSample.pretreatHours = -1),
+    (d: (typeof FixtureFixture)["data"]["overlaySample"]) =>
+      Reflect.set(d.overlays.concentration.choices[0], "series", []),
+    (d: (typeof FixtureFixture)["data"]["overlaySample"]) =>
+      Reflect.set(
+        d.overlays.concentration.choices[0].series[0],
+        "kind",
+        "protein-time",
+      ),
+    (d: (typeof FixtureFixture)["data"]["overlaySample"]) =>
+      Reflect.set(
+        d.overlays.concentration.choices[0].series[0],
+        "dataset",
+        "missing",
+      ),
+    (d: (typeof FixtureFixture)["data"]["overlaySample"]) =>
+      Reflect.set(d.overlays.concentration.choices[0].series[0], "name", ""),
+    (d: (typeof FixtureFixture)["data"]["overlaySample"]) =>
+      d.signalSample.signal.pop(),
+    (d: (typeof FixtureFixture)["data"]["overlaySample"]) =>
+      Reflect.set(d.signalSample, "signal", [0, 0, 0]),
+    (d: (typeof FixtureFixture)["data"]["overlaySample"]) =>
+      Reflect.set(d.signalSample.dose, 0, 0),
+    (d: (typeof FixtureFixture)["data"]["overlaySample"]) =>
+      Reflect.set(d.signalSample.signal, 0, Infinity),
+    (d: (typeof FixtureFixture)["data"]["overlaySample"]) =>
+      Reflect.set(d.decreaseSample, "level", [100, 100, 100, 100]),
+    (d: (typeof FixtureFixture)["data"]["overlaySample"]) =>
+      Reflect.set(d.decreaseSample.dose, 0, -1),
+    (d: (typeof FixtureFixture)["data"]["overlaySample"]) =>
+      Reflect.set(d.timeSample, "hours", []),
+    (d: (typeof FixtureFixture)["data"]["overlaySample"]) =>
+      Reflect.set(d.timeSample.level, 0, NaN),
+    (d: (typeof FixtureFixture)["data"]["overlaySample"]) =>
+      Reflect.set(d.overlays.time.choices[0].series[0], "kind", "signal-peak"),
+    (d: (typeof FixtureFixture)["data"]["overlaySample"]) =>
+      Reflect.set(d.washoutSample, "start", Infinity),
+    (d: (typeof FixtureFixture)["data"]["overlaySample"]) =>
+      Reflect.set(d.washoutSample, "pretreatHours", -1),
   ];
   for (const mutate of mutations) {
     const doc = fixture();

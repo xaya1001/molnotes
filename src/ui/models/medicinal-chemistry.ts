@@ -1,5 +1,24 @@
-import type { LabInput, LabModel, LabResult } from "./catalog.ts";
-import type { Unchecked } from "../../../shared/unchecked.ts";
+import type { DataRow } from "../data/values.ts";
+type OralParameters = {
+  cl: number;
+  vd: number;
+  f: number;
+  dose: number;
+  ka: number;
+  tau: number;
+};
+type PrintedReading = { raw: string; system?: string };
+type LeadReading = {
+  pde5: PrintedReading[];
+  pde3: string;
+  pde6?: PrintedReading;
+  logD?: string;
+  where: string;
+};
+import { isObject } from "../../../shared/json.ts";
+import type { CorrelationData, AtpSelectivityData } from "./data.ts";
+import { lab, type LabEntry } from "./model.ts";
+import type { LabInput, LabResult } from "./model.ts";
 import { defineDataTable, withAlternateValues } from "../data/values.ts";
 /** nM throughout. Reversible competitive inhibition, equilibrium, negligible ligand depletion. */
 export function chengPrusoff(ic50: number, substrateOverKm: number) {
@@ -143,8 +162,8 @@ const range = (
   default: value,
   ...(unit ? { unit } : {}),
 });
-export const medicinalChemistryModels: Record<string, LabModel> = {
-  "data-literacy-constants": {
+export const medicinalChemistryModels: Record<string, LabEntry> = {
+  "data-literacy-constants": lab({
     inputs: [range("ratio", "底物与 Km 比值", 0, 20, 0.5, 1)],
     run({ ratio }: { ratio: number }) {
       return {
@@ -161,8 +180,8 @@ export const medicinalChemistryModels: Record<string, LabModel> = {
         ],
       };
     },
-  },
-  "data-literacy-error": {
+  }),
+  "data-literacy-error": lab({
     inputs: [
       range("b", "B 的 IC50", 3, 30, 1, 5, "nM"),
       range("n", "独立重复次数", 2, 30, 1, 3),
@@ -174,8 +193,8 @@ export const medicinalChemistryModels: Record<string, LabModel> = {
         summary: `A/B 的 pIC50：${pIC50(3).toFixed(3)} / ${pIC50(b).toFixed(3)}；差值 ${r.delta.toFixed(3)}；2SE = ${r.threshold.toFixed(3)}。${r.exceedsNoise ? "超过教学误差线" : "尚未超过教学误差线"}；${r.meaningful ? "达到" : "未达到"}预设实际意义阈值 0.5 pIC50。`,
       };
     },
-  },
-  "data-literacy-dose-response": {
+  }),
+  "data-literacy-dose-response": lab({
     inputs: [
       range("slope", "Hill 系数", 0.5, 4, 0.5, 1),
       range("midpoint", "效应中点", 1, 100, 1, 10, "nM"),
@@ -204,8 +223,8 @@ export const medicinalChemistryModels: Record<string, LabModel> = {
         ],
       };
     },
-  },
-  "data-literacy-in-vivo": {
+  }),
+  "data-literacy-in-vivo": lab({
     inputs: [
       range("total", "总血浆浓度", 100, 3000, 100, 1000, "nM"),
       range("fu", "游离分数", 1, 100, 1, 1, "%"),
@@ -215,7 +234,7 @@ export const medicinalChemistryModels: Record<string, LabModel> = {
         summary: `游离血浆浓度估计 ${freeConcentration(total, fu / 100).toFixed(1)} nM；对照教学体外 IC50=30 nM。`,
       };
     },
-  },
+  }),
 };
 
 /** NIST representative natural compositions. Nominal mass offsets; no C/H/O contribution. */
@@ -275,7 +294,7 @@ export function adductMz(mass: number, adduct: string) {
   throw new Error("未知加合离子");
 }
 
-medicinalChemistryModels["spectra-mass"] = {
+medicinalChemistryModels["spectra-mass"] = lab({
   inputs: [
     {
       id: "element",
@@ -354,17 +373,17 @@ medicinalChemistryModels["spectra-mass"] = {
       ],
     };
   },
-};
+});
 
 /** Spearman rank correlation with tied ranks averaged. */
-export function spearman(pairs: Unchecked) {
+export function spearman(pairs: number[][]) {
   const n = pairs.length;
   if (n < 3) return { rho: null, n };
-  const ranks = (values: Unchecked) => {
+  const ranks = (values: number[]) => {
     const order = values
       .map((_: number, i: number) => i)
       .sort((a: number, b: number) => values[a] - values[b]);
-    const out = new Array(values.length);
+    const out = new Array<number>(values.length);
     for (let i = 0; i < order.length;) {
       let j = i;
       while (j + 1 < order.length && values[order[j + 1]] === values[order[i]])
@@ -374,9 +393,9 @@ export function spearman(pairs: Unchecked) {
     }
     return out;
   };
-  const x = ranks(pairs.map((p: Unchecked) => p[0]));
-  const y = ranks(pairs.map((p: Unchecked) => p[1]));
-  const mean = (values: Unchecked) =>
+  const x = ranks(pairs.map((p) => p[0]));
+  const y = ranks(pairs.map((p) => p[1]));
+  const mean = (values: number[]) =>
     values.reduce((a: number, b: number) => a + b, 0) / n;
   const mx = mean(x);
   const my = mean(y);
@@ -392,7 +411,12 @@ export function spearman(pairs: Unchecked) {
   return { rho: cov / Math.sqrt(vx * vy), n };
 }
 
-const exact = (row: Unchecked, key: string) => {
+const exact = (
+  row: {
+    values: Readonly<Record<string, { op: string; value: number } | undefined>>;
+  },
+  key: string,
+) => {
   const cell = row.values[key];
   return cell && cell.op === "=" ? cell.value : undefined;
 };
@@ -403,7 +427,7 @@ const exact = (row: Unchecked, key: string) => {
  * with each other are compared on the same compounds.
  */
 export function columnCorrelation(
-  rows: Unchecked,
+  rows: readonly Parameters<typeof exact>[0][],
   a: string,
   b: string,
   among = [a, b],
@@ -411,34 +435,51 @@ export function columnCorrelation(
   const pairs: number[][] = [];
   for (const row of rows) {
     if (!among.every((key) => exact(row, key) !== undefined)) continue;
-    pairs.push([exact(row, a), exact(row, b)]);
+    pairs.push([exact(row, a)!, exact(row, b)!]);
   }
   return spearman(pairs);
 }
 
 /** How many times larger `to` is than `from` for one column; undefined when either is missing or censored. */
-export function assayFoldChange(from: Unchecked, to: Unchecked, key: string) {
+export function assayFoldChange(
+  from: Parameters<typeof exact>[0],
+  to: Parameters<typeof exact>[0],
+  key: string,
+) {
   const left = exact(from, key);
   const right = exact(to, key);
   if (left === undefined || right === undefined || left === 0) return undefined;
   return right / left;
 }
 
-medicinalChemistryModels["assay-correlation"] = {
-  validateData(data) {
-    const text = (v: Unchecked) => typeof v === "string" && v.trim().length > 0;
-    if (!data || !Array.isArray(data.columns) || !Array.isArray(data.rows))
+medicinalChemistryModels["assay-correlation"] = lab<CorrelationData>({
+  validateData(data): asserts data is CorrelationData {
+    const text = (v: unknown): v is string =>
+      typeof v === "string" && v.trim().length > 0;
+    if (
+      !isObject(data) ||
+      !Array.isArray(data.columns) ||
+      !Array.isArray(data.rows)
+    )
       throw new Error("缺少相关性数据表");
-    const table = defineDataTable(data);
+    const table = defineDataTable({
+      ...data,
+      columns: data.columns,
+      rows: data.rows,
+    });
     if (!table.columns.every((c) => text(c.key) && text(c.label)))
       throw new Error("相关性数据列须有键名和标签");
-    const keys = new Set(table.columns.map((c) => c.key));
+    const keys = new Set<unknown>(table.columns.map((c) => c.key));
     const config = data.correlation;
-    if (!config || !keys.has(config.defaultX) || !keys.has(config.defaultY))
+    if (
+      !isObject(config) ||
+      !keys.has(config.defaultX) ||
+      !keys.has(config.defaultY)
+    )
       throw new Error("相关性默认轴须指向数据列");
     const cohort = config.cohort;
     if (
-      !cohort ||
+      !isObject(cohort) ||
       !Array.isArray(cohort.keys) ||
       cohort.keys.length < 2 ||
       new Set(cohort.keys).size !== cohort.keys.length ||
@@ -447,9 +488,9 @@ medicinalChemistryModels["assay-correlation"] = {
     )
       throw new Error("共同样本组须有至少两个唯一数据列及说明");
     if (
-      !data.alternates ||
-      !text(data.alternates.alternate) ||
-      !text(data.alternates.listed)
+      !isObject(data.alternates) ||
+      !text(data.alternates!.alternate) ||
+      !text(data.alternates!.listed)
     )
       throw new Error("相关性比较须提供两套来源标签");
   },
@@ -458,7 +499,7 @@ medicinalChemistryModels["assay-correlation"] = {
       id: "x",
       label: "秩相关横轴",
       kind: "select",
-      options: data.columns.map((c: Unchecked) => ({
+      options: data.columns.map((c) => ({
         value: c.key,
         label: c.label,
       })),
@@ -468,7 +509,7 @@ medicinalChemistryModels["assay-correlation"] = {
       id: "y",
       label: "秩相关纵轴",
       kind: "select",
-      options: data.columns.map((c: Unchecked) => ({
+      options: data.columns.map((c) => ({
         value: c.key,
         label: c.label,
       })),
@@ -482,7 +523,7 @@ medicinalChemistryModels["assay-correlation"] = {
         { value: "yes", label: "只用两处写法一致的化合物" },
         {
           value: "no",
-          label: `${data.alternates.alternate}与 ${data.alternates.listed}`,
+          label: `${data.alternates!.alternate}与 ${data.alternates!.listed}`,
         },
       ],
       default: "yes",
@@ -496,8 +537,9 @@ medicinalChemistryModels["assay-correlation"] = {
       cohort = data.correlation.cohort;
     const shared = cohort.keys.includes(x) && cohort.keys.includes(y);
     const among = shared ? cohort.keys : [x, y];
-    const corr = (rows: Unchecked) => columnCorrelation(rows, x, y, among);
-    const rho = (r: Unchecked) =>
+    const corr = (rows: readonly DataRow[]) =>
+      columnCorrelation(rows, x, y, among);
+    const rho = (r: ReturnType<typeof spearman>) =>
       r.rho === null ? "算不出" : `${r.rho.toFixed(2)}（n = ${r.n}）`;
     const text =
       agreedOnly === "yes"
@@ -510,7 +552,7 @@ medicinalChemistryModels["assay-correlation"] = {
         `只用${shared ? cohort.description : "两列都有确切值"}的化合物。`,
     };
   },
-};
+});
 
 // The numbers the chapters quote, and the arithmetic that ties them together.
 // The topic content data holds every printed value with its source; these
@@ -606,7 +648,7 @@ export const designMath = (() => {
   return { pIC50, ligandEfficiency, lipophilicEfficiency, baseLogD };
 })();
 
-medicinalChemistryModels["design-efficiency"] = {
+medicinalChemistryModels["design-efficiency"] = lab({
   inputs: [
     {
       id: "concentration",
@@ -647,8 +689,8 @@ medicinalChemistryModels["design-efficiency"] = {
       summary: `pIC50 ${designMath.pIC50(concentration).toFixed(2)}；LE ${designMath.ligandEfficiency(concentration, count).toFixed(3)} kcal·mol⁻¹·重原子⁻¹；LipE(logP) ${designMath.lipophilicEfficiency(concentration, lipophilicity).toFixed(2)}。`,
     };
   },
-};
-medicinalChemistryModels["design-pka"] = {
+});
+medicinalChemistryModels["design-pka"] = lab({
   inputs: [
     range("pKa", "共轭酸 pKa", 3, 12, 0.1, 9),
     range("logP", "中性形式 logP", -1, 6, 0.1, 3),
@@ -659,7 +701,7 @@ medicinalChemistryModels["design-pka"] = {
       summary: `模型 logD${pH} = ${designMath.baseLogD(logP, pKa, pH).toFixed(2)}`,
     };
   },
-};
+});
 
 export const drugActionMath = (() => {
   /** Teaching models: free concentrations in nM, time in minutes, energy in kcal/mol.
@@ -842,7 +884,7 @@ const numeric = (
   ...(step ? { step } : {}),
 });
 for (const direction of ["kd", "energy"])
-  medicinalChemistryModels[`drug-action-energy-${direction}`] = {
+  medicinalChemistryModels[`drug-action-energy-${direction}`] = lab({
     inputs: [
       numeric(
         "input",
@@ -888,8 +930,8 @@ for (const direction of ["kd", "energy"])
         summary: `Kd = ${kd.toPrecision(5)} nM；ΔG = ${energy.toFixed(4)} kcal/mol。LE = ${da.ligandEfficiency(energy, atoms).toFixed(3)} kcal·mol⁻¹·重原子⁻¹。LLE（pKd−logP）= ${da.lipophilicEfficiency(kd, logP).toFixed(3)}。`,
       };
     },
-  };
-medicinalChemistryModels["drug-action-dose"] = {
+  });
+medicinalChemistryModels["drug-action-dose"] = lab({
   inputs: [
     range("ec50", "EC50", 1, 100, 1, 10, "nM"),
     range("emax", "Emax", 10, 100, 1, 100, "% 参照响应"),
@@ -925,12 +967,17 @@ medicinalChemistryModels["drug-action-dose"] = {
       ),
     };
   },
-};
-medicinalChemistryModels["atp-selectivity"] = {
-  validateData(data) {
-    if (!data || !Array.isArray(data.variants) || data.variants.length === 0)
+});
+medicinalChemistryModels["atp-selectivity"] = lab<AtpSelectivityData>({
+  validateData(data): asserts data is AtpSelectivityData {
+    if (
+      !isObject(data) ||
+      !Array.isArray(data.variants) ||
+      data.variants.length === 0
+    )
       throw new Error("缺少激酶数据");
-    const text = (v: Unchecked) => typeof v === "string" && v.trim().length > 0;
+    const text = (v: unknown): v is string =>
+      typeof v === "string" && v.trim().length > 0;
     const names = new Set();
     for (const variant of data.variants) {
       if (
@@ -943,7 +990,7 @@ medicinalChemistryModels["atp-selectivity"] = {
       names.add(variant.name);
     }
     if (
-      !data.comparison ||
+      !isObject(data.comparison) ||
       !names.has(data.comparison.numerator) ||
       !names.has(data.comparison.denominator) ||
       data.comparison.numerator === data.comparison.denominator
@@ -961,21 +1008,21 @@ medicinalChemistryModels["atp-selectivity"] = {
   run({ exponent }: { exponent: number }, data) {
     const atp = 10 ** exponent,
       fmt = (x: number) => (x >= 100 ? x.toFixed(0) : x.toPrecision(3));
-    const rows = data.variants.map((v: Unchecked) => ({
+    const rows = data.variants.map((v) => ({
         ...v,
         ratio: atp / v.km,
         ki: da.apparentKi(v.kd, v.km, atp),
       })),
       fold =
-        rows.find((r: Unchecked) => r.name === data.comparison.numerator).ki /
-        rows.find((r: Unchecked) => r.name === data.comparison.denominator).ki;
+        rows.find((r) => r.name === data.comparison.numerator)!.ki /
+        rows.find((r) => r.name === data.comparison.denominator)!.ki;
     return {
       summary: `[ATP] = ${fmt(atp)} µM 时，${data.comparison.numerator} 的表观 Ki 是 ${data.comparison.denominator} 的 ${fold.toFixed(1)} 倍。`,
       tables: [
         {
           caption: data.caption,
           columns: data.columns,
-          rows: rows.map((r: Unchecked) => [
+          rows: rows.map((r) => [
             r.name,
             String(r.kd),
             String(r.km),
@@ -986,8 +1033,8 @@ medicinalChemistryModels["atp-selectivity"] = {
       ],
     };
   },
-};
-medicinalChemistryModels["drug-action-enzyme"] = {
+});
+medicinalChemistryModels["drug-action-enzyme"] = lab({
   inputs: [
     range("ki", "Ki", 1, 100, 1, 5, "nM"),
     range("ratio", "底物比 [S]/Km", 0, 20, 0.5, 1),
@@ -1024,8 +1071,8 @@ medicinalChemistryModels["drug-action-enzyme"] = {
       ],
     };
   },
-};
-medicinalChemistryModels["drug-action-selectivity"] = {
+});
+medicinalChemistryModels["drug-action-selectivity"] = lab({
   inputs: [
     range("target", "主靶 Kd", 1, 100, 1, 10, "nM"),
     range("off", "脱靶 Kd", 10, 10000, 10, 1000, "nM"),
@@ -1058,8 +1105,8 @@ medicinalChemistryModels["drug-action-selectivity"] = {
       ),
     };
   },
-};
-medicinalChemistryModels["drug-action-turnover"] = {
+});
+medicinalChemistryModels["drug-action-turnover"] = lab({
   inputs: [
     range("c0", "初始游离浓度 C0", 10, 1000, 10, 100, "nM"),
     range("plasmaHalfLife", "药物半衰期", 0.1, 12, 0.1, 0.5, "h"),
@@ -1097,8 +1144,8 @@ medicinalChemistryModels["drug-action-turnover"] = {
       ],
     };
   },
-};
-medicinalChemistryModels["drug-action-covalent"] = {
+});
+medicinalChemistryModels["drug-action-covalent"] = lab({
   inputs: [
     range("inhibitor", "抑制剂 [I]", 0, 2000, 10, 100, "nM"),
     range("ki", "KI", 10, 500, 10, 100, "nM"),
@@ -1142,7 +1189,7 @@ medicinalChemistryModels["drug-action-covalent"] = {
       ],
     };
   },
-};
+});
 
 export const leadMath = (() => {
   /** Teaching models. Monoprotic solute; ionized species do not partition into octanol. */
@@ -1153,16 +1200,16 @@ export const leadMath = (() => {
 
   /** Linear one-compartment oral model: mg, L, h, mg/L. No lag time. */
 
-  function elimination(p: Unchecked) {
+  function elimination(p: OralParameters) {
     return p.cl / p.vd;
   }
-  function halfLife(p: Unchecked) {
+  function halfLife(p: OralParameters) {
     return Math.LN2 / elimination(p);
   }
-  function auc(p: Unchecked) {
+  function auc(p: OralParameters) {
     return (p.f * p.dose) / p.cl;
   }
-  function concentration(t: number, p: Unchecked) {
+  function concentration(t: number, p: OralParameters) {
     if (t <= 0) return 0;
     const ke = elimination(p);
     const delta = p.ka - ke;
@@ -1174,13 +1221,13 @@ export const leadMath = (() => {
       delta
     );
   }
-  function peakTime(p: Unchecked) {
+  function peakTime(p: OralParameters) {
     const ke = elimination(p);
     return Math.abs(p.ka - ke) < 1e-8
       ? 1 / ke
       : Math.log(p.ka / ke) / (p.ka - ke);
   }
-  function repeatedConcentration(t: number, p: Unchecked) {
+  function repeatedConcentration(t: number, p: OralParameters) {
     if (t < 0) return 0;
     let c = 0;
     for (let n = 0; n <= Math.floor(t / p.tau); n++)
@@ -1188,10 +1235,10 @@ export const leadMath = (() => {
     return c;
   }
   /** Accumulation of the elimination exponential; not the oral peak ratio. */
-  function accumulation(p: Unchecked) {
+  function accumulation(p: OralParameters) {
     return 1 / -Math.expm1(-elimination(p) * p.tau);
   }
-  function steadyConcentration(t: number, p: Unchecked) {
+  function steadyConcentration(t: number, p: OralParameters) {
     const ke = elimination(p);
     const phase = ((t % p.tau) + p.tau) % p.tau;
     if (Math.abs(p.ka - ke) < 1e-8) {
@@ -1208,7 +1255,7 @@ export const leadMath = (() => {
         Math.exp(-p.ka * phase) / -Math.expm1(-p.ka * p.tau))
     );
   }
-  function steadyPeakTime(p: Unchecked) {
+  function steadyPeakTime(p: OralParameters) {
     const ke = elimination(p);
     if (Math.abs(p.ka - ke) < 1e-8)
       return 1 / ke - p.tau / Math.expm1(ke * p.tau);
@@ -1224,9 +1271,9 @@ export const leadMath = (() => {
 
   /** What one source prints for one compound of the sildenafil path. */
 
-  const nanomolar = (m: Unchecked) =>
+  const nanomolar = (m: PrintedReading) =>
     `${m.raw} nM${m.system ? `（${m.system}）` : ""}`;
-  function describeReading(reading: Unchecked) {
+  function describeReading(reading: LeadReading) {
     const parts = [`PDE5 IC₅₀ ${reading.pde5.map(nanomolar).join("、")}`];
     parts.push(`PDE3 ${reading.pde3}`);
     if (reading.pde6) parts.push(`PDE6 ${nanomolar(reading.pde6)}`);
@@ -1248,7 +1295,7 @@ export const leadMath = (() => {
     describeReading,
   };
 })();
-medicinalChemistryModels["lead-pk"] = {
+medicinalChemistryModels["lead-pk"] = lab({
   inputs: [
     range("dose", "剂量 D（mg）", 10, 500, 10, 100),
     range("f", "生物利用度 F（比例）", 0.05, 1, 0.05, 0.5),
@@ -1257,7 +1304,7 @@ medicinalChemistryModels["lead-pk"] = {
     range("vd", "分布容积 Vd（L）", 10, 200, 10, 50),
     range("tau", "给药间隔 τ（h）", 4, 24, 1, 12),
   ],
-  run(p: Record<string, number>) {
+  run(p: OralParameters) {
     const m = leadMath,
       peak = m.steadyConcentration(m.steadyPeakTime(p), p),
       trough = m.steadyConcentration(0, p);
@@ -1275,8 +1322,8 @@ medicinalChemistryModels["lead-pk"] = {
       ],
     };
   },
-};
-medicinalChemistryModels["lead-properties"] = {
+});
+medicinalChemistryModels["lead-properties"] = lab({
   inputs: [
     {
       id: "kind",
@@ -1309,7 +1356,7 @@ medicinalChemistryModels["lead-properties"] = {
       ],
     };
   },
-};
+});
 
 export const fbddMath = (() => {
   /** Printed numbers and the arithmetic built on them; every input is a number from a cited source. */
@@ -1320,14 +1367,14 @@ export const fbddMath = (() => {
   const TEMPERATURE = 298.15;
 
   /** Components of a split-and-pool library: the product of the synthon counts of its cycles. */
-  function libraryComponents(synthonsPerCycle: Unchecked) {
+  function libraryComponents(synthonsPerCycle: number[]) {
     if (
       !synthonsPerCycle.length ||
       synthonsPerCycle.some((n: number) => !Number.isInteger(n) || n < 1)
     )
       throw new Error("每一轮的砌块数必须是正整数");
     return synthonsPerCycle.reduce(
-      (product: Unchecked, n: number) => product * n,
+      (product: number, n: number) => product * n,
       1,
     );
   }
@@ -1352,7 +1399,10 @@ export const fbddMath = (() => {
    * the last round of `positiveControl` is measured; earlier rounds follow from
    * the constant-factor assumption.
    */
-  function shareAfterRounds(round: number, control: Unchecked) {
+  function shareAfterRounds(
+    round: number,
+    control: { rounds: number; copies: number; reads: number; library: number },
+  ) {
     if (!Number.isInteger(round) || round < 1 || round > control.rounds)
       throw new Error(`轮数必须在 1 到 ${control.rounds} 之间`);
     const factor = perRoundEnrichment(
@@ -1363,7 +1413,7 @@ export const fbddMath = (() => {
   }
 
   /** P(X ≥ k) for X ~ Binomial(n, p), summed over the k terms below the threshold. */
-  function probAtLeast(k: number, n: number, p: Unchecked) {
+  function probAtLeast(k: number, n: number, p: number) {
     if (!Number.isInteger(k) || k < 0 || !Number.isInteger(n) || n < 0)
       throw new Error("k 与 n 必须是非负整数");
     if (!(p >= 0 && p <= 1)) throw new Error("p 必须在 0 到 1 之间");
@@ -1380,7 +1430,7 @@ export const fbddMath = (() => {
   }
 
   /** Smallest number of reads for which the member is seen at least `k` times with probability `confidence`. */
-  function readsNeeded(k: number, p: Unchecked, confidence: number) {
+  function readsNeeded(k: number, p: number, confidence: number) {
     if (!(confidence > 0 && confidence < 1))
       throw new Error("置信度必须在 0 与 1 之间");
     if (!(p > 0 && p <= 1)) throw new Error("p 必须在 0 与 1 之间");
@@ -1396,7 +1446,7 @@ export const fbddMath = (() => {
   }
 
   /** Share of reads kept by a copy-number filter: the printed counts after filtering over before. */
-  function keptShare(keptReads: number, reads: Unchecked) {
+  function keptShare(keptReads: number, reads: number) {
     if (keptReads < 0 || reads <= 0 || keptReads > reads)
       throw new Error("保留读数必须在 0 与总读数之间");
     return keptReads / reads;
@@ -1491,7 +1541,7 @@ const fbddUnit = (id: string, label: string, value: string): LabInput => ({
   options: ["mM", "µM", "nM"].map((value) => ({ value, label: value })),
   default: value,
 });
-medicinalChemistryModels["fbdd-linking"] = {
+medicinalChemistryModels["fbdd-linking"] = lab({
   inputs: [
     numeric("kd1", "片段 1 的 Kd", Number.MIN_VALUE, Number.MAX_VALUE, 2),
     fbddUnit("kd1Unit", "片段 1 的单位", "µM"),
@@ -1531,8 +1581,8 @@ medicinalChemistryModels["fbdd-linking"] = {
       summary: `理想 Kd ${fbddMath.formatMolar(r.ideal)}；实测是理想值的 ${Number(r.ratio.toPrecision(3))} 倍；连接代价 ${r.energy.toFixed(2)} kcal·mol⁻¹。`,
     };
   },
-};
-medicinalChemistryModels["fbdd-depth"] = {
+});
+medicinalChemistryModels["fbdd-depth"] = lab({
   inputs: [
     range("exponent", "读出序列数（对数刻度）", 2, 6, 0.05, 2),
     {
@@ -1567,11 +1617,14 @@ medicinalChemistryModels["fbdd-depth"] = {
   ) {
     const m = fbddMath,
       reads = Math.round(10 ** exponent),
-      share = m.shareAfterRounds(rounds, data),
+      share = m.shareAfterRounds(
+        rounds,
+        data as Parameters<typeof m.shareAfterRounds>[1],
+      ),
       expected = reads * share,
       chance = m.probAtLeast(threshold, reads, share),
       needed = m.readsNeeded(threshold, share, 0.95);
-    const percent = (p: Unchecked) =>
+    const percent = (p: number) =>
       p >= 0.9995 ? "接近 100%" : `${(p * 100).toFixed(p < 0.01 ? 3 : 1)}%`;
     return {
       summary: `读出序列数：${reads.toLocaleString("zh-CN")}`,
@@ -1602,4 +1655,4 @@ medicinalChemistryModels["fbdd-depth"] = {
       ],
     };
   },
-};
+});

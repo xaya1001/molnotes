@@ -1,4 +1,4 @@
-import type { Unchecked } from "../shared/unchecked.ts";
+import type { TestContext } from "node:test";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import { noteTerms, notesSearchIndex } from "../shared/notes-reading.ts";
 import test from "node:test";
@@ -15,7 +15,7 @@ import {
 
 const head =
   "---\ntitle: Test\nsummary: Summary\ndate: 2026-10-16\norder: 0\n---\n";
-function fixture(t: Unchecked, body = "## Section\nText") {
+function fixture(t: TestContext, body = "## Section\nText") {
   const root = mkdtempSync(join(tmpdir(), "notes-index-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   mkdirSync(join(root, "notes/demo"), { recursive: true });
@@ -190,23 +190,23 @@ test("timeline and flow fences become figures their text is searchable in", asyn
   );
   const [note] = (await compile(root)).notes;
   assert.deepEqual(
-    note.diagrams.map(({ id, kind, caption }: Unchecked) => [
-      id,
-      kind,
-      caption,
-    ]),
+    note.diagrams!.map(({ id, kind, caption }) => [id, kind, caption]),
     [
       ["note-diagram-0", "timeline", "两件事"],
       ["note-diagram-1", "flow", ""],
     ],
   );
   assert.match(note.html, /<div id="note-diagram-0" class="note-diagram">/);
-  const [approved, kept] = note.diagrams[0].timeline.lanes[0].events;
+  const timeline = note.diagrams![0];
+  assert.ok(timeline.kind === "timeline");
+  const [approved, kept] = timeline.timeline.lanes[0].events;
   // A full date stays text in YAML and lands inside its year.
   assert.equal(approved.show, "1999 年 5 月 20 日");
   assert.ok(approved.at > 1999.38 && approved.at < 1999.39);
   assert.deepEqual([kept.at, kept.undated, kept.show], [2002, true, ""]);
-  assert.equal(note.diagrams[1].flow.nodes[1].tone, "accent");
+  const flow = note.diagrams![1];
+  assert.ok(flow.kind === "flow");
+  assert.equal(flow.flow.nodes[1].tone, "accent");
   assert.match(note.text, /两件事.*获批.*继续卖.*鸦片 母液/);
 });
 test("an image shows its description as a caption under it", async (t) => {

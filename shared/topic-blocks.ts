@@ -1,14 +1,32 @@
+import type {
+  StructureSetInput,
+  StructureSet,
+} from "../src/ui/structure/model.ts";
 // The block catalogue of a chapter's `blocks`: what each block type needs and
 // how blocks refer to each other. A chapter is a sequence of blocks; any block
 // may refer to large values in the topic's `data` by key. This is the one definition
 // of the catalogue; the runtime renders exactly these types.
 import { defineDataTable } from "../src/ui/data/values.ts";
 import { defineMatrix } from "../src/ui/matrix/model.ts";
-import { labModels, modelInputs } from "../src/ui/models/catalog.ts";
+import { labModels } from "../src/ui/models/catalog.ts";
 import { defineStructureSet } from "../src/ui/structure/model.ts";
 import { defineFlow, flowText } from "../src/ui/diagrams/flow.ts";
 import { defineTimeline, timelineText } from "../src/ui/diagrams/model.ts";
-import type { Unchecked } from "./unchecked.ts";
+import type {
+  MechanismFrame,
+  MoleculeData,
+  StructureAnchor,
+  SynthesisRoute,
+} from "../src/ui/chemistry/types.ts";
+import type { TableCell, TopicBlock } from "../src/ui/topic/blocks.ts";
+import type { PredictionEntry } from "../src/ui/topic/content.ts";
+import {
+  isFiniteNumber,
+  isInteger,
+  isList,
+  isObject,
+  type JsonObject,
+} from "./json.ts";
 
 /** Cross references a chapter's blocks make, checked once the topic's excerpts and quiz are known. */
 export interface BlockReferences {
@@ -18,23 +36,25 @@ export interface BlockReferences {
   pathPicker: boolean;
 }
 
-function isObject(value: unknown): value is Record<string, Unchecked> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-function text(value: Unchecked, where: string) {
+function text(value: unknown, where: string): asserts value is string {
   assert(typeof value === "string" && value.trim(), `${where} must be text`);
 }
 
-function optionalText(value: Unchecked, where: string) {
+function optionalText(
+  value: unknown,
+  where: string,
+): asserts value is string | undefined {
   if (value !== undefined) text(value, where);
 }
 
-function molecule(value: Unchecked, where: string) {
+function molecule(
+  value: unknown,
+  where: string,
+): asserts value is JsonObject & MoleculeData {
   assert(
     isObject(value) &&
       typeof value.name === "string" &&
@@ -42,35 +62,46 @@ function molecule(value: Unchecked, where: string) {
     `${where} needs a name and a smiles`,
   );
   // Optional atom and bond counts bound the indices a prediction accepts.
-  for (const name of ["atoms", "bonds"])
+  for (const name of ["atoms", "bonds"]) {
+    const count = value[name];
     assert(
-      value[name] === undefined ||
-        (Number.isInteger(value[name]) && value[name] > 0),
+      count === undefined || (isInteger(count) && count > 0),
       `${where} ${name} must be a positive count`,
     );
+  }
 }
 
 /** Every index in `list` lies below `count` when the molecule states one. */
-function within(list: Unchecked, count: number, where: string) {
-  if (count === undefined || !Array.isArray(list)) return;
+function within(
+  list: readonly number[],
+  count: number | undefined,
+  where: string,
+) {
+  if (count === undefined) return;
   assert(
     list.every((i) => i < count),
     `${where} has an index outside the molecule's ${count}`,
   );
 }
 
-function indices(value: Unchecked, where: string) {
+function indices(value: unknown, where: string): asserts value is number[] {
   assert(
-    Array.isArray(value) && value.every((i) => Number.isInteger(i) && i >= 0),
+    isList(value) && value.every((i) => isInteger(i) && i >= 0),
     `${where} must be a list of indices`,
   );
 }
 
-function optionalIndices(value: Unchecked, where: string) {
+function optionalIndices(
+  value: unknown,
+  where: string,
+): asserts value is number[] | undefined {
   if (value !== undefined) indices(value, where);
 }
 
-function labels(value: Unchecked, where: string) {
+function labels(
+  value: unknown,
+  where: string,
+): asserts value is Record<string, string> | undefined {
   if (value === undefined) return;
   assert(
     isObject(value) &&
@@ -81,25 +112,31 @@ function labels(value: Unchecked, where: string) {
   );
 }
 
-function anchor(value: Unchecked, where: string) {
+function anchor(
+  value: unknown,
+  where: string,
+): asserts value is StructureAnchor {
   assert(
     isObject(value) &&
-      ((Number.isInteger(value.atom) && value.atom >= 0) ||
-        (Number.isInteger(value.bond) && value.bond >= 0)),
+      ((isInteger(value.atom) && value.atom >= 0) ||
+        (isInteger(value.bond) && value.bond >= 0)),
     `${where} must name an atom or a bond`,
   );
 }
 
-function mechanismFrames(frames: Unchecked, where: string) {
+function mechanismFrames(
+  frames: unknown,
+  where: string,
+): asserts frames is MechanismFrame[] {
   assert(
-    Array.isArray(frames) && frames.length > 0,
+    isList(frames) && frames.length > 0,
     `${where} needs at least one frame`,
   );
   frames.forEach((frame, index) => {
     const at = `${where} frame ${index + 1}`;
     molecule(frame, at);
     text(frame.explanation, `${at} explanation`);
-    assert(Array.isArray(frame.arrows), `${at} arrows must be an array`);
+    assert(isList(frame.arrows), `${at} arrows must be an array`);
     for (const arrow of frame.arrows) {
       assert(isObject(arrow), `${at} arrows must be objects`);
       anchor(arrow.from, `${at} arrow from`);
@@ -112,9 +149,12 @@ function mechanismFrames(frames: Unchecked, where: string) {
   });
 }
 
-function synthesisRoutes(routes: Unchecked, where: string) {
+function synthesisRoutes(
+  routes: unknown,
+  where: string,
+): asserts routes is SynthesisRoute[] {
   assert(
-    Array.isArray(routes) && routes.length > 0,
+    isList(routes) && routes.length > 0,
     `${where} needs at least one route`,
   );
   for (const route of routes) {
@@ -122,7 +162,7 @@ function synthesisRoutes(routes: Unchecked, where: string) {
     text(route.id, `${where} route id`);
     text(route.title, `${where} route ${route.id} title`);
     assert(
-      Array.isArray(route.steps) && route.steps.length > 0,
+      isList(route.steps) && route.steps.length > 0,
       `${where} route ${route.id} needs steps`,
     );
     route.steps.forEach((step, index) => {
@@ -134,61 +174,59 @@ function synthesisRoutes(routes: Unchecked, where: string) {
       text(step.explanation, `${at} explanation`);
       optionalText(step.yield, `${at} yield`);
       for (const side of ["reactants", "products"]) {
-        assert(
-          Array.isArray(step[side]) && step[side].length > 0,
-          `${at} needs ${side}`,
-        );
-        for (const item of step[side]) molecule(item, `${at} ${side}`);
+        const items = step[side];
+        assert(isList(items) && items.length > 0, `${at} needs ${side}`);
+        for (const item of items) molecule(item, `${at} ${side}`);
       }
     });
   }
 }
 
 /** A cell is text, or `{ text, href }` for a linked value such as a PubChem CID. */
-const tableCell = (cell: Unchecked) =>
+const tableCell = (cell: unknown): cell is TableCell =>
   typeof cell === "string" ||
   (isObject(cell) &&
     typeof cell.text === "string" &&
     typeof cell.href === "string");
 
-function tableRows(rows: Unchecked, columns: Unchecked, where: string) {
-  assert(
-    Array.isArray(rows) && rows.length > 0,
-    `${where} needs at least one row`,
-  );
+function tableRows(
+  rows: unknown,
+  columns: readonly string[],
+  where: string,
+): asserts rows is TableCell[][] {
+  assert(isList(rows) && rows.length > 0, `${where} needs at least one row`);
   rows.forEach((row, index) => {
     assert(
-      Array.isArray(row) &&
-        row.length === columns.length &&
-        row.every(tableCell),
+      isList(row) && row.length === columns.length && row.every(tableCell),
       `${where} row ${index + 1} needs one text or { text, href } cell per column`,
     );
   });
 }
 
-function points(value: Unchecked, where: string) {
+function points(
+  value: unknown,
+  where: string,
+): asserts value is { x: number; y: number }[] {
   assert(
-    Array.isArray(value) &&
+    isList(value) &&
       value.length > 0 &&
       value.every(
         (point) =>
-          isObject(point) &&
-          Number.isFinite(point.x) &&
-          Number.isFinite(point.y),
+          isObject(point) && isFiniteNumber(point.x) && isFiniteNumber(point.y),
       ),
     `${where} points must be { x, y } numbers`,
   );
 }
 
 /** An optional choice submitted together with a structure pick (`options` + `optionAnswer`). */
-function choiceWithStructure(prediction: Unchecked, where: string) {
+function choiceWithStructure(prediction: JsonObject, where: string) {
   if (prediction.options !== undefined) {
     assert(
-      Array.isArray(prediction.options) && prediction.options.length >= 2,
+      isList(prediction.options) && prediction.options.length >= 2,
       `${where} options need at least two entries`,
     );
     assert(
-      Number.isInteger(prediction.optionAnswer) &&
+      isInteger(prediction.optionAnswer) &&
         prediction.optionAnswer >= 0 &&
         prediction.optionAnswer < prediction.options.length,
       `${where} optionAnswer is out of range`,
@@ -200,10 +238,18 @@ function choiceWithStructure(prediction: Unchecked, where: string) {
     );
 }
 
-/** Runs one of the `define…` checks of a shared data component and names the block in its error. */
-function defined(define: Unchecked, input: Unchecked, where: string) {
+/**
+ * Runs one of the `define…` checks of a shared data component and names the
+ * block in its error. Those checks read their input as the type they declare:
+ * a value of another shape fails inside them, and the error names the block.
+ */
+function defined<Input, Output>(
+  define: (input: Input) => Output,
+  input: unknown,
+  where: string,
+): Output {
   try {
-    return define(input);
+    return define(input as Input);
   } catch (error) {
     throw new Error(
       `${where}: ${error instanceof Error ? error.message : String(error)}`,
@@ -216,7 +262,7 @@ function defined(define: Unchecked, input: Unchecked, where: string) {
  * runs. Returns the excerpt ids the prediction shows with its result.
  */
 export function validatePrediction(
-  prediction: Unchecked,
+  prediction: unknown,
   where: string,
 ): string[] {
   assert(isObject(prediction), `${where} must be an object`);
@@ -229,18 +275,18 @@ export function validatePrediction(
   if (kind === "choice") {
     const { options, answer } = prediction;
     assert(
-      Array.isArray(options) && options.length >= 2,
+      isList(options) && options.length >= 2,
       `${where} needs at least two options`,
     );
     assert(
-      Number.isInteger(answer) && answer >= 0 && answer < options.length,
+      isInteger(answer) && answer >= 0 && answer < options.length,
       `${where} answer is out of range`,
     );
     assert(
       prediction.alsoCorrect === undefined ||
-        (Array.isArray(prediction.alsoCorrect) &&
+        (isList(prediction.alsoCorrect) &&
           prediction.alsoCorrect.every(
-            (i) => Number.isInteger(i) && i >= 0 && i < options.length,
+            (i) => isInteger(i) && i >= 0 && i < options.length,
           )),
       `${where} alsoCorrect must list option indices`,
     );
@@ -259,7 +305,7 @@ export function validatePrediction(
     const min = prediction.minSelections ?? 1;
     const max = prediction.maxSelections ?? min;
     assert(
-      Number.isInteger(min) && Number.isInteger(max) && min >= 1 && max >= min,
+      isInteger(min) && isInteger(max) && min >= 1 && max >= min,
       `${where} minSelections / maxSelections must be integers with 1 <= min <= max`,
     );
     assert(
@@ -271,7 +317,7 @@ export function validatePrediction(
   } else if (kind === "atom-set") {
     // Several atoms per molecule; the reader's set must match each one.
     assert(
-      Array.isArray(prediction.molecules) && prediction.molecules.length > 0,
+      isList(prediction.molecules) && prediction.molecules.length > 0,
       `${where} needs molecules with their answer sets`,
     );
     prediction.molecules.forEach((item, index) => {
@@ -293,13 +339,13 @@ export function validatePrediction(
     // represented and no stray atom picked; the choice must match `answer`.
     molecule(prediction.molecule, `${where} molecule`);
     assert(
-      Array.isArray(prediction.groups) &&
+      isList(prediction.groups) &&
         prediction.groups.length > 0 &&
         prediction.groups.every(
-          (group) =>
-            Array.isArray(group) &&
+          (group): group is number[] =>
+            isList(group) &&
             group.length > 0 &&
-            group.every((i) => Number.isInteger(i) && i >= 0),
+            group.every((i) => isInteger(i) && i >= 0),
         ),
       `${where} groups must be non-empty lists of atom indices`,
     );
@@ -309,11 +355,11 @@ export function validatePrediction(
       `${where} groups`,
     );
     assert(
-      Array.isArray(prediction.options) && prediction.options.length >= 2,
+      isList(prediction.options) && prediction.options.length >= 2,
       `${where} needs at least two options`,
     );
     assert(
-      Number.isInteger(prediction.answer) &&
+      isInteger(prediction.answer) &&
         prediction.answer >= 0 &&
         prediction.answer < prediction.options.length,
       `${where} answer is out of range`,
@@ -323,11 +369,11 @@ export function validatePrediction(
   } else if (kind === "ranking") {
     // The reader ranks every option; only the first place is graded.
     assert(
-      Array.isArray(prediction.options) && prediction.options.length >= 2,
+      isList(prediction.options) && prediction.options.length >= 2,
       `${where} needs at least two options`,
     );
     assert(
-      Number.isInteger(prediction.answer) &&
+      isInteger(prediction.answer) &&
         prediction.answer >= 0 &&
         prediction.answer < prediction.options.length,
       `${where} answer is out of range`,
@@ -339,10 +385,10 @@ export function validatePrediction(
     text(image.src, `${where} image src`);
     text(image.alt, `${where} image alt`);
     assert(
-      Array.isArray(pts) && pts.length >= 2,
+      isList(pts) && pts.length >= 2,
       `${where} needs at least two points`,
     );
-    const ids = new Set();
+    const ids = new Set<unknown>();
     pts.forEach((point, i) => {
       const at = `${where} point ${i + 1}`;
       assert(isObject(point), `${at} must be an object`);
@@ -350,18 +396,16 @@ export function validatePrediction(
       text(point.label, `${at} label`);
       assert(!ids.has(point.id), `${at} repeats id ${point.id}`);
       ids.add(point.id);
-      for (const axis of ["x", "y"])
+      for (const axis of ["x", "y"]) {
+        const value = point[axis];
         assert(
-          Number.isFinite(point[axis]) &&
-            point[axis] >= 0 &&
-            point[axis] <= 100,
+          isFiniteNumber(value) && value >= 0 && value <= 100,
           `${at} ${axis} must be a percentage`,
         );
+      }
     });
     assert(
-      Array.isArray(answer) &&
-        answer.length > 0 &&
-        answer.every((id) => ids.has(id)),
+      isList(answer) && answer.length > 0 && answer.every((id) => ids.has(id)),
       `${where} answer must list point ids`,
     );
     choiceWithStructure(prediction, where);
@@ -372,30 +416,33 @@ export function validatePrediction(
     assert(isObject(input), `${where} input must describe the number field`);
     text(input.label, `${where} input label`);
     optionalText(input.unit, `${where} input unit`);
-    for (const name of ["min", "max", "step"])
+    for (const name of ["min", "max", "step"]) {
+      const value = input[name];
       assert(
-        input[name] === undefined || Number.isFinite(input[name]),
+        value === undefined || isFiniteNumber(value),
         `${where} input ${name} must be a number`,
       );
+    }
     assert(
-      answer === undefined || Number.isFinite(answer),
+      answer === undefined || isFiniteNumber(answer),
       `${where} answer must be a number`,
     );
     assert(
-      tolerance === undefined || (answer !== undefined && tolerance >= 0),
+      // Compared as JavaScript compares it, so a numeric string passes as before.
+      tolerance === undefined ||
+        (answer !== undefined && Number(tolerance) >= 0),
       `${where} tolerance needs an answer and must not be negative`,
     );
     if (readout !== undefined) {
       assert(isObject(readout), `${where} readout must be { model, input }`);
-      const model = labModels[readout.model];
+      const model = labModels[String(readout.model)];
       assert(
         model,
         `${where} readout model ${readout.model} is not in the catalogue`,
       );
       assert(
-        defined(() => modelInputs(model), undefined, `${where} readout`).some(
-          (item: Unchecked) =>
-            item.id === readout.input && item.kind === "number",
+        defined(() => model().inputs, undefined, `${where} readout`).some(
+          (item) => item.id === readout.input && item.kind === "number",
         ),
         `${where} readout input ${readout.input} is not a number input of ${readout.model}`,
       );
@@ -406,8 +453,8 @@ export function validatePrediction(
     const { answer } = prediction;
     assert(
       isObject(answer) &&
-        Number.isInteger(answer.from) &&
-        Number.isInteger(answer.to) &&
+        isInteger(answer.from) &&
+        isInteger(answer.to) &&
         answer.from >= 0 &&
         answer.to >= 0 &&
         answer.from !== answer.to,
@@ -419,10 +466,7 @@ export function validatePrediction(
     throw new Error(`${where} kind ${kind} is not in the catalogue`);
   }
   if (kind !== "atom-set" && prediction.molecules !== undefined) {
-    assert(
-      Array.isArray(prediction.molecules),
-      `${where} molecules must be an array`,
-    );
+    assert(isList(prediction.molecules), `${where} molecules must be an array`);
     for (const item of prediction.molecules)
       molecule(item, `${where} molecules`);
   }
@@ -431,16 +475,17 @@ export function validatePrediction(
     prediction.reset === undefined || typeof prediction.reset === "boolean",
     `${where} reset must be a boolean`,
   );
+  const evidence: string[] = [];
   if (prediction.evidence !== undefined) {
-    assert(
-      Array.isArray(prediction.evidence),
-      `${where} evidence must be an array`,
-    );
-    prediction.evidence.forEach((id) => text(id, `${where} evidence`));
+    assert(isList(prediction.evidence), `${where} evidence must be an array`);
+    for (const id of prediction.evidence) {
+      text(id, `${where} evidence`);
+      evidence.push(id);
+    }
   }
   return [
     ...(prediction.excerpt === undefined ? [] : [prediction.excerpt]),
-    ...(prediction.evidence ?? []),
+    ...evidence,
   ];
 }
 
@@ -450,14 +495,12 @@ export function validatePrediction(
  * too, answered once every required cell is; a `quiz` block with an id is
  * answered once every question is.
  */
-export function chapterPredictions<P>(
-  chapter: { id: string; blocks: readonly unknown[] },
+export function chapterPredictions(
+  chapter: { id: string; blocks: readonly TopicBlock[] },
   data?: Record<string, unknown>,
-): { id: string; prediction: P }[] {
-  // The blocks were checked by validateBlocks; each kind becomes the prediction P names.
-  const found: { id: string; prediction: Unchecked }[] = [];
+): Omit<PredictionEntry, "chapter">[] {
+  const found: Omit<PredictionEntry, "chapter">[] = [];
   for (const block of chapter.blocks) {
-    if (!isObject(block)) continue;
     if (block.type === "prediction")
       found.push({ id: block.id ?? chapter.id, prediction: block });
     if (block.type === "quiz" && block.id !== undefined)
@@ -483,10 +526,10 @@ export function chapterPredictions<P>(
 
 /** The prose of a chapter's blocks, for the search index; `data` resolves scene frames kept there. */
 export function blockSearchText(
-  blocks: readonly { type: string; [field: string]: unknown }[],
+  blocks: readonly TopicBlock[],
   data?: Record<string, unknown>,
-): string[] {
-  return blocks.flatMap((block: Unchecked): string[] => {
+): (string | undefined)[] {
+  return blocks.flatMap((block): (string | undefined)[] => {
     switch (block.type) {
       case "heading":
       case "paragraph":
@@ -500,28 +543,24 @@ export function blockSearchText(
           ...block.columns,
           ...resolveData(block.rows, data, "table rows")
             .flat()
-            .map((cell: Unchecked) =>
-              typeof cell === "string" ? cell : cell.text,
-            ),
+            .map((cell) => (typeof cell === "string" ? cell : cell.text)),
         ];
       case "tabs":
-        return block.items.flatMap((item: Unchecked) => [
+        return block.items.flatMap((item) => [
           item.label,
           ...blockSearchText(item.blocks, data),
         ]);
       case "molecule":
         return [block.name];
       case "molecules":
-        return resolveData(block.items, data, "molecules").map(
-          (m: Unchecked) => m.name,
-        );
+        return resolveData(block.items, data, "molecules").map((m) => m.name);
       case "formula":
         return block.caption === undefined ? [] : [block.caption];
       case "figure":
         return [block.caption];
       case "scene":
         return resolveData(block.frames, data, "scene frames").flatMap(
-          (frame: Unchecked) => [frame.title, frame.text],
+          (frame) => [frame.title, frame.text],
         );
       case "lab":
         return [block.title, block.intro];
@@ -614,7 +653,7 @@ const blockFields: Record<string, string[]> = {
   reading: "scope title".split(" "),
 };
 
-const tones = ["note", "caution", "evidence"];
+const tones: readonly unknown[] = ["note", "caution", "evidence"];
 
 /**
  * Checks a chapter's blocks against the catalogue and returns what the rest
@@ -623,19 +662,18 @@ const tones = ["note", "caution", "evidence"];
  * prediction's records are kept under, across the topic.
  */
 export function validateBlocks(
-  chapter: Unchecked,
+  chapter: { id: string; blocks: unknown },
   data: Record<string, unknown> | undefined,
   where: string,
   found: BlockReferences,
-  external: Set<string> = new Set(),
-) {
+  external: ReadonlySet<unknown> = new Set(),
+): asserts chapter is { id: string; blocks: TopicBlock[] } {
   const { blocks } = chapter;
-  assert(Array.isArray(blocks), `${where} blocks must be an array`);
+  assert(isList(blocks), `${where} blocks must be an array`);
   // Spectrum assignments can depend on earlier predictions or external chapter records.
-  const availablePredictions = new Set(external);
-  const ids = new Set();
-  const registerPrediction = (block: Unchecked, here: string) => {
-    const id = block.id ?? chapter.id;
+  const availablePredictions = new Set<unknown>(external);
+  const ids = new Set<unknown>();
+  const registerPrediction = (id: string, here: string) => {
     assert(
       !found.predictionIds.has(id),
       `${here} repeats prediction id ${id}; give each prediction of a chapter its own id`,
@@ -662,8 +700,8 @@ export function validateBlocks(
     }
     if (block.type === "prediction" && block.optionExplanations !== undefined) {
       assert(
-        Array.isArray(block.options) &&
-          Array.isArray(block.optionExplanations) &&
+        isList(block.options) &&
+          isList(block.optionExplanations) &&
           block.optionExplanations.length === block.options.length,
         `${here} optionExplanations must match options`,
       );
@@ -671,7 +709,10 @@ export function validateBlocks(
         text(value, `${here} option explanation`),
       );
     }
-    const field = (name: string, check: Unchecked) =>
+    const field = (
+      name: string,
+      check: (value: unknown, where: string) => void,
+    ) =>
       check(
         resolveData(block[name], data, `${here} ${name}`),
         `${here} ${name}`,
@@ -709,7 +750,7 @@ export function validateBlocks(
         break;
       case "list":
         assert(
-          Array.isArray(block.items) &&
+          isList(block.items) &&
             block.items.length > 0 &&
             block.items.every((item) => typeof item === "string" && item),
           `${here} items must be a list of text`,
@@ -727,11 +768,12 @@ export function validateBlocks(
         optionalText(block.caption, `${here} caption`);
         break;
       case "molecule-compare":
-        field("items", (items: Unchecked, w: Unchecked) => {
+        field("items", (items, w) => {
           assert(
-            Array.isArray(items) && items.length >= 2,
+            isList(items) && items.length >= 2,
             `${w} needs at least two molecules`,
           );
+          const molecules: MoleculeData[] = [];
           items.forEach((item, i) => {
             molecule(item, `${w} item ${i + 1}`);
             optionalIndices(
@@ -739,20 +781,21 @@ export function validateBlocks(
               `${w} item ${i + 1} highlightAtoms`,
             );
             optionalText(item.caption, `${w} item ${i + 1} caption`);
+            molecules.push(item);
           });
           for (const side of ["left", "right"])
             assert(
               block[side] === undefined ||
-                items.some((item) => item.name === block[side]),
+                molecules.some((item) => item.name === block[side]),
               `${here} ${side} must name one of the items`,
             );
         });
         optionalText(block.highlightLabel, `${here} highlightLabel`);
         break;
       case "molecules":
-        field("items", (items: Unchecked, w: Unchecked) => {
+        field("items", (items, w) => {
           assert(
-            Array.isArray(items) && items.length > 0,
+            isList(items) && items.length > 0,
             `${w} needs at least one molecule`,
           );
           for (const item of items) molecule(item, w);
@@ -764,9 +807,9 @@ export function validateBlocks(
         break;
       case "substituents":
         text(block.site, `${here} site`);
-        field("variants", (variants: Unchecked, w: Unchecked) => {
+        field("variants", (variants, w) => {
           assert(
-            Array.isArray(variants) && variants.length > 0,
+            isList(variants) && variants.length > 0,
             `${w} needs at least one variant`,
           );
           for (const item of variants) molecule(item, w);
@@ -779,42 +822,42 @@ export function validateBlocks(
         optionalText(block.title, `${here} title`);
         field("frames", mechanismFrames);
         break;
-      case "table":
+      case "table": {
         text(block.caption, `${here} caption`);
+        const { columns } = block;
         assert(
-          Array.isArray(block.columns) &&
-            block.columns.length > 0 &&
-            block.columns.every((column) => typeof column === "string"),
+          isList(columns) &&
+            columns.length > 0 &&
+            columns.every((column) => typeof column === "string"),
           `${here} columns must be a list of text`,
         );
-        field("rows", (rows: Unchecked, w: Unchecked) =>
-          tableRows(rows, block.columns, w),
-        );
+        field("rows", (rows, w) => tableRows(rows, columns, w));
         optionalText(block.note, `${here} note`);
         assert(
           block.rowHeader === undefined || typeof block.rowHeader === "boolean",
           `${here} rowHeader must be a boolean`,
         );
         break;
+      }
       case "spectrum":
         // Peaks of one molecule; the assignment and highlight wait for `assignAfter`.
         molecule(block.molecule, `${here} molecule`);
         optionalText(block.caption, `${here} caption`);
-        field("peaks", (peaks: Unchecked, w: Unchecked) => {
+        field("peaks", (peaks, w) => {
           assert(
-            Array.isArray(peaks) && peaks.length > 0,
+            isList(peaks) && peaks.length > 0,
             `${w} needs at least one peak`,
           );
-          const seen = new Set();
+          const seen = new Set<unknown>();
           peaks.forEach((peak, i) => {
             const at = `${w} peak ${i + 1}`;
             assert(isObject(peak), `${at} must be an object`);
             text(peak.id, `${at} id`);
             assert(!seen.has(peak.id), `${at} repeats id ${peak.id}`);
             seen.add(peak.id);
-            assert(Number.isFinite(peak.ppm), `${at} ppm must be a number`);
+            assert(isFiniteNumber(peak.ppm), `${at} ppm must be a number`);
             assert(
-              Number.isInteger(peak.hydrogens) && peak.hydrogens > 0,
+              isInteger(peak.hydrogens) && peak.hydrogens > 0,
               `${at} hydrogens must be a positive integer`,
             );
             text(peak.multiplicity, `${at} multiplicity`);
@@ -825,7 +868,7 @@ export function validateBlocks(
         });
         if (block.assignAfter !== undefined)
           assert(
-            Array.isArray(block.assignAfter) &&
+            isList(block.assignAfter) &&
               block.assignAfter.length > 0 &&
               block.assignAfter.every((id) => availablePredictions.has(id)),
             `${here} assignAfter must list predictions earlier in the chapter`,
@@ -842,16 +885,18 @@ export function validateBlocks(
           "defaultY",
         ])
           optionalText(block[name], `${here} ${name}`);
-        field("table", (table: Unchecked, w: Unchecked) =>
-          defined(defineDataTable, table, w),
-        );
+        field("table", (table, w) => defined(defineDataTable, table, w));
         break;
       case "structure-lab":
-        field("set", (set: Unchecked, w: Unchecked) => {
-          const defined_ = defined(defineStructureSet, set, w);
+        field("set", (set, w) => {
+          const defined_ = defined<StructureSetInput, StructureSet>(
+            defineStructureSet,
+            set,
+            w,
+          );
           if (block.ids !== undefined) {
             assert(
-              Array.isArray(block.ids) && block.ids.length > 0,
+              isList(block.ids) && block.ids.length > 0,
               `${here} ids must list entries`,
             );
             for (const id of block.ids) defined_.entryById(id);
@@ -868,15 +913,11 @@ export function validateBlocks(
         text(block.caption, `${here} caption`);
         break;
       case "timeline":
-        field("timeline", (value: Unchecked, w: Unchecked) =>
-          defined(defineTimeline, value, w),
-        );
+        field("timeline", (value, w) => defined(defineTimeline, value, w));
         optionalText(block.caption, `${here} caption`);
         break;
       case "flow":
-        field("flow", (value: Unchecked, w: Unchecked) =>
-          defined(defineFlow, value, w),
-        );
+        field("flow", (value, w) => defined(defineFlow, value, w));
         optionalText(block.caption, `${here} caption`);
         break;
       case "chart":
@@ -884,15 +925,17 @@ export function validateBlocks(
         text(block.xLabel, `${here} xLabel`);
         text(block.yLabel, `${here} yLabel`);
         optionalText(block.caption, `${here} caption`);
-        for (const name of ["xDomain", "yDomain"])
+        for (const name of ["xDomain", "yDomain"]) {
+          const domain = block[name];
           assert(
-            block[name] === undefined ||
-              (Array.isArray(block[name]) &&
-                block[name].length === 2 &&
-                block[name].every(Number.isFinite) &&
-                block[name][0] < block[name][1]),
+            domain === undefined ||
+              (isList(domain) &&
+                domain.length === 2 &&
+                domain.every(isFiniteNumber) &&
+                domain[0] < domain[1]),
             `${here} ${name} must be [min, max]`,
           );
+        }
         break;
       case "diagnostic-summary":
         optionalText(block.title, `${here} title`);
@@ -905,10 +948,10 @@ export function validateBlocks(
         // Each item holds static blocks only; what they refer to is checked too.
         text(block.label, `${here} label`);
         assert(
-          Array.isArray(block.items) && block.items.length >= 2,
+          isList(block.items) && block.items.length >= 2,
           `${here} needs at least two items`,
         );
-        const itemIds = new Set();
+        const itemIds = new Set<unknown>();
         block.items.forEach((item, i) => {
           const at = `${here} item ${i + 1}`;
           assert(isObject(item), `${at} must be an object`);
@@ -934,9 +977,9 @@ export function validateBlocks(
       case "scene":
         text(block.label, `${here} label`);
         optionalText(block.title, `${here} title`);
-        field("frames", (frames: Unchecked, w: Unchecked) => {
+        field("frames", (frames, w) => {
           assert(
-            Array.isArray(frames) && frames.length > 0,
+            isList(frames) && frames.length > 0,
             `${w} needs at least one frame`,
           );
           frames.forEach((frame, i) => {
@@ -957,11 +1000,11 @@ export function validateBlocks(
       case "problem": {
         text(block.id, `${here} id`);
         assert(
-          ["en", "zh"].includes(block.lang),
+          block.lang === "en" || block.lang === "zh",
           `${here} lang must be en or zh`,
         );
-        const paragraphs = (value: Unchecked, name: string) => {
-          if (Array.isArray(value)) {
+        const paragraphs = (value: unknown, name: string) => {
+          if (isList(value)) {
             assert(value.length > 0, `${here} ${name} must not be empty`);
             value.forEach((part) => text(part, `${here} ${name}`));
           } else text(value, `${here} ${name}`);
@@ -975,7 +1018,7 @@ export function validateBlocks(
           optionalText(block[name], `${here} ${name}`);
         if (block.parts !== undefined) {
           assert(
-            Array.isArray(block.parts) && block.parts.length > 0,
+            isList(block.parts) && block.parts.length > 0,
             `${here} parts must be nonempty`,
           );
           block.parts.forEach((part) => text(part, `${here} part`));
@@ -988,27 +1031,24 @@ export function validateBlocks(
           );
         paragraphs(block.answer.text, "answer.text");
         assert(
-          ["book", "ai"].includes(block.answer.origin),
+          block.answer.origin === "book" || block.answer.origin === "ai",
           `${here} answer.origin must be book or ai`,
         );
         text(block.answer.basis, `${here} answer.basis`);
         if (block.evidence !== undefined) {
-          assert(
-            Array.isArray(block.evidence),
-            `${here} evidence must be an array`,
-          );
+          assert(isList(block.evidence), `${here} evidence must be an array`);
           block.evidence.forEach((id) => {
             text(id, `${here} evidence`);
             found.excerpts.push([id, here]);
           });
         }
-        registerPrediction(block, here);
+        registerPrediction(block.id, here);
         break;
       }
       case "prediction": {
         for (const id of validatePrediction(block, here))
           found.excerpts.push([id, here]);
-        registerPrediction(block, here);
+        registerPrediction(block.id ?? chapter.id, here);
         break;
       }
       case "matrix": {
@@ -1016,10 +1056,8 @@ export function validateBlocks(
           text(block[name], `${here} ${name}`);
         for (const name of ["heading", "instruction", "quoteLang"])
           optionalText(block[name], `${here} ${name}`);
-        field("matrix", (matrix: Unchecked, w: Unchecked) =>
-          defined(defineMatrix, matrix, w),
-        );
-        registerPrediction(block, here);
+        field("matrix", (matrix, w) => defined(defineMatrix, matrix, w));
+        registerPrediction(block.id ?? chapter.id, here);
         break;
       }
       case "lab": {
@@ -1035,23 +1073,17 @@ export function validateBlocks(
           assert(isObject(block.reveal), `${here} reveal must be { label }`);
           text(block.reveal.label, `${here} reveal label`);
         }
-        const model = labModels[block.model];
+        const model = labModels[String(block.model)];
         assert(model, `${here} model ${block.model} is not in the catalogue`);
-        const inputs = defined(
-          () => modelInputs(model, modelData),
-          undefined,
-          here,
-        );
-        const inRange = (values: Unchecked, what: Unchecked) => {
+        const inputs = defined(() => model(modelData).inputs, undefined, here);
+        const inRange = (values: unknown, what: string) => {
           assert(isObject(values), `${here} ${what} must be an object`);
           for (const [id, value] of Object.entries(values)) {
-            const input = inputs.find((item: Unchecked) => item.id === id);
+            const input = inputs.find((item) => item.id === id);
             assert(input, `${here} ${what} names unknown input ${id}`);
             assert(
               input.kind === "select"
-                ? input.options.some(
-                    (option: Unchecked) => option.value === value,
-                  )
+                ? input.options.some((option) => option.value === value)
                 : typeof value === "number" &&
                     value >= input.min &&
                     value <= input.max,
@@ -1062,7 +1094,7 @@ export function validateBlocks(
         if (block.defaults !== undefined) inRange(block.defaults, "defaults");
         if (block.presets !== undefined) {
           assert(
-            Array.isArray(block.presets) && block.presets.length > 0,
+            isList(block.presets) && block.presets.length > 0,
             `${here} presets must be a list`,
           );
           block.presets.forEach((preset, i) => {
@@ -1078,7 +1110,7 @@ export function validateBlocks(
       }
       case "quiz":
         assert(
-          Array.isArray(block.questions) &&
+          isList(block.questions) &&
             block.questions.length > 0 &&
             block.questions.every((id) => typeof id === "string"),
           `${here} questions must list quiz ids`,
@@ -1090,7 +1122,7 @@ export function validateBlocks(
         );
         // A quiz block with an id is recorded as answered once every
         // question has an answer.
-        if (block.id !== undefined) registerPrediction(block, here);
+        if (block.id !== undefined) registerPrediction(block.id, here);
         for (const id of block.questions) found.quiz.push([id, here]);
         break;
       case "reading":
@@ -1116,10 +1148,10 @@ const staticOnly = new Set([
 
 /** Checks the blocks of a page that has no predictions of its own (the sources page intro); spectrum assignments may reference `predictionIds`. */
 export function validateStaticBlocks(
-  blocks: Unchecked,
+  blocks: unknown,
   data: Record<string, unknown> | undefined,
   where: string,
-  predictionIds: Set<string>,
+  predictionIds: ReadonlySet<unknown>,
 ): BlockReferences {
   const found: BlockReferences = {
     excerpts: [],
@@ -1127,8 +1159,9 @@ export function validateStaticBlocks(
     predictionIds: new Set(),
     pathPicker: false,
   };
-  validateBlocks({ id: where, blocks }, data, where, found, predictionIds);
-  for (const block of blocks)
+  const page = { id: where, blocks };
+  validateBlocks(page, data, where, found, predictionIds);
+  for (const block of page.blocks)
     assert(
       !staticOnly.has(block.type),
       `${where} cannot hold a ${block.type} block`,

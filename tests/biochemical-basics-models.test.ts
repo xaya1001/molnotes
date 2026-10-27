@@ -1,10 +1,9 @@
-import type { Unchecked } from "../shared/unchecked.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as m from "../src/ui/models/biochemical-kinetics.ts";
 import { labModels, type LabInput } from "../src/ui/models/catalog.ts";
 
-const near = (a: Unchecked, b: Unchecked) =>
+const near = (a: number, b: number) =>
   assert.ok(Math.abs(a - b) < 1e-9, `${a} != ${b}`);
 
 test("side-chain ionization distinguishes protonation, charge and neutral fraction", () => {
@@ -113,9 +112,9 @@ test("catalogue retains the five default lab readouts", () => {
     ["bio-permeability", /20.08%/],
   ] satisfies [string, RegExp][]) {
     const model = labModels[name];
-    const result = model.run(
+    const result = model().run(
       Object.fromEntries(
-        (model.inputs as LabInput[]).map((i) => [i.id, i.default]),
+        (model().inputs as LabInput[]).map((i) => [i.id, i.default]),
       ),
     );
     assert.match(result.summary!, expected, name);

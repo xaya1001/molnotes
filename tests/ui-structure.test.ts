@@ -1,4 +1,3 @@
-import type { Unchecked } from "../shared/unchecked.ts";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
@@ -82,7 +81,7 @@ const entry = () => ({
     },
   ],
 });
-const set = (change?: (entry: Unchecked) => unknown) => {
+const set = (change?: (value: ReturnType<typeof entry>) => unknown) => {
   const e = entry();
   change?.(e);
   return () => defineStructureSet({ fetchedOn: "2026-10-12", entries: [e] });
@@ -164,41 +163,84 @@ test("a structure set is checked when it is defined", () => {
   );
   for (const [change, message] of [
     [
-      (e: Unchecked) => (e.url = "https://files.rcsb.org/download/1ABC.pdb"),
+      (e: ReturnType<typeof entry>) =>
+        Reflect.set(e, "url", "https://files.rcsb.org/download/1ABC.pdb"),
       /path on this site/,
     ],
     [
-      (e: Unchecked) => (e.url = "//files.rcsb.org/1ABC.pdb"),
+      (e: ReturnType<typeof entry>) =>
+        Reflect.set(e, "url", "//files.rcsb.org/1ABC.pdb"),
       /path on this site/,
     ],
-    [(e: Unchecked) => (e.source.pdb = "ABCDE"), /not a PDB code/],
-    [(e: Unchecked) => (e.source.resolution = 0), /resolution/],
-    [(e: Unchecked) => (e.subset.residues.A = [12, 10]), /\[first, last\]/],
-    [(e: Unchecked) => (e.ligand.resn = "XYZ"), /not in subset\.hetero/],
-    [(e: Unchecked) => (e.layers = []), /at least one layer/],
-    [(e: Unchecked) => (e.layers[0].color = "teal"), /unknown colour teal/],
-    [(e: Unchecked) => (e.layers[0].style = "ribbon"), /unknown style ribbon/],
-    [(e: Unchecked) => (e.layers[0].select = {}), /names nothing/],
     [
-      (e: Unchecked) => (e.layers[0].select = { chain: "B" }),
+      (e: ReturnType<typeof entry>) => Reflect.set(e.source, "pdb", "ABCDE"),
+      /not a PDB code/,
+    ],
+    [
+      (e: ReturnType<typeof entry>) => Reflect.set(e.source, "resolution", 0),
+      /resolution/,
+    ],
+    [
+      (e: ReturnType<typeof entry>) =>
+        Reflect.set(e.subset.residues, "A", [12, 10]),
+      /\[first, last\]/,
+    ],
+    [
+      (e: ReturnType<typeof entry>) => Reflect.set(e.ligand, "resn", "XYZ"),
+      /not in subset\.hetero/,
+    ],
+    [
+      (e: ReturnType<typeof entry>) => Reflect.set(e, "layers", []),
+      /at least one layer/,
+    ],
+    [
+      (e: ReturnType<typeof entry>) =>
+        Reflect.set(e.layers[0], "color", "teal"),
+      /unknown colour teal/,
+    ],
+    [
+      (e: ReturnType<typeof entry>) =>
+        Reflect.set(e.layers[0], "style", "ribbon"),
+      /unknown style ribbon/,
+    ],
+    [
+      (e: ReturnType<typeof entry>) => Reflect.set(e.layers[0], "select", {}),
+      /names nothing/,
+    ],
+    [
+      (e: ReturnType<typeof entry>) =>
+        Reflect.set(e.layers[0], "select", { chain: "B" }),
       /chain B is not in the subset/,
     ],
     [
-      (e: Unchecked) => (e.layers[1].select = { resi: [10] }),
+      (e: ReturnType<typeof entry>) =>
+        Reflect.set(e.layers[1], "select", { resi: [10] }),
       /resi needs a chain/,
     ],
-    [(e: Unchecked) => (e.layers[1].select.resi = ["12-10"]), /bad residue/],
-    [(e: Unchecked) => (e.labels.chain = "B"), /labels need/],
     [
-      (e: Unchecked) => e.presets.push({ ...e.presets[0] }),
+      (e: ReturnType<typeof entry>) =>
+        Reflect.set(e.layers[1].select, "resi", ["12-10"]),
+      /bad residue/,
+    ],
+    [
+      (e: ReturnType<typeof entry>) => Reflect.set(e.labels, "chain", "B"),
+      /labels need/,
+    ],
+    [
+      (e: ReturnType<typeof entry>) =>
+        Reflect.apply(e.presets.push, e.presets, [{ ...e.presets[0] }]),
       /duplicate preset trp-lig/,
     ],
-    [(e: Unchecked) => (e.presets[0].expect = -1), /preset trp-lig: expect/],
     [
-      (e: Unchecked) => (e.presets[0].b = { ...e.presets[0].a }),
+      (e: ReturnType<typeof entry>) => Reflect.set(e.presets[0], "expect", -1),
+      /preset trp-lig: expect/,
+    ],
+    [
+      (e: ReturnType<typeof entry>) =>
+        Reflect.set(e.presets[0], "b", { ...e.presets[0].a }),
       /preset trp-lig: a and b are the same atom/,
     ],
-  ] satisfies [(entry: Unchecked) => unknown, RegExp][]) {
+  ] satisfies [(value: ReturnType<typeof entry>) => unknown, RegExp][]) {
     assert.throws(set(change), message, String(change));
   }
 });
@@ -206,23 +248,22 @@ test("a structure set is checked when it is defined", () => {
 test("both atoms of a preset must lie in the entry's coordinate subset", () => {
   // chain B is not kept
   assert.throws(
-    set(
-      (e: Unchecked) => (e.presets[0].b = { chain: "B", resi: 11, atom: "CA" }),
+    set((e: ReturnType<typeof entry>) =>
+      Reflect.set(e.presets[0], "b", { chain: "B", resi: 11, atom: "CA" }),
     ),
     /Structure demo preset trp-lig atom b: atom B11 CA is outside the coordinate subset/,
   );
   // residue 13 is past the kept range 10–12 and is not a hetero group
   assert.throws(
-    set(
-      (e: Unchecked) => (e.presets[0].a = { chain: "A", resi: 13, atom: "CA" }),
+    set((e: ReturnType<typeof entry>) =>
+      Reflect.set(e.presets[0], "a", { chain: "A", resi: 13, atom: "CA" }),
     ),
     /preset trp-lig atom a: atom A13 CA is outside the coordinate subset/,
   );
   // a kept hetero group counts
   assert.doesNotThrow(
-    set(
-      (e: Unchecked) =>
-        (e.presets[0].b = { chain: "A", resi: 101, atom: "ZN" }),
+    set((e: ReturnType<typeof entry>) =>
+      Reflect.set(e.presets[0], "b", { chain: "A", resi: 101, atom: "ZN" }),
     ),
   );
 });
@@ -233,7 +274,7 @@ test("verifyStructure compares the declaration with the coordinates", () => {
   const measured = presetDistances(e, atoms);
   assert.equal(measured[0].value, 5);
 
-  const withExpect = (expect: Unchecked) => ({
+  const withExpect = (expect: number) => ({
     ...e,
     presets: [{ ...e.presets[0], expect }],
   });
@@ -341,7 +382,7 @@ test("the showcase demo subset matches what it declares", () => {
   );
   const defined = defineStructureSet({
     fetchedOn: demo.fetchedOn,
-    entries: demo.entries.map((e: Unchecked) => ({
+    entries: demo.entries.map((e: ReturnType<typeof entry>) => ({
       ...e,
       url: `/showcase/${e.id}.pdb`,
     })),

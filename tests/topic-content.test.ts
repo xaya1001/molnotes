@@ -1,4 +1,13 @@
-import type { Unchecked } from "../shared/unchecked.ts";
+type RawBlock = { type: string; [field: string]: unknown };
+type FixtureChapter = {
+  id: string;
+  number?: number;
+  title: string;
+  refs: (string | number)[];
+  excerpts?: string[];
+  blocks: RawBlock[];
+  path?: string;
+};
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
@@ -9,8 +18,8 @@ import {
 } from "../shared/topic-content.ts";
 
 // Content fixtures are plain JSON that the tests change freely, valid or not.
-function content(overrides = {}): Unchecked {
-  return {
+function content(overrides = {}) {
+  const value = {
     parts: [{ title: "一", chapters: ["a"] }],
     chapters: [
       {
@@ -47,6 +56,10 @@ function content(overrides = {}): Unchecked {
     ],
     sources: [{ id: 1, title: "书" }],
     ...overrides,
+  };
+  return value as Omit<typeof value, "chapters"> & {
+    chapters: FixtureChapter[];
+    data?: Record<string, unknown>;
   };
 }
 
@@ -141,7 +154,7 @@ test("structure predictions name the molecule, the right indices and a known exc
     explanation: "因为",
     excerpt: "e1",
   };
-  const withPrediction = (prediction: Unchecked) => blocksContent([prediction]);
+  const withPrediction = (prediction: unknown) => blocksContent([prediction]);
   assert.doesNotThrow(() => validateTopicContent(withPrediction(structure)));
   const choiceBlock = content().chapters[0].blocks[2];
   const cases = [
@@ -172,7 +185,7 @@ test("every chapter lists its sources", () => {
   );
 });
 
-function blocksContent(blocks: Unchecked, extra = {}): Unchecked {
+function blocksContent(blocks: unknown, extra = {}) {
   const base = content();
   return { ...base, ...extra, chapters: [{ ...base.chapters[0], blocks }] };
 }
@@ -238,7 +251,9 @@ test("a blocks chapter passes when every block fits the catalogue", () => {
   );
   assert.equal(validateTopicContent(value), value);
   assert.deepEqual(
-    chapterPredictions(value.chapters[0]).map((entry) => entry.id),
+    chapterPredictions(validateTopicContent(value).chapters[0]).map(
+      (entry) => entry.id,
+    ),
     ["a", "second"],
   );
 });
@@ -368,9 +383,9 @@ test("data components, formulas and the other prediction kinds are blocks too", 
     { data: { grid: matrixInput } },
   );
   assert.equal(validateTopicContent(value), value);
-  const predictions = chapterPredictions<Unchecked>(
-    value.chapters[0],
-    value.data,
+  const predictions = chapterPredictions(
+    validateTopicContent(value).chapters[0],
+    validateTopicContent(value).data,
   );
   assert.deepEqual(
     predictions.map((entry) => [entry.id, entry.prediction.kind]),
@@ -380,7 +395,10 @@ test("data components, formulas and the other prediction kinds are blocks too", 
       ["arrow", "arrows"],
     ],
   );
-  assert.ok(predictions[0].prediction.model.isComplete({ "a:x": 0 }));
+  assert.ok(
+    predictions[0].prediction.kind === "matrix" &&
+      predictions[0].prediction.model.isComplete({ "a:x": 0 }),
+  );
 });
 
 test("bad data component input and unknown prediction kinds are rejected with the block named", () => {
@@ -641,7 +659,7 @@ test("quiz blocks have stable ids; arrows may carry a choice; molecules compare 
   );
   assert.equal(validateTopicContent(value), value);
   assert.deepEqual(
-    chapterPredictions<Unchecked>(value.chapters[0]).map((entry) => [
+    chapterPredictions(validateTopicContent(value).chapters[0]).map((entry) => [
       entry.id,
       entry.prediction.kind,
     ]),
@@ -785,15 +803,15 @@ test("timeline and flow blocks are checked, may keep their value in data and are
   assert.doesNotThrow(() =>
     validateTopicContent(blocksContent(blocks, { data: { welwyn: timeline } })),
   );
-  assert.deepEqual(blockSearchText(blocks, { welwyn: timeline }), [
-    "项目",
-    "1964",
-    "搭起筛子",
-    "回头看",
-    "12 年",
-    "鸦片",
-    "母液",
-  ]);
+  assert.deepEqual(
+    blockSearchText(
+      validateTopicContent(
+        blocksContent(blocks, { data: { welwyn: timeline } }),
+      ).chapters[0].blocks,
+      { welwyn: timeline },
+    ),
+    ["项目", "1964", "搭起筛子", "回头看", "12 年", "鸦片", "母液"],
+  );
   for (const [value, pattern] of [
     [
       { events: [{ date: 1980, text: "x" }], axis: { from: 1964, to: 1976 } },
@@ -1061,7 +1079,7 @@ test("unknown block fields are rejected", () => {
   );
 });
 
-const problem = (): Unchecked => ({
+const problem = () => ({
   type: "problem",
   id: "open",
   lang: "en",
@@ -1075,28 +1093,28 @@ const problem = (): Unchecked => ({
   evidence: ["e1"],
 });
 test("problem contract checks required fields, whitelists, shared ids and evidence", () => {
-  const withProblem = (block: Unchecked) => {
+  const withProblem = (block: RawBlock) => {
     const value = content();
     value.chapters[0].blocks.push(block);
     return value;
   };
   validateTopicContent(withProblem(problem()));
   const partsOnly = problem();
-  delete partsOnly.prompt;
+  Reflect.deleteProperty(partsOnly, "prompt");
   validateTopicContent(withProblem(partsOnly));
-  delete partsOnly.parts;
+  Reflect.deleteProperty(partsOnly, "parts");
   assert.throws(
     () => validateTopicContent(withProblem(partsOnly)),
     /prompt or parts/,
   );
   for (const key of ["id", "lang", "answer"]) {
     const block = problem();
-    delete block[key];
+    Reflect.deleteProperty(block, key);
     assert.throws(() => validateTopicContent(withProblem(block)), Error, key);
   }
   for (const key of ["text", "origin", "basis"]) {
     const block = problem();
-    delete block.answer[key];
+    Reflect.deleteProperty(block.answer, key);
     assert.throws(() => validateTopicContent(withProblem(block)), Error, key);
   }
   for (const patch of [
@@ -1125,7 +1143,11 @@ test("problem contract checks required fields, whitelists, shared ids and eviden
   outside.chapters[0].excerpts = [];
   validateTopicContent(outside);
   assert.deepEqual(
-    blockSearchText([problem(), content().chapters[0].blocks[2]]),
+    blockSearchText(
+      validateTopicContent(
+        blocksContent([problem(), content().chapters[0].blocks[2]]),
+      ).chapters[0].blocks,
+    ),
     [],
   );
 });

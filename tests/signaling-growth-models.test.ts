@@ -40,9 +40,9 @@ test("catalogue preserves Ras and tumor default readouts", () => {
   ] satisfies [string, RegExp][]) {
     const model = labModels[name];
     assert.match(
-      model.run(
+      model().run(
         Object.fromEntries(
-          (model.inputs as LabInput[]).map((i) => [i.id, i.default]),
+          (model().inputs as LabInput[]).map((i) => [i.id, i.default]),
         ),
       ).summary!,
       expected,

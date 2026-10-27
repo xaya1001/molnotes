@@ -120,7 +120,7 @@ export interface StructureSetInput<E extends StructureEntry = StructureEntry> {
 export interface StructureSet<
   E extends StructureEntry = StructureEntry,
 > extends StructureSetInput<E> {
-  entryById(id: string): E;
+  entryById(id: unknown): E;
 }
 
 /** The kept chains with their first and last residue number. */
@@ -294,7 +294,7 @@ export function defineStructureSet<E extends StructureEntry>(
     ids.add(entry.id);
     checkEntry(entry);
   }
-  const entryById = (id: string) => {
+  const entryById = (id: unknown) => {
     const found = input.entries.find((entry) => entry.id === id);
     if (!found) throw new Error(`Unknown structure ${id}`);
     return found;

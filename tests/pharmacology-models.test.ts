@@ -1,4 +1,3 @@
-import type { Unchecked } from "../shared/unchecked.ts";
 import { labModels, type LabInput } from "../src/ui/models/catalog.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -24,7 +23,7 @@ const {
   lipophilicEfficiency,
 } = drugActionMath;
 
-const close = (a: Unchecked, b: Unchecked, t = 1e-9) =>
+const close = (a: number, b: number, t = 1e-9) =>
   assert.ok(Math.abs(a - b) < t, `${a} != ${b}`);
 
 test("Hill half maximum and competitive antagonist conserve Emax", () => {
@@ -81,7 +80,7 @@ test("target turnover: no drug leaves the target alone, constant drug reaches th
     efficiency: 9900,
     turnoverHalfLife: 22,
   };
-  const at = (input: Unchecked, hour: Unchecked) =>
+  const at = (input: Parameters<typeof targetActivity>[0], hour: number) =>
     targetActivity(input, hour, 1).find((p) => p.x === hour)!.y;
   close(at({ ...base, c0: 0 }, 24), 1);
   // Constant free inhibitor: a(t) = a_ss + (1 - a_ss) exp(-(kdeg + kobs) t).
@@ -113,20 +112,18 @@ test("paired drug charts retain sub-nanomolar inputs on identical axes", () => {
     ["drug-action-selectivity", [-1, 4]],
   ] satisfies [string, number[]][]) {
     const model = labModels[id];
-    const { charts } = model.run(
+    const { charts } = model().run(
       Object.fromEntries(
-        (model.inputs as LabInput[]).map((i) => [i.id, i.default]),
+        (model().inputs as LabInput[]).map((i) => [i.id, i.default]),
       ),
     );
     assert.equal(charts!.length, 2);
     for (const chart of charts!) {
       assert.deepEqual(chart.xDomain, domain);
       assert.deepEqual(chart.yDomain, [0, 100]);
-      assert.ok(chart.points!.some((p: Unchecked) => p.x < 0));
+      assert.ok(chart.points!.some((p) => p.x < 0));
       assert.ok(
-        chart.points!.every(
-          (p: Unchecked) => p.x >= domain[0] && p.x <= domain[1],
-        ),
+        chart.points!.every((p) => p.x >= domain[0] && p.x <= domain[1]),
       );
     }
   }

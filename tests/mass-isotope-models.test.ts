@@ -1,4 +1,3 @@
-import type { Unchecked } from "../shared/unchecked.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -9,7 +8,7 @@ import {
 } from "../src/ui/models/medicinal-chemistry.ts";
 import { labModels, type LabInput } from "../src/ui/models/catalog.ts";
 
-const close = (a: Unchecked, b: Unchecked, eps = 1e-10) =>
+const close = (a: number, b: number, eps = 1e-10) =>
   assert.ok(Math.abs(a - b) < eps, `${a} != ${b}`);
 
 test("natural isotope combinations conserve probability including zero atoms and sulfur M+1/M+4", () => {
@@ -55,9 +54,9 @@ test("invalid mass, count and model selection are rejected", () => {
 
 test("mass lab preserves default m/z and isotope table precision", () => {
   const model = labModels["spectra-mass"];
-  const result = model.run(
+  const result = model().run(
     Object.fromEntries(
-      (model.inputs as LabInput[]).map((input) => [input.id, input.default]),
+      (model().inputs as LabInput[]).map((input) => [input.id, input.default]),
     ),
   );
   assert.equal(result.summary!, "计算 m/z：301.007276");

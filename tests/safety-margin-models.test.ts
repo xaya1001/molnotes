@@ -1,4 +1,3 @@
-import type { Unchecked } from "../shared/unchecked.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { labModels, type LabInput } from "../src/ui/models/catalog.ts";
@@ -59,7 +58,7 @@ test("Honig Table 2: all 18 printed QTc follow from RR and QT by Bazett to withi
 
 test("Honig Table 2: the means follow from the rows except the ketoconazole QTc, printed 490±16 against 484.5±14.8", () => {
   const stat = (period: Period, key: Measure) =>
-    meanSem(honigSubjects.map((s: Unchecked) => s[period][key]));
+    meanSem(honigSubjects.map((s) => s[period][key]));
   const printed = (period: Period, key: Measure) => {
     const [mean, sem] = honigPrintedMeans[period][key].split("±").map(Number);
     return { mean, sem };
@@ -90,9 +89,9 @@ test("shared lab defaults reproduce the original page readouts", () => {
   ]) {
     const model = labModels[name];
     assert.equal(
-      model.run(
+      model().run(
         Object.fromEntries(
-          (model.inputs as LabInput[]).map((input) => [
+          (model().inputs as LabInput[]).map((input) => [
             input.id,
             input.default,
           ]),

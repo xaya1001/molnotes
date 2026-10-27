@@ -30,18 +30,18 @@ test("constant synthesis gives baseline, drug steady state and continuous washou
 
 test("Protein turnover lab defaults preserve the original turnover and dose readouts", () => {
   const turnover = labModels["protein-turnover"];
-  const result = turnover.run(
+  const result = turnover().run(
     Object.fromEntries(
-      (turnover.inputs as LabInput[]).map((i) => [i.id, i.default]),
+      (turnover().inputs as LabInput[]).map((i) => [i.id, i.default]),
     ),
   );
   assert.equal(result.summary!, "24 h 总蛋白：10.5%；48 h 总蛋白：55.2%。");
   assert.equal(result.charts![0].points!.length, 145);
   const dose = labModels["protein-loss-curve"];
   assert.equal(
-    dose.run(
+    dose().run(
       Object.fromEntries(
-        (dose.inputs as LabInput[]).map((i) => [i.id, i.default]),
+        (dose().inputs as LabInput[]).map((i) => [i.id, i.default]),
       ),
     ).summary!,
     "在 K = 10 nM 时下降 45%；绝对 50% 损失浓度：12.50 nM。",

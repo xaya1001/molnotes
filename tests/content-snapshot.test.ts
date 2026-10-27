@@ -1,4 +1,8 @@
-import type { Unchecked } from "../shared/unchecked.ts";
+import type { Snapshot } from "../shared/snapshot.ts";
+import type { TopicContent } from "../src/ui/topic/content.ts";
+import type PatentFixture from "./fixtures/content/sites/fable-patent/content.json";
+type Edit = [string, (text: string | undefined) => string | undefined];
+import type { TestContext } from "node:test";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
@@ -30,7 +34,7 @@ const execFileAsync = promisify(execFile);
 const fixtures = resolve("tests/fixtures/content");
 const materials = resolve("tests/fixtures/shelf");
 
-async function temporary(t: Unchecked) {
+async function temporary(t: TestContext) {
   const root = await mkdtemp(join(tmpdir(), "molnotes-snapshot-test-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   return root;
@@ -51,23 +55,26 @@ test("a snapshot holds every unit's rows and its asset files", async (t) => {
   const shelf = { materials, cache: join(root, "shelf-cache") };
   const output = join(root, "snapshot");
   await writeSnapshot(output, await buildSnapshot(fixtures, { shelf }));
-  const snapshot = JSON.parse(
+  const snapshot: Snapshot = JSON.parse(
     await readFile(join(output, "snapshot.json"), "utf8"),
   );
   assert.equal(snapshot.format, 1);
   assert.equal(snapshot.commit, null);
+  assert.deepEqual(snapshot.topics.map((topic) => topic.slug).sort(), [
+    "cited-sources",
+    "fable-patent",
+    "instruments",
+    "minimal",
+    "sample",
+  ]);
   assert.deepEqual(
-    snapshot.topics.map((topic: Unchecked) => topic.slug).sort(),
-    ["cited-sources", "fable-patent", "instruments", "minimal", "sample"],
-  );
-  assert.deepEqual(
-    snapshot.directories.map((directory: Unchecked) => directory.dir).sort(),
+    snapshot.directories.map((directory) => directory.dir).sort(),
     ["cited-reading", "reader-test"],
   );
   for (const directory of snapshot.directories)
     assert.equal(directory.compiled.slug, directory.dir);
   // Author material is in the snapshot, its compiled body without the author flag.
-  const author = snapshot.notes.filter((note: Unchecked) => note.author);
+  const author = snapshot.notes.filter((note) => note.author);
   assert.ok(author.length > 0);
   for (const note of snapshot.notes) {
     assert.equal(note.compiled.slug, note.slug);
@@ -79,10 +86,8 @@ test("a snapshot holds every unit's rows and its asset files", async (t) => {
     JSON.parse(await readFile(join(fixtures, "glossary.json"), "utf8")),
   );
   assert.ok(snapshot.registry);
-  assert.ok(
-    snapshot.assets.some((asset: Unchecked) => asset.path.startsWith("cited/")),
-  );
-  assert.ok(snapshot.assets.some((asset: Unchecked) => asset.prompt !== null));
+  assert.ok(snapshot.assets.some((asset) => asset.path.startsWith("cited/")));
+  assert.ok(snapshot.assets.some((asset) => asset.prompt !== null));
   for (const asset of snapshot.assets) {
     const bytes = await readFile(
       join(output, "files", asset.scope, asset.path),
@@ -145,7 +150,7 @@ test("publish switches current to the committed snapshot, keeps five and rolls b
   )!;
   assert.equal(commitOf(firstName), first);
   assert.equal(await current(), firstName);
-  const snapshot = JSON.parse(
+  const snapshot: Snapshot = JSON.parse(
     await readFile(join(releases, firstName, "snapshot.json"), "utf8"),
   );
   assert.equal(snapshot.commit, first);
@@ -240,7 +245,7 @@ test("a build that fails validation writes nothing", async (t) => {
  * returns its new text from the old one, or undefined to delete it; the
  * files are restored afterwards.
  */
-async function editableContent(t: Unchecked, units?: string[]) {
+async function editableContent(t: TestContext, units?: string[]) {
   const root = await temporary(t);
   const directory = join(root, "content");
   await cp(fixtures, directory, {
@@ -254,7 +259,7 @@ async function editableContent(t: Unchecked, units?: string[]) {
   });
   const shelf = { materials, cache: join(root, "shelf-cache") };
   const build = () => buildSnapshot(directory, { shelf });
-  async function edit(edits: Unchecked) {
+  async function edit(edits: Edit[]) {
     const originals: [string, string | undefined][] = [];
     for (const [path, change] of edits) {
       const file = join(directory, path);
@@ -274,7 +279,7 @@ async function editableContent(t: Unchecked, units?: string[]) {
     directory,
     build,
     edit,
-    async rejects(edits: Unchecked, pattern?: RegExp) {
+    async rejects(edits: Edit[], pattern?: RegExp) {
       const restore = await edit(edits);
       try {
         await (pattern
@@ -286,10 +291,12 @@ async function editableContent(t: Unchecked, units?: string[]) {
     },
   };
 }
-const json = (change: Unchecked) => (text: string) => {
-  const value = JSON.parse(text);
-  return JSON.stringify(change(value) ?? value);
-};
+const json =
+  <T = TopicContent>(change: (value: T) => unknown) =>
+  (text: string | undefined) => {
+    const value: T = JSON.parse(text!);
+    return JSON.stringify(change(value) ?? value);
+  };
 
 test("a build rejects notes, topics and glossaries that do not resolve", async (t) => {
   const { rejects, edit, build, directory } = await editableContent(t, [
@@ -297,8 +304,9 @@ test("a build rejects notes, topics and glossaries that do not resolve", async (
     "sites/instruments",
     "notes/reader-test",
   ]);
-  const replace = (from: string | RegExp, to: string) => (text: string) =>
-    text.replace(from, to);
+  const replace =
+    (from: string | RegExp, to: string) => (text: string | undefined) =>
+      text!.replace(from, to);
   const first = "notes/reader-test/first.md";
   await rejects(
     [["notes/reader-test/prompts/missing.svg.md", () => "画一张缺失的图。"]],
@@ -320,7 +328,7 @@ test("a build rejects notes, topics and glossaries that do not resolve", async (
       [
         [
           "sites/instruments/site.json",
-          json((site: Unchecked) => ({ ...site, group })),
+          json((site: Record<string, unknown>) => ({ ...site, group })),
         ],
       ],
       /group must be one of/,
@@ -338,7 +346,7 @@ test("a build rejects notes, topics and glossaries that do not resolve", async (
     [[{ ...glossary[0], confusion: "" }], /confusion must be text/],
     // A term still in use cannot leave the glossary.
     [[], /Unknown term 样品|unknown term 样品/],
-  ] satisfies [Unchecked[], RegExp][])
+  ] satisfies [unknown[], RegExp][])
     await rejects([["glossary.json", () => JSON.stringify(terms)]], pattern);
   await rejects(
     [["glossary.json", () => undefined]],
@@ -348,8 +356,8 @@ test("a build rejects notes, topics and glossaries that do not resolve", async (
     [
       [
         "sites/sample/content.json",
-        json((c: Unchecked) => {
-          c.chapters[0].terms = ["不存在"];
+        json((c: TopicContent) => {
+          Reflect.set(c.chapters[0], "terms", ["不存在"]);
         }),
       ],
     ],
@@ -359,32 +367,39 @@ test("a build rejects notes, topics and glossaries that do not resolve", async (
     [
       [
         "sites/sample/content.json",
-        json((c: Unchecked) => ({ ...c, glossary: [] })),
+        json((c: TopicContent) => ({
+          ...c,
+          glossary: [],
+        })),
       ],
     ],
     /define terms in glossary\.json/,
   );
 
   // Topics may link to each other; a missing resource still fails the build.
-  const links = [
+  const links: Edit[] = [
     [
       "sites/sample/content.json",
-      json((c: Unchecked) => {
-        c.chapters[0].blocks.push({
-          type: "callout",
-          text: "继续观察",
-          link: { to: "../instruments/", text: "工具" },
-        });
+      json((c: TopicContent) => {
+        Reflect.apply(c.chapters[0].blocks.push, c.chapters[0].blocks, [
+          {
+            type: "callout",
+            text: "继续观察",
+            link: { to: "../instruments/", text: "工具" },
+          },
+        ]);
       }),
     ],
     [
       "sites/instruments/content.json",
-      json((c: Unchecked) => {
-        c.chapters[0].blocks.push({
-          type: "callout",
-          text: "返回",
-          link: { to: "/practice/sample/start#source-1", text: "样品" },
-        });
+      json((c: TopicContent) => {
+        Reflect.apply(c.chapters[0].blocks.push, c.chapters[0].blocks, [
+          {
+            type: "callout",
+            text: "返回",
+            link: { to: "/practice/sample/start#source-1", text: "样品" },
+          },
+        ]);
       }),
     ],
   ];
@@ -394,13 +409,15 @@ test("a build rejects notes, topics and glossaries that do not resolve", async (
     [
       [
         "sites/instruments/content.json",
-        json((c: Unchecked) => {
-          c.chapters[0].blocks.push({
-            type: "figure",
-            src: "/sites/instruments/static/missing.png",
-            alt: "missing",
-            caption: "missing",
-          });
+        json((c: TopicContent) => {
+          Reflect.apply(c.chapters[0].blocks.push, c.chapters[0].blocks, [
+            {
+              type: "figure",
+              src: "/sites/instruments/static/missing.png",
+              alt: "missing",
+              caption: "missing",
+            },
+          ]);
         }),
       ],
     ],
@@ -427,7 +444,7 @@ test("author and reader notes that share a slug both compile", async (t) => {
   const { snapshot } = await build();
   const both = snapshot.notes
     .filter((note) => note.slug === "first")
-    .sort((a: Unchecked, b: Unchecked) => Number(a.author) - Number(b.author));
+    .sort((a, b) => Number(a.author) - Number(b.author));
   assert.deepEqual(
     both.map((note) => [note.author, note.compiled.title]),
     [
@@ -444,51 +461,77 @@ test("a build rejects patent data whose resources, structures or references do n
   ]);
   await build();
   for (const mutate of [
-    (c: Unchecked) =>
-      (c.data.collections.examples.records[0].potency.ref.asset =
-        "/sites/fable-patent/static/absent.svg"),
-    (c: Unchecked) =>
-      (c.data.synthesis.fable.routes[0].evidence[0].asset =
-        "/sites/fable-patent/static/absent.svg"),
-    (c: Unchecked) =>
-      (c.data.collections.examples.records[0].potency.assay = "unknown"),
-    (c: Unchecked) =>
-      (c.data.synthesis.fable.steps[0].reactants = [
+    (c: typeof PatentFixture & TopicContent) =>
+      Reflect.set(
+        c.data.collections.examples.records[0].potency.ref!,
+        "asset",
+        "/sites/fable-patent/static/absent.svg",
+      ),
+    (c: typeof PatentFixture & TopicContent) =>
+      Reflect.set(
+        c.data.synthesis.fable.routes[0].evidence[0],
+        "asset",
+        "/sites/fable-patent/static/absent.svg",
+      ),
+    (c: typeof PatentFixture & TopicContent) =>
+      Reflect.set(
+        c.data.collections.examples.records[0].potency,
+        "assay",
+        "unknown",
+      ),
+    (c: typeof PatentFixture & TopicContent) =>
+      Reflect.set(c.data.synthesis.fable.steps[0], "reactants", [
         { collection: "examples", id: 3 },
       ]),
-    (c: Unchecked) =>
-      (c.data.collections.examples.records[0].body.key = "absent"),
-    (c: Unchecked) => (c.data.claims.main.claims[0].scope.smarts = "["),
-    (c: Unchecked) =>
-      (c.data.collections.examples.records[0].structure = {
+    (c: typeof PatentFixture & TopicContent) =>
+      Reflect.set(c.data.collections.examples.records[0].body, "key", "absent"),
+    (c: typeof PatentFixture & TopicContent) =>
+      Reflect.set(c.data.claims.main.claims[0].scope!, "smarts", "["),
+    (c: typeof PatentFixture & TopicContent) =>
+      Reflect.set(c.data.collections.examples.records[0], "structure", {
         source: "beta",
         page: 1,
         rect: [0, 0, 600, 820],
       }),
-    (c: Unchecked) =>
-      (c.data.collections.examples.fields.find(
-        (f: Unchecked) => f.key === "activity",
-      ).ref = {
-        source: "beta",
-        page: 1,
-        rect: [0, 0, 595, 843],
-      }),
-    (c: Unchecked) =>
-      (c.data.collections.examples.records[0].refs.examples = [999]),
-    (c: Unchecked) => {
-      c.data.collections.examples.fields.push({
-        key: "related",
-        label: "相关记录",
-        kind: "link",
-      });
-      c.data.collections.examples.records[0].related =
-        "/sites/fable-patent/examples/999";
+    (c: typeof PatentFixture & TopicContent) =>
+      Reflect.set(
+        c.data.collections.examples.fields.find((f) => f.key === "activity")!,
+        "ref",
+        {
+          source: "beta",
+          page: 1,
+          rect: [0, 0, 595, 843],
+        },
+      ),
+    (c: typeof PatentFixture & TopicContent) =>
+      Reflect.set(
+        c.data.collections.examples.records[0].refs,
+        "examples",
+        [999],
+      ),
+    (c: typeof PatentFixture & TopicContent) => {
+      Reflect.apply(
+        c.data.collections.examples.fields.push,
+        c.data.collections.examples.fields,
+        [
+          {
+            key: "related",
+            label: "相关记录",
+            kind: "link",
+          },
+        ],
+      );
+      Reflect.set(
+        c.data.collections.examples.records[0],
+        "related",
+        "/sites/fable-patent/examples/999",
+      );
     },
   ])
     await rejects([
       [
         "sites/fable-patent/content.json",
-        json((c: Unchecked) => {
+        json((c: typeof PatentFixture & TopicContent) => {
           mutate(c);
         }),
       ],
@@ -530,7 +573,7 @@ test("a build rejects citations the registry or the shelf cannot resolve", async
     ],
   ] satisfies [[string, string], RegExp][])
     await rejects(
-      [[note, (text: string) => text.replaceAll(...change)]],
+      [[note, (text: string | undefined) => text!.replaceAll(...change)]],
       pattern,
     );
   await rejects([["sources.json", () => "{}"]], /not in sources\.json/);
@@ -538,8 +581,8 @@ test("a build rejects citations the registry or the shelf cannot resolve", async
     [
       [
         "sources.json",
-        (text: string) =>
-          text.replace("sample-handbook.pdf", "missing-handbook.pdf"),
+        (text: string | undefined) =>
+          text!.replace("sample-handbook.pdf", "missing-handbook.pdf"),
       ],
     ],
     /missing-handbook\.pdf: not on the shelf/,
@@ -549,8 +592,8 @@ test("a build rejects citations the registry or the shelf cannot resolve", async
     [
       [
         "sites/cited-sources/content.json",
-        json((c: Unchecked) => {
-          c.sources[0].file = "textbooks/sample-handbook.pdf";
+        json((c: typeof PatentFixture & TopicContent) => {
+          Reflect.set(c.sources[0], "file", "textbooks/sample-handbook.pdf");
         }),
       ],
     ],

@@ -1,4 +1,3 @@
-import type { Unchecked } from "../shared/unchecked.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -11,7 +10,7 @@ import {
 } from "../src/ui/models/medicinal-chemistry.ts";
 import { labModels, type LabInput } from "../src/ui/models/catalog.ts";
 
-const near = (a: Unchecked, b: Unchecked) => assert.ok(Math.abs(a - b) < 1e-10);
+const near = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-10);
 
 test("competitive IC50 converts using substrate/Km, preserving concentration units", () => {
   near(chengPrusoff(30, 2), 10);
@@ -49,8 +48,7 @@ test("free concentration cannot exceed total and rejects invalid fractions", () 
   assert.throws(() => freeConcentration(1000, 1.1));
 });
 
-const round = (value: Unchecked, digits: Unchecked) =>
-  Number(value.toFixed(digits));
+const round = (value: number, digits: number) => Number(value.toFixed(digits));
 
 test("Hill curves: 10% to 90% inhibition spans 81-fold at h = 1 and 4.3-fold at h = 3", () => {
   near(concentrationSpan(0.1, 0.9), 81);
@@ -62,9 +60,12 @@ test("Hill curves: 10% to 90% inhibition spans 81-fold at h = 1 and 4.3-fold at 
 test("teaching lab defaults preserve the original displayed readings", () => {
   const result = (id: string) => {
     const model = labModels["data-literacy-" + id];
-    return model.run(
+    return model().run(
       Object.fromEntries(
-        (model.inputs as LabInput[]).map((input) => [input.id, input.default]),
+        (model().inputs as LabInput[]).map((input) => [
+          input.id,
+          input.default,
+        ]),
       ),
     );
   };

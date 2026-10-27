@@ -18,19 +18,22 @@
 // name and number are listed; atoms whose altloc is blank or "A" (written back
 // with a blank altloc); no hydrogens. Water is never listed, so it is dropped.
 
+import type {
+  StructureSetInput,
+  StructureEntry,
+} from "../../src/ui/structure/model.ts";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { Unchecked } from "../../shared/unchecked.ts";
 
 const [setPath, outDir, sourceDir] = process.argv.slice(2);
 if (!setPath || !outDir)
   throw new Error("Usage: extract-subset.ts <set.json> <out-dir> [pdb-dir]");
 // The structure set as the author wrote it; only the fields named above are read.
-const config: Unchecked = JSON.parse(readFileSync(setPath, "utf8"));
+const config: StructureSetInput = JSON.parse(readFileSync(setPath, "utf8"));
 mkdirSync(outDir, { recursive: true });
 
-async function source(entry: Unchecked) {
+async function source(entry: StructureEntry) {
   const code = entry.source.pdb;
   if (sourceDir) return readFileSync(resolve(sourceDir, `${code}.pdb`));
   const response = await fetch(`https://files.rcsb.org/download/${code}.pdb`);
@@ -57,17 +60,19 @@ for (const entry of config.entries) {
     const hetero =
       record === "HETATM" &&
       entry.subset.hetero.some(
-        (h: Unchecked) =>
-          h.chain === chain && h.resn === resn && h.resi === resi,
+        (h) => h.chain === chain && h.resn === resn && h.resi === resi,
       );
     if (inChain || hetero)
       keep.push(`${line.slice(0, 16)} ${line.slice(17).trimEnd()}`);
   }
-  const ranges = Object.entries<[number, number]>(entry.subset.residues)
+  const ranges = Object.entries(entry.subset.residues)
+    .filter(
+      (item): item is [string, readonly number[]] => item[1] !== undefined,
+    )
     .map(([chain, [a, b]]) => `chain ${chain} ${a}-${b}`)
     .join("; ");
   const hetero = entry.subset.hetero
-    .map((h: Unchecked) => `${h.chain} ${h.resn} ${h.resi}`)
+    .map((h) => `${h.chain} ${h.resn} ${h.resi}`)
     .join("; ");
   const header = [
     `REMARK   1 SUBSET OF RCSB PDB ${entry.source.pdb}: ${entry.source.title}`,

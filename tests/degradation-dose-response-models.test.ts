@@ -26,14 +26,14 @@ test("absolute 50 percent loss is unreachable for Dmax <= 50 and distinct from r
 test("catalogue preserves default degradation readout", () => {
   const model = labModels["degradation-dose-response"];
   const defaults = Object.fromEntries(
-    (model.inputs as LabInput[]).map((i) => [i.id, i.default]),
+    (model().inputs as LabInput[]).map((i) => [i.id, i.default]),
   );
   assert.match(
-    model.run(defaults).summary!,
+    model().run(defaults).summary!,
     /蛋白损失 40.0%；剩余 60.0%.*16.7 nM/,
   );
   assert.match(
-    model.run({ ...defaults, dmax: 40 }).summary!,
+    model().run({ ...defaults, dmax: 40 }).summary!,
     /有限浓度下不可达/,
   );
 });

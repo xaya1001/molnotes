@@ -1,4 +1,3 @@
-import type { Unchecked } from "../shared/unchecked.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -54,7 +53,7 @@ const base: MatrixInput = {
   cells,
 };
 const define = (change = {}) => defineMatrix({ ...base, ...change });
-const withCell = (id: string, patch: Unchecked) =>
+const withCell = (id: string, patch: object) =>
   cells.map((cell) =>
     matrixCellId(cell.row, cell.column) === id ? { ...cell, ...patch } : cell,
   );

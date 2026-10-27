@@ -4,7 +4,6 @@ import { createRequire } from "node:module";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { MainModule } from "@rdkit/rdkit";
-import type { Unchecked } from "../../shared/unchecked.ts";
 const require = createRequire(path.resolve("package.json"));
 const RDKit: MainModule = await require("@rdkit/rdkit")();
 const [mode, input, output] = process.argv.slice(2);
@@ -13,8 +12,14 @@ if (!["canonicalize", "scope", "review"].includes(mode) || !input || !output)
     "Usage: node chemistry.ts canonicalize|scope|review input.json output",
   );
 // The author's input file; each mode checks the fields it reads.
-const data: Unchecked = JSON.parse(await fs.readFile(input, "utf8"));
+const inputText = await fs.readFile(input, "utf8");
 if (mode === "review") {
+  const data: {
+    id: string | number;
+    image: string;
+    smiles: string;
+    name?: string;
+  }[] = JSON.parse(inputText);
   const entities: Record<string, string> = {
     "&": "&amp;",
     "<": "&lt;",
@@ -23,7 +28,7 @@ if (mode === "review") {
   };
   const escape = (value: unknown) =>
     String(value).replace(/[&<>"]/g, (char) => entities[char]);
-  const cards = data.map((record: Unchecked) => {
+  const cards = data.map((record) => {
     if (!record.image || !record.smiles)
       throw new Error("Review entries require image and smiles");
     const mol = RDKit.get_mol(record.smiles);
@@ -42,12 +47,19 @@ if (mode === "review") {
     `<!doctype html><meta charset="utf-8"><title>Structure review</title><style>body{font:16px sans-serif;margin:2rem}section{break-inside:avoid;border-bottom:1px solid;padding:1rem}.pair{display:flex;align-items:center;gap:1rem}.pair>*{width:48%;object-fit:contain}code{overflow-wrap:anywhere}</style><h1>Original and candidate structures</h1>${cards.join("")}`,
   );
 } else if (mode === "canonicalize") {
+  const data: {
+    results: {
+      candidates?: { smiles: string; [key: string]: unknown }[];
+      [key: string]: unknown;
+    }[];
+    [key: string]: unknown;
+  }[] = JSON.parse(inputText);
   // Input candidates are kept separate from published, visually approved SMILES.
-  const results = data.map((record: Unchecked) => ({
+  const results = data.map((record) => ({
     ...record,
-    results: record.results.map((result: Unchecked) => ({
+    results: record.results.map((result) => ({
       ...result,
-      candidates: (result.candidates ?? []).map((candidate: Unchecked) => {
+      candidates: (result.candidates ?? []).map((candidate) => {
         const mol = RDKit.get_mol(candidate.smiles);
         if (!mol || !mol.is_valid()) {
           mol?.delete();
@@ -67,6 +79,11 @@ if (mode === "review") {
       "\n",
   );
 } else {
+  const data: {
+    note: string;
+    smarts: string;
+    cases: { id: string | number; expected: boolean; smiles: string }[];
+  } = JSON.parse(inputText);
   if (
     typeof data.note !== "string" ||
     !data.note.trim() ||
@@ -80,7 +97,7 @@ if (mode === "review") {
     throw new Error("Invalid SMARTS");
   }
   try {
-    const cases = data.cases.map((item: Unchecked) => {
+    const cases = data.cases.map((item) => {
       if (typeof item.expected !== "boolean")
         throw new Error("expected must be boolean");
       const mol = RDKit.get_mol(item.smiles);

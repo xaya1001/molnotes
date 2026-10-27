@@ -1,3 +1,4 @@
+import type { PatentData } from "./patent.ts";
 import {
   chapterRoutePath,
   resolveData,
@@ -220,7 +221,7 @@ export interface TopicContent {
   parts: { title: string; summary?: string; chapters: string[] }[];
   chapters: TopicChapter[];
   /** Large block values by key (mechanism frames, route steps, table rows), named by blocks. */
-  data?: Record<string, unknown>;
+  data?: Record<string, unknown> & PatentData;
   /** Excerpts shared by id; a topic may instead inline them in its chapters. */
   excerpts?: Excerpt[];
   /** The topic's reading route when it is not spread over the chapters. */
@@ -315,9 +316,7 @@ export function defineTopicContent<Content extends TopicContent>(
     excerptById,
     quizById,
     chapterPath,
-    predictions: topicPredictions<
-      TopicPrediction | MatrixPrediction | QuizGate
-    >(content),
+    predictions: topicPredictions(content),
     dataOf,
   });
 }

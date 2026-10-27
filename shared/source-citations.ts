@@ -1,7 +1,7 @@
 // The site-wide source registry (sources.json in the content directory) and
 // the citations notes and topics write against it. Publication resolves each
 // citation on the shelf; the browser shares the syntax check.
-import type { Unchecked } from "./unchecked.ts";
+import { isObject } from "./json.ts";
 
 /** A parsed `src:` citation: pages for a PDF, a chapter for an EPUB, neither for a web page. */
 export interface ParsedCitation {
@@ -30,8 +30,6 @@ const citationPattern =
 /** A PDF citation shows at most this many cited pages; longer readings are cited in parts. */
 export const maxCitedPages = 60;
 
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 const text = (value: unknown): value is string =>
   typeof value === "string" && value.trim() !== "";
 
@@ -78,7 +76,12 @@ export function parseCitation(value: unknown): ParsedCitation {
  * source (a list), on an excerpt and on a reading item (one each).
  */
 export function contentCitations(
-  content: Unchecked,
+  content: {
+    sources?: unknown;
+    excerpts?: unknown;
+    reading?: unknown;
+    chapters?: unknown;
+  },
   name = "content.json",
 ): { href: unknown; where: string }[] {
   const found: { href: unknown; where: string }[] = [];
@@ -101,10 +104,12 @@ export function contentCitations(
   each(content.sources, "sources", true);
   each(content.excerpts, "excerpts");
   each(content.reading, "reading");
-  (content.chapters ?? []).forEach((chapter: Unchecked, i: number) => {
-    each(chapter?.excerpts, `chapters[${i}].excerpts`);
-    each(chapter?.reading, `chapters[${i}].reading`);
-  });
+  if (Array.isArray(content.chapters))
+    content.chapters.forEach((chapter: unknown, i: number) => {
+      if (!isObject(chapter)) return;
+      each(chapter.excerpts, `chapters[${i}].excerpts`);
+      each(chapter.reading, `chapters[${i}].reading`);
+    });
   return found;
 }
 
@@ -135,6 +140,14 @@ export function validateSourceRegistry(
   registry: unknown,
   name = "sources.json",
 ): SourceRegistry {
+  checkSourceRegistry(registry, name);
+  return registry;
+}
+
+function checkSourceRegistry(
+  registry: unknown,
+  name: string,
+): asserts registry is SourceRegistry {
   if (!isObject(registry)) throw new Error(`${name} must be an object`);
   const files = new Map<string, string>();
   for (const [id, source] of Object.entries(registry)) {
@@ -164,6 +177,4 @@ export function validateSourceRegistry(
       );
     files.set(file, id);
   }
-  // Every entry has passed the checks above.
-  return registry as SourceRegistry;
 }
