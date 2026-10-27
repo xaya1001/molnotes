@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./helpers/test";
 
 // Records are served per page, so other specs writing the shared test database never change them.
 async function serveRecords(page: Page, records: object) {

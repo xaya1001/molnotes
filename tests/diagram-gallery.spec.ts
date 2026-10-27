@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 import { parse } from "yaml";
 
 // Every published kind of timeline and flow, at desktop and phone width:

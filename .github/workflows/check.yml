@@ -55,8 +55,32 @@ jobs:
         if: steps.plan.outputs.mode == 'docs'
       - run: npm run build
         if: steps.plan.outputs.mode != 'docs'
-      - run: npx playwright install --with-deps chromium
+      - name: Start building the image from this build
+        if: github.event_name == 'push' && steps.plan.outputs.mode != 'docs'
+        run: |
+          # Builds while the browser tests run; it is published only after they pass.
+          (
+            status=0
+            docker build \
+              --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+              --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+              -t "ghcr.io/${GITHUB_REPOSITORY,,}:${GITHUB_SHA}" . || status=$?
+            echo "${status}" > "${RUNNER_TEMP}/image-build.status"
+          ) > "${RUNNER_TEMP}/image-build.log" 2>&1 &
+      - name: Read the Playwright version
+        id: playwright
         if: steps.plan.outputs.mode != 'docs'
+        run: echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "${GITHUB_OUTPUT}"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: browsers
+        if: steps.plan.outputs.mode != 'docs'
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
+      - run: npx playwright install --with-deps chromium
+        if: steps.plan.outputs.mode != 'docs' && steps.browsers.outputs.cache-hit != 'true'
+      - run: npx playwright install-deps chromium
+        if: steps.plan.outputs.mode != 'docs' && steps.browsers.outputs.cache-hit == 'true'
       - run: npm run test:e2e
         if: steps.plan.outputs.mode != 'docs'
       - name: Summarize browser timings
@@ -96,9 +120,9 @@ jobs:
             printf 'FROM %s\n' "${parent}" | docker build \
               --label "org.opencontainers.image.revision=${GITHUB_SHA}" -t "${tag}" -
           else
-            docker build \
-              --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
-              --label "org.opencontainers.image.revision=${GITHUB_SHA}" -t "${tag}" .
+            until test -s "${RUNNER_TEMP}/image-build.status"; do sleep 1; done
+            cat "${RUNNER_TEMP}/image-build.log"
+            test "$(cat "${RUNNER_TEMP}/image-build.status")" = 0
           fi
           docker push "${tag}"
           docker pull "${tag}"
