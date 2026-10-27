@@ -1,9 +1,8 @@
 import { send, encoded, json, sendEncoded, body } from "./http-response.mjs";
-import { contentCache } from "./content-cache.mjs";
+import { contentSnapshot } from "./content-cache.mjs";
 import { createServer, request as httpRequest } from "node:http";
-import { createReadStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
-import { readFile, stat } from "node:fs/promises";
+import { open, readFile, stat } from "node:fs/promises";
 import { resolve, extname, sep } from "node:path";
 import {
   openDatabase,
@@ -11,7 +10,7 @@ import {
   databaseUrl,
   databaseError,
 } from "./database.mjs";
-import { assetStore, cachedAsset, contentType, byteRange } from "./assets.mjs";
+import { contentType, byteRange } from "./assets.mjs";
 import {
   contentIndex,
   reviewIndex,
@@ -23,6 +22,7 @@ import {
 } from "./content-query.mjs";
 import {
   recordContext,
+  recordsReady,
   readRecord,
   writeRecord,
   allRecords,
@@ -32,12 +32,11 @@ import { isMainModule } from "./main-module.mjs";
 
 export function createWebServer({
   pool,
-  store,
+  snapshot = process.env.MOLNOTES_CONTENT_SNAPSHOT || "/content/current",
   dist = resolve("dist"),
-  cache = process.env.MOLNOTES_ASSET_CACHE || "/tmp/molnotes-assets",
   socket = process.env.MOLNOTES_SYSTEM_SOCKET,
 }) {
-  const content = contentCache(pool);
+  const content = contentSnapshot(snapshot);
   const files = new Map();
   return createServer(async (req, res) => {
     try {
@@ -70,14 +69,16 @@ export function createWebServer({
         return;
       }
       if (path === "/healthz") {
-        await pool.query("SELECT 1");
+        await content();
+        await recordsReady(pool);
         send(res, 200, { status: "ok" });
         return;
       }
       const topicMatch = /^\/api\/topics\/([a-z0-9-]+)$/.exec(path);
       if (req.method === "GET" && topicMatch) {
-        const topic = await content(path, async (client) => {
-          const value = await readTopic(client, topicMatch[1]);
+        const snapshot = await content();
+        const topic = await snapshot.cached(path, async () => {
+          const value = readTopic(snapshot, topicMatch[1]);
           return value && json(value);
         });
         if (topic) sendEncoded(req, res, topic);
@@ -101,8 +102,9 @@ export function createWebServer({
           "/api/notes": notebookIndex,
           "/api/glossary": glossaryIndex,
         };
-        const entry = await content(path, async (client) =>
-          json(await builders[path](client)),
+        const snapshot = await content();
+        const entry = await snapshot.cached(path, () =>
+          json(builders[path](snapshot)),
         );
         sendEncoded(req, res, entry);
         return;
@@ -111,8 +113,9 @@ export function createWebServer({
         path,
       );
       if (req.method === "GET" && noteMatch) {
-        const note = await content(path, async (client) => {
-          const value = await readNote(client, noteMatch[1], noteMatch[2]);
+        const snapshot = await content();
+        const note = await snapshot.cached(path, async () => {
+          const value = readNote(snapshot, noteMatch[1], noteMatch[2]);
           return value && json(value);
         });
         if (note) sendEncoded(req, res, note);
@@ -127,7 +130,7 @@ export function createWebServer({
         path,
       );
       if (recordMatch && ["GET", "PUT"].includes(req.method)) {
-        const context = await recordContext(pool, recordMatch[2]);
+        const context = await recordContext(content, recordMatch[2]);
         if (!context) {
           send(res, 404, { error: "页面不存在" });
           return;
@@ -181,12 +184,8 @@ export function createWebServer({
           send(res, 405, { error: "不支持的请求方法" });
           return;
         }
-        const asset = (
-          await pool.query(
-            "SELECT * FROM assets WHERE scope=$1 AND path=$2",
-            assetMatch.slice(1),
-          )
-        ).rows[0];
+        const snapshot = await content();
+        const asset = snapshot.asset(assetMatch[1], assetMatch[2]);
         if (!asset) {
           send(res, 404, { error: "资源不存在" });
           return;
@@ -211,7 +210,7 @@ export function createWebServer({
           res.end();
           return;
         }
-        const size = Number(asset.size);
+        const { size } = asset;
         const range =
           req.method === "GET" &&
           (!req.headers["if-range"] || req.headers["if-range"] === headers.ETag)
@@ -239,10 +238,9 @@ export function createWebServer({
           res.end();
           return;
         }
-        const file = await cachedAsset(store, cache, asset);
-        if (res.destroyed) return;
+        const handle = await open(snapshot.file(asset));
         res.writeHead(range ? 206 : 200, responseHeaders);
-        await pipeline(createReadStream(file, range ?? {}), res);
+        await pipeline(handle.createReadStream(range ?? {}), res);
         return;
       }
       if (!["GET", "HEAD"].includes(req.method)) {
@@ -257,15 +255,10 @@ export function createWebServer({
       if (!extname(path)) {
         if (/^\/(sites|practice)\/[^/]+(?:\/|$)/.test(path)) {
           const [, section, slug] = path.split("/");
-          const topic = (
-            await pool.query(
-              "SELECT site->>'group' AS topic_group FROM topics WHERE slug=$1",
-              [slug],
-            )
-          ).rows[0];
+          const topic = (await content()).topic(slug);
           if (
             !topic ||
-            section !== (topic.topic_group === "练习" ? "practice" : "sites")
+            section !== (topic.site.group === "练习" ? "practice" : "sites")
           ) {
             send(res, 404, { error: "页面不存在" });
             return;
@@ -312,7 +305,7 @@ if (isMainModule(import.meta.url)) {
   const pool = openDatabase(url);
   try {
     await migrate(pool);
-    const server = createWebServer({ pool, store: await assetStore() });
+    const server = createWebServer({ pool });
     server.listen(
       Number(process.env.PORT || 8080),
       process.env.HOST || "0.0.0.0",

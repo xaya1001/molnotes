@@ -8,6 +8,7 @@ import test from "node:test";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import {
+  mkdir,
   mkdtemp,
   readFile,
   readdir,
@@ -15,7 +16,7 @@ import {
   cp,
   rm,
 } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { once } from "node:events";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -24,8 +25,41 @@ import { assetStore } from "../server/assets.mjs";
 import { pushUnits, removeUnit } from "../server/content-publish.mjs";
 import { migrate } from "../server/database.mjs";
 import { createWebServer } from "../server/web.mjs";
+import { publishSnapshot } from "./helpers/content-snapshot.mjs";
 
 const execFileAsync = promisify(execFile);
+
+/** Points `releases/current` at a snapshot of the content the database holds. */
+const serveDatabase = (pool, store, releases) =>
+  publishSnapshot(releases, async (directory) => {
+    const rows = async (sql) => (await pool.query(sql)).rows;
+    const assets = await rows(
+      "SELECT scope, path, sha256, size::int, content_type FROM assets",
+    );
+    for (const asset of assets) {
+      const file = join(directory, "files", asset.scope, asset.path);
+      await mkdir(dirname(file), { recursive: true });
+      await writeFile(file, await store.fetchObject(asset.sha256));
+    }
+    await writeFile(
+      join(directory, "snapshot.json"),
+      JSON.stringify({
+        format: 1,
+        topics: await rows("SELECT slug, site, content, citations FROM topics"),
+        directories: await rows(
+          "SELECT dir, metadata, citations, compiled FROM note_directories",
+        ),
+        notes: await rows(
+          "SELECT dir, slug, author, source, compiled FROM notes",
+        ),
+        glossary: (await rows("SELECT terms FROM glossary"))[0]?.terms ?? [],
+        registry:
+          (await rows("SELECT registry FROM source_registry"))[0]?.registry ??
+          null,
+        assets,
+      }),
+    );
+  });
 
 // Explicit opt-in keeps ordinary contract unit tests independent of a server.
 test(
@@ -39,8 +73,7 @@ test(
     await cp(resolve("tests/fixtures/content"), content, { recursive: true });
     const server = createWebServer({
       pool: db.pool,
-      store,
-      cache: join(root, "cache"),
+      snapshot: join(root, "releases/current"),
     });
     try {
       await migrate(db.pool);
@@ -199,6 +232,7 @@ test(
           original,
         );
       }
+      await serveDatabase(db.pool, store, join(root, "releases"));
       server.listen(0, "127.0.0.1");
       await once(server, "listening");
       const base = `http://127.0.0.1:${server.address().port}`;
@@ -272,6 +306,7 @@ test(
         original + "\n重新发布后的段落。\n",
       );
       await pushUnits(db.pool, store, content, ["notes/reader-test"]);
+      await serveDatabase(db.pool, store, join(root, "releases"));
       const notebook = await (await call("/api/notes")).json();
       assert.ok(
         notebook.notes.every(
@@ -450,8 +485,7 @@ test(
     await cp(resolve("tests/fixtures/content"), content, { recursive: true });
     const server = createWebServer({
       pool: db.pool,
-      store,
-      cache: join(root, "cache"),
+      snapshot: join(root, "releases/current"),
     });
     const readJson = async (path) =>
       JSON.parse(await readFile(join(content, path), "utf8"));
@@ -540,6 +574,7 @@ test(
       await pushUnits(db.pool, store, content, ["notes/reader-test"]);
       await removeUnit(db.pool, "sites/sample");
 
+      await serveDatabase(db.pool, store, join(root, "releases"));
       server.listen(0, "127.0.0.1");
       await once(server, "listening");
       const base = `http://127.0.0.1:${server.address().port}`;
@@ -890,8 +925,7 @@ test(
     };
     const server = createWebServer({
       pool: db.pool,
-      store,
-      cache: join(root, "asset-cache"),
+      snapshot: join(root, "releases/current"),
     });
     const units = ["notes/cited-reading", "sites/cited-sources"];
     try {
@@ -963,6 +997,7 @@ test(
       ).rows[0].compiled;
       assert.deepEqual(Object.keys(directory.citations), ["src:handbook#1"]);
 
+      await serveDatabase(db.pool, store, join(root, "releases"));
       server.listen(0, "127.0.0.1");
       await once(server, "listening");
       const base = `http://127.0.0.1:${server.address().port}`;

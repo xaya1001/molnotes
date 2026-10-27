@@ -1,6 +1,6 @@
 # 分子笔记（molnotes）
 
-面向化学研究者的交互式学习网站：笔记本用于按目录连续阅读，专题用于交互练习和核对原文证据，复习页汇总进度、错题、书签与笔记。共享界面在 `src/ui/`，内容与学习记录保存在 PostgreSQL，图片、结构坐标等资源按 SHA-256 存在对象存储。`/showcase/` 是共享组件示例。
+面向化学研究者的交互式学习网站：笔记本用于按目录连续阅读，专题用于交互练习和核对原文证据，复习页汇总进度、错题、书签与笔记。共享界面在 `src/ui/`。网站从内容快照读取专题、笔记与资源，学习记录保存在 PostgreSQL。`/showcase/` 是共享组件示例。
 
 仓库只包含网站运行时、内容契约、制作工具与中性测试样本，不包含学习内容。
 
@@ -11,10 +11,11 @@
 | 变量                                                                                                         | 用途                                                                      |
 | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
 | `MOLNOTES_DATABASE_URL`                                                                                      | 网站与内容命令使用的 PostgreSQL 连接                                      |
+| `MOLNOTES_CONTENT_SNAPSHOT`                                                                                  | 网站读取的内容快照目录，通常是指向当前快照的软链，默认 `/content/current` |
 | `MOLNOTES_TEST_DATABASE_URL`                                                                                 | 测试用连接，测试为每次运行创建并删除独立数据库                            |
 | `MOLNOTES_ASSET_STORE`                                                                                       | `r2`（默认）或 `dir:<绝对路径>`                                           |
 | `MOLNOTES_R2_ACCOUNT_ID`、`MOLNOTES_R2_ACCESS_KEY_ID`、`MOLNOTES_R2_SECRET_ACCESS_KEY`、`MOLNOTES_R2_BUCKET` | R2 资源存储                                                               |
-| `MOLNOTES_ASSET_CACHE`                                                                                       | 网站缓存已校验资源的目录                                                  |
+| `MOLNOTES_ASSET_CACHE`                                                                                       | 内容命令导出时缓存已校验资源的目录                                        |
 | `MOLNOTES_CONTENT_DIR`                                                                                       | 内容工作目录，见 [内容手册](docs/content.md)                              |
 | `MOLNOTES_MATERIALS_DIR`、`MOLNOTES_MATERIALS_CACHE`                                                         | 原始资料书架与渲染缓存，默认仓库的 `materials/`（不进入 Git）             |
 | `MOLNOTES_SYSTEM_SOCKET`                                                                                     | 可选：`/system/api/` 转发到的更新服务 Unix socket，未设置时该接口返回 503 |
@@ -25,7 +26,7 @@
 
 ```bash
 npm ci
-MOLNOTES_ASSET_STORE=dir:/tmp/molnotes-assets npm run serve
+MOLNOTES_CONTENT_SNAPSHOT=<快照目录> npm run serve
 npm run dev
 ```
 
@@ -39,7 +40,7 @@ npm run test:e2e
 MOLNOTES_DATABASE_TESTS=1 node --test tests/content-db.test.mjs
 ```
 
-浏览器测试前先 `npm run build`；测试自动建立临时数据库、发布 `tests/fixtures/content/` 中的中性样本、启动服务并清理。成功路径的视觉验收截图按需生成：`MOLNOTES_CAPTURE_EVIDENCE=1 npm run test:e2e -- tests/content-runtime.spec.ts`。
+浏览器测试前先 `npm run build`；测试自动由 `tests/fixtures/content/` 中的中性样本构建内容快照、为学习记录建立临时数据库、启动服务并清理。成功路径的视觉验收截图按需生成：`MOLNOTES_CAPTURE_EVIDENCE=1 npm run test:e2e -- tests/content-runtime.spec.ts`。
 
 ## 制作内容
 

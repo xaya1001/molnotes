@@ -2,8 +2,7 @@ import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { testDatabase } from "./database.mjs";
-import { assetStore } from "../../server/assets.mjs";
-import { pushUnits } from "../../server/content-publish.mjs";
+import { buildSnapshot, publishSnapshot } from "./content-snapshot.mjs";
 import { createWebServer } from "../../server/web.mjs";
 import { withInstrumentChapters } from "./instrument-chapters.mjs";
 import { requireBrowserBuild } from "./browser-build.mjs";
@@ -11,7 +10,6 @@ import { requireBrowserBuild } from "./browser-build.mjs";
 await requireBrowserBuild();
 const db = await testDatabase();
 const directory = await mkdtemp(join(tmpdir(), "il-content-browser-"));
-const store = await assetStore("dir:" + join(directory, "objects"));
 let server;
 let stopping = false;
 async function close() {
@@ -34,30 +32,31 @@ try {
       withInstrumentChapters(JSON.parse(await readFile(instruments, "utf8"))),
     ),
   );
-  await pushUnits(
-    db.pool,
-    store,
-    content,
-    [
-      "sites/sample",
-      "sites/minimal",
-      "sites/instruments",
-      "notes/reader-test",
-      "sites/fable-patent",
-      "notes/cited-reading",
-      "sites/cited-sources",
-    ],
-    {
-      shelf: {
-        materials: resolve("tests/fixtures/shelf"),
-        cache: join(directory, "shelf-cache"),
+  const releases = join(directory, "releases");
+  await publishSnapshot(releases, (snapshot) =>
+    buildSnapshot(
+      content,
+      [
+        "sites/sample",
+        "sites/minimal",
+        "sites/instruments",
+        "notes/reader-test",
+        "sites/fable-patent",
+        "notes/cited-reading",
+        "sites/cited-sources",
+      ],
+      snapshot,
+      {
+        shelf: {
+          materials: resolve("tests/fixtures/shelf"),
+          cache: join(directory, "shelf-cache"),
+        },
       },
-    },
+    ),
   );
   server = createWebServer({
     pool: db.pool,
-    store,
-    cache: join(directory, "cache"),
+    snapshot: join(releases, "current"),
   });
   server.listen(Number(process.argv[2]), "127.0.0.1");
 } catch (error) {
