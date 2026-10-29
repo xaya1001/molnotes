@@ -1,8 +1,8 @@
 // Prepares a checkout for development: dependencies through the host's
-// worktree-deps, the link to the canonical materials shelf, and links to the
-// companion checkout `<canonical>-private` that holds the agent configuration.
+// worktree-deps, the link to the canonical materials shelf, and agent
+// configuration from the companion checkout `<canonical>-private`.
 import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, symlinkSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, rmSync, symlinkSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
 const root = resolve(".");
@@ -32,6 +32,13 @@ if (root !== canonical && existsSync(shelf))
 const companion = `${canonical}-private`;
 if (existsSync(companion)) {
   link(companion, join(root, "private"));
-  for (const name of ["AGENTS.md", ".codex", ".claude"])
+  for (const name of ["AGENTS.md", ".claude"])
     link(join("private", name), join(root, name));
+  const config = join(root, ".codex");
+  rmSync(config, { recursive: true, force: true });
+  cpSync(join(companion, ".codex"), config, {
+    recursive: true,
+    dereference: false,
+    verbatimSymlinks: true,
+  });
 }
