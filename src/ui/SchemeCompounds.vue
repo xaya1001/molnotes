@@ -52,7 +52,11 @@ defineProps<{
 }
 @media (max-width: 640px) {
   .scheme-compounds {
-    flex-wrap: wrap;
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+  .plus {
+    margin-bottom: 0;
   }
 }
 </style>

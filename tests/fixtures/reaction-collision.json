@@ -1,0 +1,33 @@
+[
+  {
+    "id": "coupling",
+    "title": "Coupling",
+    "steps": [
+      {
+        "title": "Urea",
+        "reagents": ["base"],
+        "conditions": ["solvent"],
+        "explanation": "Urea coupling",
+        "reactants": [
+          {
+            "number": "1",
+            "name": "Acyl amide",
+            "smiles": "NC(=O)c1ccc(Cl)cc1Cl"
+          },
+          {
+            "number": "2",
+            "name": "Amine",
+            "smiles": "Nc1ccccc1"
+          }
+        ],
+        "products": [
+          {
+            "number": "3",
+            "name": "Urea",
+            "smiles": "O=C(NC(=O)Nc1ccccc1)c1ccc(Cl)cc1Cl"
+          }
+        ]
+      }
+    ]
+  }
+]

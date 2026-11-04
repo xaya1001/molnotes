@@ -11,7 +11,7 @@ import {
   coordinatesFrom,
   layoutCandidates,
   layoutProblems,
-} from "./molecule-layout.ts";
+} from "../shared/molecule-layout.ts";
 
 const usage =
   "Usage: npm run molecule:layout -- '<smiles>' [--like '<cxsmiles>'] [--offline]";

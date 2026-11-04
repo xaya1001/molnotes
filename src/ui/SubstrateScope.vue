@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import ReactionStep from "./ReactionStep.vue";
 import MoleculeView from "./MoleculeView.vue";
+import { substituentDisplay } from "../../shared/reaction-scheme.ts";
 import type { SubstrateScope } from "../../shared/reaction-scheme.ts";
 defineProps<{ scope: SubstrateScope }>();
 </script>
@@ -28,7 +29,12 @@ defineProps<{ scope: SubstrateScope }>();
               <strong>{{ row.number }}</strong>
             </th>
             <td v-for="column in scope.groups" :key="column.key">
-              {{ row.substituents[column.key] }}
+              {{
+                substituentDisplay(
+                  row.substituents[column.key],
+                  row.labels?.[column.key],
+                )
+              }}
             </td>
             <td>{{ row.yield }}</td>
             <td v-for="column in scope.readings" :key="column.key">

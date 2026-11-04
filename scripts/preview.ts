@@ -24,7 +24,7 @@ import { defineFlow } from "../src/ui/diagrams/flow.ts";
 import { defineTimeline } from "../src/ui/diagrams/model.ts";
 import { resolveData } from "../shared/topic-blocks.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
-import { layoutProblems } from "./molecule-layout.ts";
+import { layoutProblems } from "../shared/molecule-layout.ts";
 import { setting } from "../shared/settings.ts";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";

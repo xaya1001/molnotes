@@ -1,3 +1,4 @@
+import { layoutProblems } from "../shared/molecule-layout.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -9,6 +10,8 @@ import {
 } from "../shared/reaction-chemistry.ts";
 import {
   schemeRuns,
+  substituentDisplay,
+  rGroupLabel,
   validateSubstrateScope,
   validateSynthesisRoutes,
 } from "../shared/reaction-scheme.ts";
@@ -183,4 +186,28 @@ test("alignment keeps ring topology and molecule identity in convergent schemes"
       drawn.delete();
     }
   }
+});
+
+test("a constrained acyl-urea scheme falls back when chlorine and oxygen labels collide", () => {
+  const routes = JSON.parse(
+    readFileSync("tests/fixtures/reaction-collision.json", "utf8"),
+  );
+  validateSynthesisRoutes(routes, "collision");
+  const route = routes[0];
+  const aligned = alignScheme(toolkit, route);
+  assert.deepEqual(layoutProblems(toolkit, aligned.smiles["3"]), []);
+  assert.ok(aligned.warnings.some((warning) => warning.includes("compound 3")));
+});
+
+test("R columns use shared abbreviations or content display text and superscript maps", () => {
+  assert.equal(substituentDisplay("C"), "Me");
+  assert.equal(substituentDisplay("*OC"), "OMe");
+  assert.equal(substituentDisplay("C1CCCCC1", "cyclohexyl"), "cyclohexyl");
+  assert.throws(() => substituentDisplay("C1CCCCC1"), /display label/);
+  assert.equal(rGroupLabel(12), "R¹²");
+  const scope = structuredClone(scopeExample);
+  scope.rows[0].substituents["1"] = "C1CCCCC1";
+  assert.throws(() => validateSubstrateScope(scope, "scope"), /display label/);
+  scope.rows[0].labels = { "1": "cyclohexyl" };
+  validateSubstrateScope(scope, "scope");
 });

@@ -1,5 +1,8 @@
 import type { MoleculeData } from "../src/ui/chemistry/types.ts";
-import { validateAbbreviations } from "./molecule-abbreviations.ts";
+import {
+  validateAbbreviations,
+  abbreviationSmarts,
+} from "./molecule-abbreviations.ts";
 import { isObject } from "./json.ts";
 
 export interface SchemeCompound extends MoleculeData {
@@ -28,10 +31,40 @@ export interface SubstrateScope {
   rows: {
     number: string;
     substituents: Record<string, string>;
+    labels?: Record<string, string>;
     yield: string;
     readings: Record<string, string>;
     product: MoleculeData;
   }[];
+}
+/** Display fragments as journal notation; unfamiliar SMILES need content text. */
+export function substituentDisplay(smiles: string, label?: string) {
+  if (Object.hasOwn(abbreviationSmarts, smiles)) return smiles;
+  const rooted = smiles.startsWith("*") ? smiles : `*${smiles}`;
+  const known: Record<string, string> = {
+    "*C": "Me",
+    "*CC": "Et",
+    "*C(C)C": "iPr",
+    "*C(C)(C)C": "tBu",
+    "*[H]": "H",
+    "*F": "F",
+    "*Cl": "Cl",
+    "*Br": "Br",
+    "*I": "I",
+  };
+  const name =
+    known[rooted] ??
+    Object.entries(abbreviationSmarts).find(
+      ([, fragment]) => fragment === rooted,
+    )?.[0];
+  if (name) return name;
+  if (label?.trim()) return label;
+  throw new Error("R substituent needs a display label");
+}
+export function rGroupLabel(map: number) {
+  return (
+    "R" + String(map).replace(/\d/g, (digit) => "⁰¹²³⁴⁵⁶⁷⁸⁹"[Number(digit)])
+  );
 }
 function requireValue(ok: unknown, where: string): asserts ok {
   if (!ok) throw new Error(where);
@@ -99,6 +132,29 @@ export function validateSynthesisRoutes(
     );
   }
 }
+function textCells(
+  value: unknown,
+  expected: readonly string[],
+  where: string,
+): asserts value is Record<string, string> {
+  requireValue(
+    isObject(value) && Object.keys(value).length === expected.length,
+    `${where} needs one value per column`,
+  );
+  for (const key of expected) text(value[key], `${where}.${key}`);
+}
+function displayLabels(
+  value: unknown,
+  keys: readonly string[],
+  where: string,
+): asserts value is Record<string, string> | undefined {
+  if (value === undefined) return;
+  requireValue(isObject(value), `${where} must map R columns to display text`);
+  for (const [key, label] of Object.entries(value)) {
+    requireValue(keys.includes(key), `${where} has an unknown R column`);
+    text(label, `${where}.${key}`);
+  }
+}
 export function validateSubstrateScope(
   value: unknown,
   at: string,
@@ -148,17 +204,11 @@ export function validateSubstrateScope(
       `${w} duplicate number ${row.number}`,
     );
     numbers.add(row.number);
-    for (const [field, expected] of [
-      ["substituents", keys.groups],
-      ["readings", keys.readings],
-    ] as const) {
-      const cells = row[field];
-      requireValue(
-        isObject(cells) && Object.keys(cells).length === expected.length,
-        `${w}.${field} needs one value per column`,
-      );
-      for (const key of expected) text(cells[key], `${w}.${field}.${key}`);
-    }
+    textCells(row.substituents, keys.groups, `${w}.substituents`);
+    textCells(row.readings, keys.readings, `${w}.readings`);
+    displayLabels(row.labels, keys.groups, `${w}.labels`);
+    for (const key of keys.groups)
+      substituentDisplay(row.substituents[key], row.labels?.[key]);
     requireValue(isObject(row.product), `${w}.product is required`);
     text(row.product.name, w);
     text(row.product.smiles, w);

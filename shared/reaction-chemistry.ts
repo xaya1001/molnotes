@@ -1,3 +1,4 @@
+import { layoutProblems } from "./molecule-layout.ts";
 import type { MainModule, Mol } from "@rdkit/rdkit";
 import { abbreviationSmarts } from "./molecule-abbreviations.ts";
 import type { SubstrateScope, SynthesisRoute } from "./reaction-scheme.ts";
@@ -41,18 +42,20 @@ export function alignScheme(toolkit: SchemeToolkit, route: SynthesisRoute) {
     for (const [index, step] of route.steps.entries()) {
       for (const compound of [...step.reactants, ...step.products]) {
         if (saved.has(compound.number)) continue;
-        const mol = parse(toolkit, compound.smiles);
+        let mol = parse(toolkit, compound.smiles);
         saved.set(compound.number, mol);
         if (!mol.has_coords()) mol.set_new_coords();
         if (!reference) {
           reference = mol;
           continue;
         }
+        const defaultLayout = mol.get_v3Kmolblock();
+        let smarts: string | undefined;
         const list = new toolkit.MolList();
         try {
           list.append(reference);
           list.append(mol);
-          const smarts =
+          smarts =
             route.core ??
             toolkit.get_mcs_as_smarts(
               list,
@@ -81,13 +84,38 @@ export function alignScheme(toolkit: SchemeToolkit, route: SynthesisRoute) {
               ),
             );
             if (!result.atoms?.length) throw new Error("alignment failed");
+            if (layoutProblems(toolkit, mol.get_v3Kmolblock()).length)
+              throw new Error("aligned drawing has overlaps");
           } finally {
             query?.delete();
           }
         } catch {
-          mol.set_new_coords();
+          mol.delete();
+          mol = parse(toolkit, defaultLayout);
+          // Preserve the default graph geometry, keeping its shared core's
+          // orientation where a rigid alignment gives a clean drawing.
+          if (smarts) {
+            try {
+              mol.generate_aligned_coords(
+                reference,
+                JSON.stringify({
+                  referenceSmarts: smarts,
+                  acceptFailure: false,
+                  alignOnly: true,
+                }),
+              );
+              if (layoutProblems(toolkit, mol.get_v3Kmolblock()).length) {
+                mol.delete();
+                mol = parse(toolkit, defaultLayout);
+              }
+            } catch {
+              mol.delete();
+              mol = parse(toolkit, defaultLayout);
+            }
+          }
+          saved.set(compound.number, mol);
           warnings.push(
-            `${route.id} step ${index + 1}, compound ${compound.number}: core alignment failed; using default layout`,
+            `${route.id} step ${index + 1}, compound ${compound.number}: core alignment failed or overlapped; using default layout`,
           );
         } finally {
           list.delete();

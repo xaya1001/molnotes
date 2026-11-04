@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { rGroupLabel } from "../../shared/reaction-scheme.ts";
 import { mappedDummies } from "../../shared/reaction-chemistry.ts";
 import { computed, nextTick, ref, useId, watch } from "vue";
 import { loadChemistry, molecule } from "./chemistry/rdkit.ts";
@@ -98,8 +99,8 @@ watch(
         const folded = new Set(groups.flatMap((group) => group.atoms));
         const hiddenBonds = new Set(groups.flatMap((group) => group.bonds));
         const atomLabels: Record<number, string> = {};
-        for (const { atom, map } of mappedDummies(mol))
-          if (map) atomLabels[atom] = `R${map}`;
+        const rGroups = mappedDummies(mol).filter((group) => group.map);
+        for (const { atom } of rGroups) atomLabels[atom] = "R";
         for (const group of groups) {
           for (const atom of group.atoms) atomLabels[atom] = "";
           // Reserve a single attachment glyph; the full abbreviation is placed
@@ -119,6 +120,12 @@ watch(
         );
         if (document.querySelector("parsererror"))
           throw new Error("RDKit 结构绘图失败");
+        // MinimalLib splits UTF-8 superscripts into separate glyphs. Give it an
+        // ASCII label for placement, then let the browser draw the journal label.
+        for (const { atom, map } of rGroups) {
+          const label = document.querySelector(`text.atom-${atom}`);
+          if (label) label.textContent = rGroupLabel(map);
+        }
         const points: Point[] = [];
         for (let i = 0; i < count; i++) {
           const ellipse = document.querySelector(`ellipse.atom-${i}`);
