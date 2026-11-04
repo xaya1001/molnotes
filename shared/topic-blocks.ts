@@ -1,3 +1,4 @@
+import { validateProcess } from "./process.ts";
 import type {
   StructureSetInput,
   StructureSet,
@@ -135,6 +136,7 @@ function mechanismFrames(
   frames.forEach((frame, index) => {
     const at = `${where} frame ${index + 1}`;
     molecule(frame, at);
+    optionalText(frame.title, `${at} title`);
     text(frame.explanation, `${at} explanation`);
     assert(isList(frame.arrows), `${at} arrows must be an array`);
     for (const arrow of frame.arrows) {
@@ -558,6 +560,22 @@ export function blockSearchText(
         return block.caption === undefined ? [] : [block.caption];
       case "figure":
         return [block.caption];
+      case "process": {
+        const process = resolveData(block.process, data, "process");
+        return [
+          process.title,
+          ...process.nodes.flatMap((node) => [node.name, node.detail]),
+          ...process.scenarios.flatMap((scenario) => [
+            scenario.name,
+            ...scenario.steps.flatMap((step) => [
+              step.title,
+              step.text,
+              step.state,
+              step.loss?.label,
+            ]),
+          ]),
+        ];
+      }
       case "scene":
         return resolveData(block.frames, data, "scene frames").flatMap(
           (frame) => [frame.title, frame.text],
@@ -638,6 +656,7 @@ const blockFields: Record<string, string[]> = {
   "path-picker": "title".split(" "),
   "diagnostic-summary": "title".split(" "),
   scene: "label title frames".split(" "),
+  process: ["process"],
   problem: "lang label source task prompt parts answer evidence".split(" "),
   prediction:
     "kind question source context explanation molecules excerpt reset options answer alsoCorrect optionExplanations molecule labels minSelections maxSelections match optionAnswer gradeAtoms groups atomExplanation image points input tolerance readout activity chapter data evidence inputExcerpt mode quizId refs result sourceContext title".split(
@@ -974,6 +993,9 @@ export function validateBlocks(
         );
         break;
       }
+      case "process":
+        field("process", validateProcess);
+        break;
       case "scene":
         text(block.label, `${here} label`);
         optionalText(block.title, `${here} title`);
@@ -984,7 +1006,7 @@ export function validateBlocks(
           );
           frames.forEach((frame, i) => {
             assert(isObject(frame), `${w} frame ${i + 1} must be an object`);
-            text(frame.title, `${w} frame ${i + 1} title`);
+            optionalText(frame.title, `${w} frame ${i + 1} title`);
             text(frame.text, `${w} frame ${i + 1} text`);
             if (frame.image !== undefined) {
               assert(

@@ -29,6 +29,7 @@ export interface SynthesisRoute {
   steps: ReactionStep[];
 }
 export interface MechanismFrame extends MoleculeData {
+  title?: string;
   explanation: string;
   arrows: ElectronArrow[];
 }

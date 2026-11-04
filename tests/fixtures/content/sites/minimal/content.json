@@ -2,7 +2,7 @@
   "parts": [
     {
       "title": "观察",
-      "chapters": ["start"]
+      "chapters": ["start", "steps"]
     }
   ],
   "chapters": [
@@ -26,6 +26,211 @@
         {
           "type": "list",
           "items": ["A: 2", "B: 1"]
+        }
+      ]
+    },
+    {
+      "id": "steps",
+      "title": "分步观察",
+      "number": 2,
+      "short": "分步",
+      "minutes": 5,
+      "lead": "观察中性过程。",
+      "refs": [],
+      "blocks": [
+        {
+          "type": "process",
+          "process": {
+            "title": "一批样品的去向",
+            "label": "投料、溶解、萃取、收集四站与各站损失",
+            "total": {
+              "amount": 100,
+              "unit": "g",
+              "label": "样品去向"
+            },
+            "nodes": [
+              {
+                "name": "投料",
+                "detail": "初始样品"
+              },
+              {
+                "name": "溶解",
+                "detail": "溶解 · 过滤"
+              },
+              {
+                "name": "萃取",
+                "detail": "分液 · 保留"
+              },
+              {
+                "name": "收集",
+                "detail": "结晶 · 称量"
+              }
+            ],
+            "scenarios": [
+              {
+                "name": "常规批次",
+                "steps": [
+                  {
+                    "title": "溶解",
+                    "kind": "transfer",
+                    "from": 0,
+                    "to": 1,
+                    "loss": {
+                      "node": 0,
+                      "label": "未溶残渣",
+                      "amount": 10
+                    },
+                    "state": "收率 0.90 · 剩余 90 g",
+                    "text": "投入 100 g 样品，溶解后保留 90 g，未溶残渣占 10 g。",
+                    "amounts": [0, 90, null, null],
+                    "label": "溶解"
+                  },
+                  {
+                    "title": "过滤",
+                    "kind": "local",
+                    "from": 1,
+                    "to": 1,
+                    "loss": {
+                      "node": 1,
+                      "label": "留在水相",
+                      "amount": 18
+                    },
+                    "state": "收率 0.80 · 剩余 72 g",
+                    "text": "溶解站内完成过滤与水相分离，18 g 留在水相，保留 72 g 进入下一站。",
+                    "amounts": [0, 72, null, null]
+                  },
+                  {
+                    "title": "萃取分液",
+                    "kind": "transfer",
+                    "from": 1,
+                    "to": 2,
+                    "loss": {
+                      "node": 2,
+                      "label": "母液损失",
+                      "amount": 28.8
+                    },
+                    "state": "收率 0.60 · 剩余 43.2 g",
+                    "text": "样品进入萃取站，分液后计入母液损失 28.8 g，待收集的样品剩余 43.2 g。",
+                    "amounts": [0, 0, 43.2, null],
+                    "label": "萃取"
+                  },
+                  {
+                    "title": "结晶收集",
+                    "kind": "transfer",
+                    "from": 2,
+                    "to": 3,
+                    "state": "总收率 = 0.90 × 0.80 × 0.60 = 43.2%",
+                    "text": "结晶并收集 43.2 g 样品。总收率为三个保留比例之积。",
+                    "amounts": [0, 0, 0, 43.2],
+                    "label": "收集"
+                  }
+                ]
+              },
+              {
+                "name": "损耗批次",
+                "steps": [
+                  {
+                    "title": "溶解",
+                    "kind": "transfer",
+                    "from": 0,
+                    "to": 1,
+                    "state": "样品 100 g",
+                    "text": "样品进入溶解站。",
+                    "amounts": [0, 100, null, null],
+                    "label": "溶解"
+                  },
+                  {
+                    "title": "路径截断",
+                    "text": "传递停在途中。",
+                    "state": "接收端未激活",
+                    "kind": "blocked",
+                    "from": 1,
+                    "to": 2,
+                    "amounts": [0, 100, 0, null],
+                    "label": "阻断"
+                  },
+                  {
+                    "title": "流出系统",
+                    "text": "样品从溶解站离开。",
+                    "state": "剩余 80 g",
+                    "kind": "exit",
+                    "from": 1,
+                    "to": 1,
+                    "amounts": [0, 80, 0, null],
+                    "loss": {
+                      "node": 1,
+                      "label": "流出样品",
+                      "amount": 20
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "type": "scene",
+          "label": "多帧示意",
+          "frames": [
+            {
+              "title": "初始",
+              "text": "初始状态。",
+              "image": {
+                "src": "/sites/minimal/static/sample.svg",
+                "alt": "中性形状"
+              }
+            },
+            {
+              "text": "变化后的状态。",
+              "image": {
+                "src": "/sites/minimal/static/sample.svg",
+                "alt": "中性形状"
+              }
+            }
+          ]
+        },
+        {
+          "type": "mechanism",
+          "frames": [
+            {
+              "title": "起始结构",
+              "name": "Sample A",
+              "smiles": "CCO",
+              "arrows": [],
+              "explanation": "结构 A。"
+            },
+            {
+              "name": "Sample B",
+              "smiles": "CC=O",
+              "arrows": [],
+              "explanation": "结构 B。"
+            }
+          ]
+        },
+        {
+          "type": "scene",
+          "label": "单帧示意",
+          "frames": [
+            {
+              "title": "静态",
+              "text": "单帧状态。",
+              "image": {
+                "src": "/sites/minimal/static/sample.svg",
+                "alt": "中性形状"
+              }
+            }
+          ]
+        },
+        {
+          "type": "mechanism",
+          "frames": [
+            {
+              "name": "Sample",
+              "smiles": "CO",
+              "arrows": [],
+              "explanation": "单帧结构。"
+            }
+          ]
         }
       ]
     }

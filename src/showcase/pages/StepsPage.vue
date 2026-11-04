@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { PageHeading } from "@ui";
-import StepPlayer from "../StepPlayer.vue";
+import ProcessViewer from "../../ui/topic/ProcessViewer.vue";
 import { sampleProcess } from "../step-scenarios.ts";
 </script>
 
 <template>
   <article class="page-reading">
     <PageHeading eyebrow="Steps" title="分步图示" />
-    <StepPlayer :data="sampleProcess" />
+    <ProcessViewer :data="sampleProcess" />
   </article>
 </template>

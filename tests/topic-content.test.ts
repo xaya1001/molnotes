@@ -1181,3 +1181,121 @@ test("the topic home cannot be used as a chapter path", () => {
   value.chapters[0].path = "/";
   assert.throws(() => validateTopicContent(value), /cannot be \//);
 });
+
+test("process blocks validate scene relations, quantities and search text", () => {
+  const process = {
+    title: "Sample path",
+    label: "Two nodes",
+    nodes: [{ name: "A" }, { name: "B" }],
+    total: { amount: 10, unit: "g", label: "Sample" },
+    scenarios: [
+      {
+        name: "Open",
+        steps: [
+          {
+            title: "Move",
+            text: "Transfer sample",
+            state: "Ready",
+            kind: "transfer",
+            from: 0,
+            to: 1,
+            amounts: [0, 10],
+          },
+          {
+            title: "Change",
+            text: "Local change",
+            state: "Changed",
+            kind: "local",
+            from: 1,
+            to: 1,
+            amounts: [0, 10],
+          },
+          {
+            title: "Leave",
+            text: "Sample leaves",
+            state: "Eight left",
+            kind: "exit",
+            from: 1,
+            to: 1,
+            amounts: [0, 8],
+            loss: { node: 1, label: "Waste", amount: 2 },
+          },
+        ],
+      },
+    ],
+  };
+  const fixture = () =>
+    content({
+      chapters: [
+        {
+          id: "a",
+          title: "Chapter",
+          refs: [1],
+          blocks: [{ type: "process", process: "path" }],
+        },
+      ],
+      data: { path: structuredClone(process) },
+    });
+  const valid = fixture();
+  validateTopicContent(valid, "sample");
+  assert.ok(
+    blockSearchText(
+      [{ type: "process", process: "path" }],
+      valid.data,
+    ).includes("Transfer sample"),
+  );
+  const rejects = [
+    [
+      (p: typeof process) => {
+        p.scenarios[0].steps[0].kind = "unknown";
+      },
+      /unknown relation/,
+    ],
+    [
+      (p: typeof process) => {
+        p.scenarios[0].steps[0].to = 9;
+      },
+      /unknown node/,
+    ],
+    [
+      (p: typeof process) => {
+        p.scenarios[0].steps[1].to = 0;
+      },
+      /same node/,
+    ],
+    [
+      (p: typeof process) => {
+        p.scenarios.push(p.scenarios[0], p.scenarios[0]);
+      },
+      /one or two/,
+    ],
+    [
+      (p: typeof process) => {
+        p.scenarios[0].steps[0].to = 0;
+      },
+      /different nodes/,
+    ],
+    [
+      (p: typeof process) => {
+        Reflect.deleteProperty(p.scenarios[0].steps[2].loss!, "amount");
+      },
+      /loss amount/,
+    ],
+  ] as const;
+  for (const [mutate, reason] of rejects) {
+    const value = fixture();
+    mutate(value.data!.path as typeof process);
+    assert.throws(
+      () => validateTopicContent(value, "sample"),
+      (error) => {
+        assert.match(String(error), /sample.*a.*process/);
+        assert.match(String(error), reason);
+        return true;
+      },
+    );
+  }
+  const withoutTotal = fixture();
+  const path = withoutTotal.data!.path as Partial<typeof process>;
+  delete path.total;
+  validateTopicContent(withoutTotal, "sample");
+});
