@@ -84,7 +84,7 @@ test("molecule canvases crop whitespace without enlarging small molecules on des
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/showcase/molecule");
-    const route = page.getByRole("region", { name: "分步合成路线" });
+    const route = page.getByRole("region", { name: "合成方案" });
     await route
       .getByRole("button", { name: "乙酰化示意", exact: true })
       .click();
