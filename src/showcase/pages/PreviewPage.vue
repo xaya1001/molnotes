@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref } from "vue";
+import { validateProcess, type ProcessData } from "../../../shared/process.ts";
+import ProcessViewer from "../../ui/topic/ProcessViewer.vue";
 import MoleculeView from "../../ui/MoleculeView.vue";
 import FlowFigure from "../../ui/diagrams/FlowFigure.vue";
 import TimelineFigure from "../../ui/diagrams/TimelineFigure.vue";
@@ -11,13 +13,14 @@ import { defineTimeline, type Timeline } from "../../ui/diagrams/model.ts";
 // warnings back; the page is not linked from the showcase.
 interface Injected {
   where: string;
-  kind: "timeline" | "flow" | "molecule";
+  kind: "timeline" | "flow" | "process" | "molecule";
   value: unknown;
   caption: string;
 }
 type Shown =
   | { where: string; kind: "timeline"; timeline: Timeline; caption: string }
   | { where: string; kind: "flow"; flow: Flow; caption: string }
+  | { where: string; kind: "process"; process: ProcessData; caption: string }
   | {
       where: string;
       kind: "molecule";
@@ -31,16 +34,22 @@ declare global {
   }
 }
 
+function processFigure(f: Injected): Shown {
+  validateProcess(f.value, f.where);
+  return { ...f, kind: "process", process: f.value };
+}
 const shown: Shown[] = (window.__previewFigures ?? []).map((f) =>
   f.kind === "timeline"
     ? { ...f, kind: "timeline", timeline: defineTimeline(f.value) }
     : f.kind === "flow"
       ? { ...f, kind: "flow", flow: defineFlow(f.value) }
-      : {
-          ...f,
-          kind: "molecule",
-          molecules: f.value as { smiles: string; caption: string }[],
-        },
+      : f.kind === "process"
+        ? processFigure(f)
+        : {
+            ...f,
+            kind: "molecule",
+            molecules: f.value as { smiles: string; caption: string }[],
+          },
 );
 const figures = ref<HTMLElement[]>([]);
 
@@ -60,7 +69,7 @@ onMounted(async () => {
   for (let i = 0; i < 3; i++) await settle();
   window.__previewResult = shown.map((figure, i) => {
     const root = figures.value[i]?.querySelector<HTMLElement>(
-      "figure.timeline, figure.flow, figure.molecule",
+      "figure.timeline, figure.flow, figure.molecule, .player",
     );
     return {
       where: figure.where,
@@ -100,6 +109,10 @@ onMounted(async () => {
           v-else-if="figure.kind === 'flow'"
           :flow="figure.flow"
           :caption="figure.caption"
+        />
+        <ProcessViewer
+          v-else-if="figure.kind === 'process'"
+          :data="figure.process"
         />
         <div v-else class="preview-molecules">
           <MoleculeView

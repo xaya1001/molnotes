@@ -19,8 +19,13 @@ const containerWidth = ref(680);
 let observer: ResizeObserver;
 const vertical = computed(() => containerWidth.value < 600);
 const diagramWidth = computed(() => containerWidth.value);
+const hasLoss = computed(() =>
+  props.data.scenarios.some((scenario) =>
+    scenario.steps.some((step) => step.loss),
+  ),
+);
 const diagramHeight = computed(() =>
-  vertical.value ? props.data.nodes.length * 160 : 250,
+  vertical.value ? props.data.nodes.length * 160 : hasLoss.value ? 250 : 160,
 );
 const nodeHalfWidth = computed(() =>
   vertical.value ? Math.min(70, diagramWidth.value * 0.21) : 60,
@@ -29,9 +34,9 @@ const nodes = computed(() =>
   props.data.nodes.map((node, i) => ({
     ...node,
     x: vertical.value
-      ? diagramWidth.value * 0.27
+      ? diagramWidth.value * (hasLoss.value ? 0.27 : 0.5)
       : (diagramWidth.value / props.data.nodes.length) * (i + 0.5),
-    y: vertical.value ? 68 + i * 160 : 95,
+    y: vertical.value ? 68 + i * 160 : hasLoss.value ? 95 : 80,
   })),
 );
 const edges = computed(() => {

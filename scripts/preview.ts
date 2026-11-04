@@ -2,7 +2,7 @@ import type { TopicContent } from "../src/ui/topic/content.ts";
 import type { TopicBlock } from "../src/ui/topic/blocks.ts";
 import type { MoleculeData } from "../src/ui/chemistry/types.ts";
 // Renders the figures of content units as a reader will see them, without
-// publishing: timelines, flows and structures from the content directory,
+// publishing: timelines, flows, processes and structures from the content directory,
 // drawn by this checkout's components at desktop and phone width. Prints
 // where each screenshot went, the layout warnings the page found and the
 // structures whose drawing stacks atoms or bonds.
@@ -15,6 +15,7 @@ import { homedir } from "node:os";
 import { extname, join, resolve } from "node:path";
 import { parseDocument } from "yaml";
 import { chromium } from "playwright";
+import { validateProcess } from "../shared/process.ts";
 import { defineFlow } from "../src/ui/diagrams/flow.ts";
 import { defineTimeline } from "../src/ui/diagrams/model.ts";
 import { resolveData } from "../shared/topic-blocks.ts";
@@ -24,10 +25,10 @@ import { setting } from "../shared/settings.ts";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 
-/** A figure to draw: a timeline or flow model, or a list of structures. */
+/** A figure to draw: a timeline, flow or process model, or a list of structures. */
 interface Figure {
   where: string;
-  kind: "timeline" | "flow" | "molecule";
+  kind: "timeline" | "flow" | "process" | "molecule";
   value: unknown;
   caption: string;
 }
@@ -39,9 +40,16 @@ const widths = [
   [1366, 900],
   [390, 844],
 ];
-const define: Record<"timeline" | "flow", (value: unknown) => unknown> = {
+const define: Record<
+  "timeline" | "flow" | "process",
+  (value: unknown) => unknown
+> = {
   timeline: defineTimeline,
   flow: defineFlow,
+  process: (value) => {
+    validateProcess(value, "process");
+    return value;
+  },
 };
 
 /** The figures of one note: fenced timeline, flow and molecule blocks. */
@@ -50,7 +58,7 @@ function noteFigures(source: string, file: string, errors: string[]) {
   const lines = source.split("\n");
   for (let i = 0; i < lines.length; i++) {
     const kind = /^```(timeline|flow|molecule)\s*$/.exec(lines[i])?.[1] as
-      Figure["kind"] | undefined;
+      "timeline" | "flow" | "molecule" | undefined;
     if (!kind) continue;
     const start = i + 1;
     let end = start;
@@ -97,11 +105,19 @@ function topicFigures(topic: TopicContent, file: string, errors: string[]) {
         block.items.forEach((item) =>
           visit(item.blocks, `${at}「${item.label}」`),
         );
-      if (block.type === "timeline" || block.type === "flow") {
+      if (
+        block.type === "timeline" ||
+        block.type === "flow" ||
+        block.type === "process"
+      ) {
         try {
-          const kind: "timeline" | "flow" = block.type;
+          const kind = block.type;
           const value = resolveData(
-            block.type === "timeline" ? block.timeline : block.flow,
+            block.type === "timeline"
+              ? block.timeline
+              : block.type === "flow"
+                ? block.flow
+                : block.process,
             topic.data,
             at,
           );
@@ -110,7 +126,7 @@ function topicFigures(topic: TopicContent, file: string, errors: string[]) {
             where: at,
             kind,
             value,
-            caption: block.caption ?? "",
+            caption: "caption" in block ? (block.caption ?? "") : "",
           });
         } catch (error) {
           errors.push(`${at}: ${(error as Error).message}`);
@@ -255,7 +271,7 @@ const figures: Figure[] = [];
 for (const unit of units) figures.push(...(await unitFigures(unit, errors)));
 for (const error of errors) console.error(error);
 if (!figures.length) {
-  console.log("没有可预览的时间线、流程图或结构式。");
+  console.log("没有可预览的时间线、流程图、过程图或结构式。");
   process.exit(errors.length ? 1 : 0);
 }
 const out =
@@ -272,7 +288,10 @@ const report = figures.map((figure) => ({
 }));
 try {
   for (const [width, height] of widths) {
-    const page = await browser.newPage({ viewport: { width, height } });
+    const page = await browser.newPage({
+      viewport: { width, height },
+      reducedMotion: "reduce",
+    });
     await page.addInitScript((value) => {
       window.__previewFigures = value;
     }, figures);

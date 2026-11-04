@@ -262,11 +262,39 @@ function flowWarnings(root: HTMLElement): string[] {
   return warnings;
 }
 
-/** What a reader would trip over in a rendered timeline, flow or structure. */
+function processWarnings(root: HTMLElement): string[] {
+  const warnings: string[] = [];
+  const labels = [
+    ...root.querySelectorAll<SVGTextElement>(".stage svg text"),
+  ].filter((label) => {
+    const loss = label.closest(".loss");
+    return (
+      label.textContent?.trim() &&
+      (!loss || Number(getComputedStyle(loss).opacity) > 0)
+    );
+  });
+  labels.forEach((label, i) => {
+    const scale = label.getScreenCTM()!;
+    const size =
+      parseFloat(getComputedStyle(label).fontSize) *
+      Math.hypot(scale.a, scale.b);
+    if (size < smallestText)
+      warnings.push(
+        `「${short(label)}」字号 ${size}px，小于 ${smallestText}px`,
+      );
+    for (const other of labels.slice(i + 1))
+      if (overlap(rect(label), rect(other)))
+        warnings.push(`文字「${short(label)}」与「${short(other)}」重叠`);
+  });
+  return warnings;
+}
+
+/** What a reader would trip over in a rendered figure. */
 export function figureWarnings(root: HTMLElement): string[] {
   const warnings = textWarnings(root);
   if (root.matches(".timeline")) warnings.push(...timelineWarnings(root));
   if (root.matches(".flow")) warnings.push(...flowWarnings(root));
+  if (root.matches(".player")) warnings.push(...processWarnings(root));
   if (root.querySelector('[role="alert"]'))
     warnings.push(`渲染失败：${short(root.querySelector('[role="alert"]')!)}`);
   return [...new Set(warnings)];

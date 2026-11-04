@@ -231,6 +231,75 @@
               "explanation": "单帧结构。"
             }
           ]
+        },
+        {
+          "type": "process",
+          "process": {
+            "title": "样品传递",
+            "label": "样品经过三个站点",
+            "nodes": [
+              {
+                "name": "准备",
+                "detail": "起点"
+              },
+              {
+                "name": "处理",
+                "detail": "中间站"
+              },
+              {
+                "name": "完成",
+                "detail": "终点"
+              }
+            ],
+            "scenarios": [
+              {
+                "name": "直接传递",
+                "steps": [
+                  {
+                    "title": "送入",
+                    "text": "样品进入处理站。",
+                    "state": "处理中",
+                    "kind": "transfer",
+                    "from": 0,
+                    "to": 1,
+                    "label": "送入"
+                  },
+                  {
+                    "title": "收集",
+                    "text": "样品进入完成站。",
+                    "state": "完成",
+                    "kind": "transfer",
+                    "from": 1,
+                    "to": 2,
+                    "label": "收集"
+                  }
+                ]
+              },
+              {
+                "name": "暂停传递",
+                "steps": [
+                  {
+                    "title": "送入",
+                    "text": "样品进入处理站。",
+                    "state": "处理中",
+                    "kind": "transfer",
+                    "from": 0,
+                    "to": 1,
+                    "label": "送入"
+                  },
+                  {
+                    "title": "暂停",
+                    "text": "样品保留在处理站。",
+                    "state": "等待",
+                    "kind": "blocked",
+                    "from": 1,
+                    "to": 2,
+                    "label": "暂停"
+                  }
+                ]
+              }
+            ]
+          }
         }
       ]
     }
