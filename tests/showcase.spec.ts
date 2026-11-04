@@ -89,13 +89,81 @@ test("the dialog returns focus to the control that opened it", async ({
   await expect(opener).toBeFocused();
 });
 
-test("the step scene and curve respond to their controls", async ({ page }) => {
+test("the step player jumps, replays, pauses in place and advances automatically", async ({
+  page,
+}) => {
+  await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
+  await page.clock.pauseAt(new Date("2026-01-01T00:00:01Z"));
   await page.goto("/showcase/steps");
-  await expect(page.getByText("步骤 1 / 3")).toBeVisible();
-  await page.getByRole("button", { name: "下一步" }).click();
-  await expect(page.getByText("对象 A 接近对象 B")).toBeVisible();
-  await expect(page.getByText("步骤 2 / 3")).toBeVisible();
+  const player = page.getByRole("region", { name: "一批样品的去向" });
+  const rows = player.locator("tbody tr");
+  await rows.nth(1).click();
+  await expect(rows.nth(1)).toHaveAttribute("aria-current", "step");
+  await expect(player.locator(".pulse")).toHaveCount(1);
+  await page.clock.runFor(400);
+  await player.getByRole("button", { name: "暂停", exact: true }).click();
+  const radius = await player.locator(".pulse").getAttribute("r");
+  await page.clock.runFor(4000);
+  await expect(player.locator(".pulse")).toHaveAttribute("r", radius!);
+  await expect(rows.nth(1)).toHaveAttribute("aria-current", "step");
+  await player.getByRole("button", { name: "播放", exact: true }).click();
+  await player.getByRole("button", { name: "播放速度" }).click();
+  await expect(player.locator(".pulse")).toHaveAttribute("r", radius!);
+  await page.clock.runFor(2600);
+  await expect(rows.nth(2)).toHaveAttribute("aria-current", "step");
+  await page.clock.runFor(4800);
+  await expect(rows.nth(3)).toHaveAttribute("aria-current", "step");
+  await expect(
+    player.getByRole("button", { name: "重播", exact: true }),
+  ).toBeVisible();
+  await player.getByRole("button", { name: "重播", exact: true }).click();
+  await expect(rows.first()).toHaveAttribute("aria-current", "step");
+  await player.getByRole("button", { name: "损耗批次" }).click();
+  await expect(rows.first()).toHaveAttribute("aria-current", "step");
+  await expect(
+    player.getByRole("button", { name: "损耗批次" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    player.getByRole("button", { name: "播放", exact: true }),
+  ).toBeVisible();
+});
 
+test("the player delays quantities until motion ends and supports keyboard and reduced motion", async ({
+  page,
+}) => {
+  await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
+  await page.clock.pauseAt(new Date("2026-01-01T00:00:01Z"));
+  await page.goto("/showcase/steps");
+  const player = page.getByRole("region", { name: "一批样品的去向" });
+  await player.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(player.locator(".amount").nth(1)).toHaveText("90 g");
+  await page.clock.runFor(2300);
+  await expect(player.locator(".amount").nth(1)).toHaveText("72 g");
+  await page.keyboard.press("Escape");
+  await expect(player.locator("tbody tr").first()).toHaveAttribute(
+    "aria-current",
+    "step",
+  );
+  await page.keyboard.press("Space");
+  await page.clock.runFor(1500);
+  await expect(player.locator("tbody tr").nth(1)).toHaveAttribute(
+    "aria-current",
+    "step",
+  );
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await player.getByRole("button", { name: "步骤 3", exact: true }).click();
+  await expect(player.locator(".transfer-dot, .loss-dot, .pulse")).toHaveCount(
+    0,
+  );
+  await expect(player.locator(".amount").nth(2)).toHaveText("43.2 g");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(390);
+});
+
+test("the curve responds to its controls", async ({ page }) => {
   await page.goto("/showcase/curves");
   await page.getByRole("slider", { name: /斜率/ }).fill("4");
   await expect(page.getByText("斜率 k：4")).toBeVisible();
