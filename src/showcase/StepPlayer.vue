@@ -10,6 +10,51 @@ const playing = ref(false);
 const progress = ref(1);
 const speed = ref(1);
 const reduced = ref(false);
+const player = ref<HTMLElement | null>(null);
+const containerWidth = ref(680);
+let observer: ResizeObserver;
+const vertical = computed(() => containerWidth.value < 600);
+const diagramWidth = computed(() =>
+  vertical.value ? containerWidth.value - 24 : 720,
+);
+const nodeHalfWidth = computed(() =>
+  vertical.value ? Math.min(70, diagramWidth.value * 0.21) : 60,
+);
+const nodes = computed(() =>
+  props.data.nodes.map((node, i) => ({
+    ...node,
+    x: vertical.value ? diagramWidth.value * 0.27 : node.x,
+    y: vertical.value ? 68 + i * 160 : 95,
+  })),
+);
+const edges = computed(() =>
+  props.data.edges.map((edge) => {
+    const from = nodes.value[edge.from];
+    const to = nodes.value[edge.to];
+    return {
+      ...edge,
+      x1: vertical.value ? from.x : from.x + nodeHalfWidth.value,
+      y1: vertical.value ? from.y + 33 : from.y,
+      x2: vertical.value ? to.x : to.x - nodeHalfWidth.value - 2,
+      y2: vertical.value ? to.y - 35 : to.y,
+      labelX: vertical.value ? from.x + 14 : (from.x + to.x) / 2,
+      labelY: vertical.value ? (from.y + to.y) / 2 + 5 : from.y - 12,
+    };
+  }),
+);
+const branches = computed(() =>
+  props.data.lossNames.map((_, i) => {
+    const node = nodes.value[i];
+    return {
+      x1: vertical.value ? node.x + nodeHalfWidth.value : node.x,
+      y1: vertical.value ? node.y : node.y + 33,
+      x2: vertical.value ? diagramWidth.value * 0.77 - 50 : node.x,
+      y2: vertical.value ? node.y : node.y + 91,
+      labelX: vertical.value ? diagramWidth.value * 0.77 : node.x,
+      labelY: vertical.value ? node.y - 5 : node.y + 111,
+    };
+  }),
+);
 const speeds = [0.5, 1, 1.5, 2];
 const duration = 2200;
 const dwellDuration = 1400;
@@ -54,10 +99,21 @@ const motion = computed(() => {
   const t = raw < 0.5 ? 2 * raw * raw : 1 - Math.pow(-2 * raw + 2, 2) / 2;
   return { lossPhase, t };
 });
-const transferX = computed(() => {
-  const start = props.data.nodes[step.value.from].x + 70;
-  const end = props.data.nodes[step.value.to].x - 78;
-  return start + (end - start) * motion.value.t;
+const transferPoint = computed(() => {
+  const edge = edges.value.find(
+    (edge) => edge.from === step.value.from && edge.to === step.value.to,
+  )!;
+  return {
+    x: edge.x1 + (edge.x2 - edge.x1) * motion.value.t,
+    y: edge.y1 + (edge.y2 - edge.y1) * motion.value.t,
+  };
+});
+const lossPoint = computed(() => {
+  const branch = branches.value[step.value.loss!.index];
+  return {
+    x: branch.x1 + (branch.x2 - branch.x1) * motion.value.t,
+    y: branch.y1 + (branch.y2 - branch.y1) * motion.value.t,
+  };
 });
 
 function stop() {
@@ -145,6 +201,10 @@ function motionPreference() {
   if (reduced.value) progress.value = 1;
 }
 onMounted(() => {
+  observer = new ResizeObserver(([entry]) => {
+    containerWidth.value = entry.contentRect.width;
+  });
+  observer.observe(player.value!);
   media = matchMedia("(prefers-reduced-motion: reduce)");
   motionPreference();
   media.addEventListener("change", motionPreference);
@@ -152,6 +212,7 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   stop();
+  observer.disconnect();
   media.removeEventListener("change", motionPreference);
   document.removeEventListener("visibilitychange", visibility);
 });
@@ -159,6 +220,7 @@ onBeforeUnmount(() => {
 
 <template>
   <section
+    ref="player"
     class="player"
     tabindex="0"
     :aria-label="data.title"
@@ -179,7 +241,11 @@ onBeforeUnmount(() => {
       </div>
     </div>
     <div class="stage">
-      <svg viewBox="0 0 720 250" role="img" :aria-label="data.diagramLabel">
+      <svg
+        :viewBox="`0 0 ${diagramWidth} ${vertical ? 600 : 250}`"
+        role="img"
+        :aria-label="data.diagramLabel"
+      >
         <defs>
           <marker
             :id="arrowId"
@@ -194,7 +260,7 @@ onBeforeUnmount(() => {
           </marker>
         </defs>
         <g
-          v-for="edge in data.edges"
+          v-for="edge in edges"
           :key="edge.from"
           :class="{
             active:
@@ -205,17 +271,17 @@ onBeforeUnmount(() => {
         >
           <line
             class="edge"
-            :x1="data.nodes[edge.from].x + 70"
-            y1="95"
-            :x2="data.nodes[edge.to].x - 72"
-            y2="95"
+            :x1="edge.x1"
+            :y1="edge.y1"
+            :x2="edge.x2"
+            :y2="edge.y2"
             :marker-end="`url(#${arrowId})`"
           />
           <text
             class="edge-label"
-            :x="(data.nodes[edge.from].x + data.nodes[edge.to].x) / 2"
-            y="83"
-            text-anchor="middle"
+            :x="edge.labelX"
+            :y="edge.labelY"
+            :text-anchor="vertical ? 'start' : 'middle'"
           >
             {{ edge.label }}
           </text>
@@ -230,34 +296,50 @@ onBeforeUnmount(() => {
               (moving && motion.lossPhase && step.loss?.index === i),
           }"
         >
-          <path :d="`M${data.nodes[i].x} 128 V186`" />
-          <text :x="data.nodes[i].x" y="206" text-anchor="middle">
+          <path
+            :d="`M${branches[i].x1} ${branches[i].y1} L${branches[i].x2} ${branches[i].y2}`"
+          />
+          <text
+            :x="branches[i].labelX"
+            :y="branches[i].labelY"
+            text-anchor="middle"
+          >
             − {{ formatAmount((losses[i] ?? step.loss)?.amount ?? 0) }}
             {{ data.unit }}
           </text>
-          <text :x="data.nodes[i].x" y="224" text-anchor="middle">
+          <text
+            :x="branches[i].labelX"
+            :y="branches[i].labelY + 18"
+            text-anchor="middle"
+          >
             {{ lossName }}
           </text>
         </g>
         <g
-          v-for="(node, i) in data.nodes"
+          v-for="(node, i) in nodes"
           :key="node.name"
           class="node"
           :class="{ active: i === step.from || i === step.to }"
         >
-          <rect :x="node.x - 70" y="62" width="140" height="66" rx="8" />
-          <text class="name" :x="node.x" y="91" text-anchor="middle">
+          <rect
+            :x="node.x - nodeHalfWidth"
+            :y="node.y - 33"
+            :width="nodeHalfWidth * 2"
+            height="66"
+            rx="8"
+          />
+          <text class="name" :x="node.x" :y="node.y - 4" text-anchor="middle">
             {{ node.name }}
           </text>
-          <text class="sub" :x="node.x" y="112" text-anchor="middle">
+          <text class="sub" :x="node.x" :y="node.y + 17" text-anchor="middle">
             {{ node.detail }}
           </text>
           <text
             class="amount"
             :class="{ dim: amounts[i] === 0 }"
-            :x="node.x"
-            y="50"
-            text-anchor="middle"
+            :x="vertical ? node.x - nodeHalfWidth : node.x"
+            :y="node.y - 45"
+            :text-anchor="vertical ? 'start' : 'middle'"
           >
             {{
               amounts[i] === null
@@ -270,23 +352,23 @@ onBeforeUnmount(() => {
           <circle
             v-if="motion.lossPhase && step.loss"
             class="loss-dot"
-            :cx="data.nodes[step.loss.at].x"
-            :cy="128 + 58 * motion.t"
+            :cx="lossPoint.x"
+            :cy="lossPoint.y"
             r="6"
             :opacity="1 - motion.t * 0.6"
           />
           <circle
             v-else-if="step.kind === 'transfer'"
             class="transfer-dot"
-            :cx="transferX"
-            cy="95"
+            :cx="transferPoint.x"
+            :cy="transferPoint.y"
             r="7"
           />
           <circle
             v-else
             class="pulse"
-            :cx="data.nodes[step.from].x"
-            cy="95"
+            :cx="nodes[step.from].x"
+            :cy="nodes[step.from].y"
             :r="20 + 58 * motion.t"
             :opacity="1 - motion.t"
           />
@@ -475,7 +557,7 @@ svg {
 }
 .sub,
 .edge-label {
-  font: 500 var(--text-xs) var(--font-sans);
+  font: 500 var(--text-sm) var(--font-sans);
   fill: var(--ink-muted);
 }
 .amount {
@@ -510,7 +592,7 @@ svg {
   fill: none;
 }
 .loss text {
-  font: 500 var(--text-xs) var(--font-sans);
+  font: 500 var(--text-sm) var(--font-sans);
   fill: var(--danger);
 }
 .transfer-dot {

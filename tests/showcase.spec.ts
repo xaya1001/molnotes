@@ -135,6 +135,22 @@ test("the player delays quantities until motion ends and supports keyboard and r
   await page.clock.pauseAt(new Date("2026-01-01T00:00:01Z"));
   await page.goto("/showcase/steps");
   const player = page.getByRole("region", { name: "一批样品的去向" });
+  expect(
+    await player.locator("svg").evaluate((svg) => {
+      const nodes = [...svg.querySelectorAll(".node rect")].map((node) =>
+        node.getBoundingClientRect(),
+      );
+      return [...svg.querySelectorAll(".edge-label")].every((label, i) => {
+        const box = label.getBoundingClientRect();
+        const line = svg.querySelectorAll(".edge")[i].getBoundingClientRect();
+        return (
+          box.left > nodes[i].right &&
+          box.right < nodes[i + 1].left &&
+          box.bottom < line.top
+        );
+      });
+    }),
+  ).toBe(true);
   await player.focus();
   await page.keyboard.press("ArrowRight");
   await expect(player.locator(".amount").nth(1)).toHaveText("90 g");
@@ -158,6 +174,32 @@ test("the player delays quantities until motion ends and supports keyboard and r
   );
   await expect(player.locator(".amount").nth(2)).toHaveText("43.2 g");
   await page.setViewportSize({ width: 390, height: 844 });
+  await expect
+    .poll(() =>
+      player.locator("svg text").evaluateAll((elements) =>
+        Math.min(
+          ...elements.map((element) => {
+            const text = element as SVGTextElement;
+            const scale = text.getScreenCTM()!;
+            return (
+              parseFloat(getComputedStyle(text).fontSize) *
+              Math.hypot(scale.a, scale.b)
+            );
+          }),
+        ),
+      ),
+    )
+    .toBeGreaterThanOrEqual(11);
+  const nodes = await player.locator(".node rect").evaluateAll((elements) =>
+    elements.map((element) => {
+      const box = element.getBoundingClientRect();
+      return { x: box.x, y: box.y };
+    }),
+  );
+  expect(nodes.every((node) => Math.abs(node.x - nodes[0].x) < 1)).toBe(true);
+  expect(nodes.every((node, i) => i === 0 || node.y > nodes[i - 1].y)).toBe(
+    true,
+  );
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(390);

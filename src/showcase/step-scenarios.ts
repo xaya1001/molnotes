@@ -89,7 +89,7 @@ function scenario(
         loss: null,
         remaining: extracted,
         state: `总收率 = ${a.toFixed(2)} × ${b.toFixed(2)} × ${c.toFixed(2)} = ${formatAmount(a * b * c * 100)}%`,
-        text: `结晶并收集 ${formatAmount(extracted)} g 样品。总收率为三个保留比例之积；本批次的数值为虚构样本。`,
+        text: `结晶并收集 ${formatAmount(extracted)} g 样品。总收率为三个保留比例之积。`,
         destination: "萃取 → 收集",
         amounts: [0, 0, 0, extracted],
       },
@@ -110,8 +110,8 @@ export const sampleProcess: PlayerData = {
   ],
   edges: [
     { from: 0, to: 1, label: "溶解" },
-    { from: 1, to: 2, label: "萃取分液" },
-    { from: 2, to: 3, label: "结晶收集" },
+    { from: 1, to: 2, label: "萃取" },
+    { from: 2, to: 3, label: "收集" },
   ],
   lossNames: ["未溶残渣", "留在水相", "母液损失"],
   scenarios: [
