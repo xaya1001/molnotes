@@ -260,7 +260,7 @@ import { records } from "../records";
 | ------------------ | ----------------------------------------------------------------------------------------------------------- | ---------------------------- |
 | 创建独立专题       | `npm run site:new -- <slug> "<title>" "<description>" <group>`                                              | 内容工作目录中的专题单元     |
 | 图片查看           | `UiFigure`                                                                                                  | 带图注的可放大本地素材       |
-| 分步图示           | `src/showcase/StepScene.vue` 的示例与 Vue SVG、Motion                                                       | 可控制步骤的 SVG 图示        |
+| 分步图示           | `src/showcase/StepPlayer.vue` 的数据驱动 SVG 示例                                                           | 支持暂停、变速与跳步的播放器 |
 | 定量曲线           | `LineChart`                                                                                                 | 页面公式生成的数据与可读图表 |
 | 数学与化学式       | `Formula`，按需启用 mhchem                                                                                  | 公式及文字解释               |
 | 二维分子结构       | [二维结构 recipe](recipes/molecule-2d.md) 与 `toolbox/molecule-2d/render.py`                                | 来源可核对的 SVG             |
