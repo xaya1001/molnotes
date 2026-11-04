@@ -37,6 +37,7 @@ import QuizQuestion from "./QuizQuestion.vue";
 import DiagnosticSummary from "./DiagnosticSummary.vue";
 import PathPicker from "./PathPicker.vue";
 import TabsBlock from "./TabsBlock.vue";
+import ProcessViewer from "./ProcessViewer.vue";
 import SceneViewer from "./SceneViewer.vue";
 import SpectrumBlock from "./SpectrumBlock.vue";
 import TopicRefs from "./TopicRefs.vue";
@@ -293,6 +294,10 @@ const toneClass = (tone?: string) =>
       v-else-if="block.type === 'tabs'"
       :block="block"
       :chapter="chapter"
+    />
+    <ProcessViewer
+      v-else-if="block.type === 'process'"
+      :data="content.dataOf(block.process)"
     />
     <SceneViewer
       v-else-if="block.type === 'scene'"

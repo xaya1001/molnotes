@@ -1,3 +1,4 @@
+import type { ProcessData } from "../../../shared/process.ts";
 // The block catalogue as the runtime reads it. shared/topic-blocks.ts is
 // the definition and checks every topic's content.json against it; these
 // types mirror it so the renderer and the pages read checked data.
@@ -170,9 +171,13 @@ export interface DiagnosticSummaryBlock extends BlockBase {
   title?: string;
 }
 export interface SceneFrame {
-  title: string;
+  title?: string;
   text: string;
   image?: { src: string; alt: string };
+}
+export interface ProcessBlock extends BlockBase {
+  type: "process";
+  process: DataRef<ProcessData>;
 }
 export interface SceneBlock extends BlockBase {
   type: "scene";
@@ -276,6 +281,7 @@ export type TopicBlock =
   | DiagnosticSummaryBlock
   | PathPickerBlock
   | TabsBlock
+  | ProcessBlock
   | SceneBlock
   | ProblemBlock
   | PredictionBlock

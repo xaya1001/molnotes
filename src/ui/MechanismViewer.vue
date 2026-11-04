@@ -1,32 +1,26 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed } from "vue";
+import StepPlayer from "./StepPlayer.vue";
 import MoleculeView from "./MoleculeView.vue";
 import type { MechanismFrame } from "./chemistry/types.ts";
-defineProps<{ frames: readonly MechanismFrame[] }>();
-const index = ref(0);
+const props = defineProps<{ frames: readonly MechanismFrame[] }>();
+const steps = computed(() =>
+  props.frames.map((frame) => ({
+    title: frame.title,
+    text: frame.explanation,
+  })),
+);
 </script>
 <template>
-  <section aria-label="分步机理">
-    <MoleculeView :key="index" v-bind="frames[index]" />
-    <p aria-live="polite">{{ frames[index].explanation }}</p>
-    <div class="controls">
-      <button class="button" :disabled="index === 0" @click="index--">
-        上一帧</button
-      ><span>{{ index + 1 }} / {{ frames.length }}</span
-      ><button
-        class="button"
-        :disabled="index === frames.length - 1"
-        @click="index++"
-      >
-        下一帧
-      </button>
-    </div>
-  </section>
+  <StepPlayer label="分步机理" :steps="steps">
+    <template #default="{ index }"
+      ><MoleculeView class="stage" :key="index" v-bind="frames[index]"
+    /></template>
+  </StepPlayer>
 </template>
+
 <style scoped>
-.controls {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
+.stage {
+  padding: var(--space-3) var(--space-5);
 }
 </style>
