@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { schemeRoutes, scopeExample } from "../data/reactions.ts";
 import { ref } from "vue";
 import {
   PageHeading,
@@ -7,11 +8,11 @@ import {
   MolecularProperties,
   SubstituentExplorer,
   SynthesisRoute,
+  SubstrateScope,
   MechanismViewer,
   PredictionExercise,
   SourceExcerpt,
   ReadingGuide,
-  type SynthesisRouteData,
   type MechanismFrame,
 } from "@ui";
 const selected = ref<number[]>([]),
@@ -26,64 +27,6 @@ const excerpt = {
   text: "CCO",
   guide: "两个碳连接一个氧。此处只演示数据、结构与导读如何一起呈现。",
 };
-const routes: SynthesisRouteData[] = [
-  {
-    id: "oxidation",
-    title: "氧化示意",
-    steps: [
-      {
-        title: "乙醇到乙醛",
-        reactants: [{ name: "乙醇", smiles: "CCO" }],
-        products: [{ name: "乙醛", smiles: "CC=O" }],
-        reagents: "氧化剂（示意）",
-        conditions: "教学结构对照，无实验条件",
-        explanation: "比较羟基与羰基；不是操作规程。",
-      },
-      {
-        title: "乙醛到乙酸",
-        reactants: [{ name: "乙醛", smiles: "CC=O" }],
-        products: [{ name: "乙酸", smiles: "CC(=O)O" }],
-        reagents: "氧化剂（示意）",
-        conditions: "教学结构对照，无实验条件",
-        explanation: "逐步浏览时同时更换反应物和产物。",
-      },
-    ],
-  },
-  {
-    id: "acetylation",
-    title: "乙酰化示意",
-    steps: [
-      {
-        title: "水杨酸到阿司匹林",
-        reactants: [
-          { name: "水杨酸", smiles: "OC(=O)c1ccccc1O" },
-          { name: "乙酸酐", smiles: "CC(=O)OC(C)=O" },
-        ],
-        products: [
-          { name: "阿司匹林", smiles: "CC(=O)Oc1ccccc1C(=O)O" },
-          { name: "乙酸", smiles: "CC(=O)O" },
-        ],
-        reagents: "乙酸酐（示意）",
-        conditions: "教学结构对照，无实验条件",
-        explanation: "同一步里大小不同的分子按同一键长绘制，小分子不被放大。",
-      },
-    ],
-  },
-  {
-    id: "reduction",
-    title: "还原示意",
-    steps: [
-      {
-        title: "乙醛到乙醇",
-        reactants: [{ name: "乙醛", smiles: "CC=O" }],
-        products: [{ name: "乙醇", smiles: "CCO" }],
-        reagents: "还原剂（示意）",
-        conditions: "教学结构对照，无实验条件",
-        explanation: "另一条路线仍由相同的反应结构契约呈现。",
-      },
-    ],
-  },
-];
 const frames: MechanismFrame[] = [
   {
     name: "羰基的电子对位移",
@@ -221,7 +164,9 @@ const frames: MechanismFrame[] = [
         ]"
       />
       <h2>反应与路线</h2>
-      <SynthesisRoute :routes="routes" />
+      <SynthesisRoute :routes="schemeRoutes" />
+      <h2>底物范围</h2>
+      <SubstrateScope :scope="scopeExample" />
       <h2>电子流的关键帧</h2>
       <MechanismViewer :frames="frames" />
       <h2>原页与图片</h2>

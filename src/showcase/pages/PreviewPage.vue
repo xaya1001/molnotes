@@ -1,4 +1,12 @@
 <script setup lang="ts">
+import {
+  validateSynthesisRoutes,
+  validateSubstrateScope,
+  type SynthesisRoute as RouteData,
+  type SubstrateScope as ScopeData,
+} from "../../../shared/reaction-scheme.ts";
+import SynthesisRoute from "../../ui/SynthesisRoute.vue";
+import SubstrateScope from "../../ui/SubstrateScope.vue";
 import type { NoteMolecules } from "../../../shared/notes-index.ts";
 import { nextTick, onMounted, ref } from "vue";
 import { validateProcess, type ProcessData } from "../../../shared/process.ts";
@@ -14,11 +22,19 @@ import { defineTimeline, type Timeline } from "../../ui/diagrams/model.ts";
 // warnings back; the page is not linked from the showcase.
 interface Injected {
   where: string;
-  kind: "timeline" | "flow" | "process" | "molecule";
+  kind:
+    "timeline" | "flow" | "process" | "molecule" | "route" | "substrate-scope";
   value: unknown;
   caption: string;
 }
 type Shown =
+  | { where: string; kind: "route"; routes: RouteData[]; caption: string }
+  | {
+      where: string;
+      kind: "substrate-scope";
+      scope: ScopeData;
+      caption: string;
+    }
   | { where: string; kind: "timeline"; timeline: Timeline; caption: string }
   | { where: string; kind: "flow"; flow: Flow; caption: string }
   | { where: string; kind: "process"; process: ProcessData; caption: string }
@@ -39,18 +55,28 @@ function processFigure(f: Injected): Shown {
   validateProcess(f.value, f.where);
   return { ...f, kind: "process", process: f.value };
 }
+function schemeFigure(f: Injected): Shown {
+  if (f.kind === "route") {
+    validateSynthesisRoutes(f.value, f.where);
+    return { ...f, kind: "route", routes: f.value };
+  }
+  validateSubstrateScope(f.value, f.where);
+  return { ...f, kind: "substrate-scope", scope: f.value };
+}
 const shown: Shown[] = (window.__previewFigures ?? []).map((f) =>
-  f.kind === "timeline"
-    ? { ...f, kind: "timeline", timeline: defineTimeline(f.value) }
-    : f.kind === "flow"
-      ? { ...f, kind: "flow", flow: defineFlow(f.value) }
-      : f.kind === "process"
-        ? processFigure(f)
-        : {
-            ...f,
-            kind: "molecule",
-            molecules: f.value as NoteMolecules["molecules"],
-          },
+  f.kind === "route" || f.kind === "substrate-scope"
+    ? schemeFigure(f)
+    : f.kind === "timeline"
+      ? { ...f, kind: "timeline", timeline: defineTimeline(f.value) }
+      : f.kind === "flow"
+        ? { ...f, kind: "flow", flow: defineFlow(f.value) }
+        : f.kind === "process"
+          ? processFigure(f)
+          : {
+              ...f,
+              kind: "molecule",
+              molecules: f.value as NoteMolecules["molecules"],
+            },
 );
 const figures = ref<HTMLElement[]>([]);
 
@@ -70,13 +96,20 @@ onMounted(async () => {
   for (let i = 0; i < 3; i++) await settle();
   window.__previewResult = shown.map((figure, i) => {
     const root = figures.value[i]?.querySelector<HTMLElement>(
-      "figure.timeline, figure.flow, figure.molecule, .player",
+      ".reaction-scheme, .substrate-scope, figure.timeline, figure.flow, figure.molecule, .player",
     );
     return {
       where: figure.where,
       warnings: root
         ? [
             ...figureWarnings(root),
+            ...[
+              ...figures.value[i].querySelectorAll<HTMLElement>(
+                "[data-alignment-warning]",
+              ),
+            ].flatMap((node) =>
+              (node.dataset.alignmentWarning ?? "").split("\n").filter(Boolean),
+            ),
             ...[
               ...figures.value[i].querySelectorAll<HTMLElement>(
                 "figure.molecule",
@@ -114,6 +147,14 @@ onMounted(async () => {
         <ProcessViewer
           v-else-if="figure.kind === 'process'"
           :data="figure.process"
+        />
+        <SynthesisRoute
+          v-else-if="figure.kind === 'route'"
+          :routes="figure.routes"
+        />
+        <SubstrateScope
+          v-else-if="figure.kind === 'substrate-scope'"
+          :scope="figure.scope"
         />
         <div v-else class="preview-molecules">
           <MoleculeView

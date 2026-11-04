@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { mappedDummies } from "../../shared/reaction-chemistry.ts";
 import { computed, nextTick, ref, useId, watch } from "vue";
 import { loadChemistry, molecule } from "./chemistry/rdkit.ts";
 import {
@@ -97,6 +98,8 @@ watch(
         const folded = new Set(groups.flatMap((group) => group.atoms));
         const hiddenBonds = new Set(groups.flatMap((group) => group.bonds));
         const atomLabels: Record<number, string> = {};
+        for (const { atom, map } of mappedDummies(mol))
+          if (map) atomLabels[atom] = `R${map}`;
         for (const group of groups) {
           for (const atom of group.atoms) atomLabels[atom] = "";
           // Reserve a single attachment glyph; the full abbreviation is placed
@@ -411,7 +414,9 @@ function toggle(index: number) {
         <title>{{ arrow.electrons === 2 ? "电子对" : "单电子" }}转移</title>
       </path>
     </svg>
-    <figcaption>{{ name }}</figcaption>
+    <figcaption>
+      <slot name="caption">{{ name }}</slot>
+    </figcaption>
     <p v-if="selectable" class="selection" aria-live="polite">
       {{
         selected.length

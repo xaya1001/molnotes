@@ -16,6 +16,7 @@ import MoleculeView from "../MoleculeView.vue";
 import ReadingGuide from "../ReadingGuide.vue";
 import SourceExcerpt from "../SourceExcerpt.vue";
 import SubstituentExplorer from "../SubstituentExplorer.vue";
+import SubstrateScope from "../SubstrateScope.vue";
 import SynthesisRoute from "../SynthesisRoute.vue";
 import UiFigure from "../UiFigure.vue";
 import DataScatterExplorer from "../data/DataScatterExplorer.vue";
@@ -218,6 +219,10 @@ const toneClass = (tone?: string) =>
     <SynthesisRoute
       v-else-if="block.type === 'route'"
       :routes="content.dataOf(block.routes)"
+    />
+    <SubstrateScope
+      v-else-if="block.type === 'substrate-scope'"
+      :scope="content.dataOf(block.scope)"
     />
     <template v-else-if="block.type === 'mechanism'">
       <h3 v-if="block.title">{{ block.title }}</h3>

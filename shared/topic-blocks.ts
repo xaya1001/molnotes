@@ -1,3 +1,7 @@
+import {
+  validateSynthesisRoutes,
+  validateSubstrateScope,
+} from "./reaction-scheme.ts";
 import { validateAbbreviations } from "./molecule-abbreviations.ts";
 import { validateProcess } from "./process.ts";
 import type {
@@ -18,7 +22,6 @@ import type {
   MechanismFrame,
   MoleculeData,
   StructureAnchor,
-  SynthesisRoute,
 } from "../src/ui/chemistry/types.ts";
 import type { TableCell, TopicBlock } from "../src/ui/topic/blocks.ts";
 import type { PredictionEntry } from "../src/ui/topic/content.ts";
@@ -151,39 +154,6 @@ function mechanismFrames(
       );
     }
   });
-}
-
-function synthesisRoutes(
-  routes: unknown,
-  where: string,
-): asserts routes is SynthesisRoute[] {
-  assert(
-    isList(routes) && routes.length > 0,
-    `${where} needs at least one route`,
-  );
-  for (const route of routes) {
-    assert(isObject(route), `${where} routes must be objects`);
-    text(route.id, `${where} route id`);
-    text(route.title, `${where} route ${route.id} title`);
-    assert(
-      isList(route.steps) && route.steps.length > 0,
-      `${where} route ${route.id} needs steps`,
-    );
-    route.steps.forEach((step, index) => {
-      const at = `${where} route ${route.id} step ${index + 1}`;
-      assert(isObject(step), `${at} must be an object`);
-      text(step.title, `${at} title`);
-      text(step.reagents, `${at} reagents`);
-      text(step.conditions, `${at} conditions`);
-      text(step.explanation, `${at} explanation`);
-      optionalText(step.yield, `${at} yield`);
-      for (const side of ["reactants", "products"]) {
-        const items = step[side];
-        assert(isList(items) && items.length > 0, `${at} needs ${side}`);
-        for (const item of items) molecule(item, `${at} ${side}`);
-      }
-    });
-  }
 }
 
 /** A cell is text, or `{ text, href }` for a linked value such as a PubChem CID. */
@@ -644,6 +614,7 @@ const blockFields: Record<string, string[]> = {
   molecules: "items caption".split(" "),
   substituents: "site variants".split(" "),
   route: "routes".split(" "),
+  "substrate-scope": ["scope"],
   mechanism: "title frames".split(" "),
   table: "caption columns rows note rowHeader".split(" "),
   spectrum: "molecule peaks caption assignAfter".split(" "),
@@ -837,7 +808,10 @@ export function validateBlocks(
         });
         break;
       case "route":
-        field("routes", synthesisRoutes);
+        field("routes", validateSynthesisRoutes);
+        break;
+      case "substrate-scope":
+        field("scope", validateSubstrateScope);
         break;
       case "mechanism":
         optionalText(block.title, `${here} title`);

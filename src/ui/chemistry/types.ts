@@ -16,20 +16,10 @@ export interface MoleculeData {
   atoms?: number;
   bonds?: number;
 }
-export interface ReactionStep {
-  title: string;
-  reactants: MoleculeData[];
-  products: MoleculeData[];
-  reagents: string;
-  conditions: string;
-  yield?: string;
-  explanation: string;
-}
-export interface SynthesisRoute {
-  id: string;
-  title: string;
-  steps: ReactionStep[];
-}
+export type {
+  ReactionStep,
+  SynthesisRoute,
+} from "../../../shared/reaction-scheme.ts";
 export interface MechanismFrame extends MoleculeData {
   title?: string;
   explanation: string;

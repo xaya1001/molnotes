@@ -1,20 +1,10 @@
+import type { MainModule, Mol } from "@rdkit/rdkit";
 // The loader module (and both RDKit assets) is fetched only by a mounted consumer.
-export interface MoleculeHandle {
-  get_substruct_match(query: MoleculeHandle): string;
-  get_substruct_matches(query: MoleculeHandle): string;
-  get_num_atoms(): number;
-  get_num_bonds(): number;
-  get_svg_with_highlights(options: string): string;
-  get_descriptors(): string;
-  get_json(): string;
-  set_new_coords(): boolean;
-  normalize_depiction(canonicalize: number, scaleFactor: number): number;
-  delete(): void;
-}
-export interface ChemistryToolkit {
-  get_mol(smiles: string): MoleculeHandle | null;
-  get_qmol(smarts: string): MoleculeHandle | null;
-}
+export type MoleculeHandle = Mol;
+export type ChemistryToolkit = Pick<
+  MainModule,
+  "get_mol" | "get_qmol" | "MolList" | "get_mcs_as_smarts"
+>;
 export async function loadChemistry(): Promise<ChemistryToolkit> {
   return (await import("./runtime.ts")).loadToolkit();
 }

@@ -60,6 +60,11 @@
   --sidebar-width: 17.5rem;
   --topbar-height: 3.25rem;
 
+  --scheme-arrow-min: 6rem;
+  --scheme-arrow-max: 14rem;
+  --scheme-caption-height: 1.8rem;
+  --scheme-line: 1.2;
+
   --focus-ring: 2px solid var(--accent);
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --duration: 160ms;
