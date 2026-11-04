@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import type { ProcessData } from "../shared/process.ts";
 import { expect, test } from "./helpers/test.ts";
 
 async function clock(page: import("@playwright/test").Page) {
@@ -189,3 +191,140 @@ test("hidden pages pause motion and the speed control cycles without resetting p
   expect(await speed.textContent()).toBe(initial);
   await expect(dot).toHaveAttribute("cx", x!);
 });
+
+for (const [width, height] of [
+  [1366, 900],
+  [390, 844],
+])
+  test(`process reserves branch space only when needed at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto("/sites/minimal/steps");
+    const withLoss = page.locator(".player").first();
+    const withoutLoss = page.locator(".player").last();
+    for (const [name, player] of [
+      ["with-loss", withLoss],
+      ["without-loss", withoutLoss],
+    ] as const) {
+      await player.scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: test.info().outputPath(`${name}-${width}.png`),
+      });
+      await player.screenshot({
+        path: test.info().outputPath(`${name}-${width}-full.png`),
+      });
+    }
+    const geometry = (player: typeof withLoss) =>
+      player.locator(".stage svg").evaluate((svg) => {
+        const box = svg.getBoundingClientRect();
+        const nodes = [...svg.querySelectorAll(".node rect")].map((node) =>
+          node.getBoundingClientRect(),
+        );
+        return {
+          height: box.height,
+          bottomGap: box.bottom - Math.max(...nodes.map((node) => node.bottom)),
+          centerOffset:
+            nodes[0].left + nodes[0].width / 2 - (box.left + box.width / 2),
+        };
+      });
+    const compact = await geometry(withoutLoss);
+    const reserved = await geometry(withLoss);
+    await expect(withoutLoss.locator(".loss")).toHaveCount(0);
+    if (width === 1366) {
+      expect(compact.bottomGap).toBeLessThan(60);
+      expect(reserved.bottomGap).toBeGreaterThan(100);
+    } else {
+      expect(Math.abs(compact.centerOffset)).toBeLessThan(1);
+      expect(reserved.centerOffset).toBeLessThan(-40);
+    }
+    for (const player of [withLoss, withoutLoss]) {
+      const original = await geometry(player);
+      for (const scenario of await player.locator(".seg button").all()) {
+        await scenario.click();
+        for (const row of await player.locator("tbody tr").all()) {
+          await row.click();
+          expect((await geometry(player)).height).toBeCloseTo(
+            original.height,
+            1,
+          );
+        }
+      }
+    }
+  });
+
+for (const [width, height] of [
+  [1366, 900],
+  [390, 844],
+])
+  test(`content preview renders processes and reports layout warnings at ${width}px`, async ({
+    page,
+  }) => {
+    const content = JSON.parse(
+      readFileSync("tests/fixtures/content/sites/minimal/content.json", "utf8"),
+    );
+    const processes: ProcessData[] = content.chapters[1].blocks
+      .filter((block: { type: string }) => block.type === "process")
+      .map((block: { process: ProcessData }) => block.process);
+    const mixed = structuredClone(processes[1]);
+    mixed.scenarios[1].steps[1] = {
+      title: "离开",
+      text: "样品离开处理站。",
+      state: "已离开",
+      kind: "exit",
+      from: 1,
+      to: 1,
+      loss: { node: 1, label: "流出" },
+    };
+    processes.push(mixed);
+    const crowded = structuredClone(processes[1]);
+    crowded.nodes.forEach((node) => {
+      node.name = "Sample ".repeat(20);
+    });
+    await page.setViewportSize({ width, height });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.addInitScript(
+      (values) => {
+        window.addEventListener("DOMContentLoaded", () => {
+          const style = document.createElement("style");
+          style.textContent = '[data-preview="3"] .sub { font-size: 10px; }';
+          document.head.append(style);
+        });
+        window.__previewFigures = values.map((value, i) => ({
+          where: `process ${i}`,
+          kind: "process",
+          value,
+          caption: "",
+        }));
+      },
+      [...processes, crowded],
+    );
+    await page.goto("/showcase/preview");
+    await page.waitForFunction(() => window.__previewResult);
+    await expect(page.locator("[data-preview] .stage svg")).toHaveCount(4);
+    const mixedSvg = page.locator('[data-preview="2"] .stage svg');
+    const bounds = await mixedSvg.boundingBox();
+    await page.locator('[data-preview="2"] .seg button').last().click();
+    await page.locator('[data-preview="2"] tbody tr').last().click();
+    expect((await mixedSvg.boundingBox())!.height).toBeCloseTo(
+      bounds!.height,
+      1,
+    );
+    const result = (await page.evaluate(() => window.__previewResult))!;
+    expect(
+      result[3].warnings.some((warning) => warning.includes("小于 11px")),
+    ).toBe(true);
+    expect(result.slice(0, 3)).toEqual(
+      processes.map((_, i) => ({ where: `process ${i}`, warnings: [] })),
+    );
+    expect(
+      result[3].warnings.some((warning) =>
+        warning.includes("超出图的左右边界"),
+      ),
+    ).toBe(true);
+    if (width === 1366)
+      expect(
+        result[3].warnings.some((warning) => warning.includes("重叠")),
+      ).toBe(true);
+  });
