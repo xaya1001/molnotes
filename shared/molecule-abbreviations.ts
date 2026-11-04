@@ -46,6 +46,8 @@ export function validateAbbreviations(
 
 export interface AbbreviatedGroup {
   name: MoleculeAbbreviation;
+  attachment: number;
+  bond: number;
   /** All original atom indices, including the atom replaced by the label. */
   atoms: number[];
   /** Original bond indices internal to the group. */
@@ -85,7 +87,13 @@ export function abbreviatedGroups(
         const bond = edges[external[0]].atoms;
         if (!bond.includes(match.atoms[0]) || !bond.includes(atoms[0]))
           continue;
-        candidates.push({ name, atoms, bonds: internal });
+        candidates.push({
+          name,
+          attachment: match.atoms[0],
+          bond: external[0],
+          atoms,
+          bonds: internal,
+        });
       }
     } finally {
       query.delete();

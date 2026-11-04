@@ -9,6 +9,9 @@ import {
   moleculeDrawingOptions,
   moleculeScreenScale,
   moleculeSvg,
+  labelAbbreviations,
+  padAtomLabels,
+  electronArrowLineWidth,
 } from "./chemistry/drawing.ts";
 import type { ElectronArrow, StructureAnchor } from "./chemistry/types.ts";
 const props = withDefaults(
@@ -96,9 +99,9 @@ watch(
         const atomLabels: Record<number, string> = {};
         for (const group of groups) {
           for (const atom of group.atoms) atomLabels[atom] = "";
-          atomLabels[group.atoms[0]] = group.name
-            .replace(/₂/g, "<sub>2</sub>")
-            .replace(/₃/g, "<sub>3</sub>");
+          // Reserve a single attachment glyph; the full abbreviation is placed
+          // using the visible bond direction after the folded drawing is removed.
+          atomLabels[group.atoms[0]] = "C";
         }
         const markup = moleculeSvg(mol, {
           atomLabels,
@@ -170,6 +173,7 @@ watch(
           )
             path.remove();
         }
+        labelAbbreviations(document, groups, points, graph.molecules[0].atoms);
         document.querySelectorAll<SVGTextElement>("text").forEach((node) => {
           node.style.fontFamily = "Arial, Helvetica, sans-serif";
         });
@@ -207,6 +211,7 @@ watch(
             );
           }
         });
+        padAtomLabels(document, points);
         document.querySelector("rect")?.remove();
         foldedAtoms.value = folded;
         atoms.value = points;
@@ -400,6 +405,7 @@ function toggle(index: number) {
         :key="`arrow${i}`"
         :d="arrow.path"
         class="electron-arrow"
+        :style="{ strokeWidth: electronArrowLineWidth }"
         :marker-end="`url(#${marker}-${arrow.electrons})`"
       >
         <title>{{ arrow.electrons === 2 ? "电子对" : "单电子" }}转移</title>
