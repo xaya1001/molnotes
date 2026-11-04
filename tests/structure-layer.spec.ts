@@ -119,3 +119,225 @@ test("molecule canvases crop whitespace without enlarging small molecules on des
     });
   }
 });
+
+test("journal structures keep monochrome labels, equal screen bonds and only declared abbreviations", async ({
+  page,
+}) => {
+  for (const [width, height] of [
+    [1366, 900],
+    [390, 844],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await page.goto("/showcase/molecule");
+    const full = page.getByRole("img", {
+      name: "完整样品二维结构",
+      exact: true,
+    });
+    const abbreviated = page.getByRole("group", {
+      name: "缩写样品二维结构",
+      exact: true,
+    });
+    await expect(full).toBeVisible({ timeout: 45_000 });
+    await expect(abbreviated).toBeVisible();
+    await expect(full.locator("text.atom-11")).toHaveCount(0);
+    await expect
+      .poll(async () =>
+        (
+          await abbreviated
+            .locator('.abbreviation-label[data-abbreviation="Boc"]')
+            .allTextContents()
+        ).join(""),
+      )
+      .toBe("BocN");
+    await expect(abbreviated.locator(".bond-11")).toHaveCount(0);
+    const residue = await abbreviated
+      .locator("g[aria-hidden]")
+      .evaluate((node: SVGGElement) => {
+        const full = node.getBBox();
+        const boxes = [
+          ...node.querySelectorAll<SVGGraphicsElement>(
+            "path[class],text[class]",
+          ),
+        ].map((el) => el.getBBox());
+        const left = Math.min(...boxes.map((b) => b.x)),
+          right = Math.max(...boxes.map((b) => b.x + b.width));
+        const top = Math.min(...boxes.map((b) => b.y)),
+          bottom = Math.max(...boxes.map((b) => b.y + b.height));
+        return Math.max(
+          Math.abs(full.x - left),
+          Math.abs(full.y - top),
+          Math.abs(full.width - (right - left)),
+          Math.abs(full.height - (bottom - top)),
+        );
+      });
+    expect(residue).toBeLessThan(0.5);
+    await expect(
+      abbreviated.getByRole("button", { name: "原子 11", exact: true }),
+    ).toHaveCount(0);
+    const atom = abbreviated.getByRole("button", {
+      name: "原子 8",
+      exact: true,
+    });
+    await atom.click();
+    await expect(atom).toHaveAttribute("aria-pressed", "true");
+    const measurements = await page
+      .locator(".molecule svg.structure")
+      .evaluateAll((nodes) =>
+        nodes.map((node) => {
+          const svg = node as SVGSVGElement;
+          return [
+            ...svg.querySelectorAll("g[aria-hidden] text, g[aria-hidden] path"),
+          ].map((el) => {
+            const style = getComputedStyle(el);
+            return { fill: style.fill, stroke: style.stroke };
+          });
+        }),
+      );
+    for (const elements of measurements)
+      for (const { fill, stroke } of elements) {
+        expect(["none", "rgb(0, 0, 0)"]).toContain(fill);
+        expect(["none", "rgb(0, 0, 0)"]).toContain(stroke);
+      }
+    const bondLength = async (path: ReturnType<typeof full.locator>) =>
+      path.evaluate((el: SVGPathElement) => {
+        const a = el.getPointAtLength(0),
+          b = el.getPointAtLength(el.getTotalLength());
+        const matrix = el.getScreenCTM()!;
+        const p = new DOMPoint(a.x, a.y).matrixTransform(matrix),
+          q = new DOMPoint(b.x, b.y).matrixTransform(matrix);
+        return Math.hypot(p.x - q.x, p.y - q.y);
+      });
+    const small = page
+      .getByRole("group", { name: "乙醇二维结构", exact: true })
+      .locator("path.bond-0");
+    const large = full.locator("path.bond-5");
+    expect(await bondLength(small)).toBeCloseTo(await bondLength(large), 0);
+    expect(await bondLength(large)).toBeCloseTo(28, 0);
+    const gaps = await page.locator("svg.structure").evaluateAll((nodes) =>
+      nodes.flatMap((node) => {
+        const canvas = document.createElement("canvas").getContext("2d")!;
+        const distances: number[] = [];
+        for (const path of node.querySelectorAll<SVGPathElement>(
+          "g[aria-hidden] path[class*='bond-']",
+        )) {
+          if (getComputedStyle(path).fill !== "none") continue;
+          const ids = [...path.classList].filter((c) => /^atom-\d+$/.test(c));
+          for (const [side, id] of ids.entries()) {
+            const labels = [
+              ...node.querySelectorAll<SVGTextElement>(`text.${id}`),
+            ];
+            if (!labels.length) continue;
+            const boxes = labels.map((text) => {
+              const style = getComputedStyle(text);
+              canvas.font = `${style.fontSize} ${style.fontFamily}`;
+              const m = canvas.measureText(text.textContent ?? "");
+              const x = Number(text.getAttribute("x")),
+                y = Number(text.getAttribute("y"));
+              return {
+                left: x - m.actualBoundingBoxLeft,
+                right: x + m.actualBoundingBoxRight,
+                top: y - m.actualBoundingBoxAscent,
+                bottom: y + m.actualBoundingBoxDescent,
+              };
+            });
+            const p = path.getPointAtLength(
+              side === 0 ? 0 : path.getTotalLength(),
+            );
+            const rect = {
+              left: Math.min(...boxes.map((b) => b.left)),
+              right: Math.max(...boxes.map((b) => b.right)),
+              top: Math.min(...boxes.map((b) => b.top)),
+              bottom: Math.max(...boxes.map((b) => b.bottom)),
+            };
+            const distance = Math.hypot(
+              Math.max(rect.left - p.x, 0, p.x - rect.right),
+              Math.max(rect.top - p.y, 0, p.y - rect.bottom),
+            );
+            distances.push(distance);
+          }
+        }
+        return distances;
+      }),
+    );
+    expect(Math.min(...gaps)).toBeGreaterThan(1.2);
+    const arrow = page.locator(".electron-arrow").first();
+    const arrowSize = await arrow.evaluate((el: SVGPathElement) => {
+      const scale =
+        el.ownerSVGElement!.getBoundingClientRect().width /
+        el.ownerSVGElement!.viewBox.baseVal.width;
+      const stroke = parseFloat(getComputedStyle(el).strokeWidth);
+      const marker =
+        el.ownerSVGElement!.querySelector<SVGMarkerElement>(
+          "marker[id$='-2']",
+        )!;
+      return {
+        stroke: stroke * scale,
+        head: marker.markerWidth.baseVal.value * stroke * scale,
+      };
+    });
+    expect(arrowSize.stroke).toBeCloseTo((2 * 28) / 42, 1);
+    expect(arrowSize.head).toBeCloseTo((14 * 28) / 42, 1);
+
+    const oversized = page.getByRole("img", {
+      name: "长链样品二维结构",
+      exact: true,
+    });
+    const fit = await oversized.evaluate((el: SVGSVGElement) => ({
+      natural: parseFloat(el.style.width),
+      actual: el.getBoundingClientRect().width,
+      parent: el.parentElement!.getBoundingClientRect().width,
+    }));
+    expect(fit.actual).toBeLessThan(fit.natural);
+    expect(fit.actual).toBeLessThanOrEqual(fit.parent);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  }
+});
+
+test("published notes keep authored coordinates at the shared scale and render their declared groups", async ({
+  page,
+}) => {
+  await page.goto("/notes/reader-test/second");
+  const a = page.getByRole("img", { name: "样品 A二维结构", exact: true });
+  const b = page.getByRole("img", { name: "样品 B二维结构", exact: true });
+  const short = page.getByRole("img", {
+    name: "样品 B 缩写二维结构",
+    exact: true,
+  });
+  await expect(a).toBeVisible({ timeout: 45_000 });
+  await expect
+    .poll(async () =>
+      (
+        await short
+          .locator('.abbreviation-label[data-abbreviation="Boc"]')
+          .allTextContents()
+      ).join(""),
+    )
+    .toBe("BocN");
+  await expect
+    .poll(async () =>
+      (
+        await short
+          .locator('.abbreviation-label[data-abbreviation="CO₂Et"]')
+          .allTextContents()
+      ).join(""),
+    )
+    .toBe("CO₂Et");
+  const lengths = await Promise.all(
+    [a.locator("path.bond-0"), b.locator("path.bond-5")].map((path) =>
+      path.evaluate((el: SVGPathElement) => {
+        const start = el.getPointAtLength(0),
+          end = el.getPointAtLength(el.getTotalLength());
+        const matrix = el.getScreenCTM()!;
+        const a = new DOMPoint(start.x, start.y).matrixTransform(matrix),
+          b = new DOMPoint(end.x, end.y).matrixTransform(matrix);
+        return Math.hypot(a.x - b.x, a.y - b.y);
+      }),
+    ),
+  );
+  expect(lengths[0]).toBeCloseTo(lengths[1], 0);
+  expect(lengths[0]).toBeCloseTo(28, 0);
+});

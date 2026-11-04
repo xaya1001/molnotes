@@ -4,6 +4,11 @@ import type { Env } from "markdown-it";
 import markdownItCjkFriendly from "markdown-it-cjk-friendly";
 import { parseDocument } from "yaml";
 import katex from "katex";
+import {
+  abbreviatedGroups,
+  validateAbbreviations,
+  type MoleculeAbbreviation,
+} from "./molecule-abbreviations.ts";
 import { moleculeToolkit } from "./molecule-toolkit.ts";
 import { defineFlow, flowText, type Flow } from "../src/ui/diagrams/flow.ts";
 import {
@@ -21,7 +26,11 @@ export interface NoteSection {
 }
 export interface NoteMolecules {
   id: string;
-  molecules: { smiles: string; caption: string }[];
+  molecules: {
+    smiles: string;
+    caption: string;
+    abbreviations?: MoleculeAbbreviation[];
+  }[];
 }
 export type NoteDiagram =
   | { id: string; kind: "timeline"; timeline: Timeline; caption: string }
@@ -328,7 +337,7 @@ export async function compileNotes({
       return originalFence!(tokens, i, options, env, self);
     const molecules: NoteMolecules["molecules"] = [];
     for (const [n, line] of token.content.trim().split("\n").entries()) {
-      const match = /^(smiles|caption):\s*(.+)$/.exec(line);
+      const match = /^(smiles|caption|abbreviations):\s*(.+)$/.exec(line);
       if (!match)
         fail(env.file, env.line + n + 1, "Expected smiles: / caption: pair");
       if (match[1] === "smiles") {
@@ -347,6 +356,24 @@ export async function compileNotes({
           }
         }
         molecules.push({ smiles: match[2], caption: "" });
+      } else if (match[1] === "abbreviations") {
+        const current = molecules.at(-1);
+        if (!current || current.caption || current.abbreviations)
+          fail(
+            env.file,
+            env.line + n + 1,
+            "abbreviations must follow smiles, before caption",
+          );
+        const names = match[2].split(",").map((name) => name.trim());
+        const where = `${env.file}:${env.line + n + 1}`;
+        validateAbbreviations(names, where);
+        const mol = toolkit!.get_mol(current.smiles)!;
+        try {
+          abbreviatedGroups(toolkit!, mol, names, where);
+        } finally {
+          mol.delete();
+        }
+        current.abbreviations = names;
       } else {
         if (!molecules.length || molecules[molecules.length - 1].caption)
           fail(env.file, env.line + n + 1, "caption must follow smiles");

@@ -47,6 +47,7 @@ const canHighlight = computed(() =>
           :key="side.model.value"
           :name="byName(side.model.value, 0).name"
           :smiles="byName(side.model.value, 0).smiles"
+          :abbreviations="byName(side.model.value, 0).abbreviations"
           :highlight-atoms="
             highlight ? (byName(side.model.value, 0).highlightAtoms ?? []) : []
           "

@@ -16,6 +16,7 @@ import {
 } from "@ui";
 const selected = ref<number[]>([]),
   cut = ref<number[]>([]),
+  abbreviatedSelection = ref<number[]>([]),
   sar = ref("");
 const sources = [{ id: "demo", title: "工具箱中性演示数据" }];
 const excerpt = {
@@ -137,6 +138,19 @@ const frames: MechanismFrame[] = [
       <MolecularProperties smiles="CCO" />
       <h2>立体标记</h2>
       <MoleculeView name="L-乳酸" smiles="C[C@H](O)C(=O)O" />
+      <h2>基团缩写</h2>
+      <MoleculeView name="完整样品" smiles="CCOC(=O)C1CCN(CC1)C(=O)OC(C)(C)C" />
+      <MoleculeView
+        name="缩写样品"
+        smiles="CCOC(=O)C1CCN(CC1)C(=O)OC(C)(C)C"
+        :abbreviations="['Boc', 'CO₂Et']"
+        selectable="atoms"
+        v-model:selected="abbreviatedSelection"
+      />
+      <MoleculeView
+        name="长链样品"
+        smiles="CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+      />
       <h2>选择断键</h2>
       <PredictionExercise
         prompt="选择乙醇的 C–O 键"

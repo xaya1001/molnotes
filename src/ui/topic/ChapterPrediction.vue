@@ -333,6 +333,7 @@ const hints: Record<string, string> = {
       v-if="prediction.kind === 'atoms' || prediction.kind === 'bonds'"
       :name="prediction.molecule.name"
       :smiles="prediction.molecule.smiles"
+      :abbreviations="prediction.molecule.abbreviations"
       :selected="picked"
       :selected-kind="prediction.kind"
       :highlight-atoms="prediction.kind === 'atoms' ? prediction.answer : []"
@@ -347,6 +348,7 @@ const hints: Record<string, string> = {
         <MoleculeView
           :name="molecule.name"
           :smiles="molecule.smiles"
+          :abbreviations="molecule.abbreviations"
           :selected="pickedSets[i] ?? []"
           :highlight-atoms="molecule.answer"
           :labels="prediction.labels"
@@ -362,6 +364,7 @@ const hints: Record<string, string> = {
       v-else-if="prediction.kind === 'arrows'"
       :name="prediction.molecule.name"
       :smiles="prediction.molecule.smiles"
+      :abbreviations="prediction.molecule.abbreviations"
       :selected="pickedArrow ? [pickedArrow.from, pickedArrow.to] : []"
       :arrows="[
         {
@@ -390,6 +393,7 @@ const hints: Record<string, string> = {
       <MoleculeView
         :name="prediction.molecule.name"
         :smiles="prediction.molecule.smiles"
+        :abbreviations="prediction.molecule.abbreviations"
         :selected="pickedAtoms"
         :highlight-atoms="prediction.groups.flat()"
         :labels="prediction.labels"
@@ -439,6 +443,7 @@ const hints: Record<string, string> = {
           v-if="prediction.kind === 'atoms' || prediction.kind === 'bonds'"
           :name="prediction.molecule.name"
           :smiles="prediction.molecule.smiles"
+          :abbreviations="prediction.molecule.abbreviations"
           :selected="selected"
           :selectable="prediction.kind"
           :disabled="submitted"
@@ -451,6 +456,7 @@ const hints: Record<string, string> = {
             v-model:selected="sets[i]"
             :name="molecule.name"
             :smiles="molecule.smiles"
+            :abbreviations="molecule.abbreviations"
             selectable="atoms"
             :disabled="submitted"
           />
@@ -459,6 +465,7 @@ const hints: Record<string, string> = {
           v-else-if="prediction.kind === 'arrows'"
           :name="prediction.molecule.name"
           :smiles="prediction.molecule.smiles"
+          :abbreviations="prediction.molecule.abbreviations"
           :selected="selected"
           selectable="atoms"
           :disabled="submitted"
@@ -470,6 +477,7 @@ const hints: Record<string, string> = {
             :key="molecule.name"
             :name="molecule.name"
             :smiles="molecule.smiles"
+            :abbreviations="molecule.abbreviations"
           />
         </template>
         <ImagePoints
@@ -485,6 +493,7 @@ const hints: Record<string, string> = {
           v-model:selected="selected"
           :name="prediction.molecule.name"
           :smiles="prediction.molecule.smiles"
+          :abbreviations="prediction.molecule.abbreviations"
           selectable="atoms"
           :disabled="submitted"
         />

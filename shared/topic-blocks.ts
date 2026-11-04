@@ -1,3 +1,4 @@
+import { validateAbbreviations } from "./molecule-abbreviations.ts";
 import { validateProcess } from "./process.ts";
 import type {
   StructureSetInput,
@@ -62,6 +63,7 @@ function molecule(
       typeof value.smiles === "string",
     `${where} needs a name and a smiles`,
   );
+  validateAbbreviations(value.abbreviations, where);
   // Optional atom and bond counts bound the indices a prediction accepts.
   for (const name of ["atoms", "bonds"]) {
     const count = value[name];
@@ -634,10 +636,10 @@ const blockFields: Record<string, string[]> = {
   list: "items ordered".split(" "),
   formula: "tex caption".split(" "),
   molecule:
-    "name smiles atoms bonds highlightAtoms highlightBonds labels caption IUPACName anchorAtoms canonical checked cid source stereo".split(
+    "name smiles abbreviations atoms bonds highlightAtoms highlightBonds labels caption IUPACName anchorAtoms canonical checked cid source stereo".split(
       " ",
     ),
-  properties: "name smiles atoms bonds".split(" "),
+  properties: "name smiles abbreviations atoms bonds".split(" "),
   "molecule-compare": "items left right highlightLabel".split(" "),
   molecules: "items caption".split(" "),
   substituents: "site variants".split(" "),

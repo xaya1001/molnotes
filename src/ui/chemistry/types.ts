@@ -1,3 +1,4 @@
+import type { MoleculeAbbreviation } from "../../../shared/molecule-abbreviations.ts";
 /** Indices are zero based in the supplied SMILES parse order. */
 export type StructureAnchor = { atom: number } | { bond: number };
 export interface ElectronArrow {
@@ -10,6 +11,7 @@ export interface ElectronArrow {
 export interface MoleculeData {
   name: string;
   smiles: string;
+  abbreviations?: MoleculeAbbreviation[];
   /** Atom and bond counts of the SMILES, when a prediction bounds its indices by them. */
   atoms?: number;
   bonds?: number;

@@ -268,3 +268,23 @@ test("publication compilers share one molecule toolkit across overlapping caller
   assert.equal(first, second);
   assert.equal(await moleculeToolkit(), first);
 });
+
+test("molecule fences preserve declared abbreviations and reject unknown or absent groups at the source line", async (t) => {
+  const body =
+    "```molecule\nsmiles: CCNC(=O)OC(C)(C)C\nabbreviations: Boc\ncaption: Sample\n```";
+  const root = fixture(t, body);
+  const result = await compile(root);
+  assert.deepEqual(result.notes[0].molecules[0].molecules[0].abbreviations, [
+    "Boc",
+  ]);
+  for (const name of ["Unknown", "Ts"]) {
+    writeFileSync(
+      join(root, "notes/demo/first.md"),
+      head + body.replace("abbreviations: Boc", `abbreviations: ${name}`),
+    );
+    await assert.rejects(
+      compile(root),
+      /notes\/demo\/first.md:\d+:.*(?:whitelist|SMILES)/,
+    );
+  }
+});

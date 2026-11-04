@@ -19,3 +19,20 @@ events:
   - {date: 2024-03, text: 第一组读数}
   - {date: 2025-09, text: 第二组读数, accent: true}
 ```
+
+## 结构对照
+
+```molecule
+smiles: CCO |(0,0,;3,0,;4.5,2.598,)|
+caption: 样品 A
+smiles: CCOC(=O)C1CCN(CC1)C(=O)OC(C)(C)C
+caption: 样品 B
+```
+
+```molecule
+smiles: CCOC(=O)C1CCN(CC1)C(=O)OC(C)(C)C
+abbreviations: Boc, CO₂Et
+caption: 样品 B 缩写
+smiles: C[C@H](O)/C=C/C(=O)O
+caption: 构型样品
+```

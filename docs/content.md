@@ -25,6 +25,8 @@ caption: aspirin
 
 SMILES 在发布时由 RDKit 校验，页面使用共享 MoleculeView。不能解析或缺少配对 caption 时明确报错。
 
+结构默认完整绘制。分子对象可写 `abbreviations: ["Boc", "CO₂Et"]`；笔记围栏在 `smiles` 与 `caption` 之间写 `abbreviations: Boc, CO₂Et`。共享白名单为 Boc、Cbz、Fmoc、Ts、Ms、Tf、TBS、TIPS、Bn、PMB、Ac、Bz、Piv、Ph、CO₂Me、CO₂Et、CO₂tBu、OMe、OEt、CF₃。只折叠声明的完整末端基团；声明未知、缺失或与另一声明重叠的基团时发布失败。缩写保持原 SMILES 的原子与键编号，折叠原子不生成点选目标；预测答案、原子标签、高亮和箭头端点引用折叠原子或以其为端点的键时，发布失败并指出内容位置。
+
 结构式在 SMILES 指定构型的手性中心旁标 (R)/(S)、双键旁标 (E)/(Z)，所以立体标记按原始资料写：原文画出或命名了构型的照写；外消旋、构型未指派或机理中不涉及构型的不写；只有一个手性中心的外消旋体不写；多个手性中心、相对构型确定的外消旋体或某一中心为差向异构混合物时，用 CXSMILES 的增强立体写法（`C[C@]12CCC(=O)C[C@@]1(O)CCCC2=O |&1:1,7|`），图上标 and1；单一异构体但绝对构型未知时用 `|o1:…|`，图上标 or1。专题与笔记的 `smiles` 字段都接受这种写法。
 
 结构式按 RDKit 的二维排版绘制。桥环与笼状骨架上这种排版可能把原子叠在一起、把原子压在键上或让手性中心的 H 压线，`content:preview` 会逐个指出。这时运行 `npm run molecule:layout -- '<SMILES>'`：它从 RDKit、CoordGen 与 PubChem 的二维结构出发分别调整，列出各自剩下的问题，最后一行是推荐的写法，即原 SMILES 后附 CXSMILES 坐标块 `|(x,y,;x,y,;…)|`，按 SMILES 中原子的顺序给出二维坐标，已有增强立体时写在同一个块里（`|(…),&1:1,7|`）。把它写回 `smiles` 字段即可：图按坐标绘制，楔形键与 R/S 仍由 SMILES 的构型决定，原子编号不变。同一骨架的几个分子用 `--like '<已排好的 CXSMILES>'` 沿用同一排法；没有网络时加 `--offline`。

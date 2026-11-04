@@ -1,11 +1,14 @@
 // The loader module (and both RDKit assets) is fetched only by a mounted consumer.
 export interface MoleculeHandle {
   get_substruct_match(query: MoleculeHandle): string;
+  get_substruct_matches(query: MoleculeHandle): string;
   get_num_atoms(): number;
   get_num_bonds(): number;
   get_svg_with_highlights(options: string): string;
   get_descriptors(): string;
   get_json(): string;
+  set_new_coords(): boolean;
+  normalize_depiction(canonicalize: number, scaleFactor: number): number;
   delete(): void;
 }
 export interface ChemistryToolkit {

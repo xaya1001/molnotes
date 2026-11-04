@@ -1,3 +1,8 @@
+import {
+  abbreviatedGroups,
+  validateAbbreviations,
+  validateAbbreviatedReferences,
+} from "../../shared/molecule-abbreviations.ts";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { measureStage } from "../../shared/stage-timing.ts";
@@ -85,10 +90,14 @@ async function validateTopics(data: PublishData, ctx: BuildContext) {
             `${where}: chapter ${chapter.id} uses unknown term ${term}`,
           );
     await validatePatentAssets(topic.content, topic.slug, data.assets);
-    async function visit(value: unknown, path: string): Promise<void> {
+    async function visit(
+      value: unknown,
+      path: string,
+      parent?: Record<string, unknown>,
+    ): Promise<void> {
       if (Array.isArray(value)) {
         for (const [i, item] of value.entries())
-          await visit(item, `${path}[${i}]`);
+          await visit(item, `${path}[${i}]`, parent);
         return;
       }
       if (!value || typeof value !== "object") return;
@@ -98,15 +107,35 @@ async function validateTopics(data: PublishData, ctx: BuildContext) {
           key === "smiles" &&
           typeof item === "string" &&
           item !== "" &&
-          !checkedSmiles.has(item)
+          (!checkedSmiles.has(item) || "abbreviations" in value)
         ) {
           toolkit ??= await moleculeToolkit();
           let mol;
           try {
             mol = toolkit.get_mol(item);
-            if (!mol?.is_valid()) throw new Error();
-          } catch {
-            throw new Error(`${where}:${location}: invalid SMILES`);
+            if (!mol?.is_valid())
+              throw new Error(`${where}:${location}: invalid SMILES`);
+            const data = value as Record<string, unknown>;
+            validateAbbreviations(data.abbreviations, `${where}:${path}`);
+            const groups = abbreviatedGroups(
+              toolkit,
+              mol,
+              data.abbreviations,
+              `${where}:${path}`,
+            );
+            const prediction =
+              parent &&
+              (parent.molecule === value ||
+                (Array.isArray(parent.molecules) &&
+                  parent.molecules.includes(value)))
+                ? parent
+                : {};
+            validateAbbreviatedReferences(
+              mol,
+              groups,
+              { ...prediction, ...data },
+              `${where}:${path}`,
+            );
           } finally {
             mol?.delete();
           }
@@ -144,7 +173,7 @@ async function validateTopics(data: PublishData, ctx: BuildContext) {
               );
           }
         }
-        await visit(item, location);
+        await visit(item, location, value as Record<string, unknown>);
       }
     }
     await visit(topic.content, "content");
