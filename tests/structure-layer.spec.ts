@@ -119,3 +119,148 @@ test("molecule canvases crop whitespace without enlarging small molecules on des
     });
   }
 });
+
+test("journal structures keep monochrome labels, equal screen bonds and only declared abbreviations", async ({
+  page,
+}) => {
+  for (const [width, height] of [
+    [1366, 900],
+    [390, 844],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await page.goto("/showcase/molecule");
+    const full = page.getByRole("img", {
+      name: "完整样品二维结构",
+      exact: true,
+    });
+    const abbreviated = page.getByRole("group", {
+      name: "缩写样品二维结构",
+      exact: true,
+    });
+    await expect(full).toBeVisible({ timeout: 45_000 });
+    await expect(abbreviated).toBeVisible();
+    await expect(full.locator("text.atom-11")).toHaveCount(0);
+    await expect
+      .poll(async () =>
+        (await abbreviated.locator("text.atom-11").allTextContents()).join(""),
+      )
+      .toBe("Boc");
+    await expect(abbreviated.locator(".bond-11")).toHaveCount(0);
+    const residue = await abbreviated
+      .locator("g[aria-hidden]")
+      .evaluate((node: SVGGElement) => {
+        const full = node.getBBox();
+        const boxes = [
+          ...node.querySelectorAll<SVGGraphicsElement>(
+            "path[class],text[class]",
+          ),
+        ].map((el) => el.getBBox());
+        const left = Math.min(...boxes.map((b) => b.x)),
+          right = Math.max(...boxes.map((b) => b.x + b.width));
+        const top = Math.min(...boxes.map((b) => b.y)),
+          bottom = Math.max(...boxes.map((b) => b.y + b.height));
+        return Math.max(
+          Math.abs(full.x - left),
+          Math.abs(full.y - top),
+          Math.abs(full.width - (right - left)),
+          Math.abs(full.height - (bottom - top)),
+        );
+      });
+    expect(residue).toBeLessThan(0.5);
+    await expect(
+      abbreviated.getByRole("button", { name: "原子 11", exact: true }),
+    ).toHaveCount(0);
+    const atom = abbreviated.getByRole("button", {
+      name: "原子 8",
+      exact: true,
+    });
+    await atom.click();
+    await expect(atom).toHaveAttribute("aria-pressed", "true");
+    const measurements = await page
+      .locator(".molecule svg.structure")
+      .evaluateAll((nodes) =>
+        nodes.map((node) => {
+          const svg = node as SVGSVGElement;
+          return [
+            ...svg.querySelectorAll("g[aria-hidden] text, g[aria-hidden] path"),
+          ].map((el) => {
+            const style = getComputedStyle(el);
+            return { fill: style.fill, stroke: style.stroke };
+          });
+        }),
+      );
+    for (const elements of measurements)
+      for (const { fill, stroke } of elements) {
+        expect(["none", "rgb(0, 0, 0)"]).toContain(fill);
+        expect(["none", "rgb(0, 0, 0)"]).toContain(stroke);
+      }
+    const bondLength = async (path: ReturnType<typeof full.locator>) =>
+      path.evaluate((el: SVGPathElement) => {
+        const a = el.getPointAtLength(0),
+          b = el.getPointAtLength(el.getTotalLength());
+        const matrix = el.getScreenCTM()!;
+        const p = new DOMPoint(a.x, a.y).matrixTransform(matrix),
+          q = new DOMPoint(b.x, b.y).matrixTransform(matrix);
+        return Math.hypot(p.x - q.x, p.y - q.y);
+      });
+    const small = page
+      .getByRole("group", { name: "乙醇二维结构", exact: true })
+      .locator("path.bond-0");
+    const large = full.locator("path.bond-5");
+    expect(await bondLength(small)).toBeCloseTo(await bondLength(large), 0);
+    expect(await bondLength(large)).toBeCloseTo(21.6, 0);
+    const oversized = page.getByRole("img", {
+      name: "长链样品二维结构",
+      exact: true,
+    });
+    const fit = await oversized.evaluate((el: SVGSVGElement) => ({
+      natural: el.viewBox.baseVal.width * 1.5,
+      actual: el.getBoundingClientRect().width,
+      parent: el.parentElement!.getBoundingClientRect().width,
+    }));
+    expect(fit.actual).toBeLessThan(fit.natural);
+    expect(fit.actual).toBeLessThanOrEqual(fit.parent);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  }
+});
+
+test("published notes keep authored coordinates at the shared scale and render their declared groups", async ({
+  page,
+}) => {
+  await page.goto("/notes/reader-test/second");
+  const a = page.getByRole("img", { name: "样品 A二维结构", exact: true });
+  const b = page.getByRole("img", { name: "样品 B二维结构", exact: true });
+  const short = page.getByRole("img", {
+    name: "样品 B 缩写二维结构",
+    exact: true,
+  });
+  await expect(a).toBeVisible({ timeout: 45_000 });
+  await expect
+    .poll(async () =>
+      (await short.locator("text.atom-11").allTextContents()).join(""),
+    )
+    .toBe("Boc");
+  await expect
+    .poll(async () =>
+      (await short.locator("text.atom-3").allTextContents()).join(""),
+    )
+    .toBe("CO2Et");
+  const lengths = await Promise.all(
+    [a.locator("path.bond-0"), b.locator("path.bond-5")].map((path) =>
+      path.evaluate((el: SVGPathElement) => {
+        const start = el.getPointAtLength(0),
+          end = el.getPointAtLength(el.getTotalLength());
+        const matrix = el.getScreenCTM()!;
+        const a = new DOMPoint(start.x, start.y).matrixTransform(matrix),
+          b = new DOMPoint(end.x, end.y).matrixTransform(matrix);
+        return Math.hypot(a.x - b.x, a.y - b.y);
+      }),
+    ),
+  );
+  expect(lengths[0]).toBeCloseTo(lengths[1], 0);
+  expect(lengths[0]).toBeCloseTo(21.6, 0);
+});

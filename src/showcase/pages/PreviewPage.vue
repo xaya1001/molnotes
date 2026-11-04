@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { NoteMolecules } from "../../../shared/notes-index.ts";
 import { nextTick, onMounted, ref } from "vue";
 import { validateProcess, type ProcessData } from "../../../shared/process.ts";
 import ProcessViewer from "../../ui/topic/ProcessViewer.vue";
@@ -24,7 +25,7 @@ type Shown =
   | {
       where: string;
       kind: "molecule";
-      molecules: { smiles: string; caption: string }[];
+      molecules: NoteMolecules["molecules"];
       caption: string;
     };
 declare global {
@@ -48,7 +49,7 @@ const shown: Shown[] = (window.__previewFigures ?? []).map((f) =>
         : {
             ...f,
             kind: "molecule",
-            molecules: f.value as { smiles: string; caption: string }[],
+            molecules: f.value as NoteMolecules["molecules"],
           },
 );
 const figures = ref<HTMLElement[]>([]);
@@ -119,6 +120,7 @@ onMounted(async () => {
             v-for="(m, j) in figure.molecules"
             :key="j"
             :smiles="m.smiles"
+            :abbreviations="m.abbreviations"
             :name="m.caption"
           />
         </div>

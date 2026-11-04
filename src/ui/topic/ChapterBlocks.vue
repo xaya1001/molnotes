@@ -172,6 +172,7 @@ const toneClass = (tone?: string) =>
       <MoleculeView
         :name="block.name"
         :smiles="block.smiles"
+        :abbreviations="block.abbreviations"
         :highlight-atoms="block.highlightAtoms"
         :highlight-bonds="block.highlightBonds"
         :labels="block.labels"
@@ -194,6 +195,7 @@ const toneClass = (tone?: string) =>
           :key="item.name"
           :name="item.name"
           :smiles="item.smiles"
+          :abbreviations="item.abbreviations"
         />
       </div>
       <figcaption v-if="block.caption" class="caption">
@@ -201,7 +203,11 @@ const toneClass = (tone?: string) =>
       </figcaption>
     </figure>
     <template v-else-if="block.type === 'properties'">
-      <MoleculeView :name="block.name" :smiles="block.smiles" />
+      <MoleculeView
+        :name="block.name"
+        :smiles="block.smiles"
+        :abbreviations="block.abbreviations"
+      />
       <MolecularProperties :smiles="block.smiles" />
     </template>
     <SubstituentExplorer

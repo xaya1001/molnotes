@@ -600,3 +600,95 @@ test("a build rejects citations the registry or the shelf cannot resolve", async
     /source 1 names a shelf file/,
   );
 });
+
+test("publication rejects invalid abbreviations and references to collapsed atoms at their content path", async (t) => {
+  const { rejects, edit, build } = await editableContent(t, [
+    "sites/sample",
+    "notes/reader-test",
+  ]);
+  const smiles = "CCOC(=O)C1CCN(CC1)C(=O)OC(C)(C)C";
+  const molecule = { name: "Sample", smiles, abbreviations: ["Boc"] };
+  const update = (block: unknown) =>
+    [
+      [
+        "sites/sample/content.json",
+        json((content) => {
+          content.chapters[0].blocks[2] = {
+            ...(block as object),
+            id: "structure-test",
+          } as TopicContent["chapters"][number]["blocks"][number];
+        }),
+      ],
+    ] satisfies Edit[];
+  const location =
+    /sites\/sample\/content.json:content.chapters\[0\].blocks\[2\]/;
+  for (const abbreviations of [["Unknown"], ["Ts"]])
+    await rejects(
+      update({ type: "molecule", ...molecule, abbreviations }),
+      /(?:whitelist|SMILES)/,
+    );
+  for (const reference of [
+    { highlightAtoms: [11] },
+    { highlightBonds: [10] },
+    { labels: { 12: "A" } },
+  ])
+    await rejects(
+      update({ type: "molecule", ...molecule, ...reference }),
+      location,
+    );
+  for (const prediction of [
+    { kind: "atoms", answer: [11] },
+    { kind: "bonds", answer: [10] },
+    { kind: "arrows", answer: { from: 8, to: 11 } },
+    { kind: "design", groups: [[11]], options: ["A", "B"], answer: 0 },
+  ])
+    await rejects(
+      update({
+        type: "prediction",
+        question: "Pick",
+        explanation: "Sample",
+        molecule,
+        ...prediction,
+      }),
+      /(?:answer|groups).*abbreviated/,
+    );
+  await rejects(
+    update({
+      type: "prediction",
+      kind: "atom-set",
+      question: "Pick",
+      explanation: "Sample",
+      molecules: [{ ...molecule, answer: [12] }],
+    }),
+    /answer/,
+  );
+  for (const from of [{ atom: 11 }, { bond: 10 }])
+    await rejects(
+      update({
+        type: "mechanism",
+        frames: [
+          {
+            ...molecule,
+            explanation: "Sample",
+            arrows: [{ from, to: { atom: 8 }, electrons: 2 }],
+          },
+        ],
+      }),
+      /arrows\[0\].from.*abbreviated/,
+    );
+  const restore = await edit(
+    update({
+      type: "prediction",
+      kind: "atoms",
+      question: "Pick",
+      explanation: "Sample",
+      molecule,
+      answer: [8],
+    }),
+  );
+  try {
+    await build();
+  } finally {
+    await restore();
+  }
+});

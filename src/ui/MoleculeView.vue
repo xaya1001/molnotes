@@ -1,11 +1,21 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, useId, watch } from "vue";
 import { loadChemistry, molecule } from "./chemistry/rdkit.ts";
+import {
+  abbreviatedGroups,
+  type MoleculeAbbreviation,
+} from "../../shared/molecule-abbreviations.ts";
+import {
+  moleculeDrawingOptions,
+  moleculeScreenScale,
+  moleculeSvg,
+} from "./chemistry/drawing.ts";
 import type { ElectronArrow, StructureAnchor } from "./chemistry/types.ts";
 const props = withDefaults(
   defineProps<{
     smiles: string;
     name: string;
+    abbreviations?: readonly MoleculeAbbreviation[];
     selectable?: "atoms" | "bonds";
     /** Indices to pick, or, when nothing is selectable, a reader's earlier choice to compare. */
     selected?: readonly number[];
@@ -18,6 +28,7 @@ const props = withDefaults(
     disabled?: boolean;
   }>(),
   {
+    abbreviations: () => [],
     selected: () => [],
     selectedKind: "atoms",
     highlightAtoms: () => [],
@@ -31,8 +42,7 @@ type Point = { x: number; y: number };
 const svg = ref("");
 const structure = ref<SVGSVGElement>();
 const bounds = ref({ x: 0, y: 0, width: 600, height: 360 });
-// Crop in drawing coordinates, then retain the original 600-unit CSS scale.
-// Setting the cropped SVG to width: 100% would enlarge small molecules again.
+// Crop without changing the shared screen scale; max-width shrinks wide structures.
 watch(
   [
     svg,
@@ -59,11 +69,12 @@ watch(
 );
 const atoms = ref<Point[]>([]);
 const bonds = ref<[number, number][]>([]);
+const foldedAtoms = ref(new Set<number>());
 const error = ref("");
 const retry = ref(0);
 const marker = useId();
 watch(
-  [() => props.smiles, retry],
+  [() => props.smiles, () => props.abbreviations, retry],
   async (_, __, cleanup) => {
     let active = true;
     cleanup(() => {
@@ -79,20 +90,23 @@ watch(
       const mol = molecule(toolkit, props.smiles);
       try {
         const count = mol.get_num_atoms();
-        const markup = mol.get_svg_with_highlights(
-          JSON.stringify({
-            width: 600,
-            height: 360,
-            fixedBondLength: 28,
-            atoms: Array.from({ length: count }, (_, i) => i),
-            bonds: [],
-            highlightRadius: 0.25,
-            atomHighlightsAreCircles: true,
-            useMolBlockWedging: true,
-            addStereoAnnotation: true,
-            annotationFontScale: 0.7,
-          }),
-        );
+        const groups = abbreviatedGroups(toolkit, mol, props.abbreviations);
+        const folded = new Set(groups.flatMap((group) => group.atoms));
+        const hiddenBonds = new Set(groups.flatMap((group) => group.bonds));
+        const atomLabels: Record<number, string> = {};
+        for (const group of groups) {
+          for (const atom of group.atoms) atomLabels[atom] = "";
+          atomLabels[group.atoms[0]] = group.name
+            .replace(/₂/g, "<sub>2</sub>")
+            .replace(/₃/g, "<sub>3</sub>");
+        }
+        const markup = moleculeSvg(mol, {
+          atomLabels,
+          atoms: Array.from({ length: count }, (_, i) => i),
+          bonds: [],
+          highlightRadius: 0.25,
+          atomHighlightsAreCircles: true,
+        });
         const document = new DOMParser().parseFromString(
           markup,
           "image/svg+xml",
@@ -126,7 +140,75 @@ watch(
             throw new Error("RDKit 键索引无效");
           edges.push([bond.atoms[0], bond.atoms[1]]);
         }
+        // Keep the original graph for stereochemistry and indices. Only the
+        // declared terminal group's drawing is replaced by its attachment label.
+        for (const index of hiddenBonds)
+          document
+            .querySelectorAll(`.bond-${index}`)
+            .forEach((node) => node.remove());
+        for (const group of groups)
+          for (const index of group.atoms.slice(1))
+            document
+              .querySelectorAll(`.atom-${index}`)
+              .forEach((node) => node.remove());
+        // RDKit's untagged corner joins also belong to the folded graph.
+        for (const path of document.querySelectorAll<SVGPathElement>(
+          "path:not([class])",
+        )) {
+          const vertices = [
+            ...(path.getAttribute("d") ?? "").matchAll(
+              /[ML]\s+(-?[\d.]+)[,\s]+(-?[\d.]+)/g,
+            ),
+          ];
+          if (vertices.length !== 3) continue;
+          const x = Number(vertices[1][1]),
+            y = Number(vertices[1][2]);
+          if (
+            [...folded].some(
+              (i) => Math.hypot(points[i].x - x, points[i].y - y) < 0.15,
+            )
+          )
+            path.remove();
+        }
+        document.querySelectorAll<SVGTextElement>("text").forEach((node) => {
+          node.style.fontFamily = "Arial, Helvetica, sans-serif";
+        });
+        // RDKit ties wedge width to the multiple-bond offset. ACS specifies
+        // 2 pt wedges separately; narrow only their perpendicular coordinates.
+        edges.forEach(([a, b], i) => {
+          if ((graph.molecules[0].bonds[i].bo ?? 1) !== 1) return;
+          const paths = [
+            ...document.querySelectorAll<SVGPathElement>(`path.bond-${i}`),
+          ];
+          const solid = paths.some(
+            (path) => path.style.fill && path.style.fill !== "none",
+          );
+          if (!solid && paths.length < 3) return;
+          const start = points[a],
+            end = points[b];
+          const length = Math.hypot(end.x - start.x, end.y - start.y);
+          if (!length) return;
+          const ux = (end.x - start.x) / length,
+            uy = (end.y - start.y) / length;
+          const factor = 2 / 14.4 / moleculeDrawingOptions.multipleBondOffset;
+          for (const path of paths) {
+            path.setAttribute(
+              "d",
+              (path.getAttribute("d") ?? "").replace(
+                /([ML])\s+(-?[\d.]+)[,\s]+(-?[\d.]+)/g,
+                (_, command: string, x: string, y: string) => {
+                  const dx = Number(x) - start.x,
+                    dy = Number(y) - start.y;
+                  const along = dx * ux + dy * uy,
+                    across = (-dx * uy + dy * ux) * factor;
+                  return `${command} ${start.x + along * ux - across * uy},${start.y + along * uy + across * ux}`;
+                },
+              ),
+            );
+          }
+        });
         document.querySelector("rect")?.remove();
+        foldedAtoms.value = folded;
         atoms.value = points;
         bonds.value = edges;
         svg.value = document.documentElement.innerHTML;
@@ -190,7 +272,7 @@ function toggle(index: number) {
       class="structure"
       ref="structure"
       :viewBox="`${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}`"
-      :style="{ width: `${(bounds.width / 600) * 100}%` }"
+      :style="{ width: `${bounds.width * moleculeScreenScale}px` }"
       :role="selectable ? 'group' : 'img'"
       :aria-label="`${name}二维结构`"
     >
@@ -221,7 +303,11 @@ function toggle(index: number) {
       </defs>
       <g v-for="(bond, i) in bonds" :key="`b${i}`">
         <line
-          v-if="selectable === 'bonds' || highlightBonds.includes(i)"
+          v-if="
+            !foldedAtoms.has(bond[0]) &&
+            !foldedAtoms.has(bond[1]) &&
+            (selectable === 'bonds' || highlightBonds.includes(i))
+          "
           :x1="atoms[bond[0]].x"
           :y1="atoms[bond[0]].y"
           :x2="atoms[bond[1]].x"
@@ -244,7 +330,13 @@ function toggle(index: number) {
           @keydown.space.prevent="selectable === 'bonds' && toggle(i)"
         />
         <line
-          v-if="!selectable && selectedKind === 'bonds' && selected.includes(i)"
+          v-if="
+            !foldedAtoms.has(bond[0]) &&
+            !foldedAtoms.has(bond[1]) &&
+            !selectable &&
+            selectedKind === 'bonds' &&
+            selected.includes(i)
+          "
           :x1="atoms[bond[0]].x"
           :y1="atoms[bond[0]].y"
           :x2="atoms[bond[1]].x"
@@ -256,10 +348,13 @@ function toggle(index: number) {
       </g>
       <g v-for="(atom, i) in atoms" :key="i">
         <circle
-          v-if="selectable === 'atoms' || highlightAtoms.includes(i)"
+          v-if="
+            !foldedAtoms.has(i) &&
+            (selectable === 'atoms' || highlightAtoms.includes(i))
+          "
           :cx="atom.x"
           :cy="atom.y"
-          r="12"
+          :r="12 / moleculeScreenScale"
           class="atom-target"
           :class="{
             picked: selectable === 'atoms' && selected.includes(i),
@@ -278,15 +373,25 @@ function toggle(index: number) {
           @keydown.space.prevent="selectable === 'atoms' && toggle(i)"
         />
         <circle
-          v-if="!selectable && selectedKind === 'atoms' && selected.includes(i)"
+          v-if="
+            !foldedAtoms.has(i) &&
+            !selectable &&
+            selectedKind === 'atoms' &&
+            selected.includes(i)
+          "
           :cx="atom.x"
           :cy="atom.y"
-          r="17"
+          :r="17 / moleculeScreenScale"
           class="comparison-choice"
         >
           <title>你的选择</title>
         </circle>
-        <text v-if="labels[i]" :x="atom.x" :y="atom.y - 18" class="atom-label">
+        <text
+          v-if="!foldedAtoms.has(i) && labels[i]"
+          :x="atom.x"
+          :y="atom.y - 18"
+          class="atom-label"
+        >
           {{ labels[i] }}
         </text>
       </g>

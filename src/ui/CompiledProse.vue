@@ -155,6 +155,7 @@ defineExpose({ showMatch });
         v-for="(mol, i) in row.molecules"
         :key="i"
         :smiles="mol.smiles"
+        :abbreviations="mol.abbreviations"
         :name="mol.caption"
       />
     </Teleport>
