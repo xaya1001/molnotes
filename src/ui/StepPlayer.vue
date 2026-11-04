@@ -150,7 +150,11 @@ watch(() => props.steps, reset);
       </div>
     </div>
     <slot name="summary" :index="index" :progress="progress" />
-    <table v-if="steps.length > 1" class="trace">
+    <table
+      v-if="steps.length > 1"
+      class="trace"
+      :class="{ 'frame-trace': !$slots['trace-row'] }"
+    >
       <thead v-if="$slots['trace-head']">
         <tr>
           <th scope="col"><span class="visually-hidden">步骤</span></th>
@@ -175,7 +179,10 @@ watch(() => props.steps, reset);
               {{ i + 1 }}
             </button>
           </td>
-          <td>{{ item.title }}</td>
+          <td>
+            <span v-if="item.title">{{ item.title }}</span>
+            <span v-else class="step-summary">{{ item.text }}</span>
+          </td>
           <slot name="trace-row" :index="i" />
         </tr>
       </tbody>
@@ -289,6 +296,15 @@ th {
   border-collapse: collapse;
   border-top: 1px solid var(--rule);
   font-size: var(--text-sm);
+}
+.frame-trace {
+  table-layout: fixed;
+}
+.step-summary {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 th,
 td {

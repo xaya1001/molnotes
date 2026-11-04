@@ -88,6 +88,8 @@ test("all frame blocks share keyboard and step navigation, and single frames hid
     page.locator(".player").nth(2),
   ]) {
     await expect(player.locator("tbody tr")).toHaveCount(2);
+    const untitledStep = player.locator("tbody tr").nth(1).locator("td").nth(1);
+    await expect(untitledStep.getByText(/\S/)).toBeVisible();
     await player.focus();
     await page.keyboard.press("ArrowRight");
     await expect(player.locator("tbody tr").nth(1)).toHaveAttribute(
