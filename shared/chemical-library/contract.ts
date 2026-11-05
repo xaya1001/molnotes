@@ -71,6 +71,7 @@ function focus(v: unknown, w: string) {
 }
 function layout(v: unknown, w: string) {
   object(v, w);
+  if (v.molblock !== undefined) text(v.molblock, w);
   object(v.coords, w);
   for (const p of Object.values(v.coords)) point(p, w);
   for (const k of ["pins", "labels"]) {

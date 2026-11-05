@@ -5,6 +5,7 @@ import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import {
   prepareCompound,
   graphOf,
+  openMolecule,
 } from "../shared/chemical-library/chemistry.ts";
 import { abbreviatedGroups } from "../shared/molecule-abbreviations.ts";
 import type {
@@ -20,6 +21,7 @@ import type {
 interface MoleculeInput {
   smiles?: string;
   ref?: string;
+  variant?: string;
   molfile?: string;
   labels?: string[];
   rightOf?: string;
@@ -103,6 +105,7 @@ function validateSceneInput(value: unknown): asserts value is FigureSceneInput {
     for (const k of [
       "smiles",
       "ref",
+      "variant",
       "molfile",
       "rightOf",
       "leftOf",
@@ -111,6 +114,8 @@ function validateSceneInput(value: unknown): asserts value is FigureSceneInput {
       "number",
     ])
       if (m[k] !== undefined) text(m[k], `${name}.${k}`);
+    if (m.variant !== undefined && !m.ref)
+      throw new Error(`${name}: variant requires a compound ref`);
     for (const k of ["gap", "rotate", "yield"])
       if (m[k] !== undefined) number(m[k], `${name}.${k}`);
     if (m.offset !== undefined) {
@@ -201,6 +206,12 @@ export async function compileFigureScene(
         if (source?.kind !== "compound")
           throw new Error(`${name}: unknown compound ${spec.ref}`);
         c = structuredClone(source);
+        if (spec.variant) {
+          const variant = c.variants?.[spec.variant];
+          if (!variant)
+            throw new Error(`${name}: unknown variant ${spec.variant}`);
+          c.layout = structuredClone(variant);
+        }
       } else {
         if (!spec.smiles) throw new Error(`${name}: supply smiles or ref`);
         c = prepareCompound(
@@ -219,7 +230,11 @@ export async function compileFigureScene(
         );
       }
       c.id = id;
-      const m = rd.get_mol(c.smiles, JSON.stringify({ removeHs: false }))!;
+      const m = openMolecule(
+        rd,
+        c.layout.molblock ?? c.smiles,
+        !c.layout.molblock,
+      );
       handles.set(name, m);
       compounds.set(name, c);
       entries[id] = c;
@@ -923,9 +938,11 @@ export async function compileFigureScene(
           throw new Error(
             `${sourceId}: template labels belong to the saved compound`,
           );
-        if (
-          JSON.stringify(generated.layout) !== JSON.stringify(source.layout)
-        ) {
+        const selected = input.molecules[placement.id].variant;
+        const sourceLayout = selected
+          ? source.variants![selected]
+          : source.layout;
+        if (JSON.stringify(generated.layout) !== JSON.stringify(sourceLayout)) {
           const variant = identity.id + "_" + placement.id;
           const stored = entries[sourceId];
           if (stored.kind !== "compound")
@@ -935,7 +952,7 @@ export async function compileFigureScene(
             variants: { ...stored.variants, [variant]: generated.layout },
           };
           placement.variant = variant;
-        }
+        } else if (selected) placement.variant = selected;
         placement.compound = sourceId;
         delete entries[generated.id];
       }

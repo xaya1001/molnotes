@@ -41,6 +41,7 @@ For process diagrams, save a `kind: process` entry in `library/processes/prc_<id
 ## Identity, references and style
 
 - Save one entry per stable `cmp_`, `rxn_`, `rte_`, `mec_`, `img_` or `prc_` ID. Reactions reference compounds; routes reference reactions; mechanism frames reference compounds. Preserve graph identity when saving layout variants.
+- 芳香环推电子先存 Kekulé 变体：在 `variants.<name>` 保存完整 `coords` 和含持久原子映射、明确单/双键的 `molblock`，原子顺序与 `atomIds` 一致。场景的分子用 `variant` 选它；π 锚点只接受该变体中的多键。变体经芳香化后的图、立体化学与同位素必须保持原化合物身份。
 - A page uses `figure-ref` with `ref`, optional `variant`/`frame`, local `numbers`, focus and caption. Keep structures, reagents, yields, coordinates and source evidence in the library entry. Notes use a `figure-ref` fenced block; topics use `{ "type": "figure-ref", "ref": "rxn_example" }`.
 - Image references keep local `alt` and caption. Use `presentation: figure` for the ordinary framed image, or `presentation: note` for a centered note illustration. Existing SVG library presentation is the default. Scene, picture-question and original-page image slots accept `{ref: img_<id>}` while retaining their own controls.
 - Use gray/black plus the shared red accent. At most one primary focus and two supporting focuses; one coordinated electron event may include several related arrows. Keep background structures readable and use the shared design tokens for color, weight, bond length and glyph sizes.
