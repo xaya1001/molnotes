@@ -1,3 +1,4 @@
+import { validateMechanismChemistry } from "../../shared/mechanism-chemistry.ts";
 import {
   validateSchemeCompounds,
   validateScopeProducts,
@@ -100,6 +101,14 @@ async function validateTopics(data: PublishData, ctx: BuildContext) {
       for (const block of blocks) {
         if (block.type === "tabs")
           for (const item of block.items) await schemes(item.blocks);
+        if (block.type === "mechanism") {
+          toolkit ??= await moleculeToolkit();
+          validateMechanismChemistry(
+            toolkit,
+            resolveData(block.frames, topic.content.data, where),
+            where,
+          );
+        }
         if (block.type === "route") {
           toolkit ??= await moleculeToolkit();
           for (const route of resolveData(

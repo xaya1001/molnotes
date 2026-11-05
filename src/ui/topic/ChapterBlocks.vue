@@ -226,7 +226,10 @@ const toneClass = (tone?: string) =>
     />
     <template v-else-if="block.type === 'mechanism'">
       <h3 v-if="block.title">{{ block.title }}</h3>
-      <MechanismViewer :frames="content.dataOf(block.frames)" />
+      <MechanismViewer
+        :frames="content.dataOf(block.frames)"
+        :cycle="block.cycle"
+      />
     </template>
     <TopicTable
       v-else-if="block.type === 'table'"

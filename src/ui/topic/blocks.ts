@@ -1,3 +1,4 @@
+import type { CatalyticCycle } from "../../../shared/mechanism.ts";
 import type { SubstrateScope } from "../../../shared/reaction-scheme.ts";
 import type { ProcessData } from "../../../shared/process.ts";
 // The block catalogue as the runtime reads it. shared/topic-blocks.ts is
@@ -91,6 +92,7 @@ export interface MechanismBlock extends BlockBase {
   type: "mechanism";
   title?: string;
   frames: DataRef<MechanismFrame[]>;
+  cycle?: CatalyticCycle;
 }
 /** A table cell: text, or a linked value. */
 export type TableCell = string | { text: string; href: string };

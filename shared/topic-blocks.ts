@@ -1,4 +1,8 @@
 import {
+  validateMechanismFrames,
+  validateCatalyticCycle,
+} from "./mechanism.ts";
+import {
   validateSynthesisRoutes,
   validateSubstrateScope,
 } from "./reaction-scheme.ts";
@@ -19,7 +23,6 @@ import { defineStructureSet } from "../src/ui/structure/model.ts";
 import { defineFlow, flowText } from "../src/ui/diagrams/flow.ts";
 import { defineTimeline, timelineText } from "../src/ui/diagrams/model.ts";
 import type {
-  MechanismFrame,
   MoleculeData,
   StructureAnchor,
 } from "../src/ui/chemistry/types.ts";
@@ -128,32 +131,6 @@ function anchor(
         (isInteger(value.bond) && value.bond >= 0)),
     `${where} must name an atom or a bond`,
   );
-}
-
-function mechanismFrames(
-  frames: unknown,
-  where: string,
-): asserts frames is MechanismFrame[] {
-  assert(
-    isList(frames) && frames.length > 0,
-    `${where} needs at least one frame`,
-  );
-  frames.forEach((frame, index) => {
-    const at = `${where} frame ${index + 1}`;
-    molecule(frame, at);
-    optionalText(frame.title, `${at} title`);
-    text(frame.explanation, `${at} explanation`);
-    assert(isList(frame.arrows), `${at} arrows must be an array`);
-    for (const arrow of frame.arrows) {
-      assert(isObject(arrow), `${at} arrows must be objects`);
-      anchor(arrow.from, `${at} arrow from`);
-      anchor(arrow.to, `${at} arrow to`);
-      assert(
-        arrow.electrons === 1 || arrow.electrons === 2,
-        `${at} arrow electrons must be 1 or 2`,
-      );
-    }
-  });
 }
 
 /** A cell is text, or `{ text, href }` for a linked value such as a PubChem CID. */
@@ -615,7 +592,7 @@ const blockFields: Record<string, string[]> = {
   substituents: "site variants".split(" "),
   route: "routes".split(" "),
   "substrate-scope": ["scope"],
-  mechanism: "title frames".split(" "),
+  mechanism: "title frames cycle".split(" "),
   table: "caption columns rows note rowHeader".split(" "),
   spectrum: "molecule peaks caption assignAfter".split(" "),
   "data-table":
@@ -815,7 +792,10 @@ export function validateBlocks(
         break;
       case "mechanism":
         optionalText(block.title, `${here} title`);
-        field("frames", mechanismFrames);
+        field("frames", (frames, at) => {
+          validateMechanismFrames(frames, at);
+          validateCatalyticCycle(block.cycle, frames, at);
+        });
         break;
       case "table": {
         text(block.caption, `${here} caption`);

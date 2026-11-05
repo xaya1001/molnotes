@@ -20,8 +20,10 @@ export type {
   ReactionStep,
   SynthesisRoute,
 } from "../../../shared/reaction-scheme.ts";
-export interface MechanismFrame extends MoleculeData {
-  title?: string;
-  explanation: string;
-  arrows: ElectronArrow[];
-}
+export type {
+  MechanismFrame,
+  MechanismMolecule,
+  MechanismArrow,
+  MechanismAnchor,
+  CatalyticCycle,
+} from "../../../shared/mechanism.ts";
