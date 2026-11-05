@@ -401,3 +401,96 @@ test("filled heads meet the visible shaft at their notch and distinguish one ele
     assert.deepEqual(half.vertices[0], full.vertices[0]);
   }
 });
+
+test("content builds compile YAML scenes while keeping saved compounds shared", async () => {
+  const { mkdtemp, mkdir, writeFile, rm } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const { stringify } = await import("yaml");
+  const { readChemicalLibrary } =
+    await import("../scripts/content/chemical-library.ts");
+  const root = await mkdtemp(join(tmpdir(), "chemical-library-"));
+  try {
+    const compound = prepareCompound(await moleculeToolkit(), {
+      id: "cmp_example",
+      title: "Alcohol",
+      smiles: "CCO",
+      sources,
+    });
+    for (const dir of ["compounds", "reactions", "mechanisms"])
+      await mkdir(join(root, "library", dir), { recursive: true });
+    await writeFile(
+      join(root, "library/compounds/cmp_example.json"),
+      JSON.stringify(compound),
+    );
+    await writeFile(
+      join(root, "library/mechanisms/mec_example.yaml"),
+      stringify({
+        kind: "mechanism",
+        id: "mec_example",
+        title: "Two views",
+        sources,
+        category: "comparison",
+        frames: [
+          {
+            id: "first",
+            title: "First",
+            explanation: "First view",
+            scene: { molecules: { molecule: { ref: compound.id } } },
+          },
+          {
+            id: "second",
+            title: "Second",
+            explanation: "Second view",
+            scene: {
+              molecules: { molecule: { ref: compound.id, rotate: 90 } },
+            },
+          },
+        ],
+      }),
+    );
+    await writeFile(
+      join(root, "library/reactions/rxn_example.yml"),
+      stringify({
+        kind: "reaction",
+        id: "rxn_example",
+        title: "Transfer",
+        sources,
+        reactants: [{ id: "input", compound: compound.id }],
+        products: [{ id: "output", compound: compound.id }],
+        explanation: "Transfer",
+        scene: {
+          molecules: {
+            input: { ref: compound.id },
+            output: { ref: compound.id, rightOf: "input" },
+          },
+          reactions: [{ from: "input", to: "output", above: ["Condition"] }],
+        },
+      }),
+    );
+    const { entries } = await readChemicalLibrary(root);
+    assert.deepEqual(Object.keys(entries).sort(), [
+      "cmp_example",
+      "mec_example",
+      "rxn_example",
+    ]);
+    const mechanism = entries.mec_example;
+    assert.equal(mechanism.kind, "mechanism");
+    if (mechanism.kind !== "mechanism") throw new Error("Expected mechanism");
+    assert.equal(mechanism.frames[1].scene.molecules[0].compound, compound.id);
+    assert.ok(mechanism.frames[1].scene.molecules[0].variant);
+    const saved = entries.cmp_example;
+    assert.equal(saved.kind, "compound");
+    if (saved.kind !== "compound") throw new Error("Expected compound");
+    assert.equal(saved.graph, compound.graph);
+    assert.deepEqual(saved.layout, compound.layout);
+    assert.ok(saved.variants?.mec_example_second_molecule);
+    const reaction = entries.rxn_example;
+    assert.equal(reaction.kind, "reaction");
+    if (reaction.kind !== "reaction") throw new Error("Expected reaction");
+    assert.deepEqual(reaction.reagents, ["Condition"]);
+    assert.ok(reaction.arrow.to.x > reaction.arrow.from.x);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

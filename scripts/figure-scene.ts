@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { isObject } from "../shared/json.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import {
   prepareCompound,
@@ -12,8 +13,8 @@ import type {
   Library,
   Point,
   Scene,
-  ElectronArrow,
   AtomRef,
+  Evidence,
 } from "../shared/chemical-library/types.ts";
 
 interface MoleculeInput {
@@ -67,16 +68,114 @@ export interface FigureSceneInput {
   comparison?: boolean;
   focus?: string[];
 }
+function validateSceneInput(value: unknown): asserts value is FigureSceneInput {
+  const object = (v: unknown, where: string): Record<string, unknown> => {
+    if (!isObject(v)) throw new Error(`${where}: expected object`);
+    return v;
+  };
+  const text = (v: unknown, where: string) => {
+    if (typeof v !== "string" || !v.trim())
+      throw new Error(`${where}: expected text`);
+  };
+  const number = (v: unknown, where: string) => {
+    if (typeof v !== "number" || !Number.isFinite(v))
+      throw new Error(`${where}: expected finite number`);
+  };
+  const array = (v: unknown, where: string): unknown[] => {
+    if (!Array.isArray(v)) throw new Error(`${where}: expected array`);
+    return v;
+  };
+  const strings = (v: unknown, where: string) =>
+    array(v, where).forEach((x) => text(x, where));
+  const choice = (v: unknown, allowed: unknown[], where: string) => {
+    if (v !== undefined && !allowed.includes(v))
+      throw new Error(`${where}: invalid value`);
+  };
+  const input = object(value, "scene");
+  text(input.title, "title");
+  const molecules = object(input.molecules, "molecules");
+  if (!Object.keys(molecules).length)
+    throw new Error("Scene requires molecules");
+  for (const [name, raw] of Object.entries(molecules)) {
+    const m = object(raw, name);
+    if (!!m.ref === !!m.smiles)
+      throw new Error(`${name}: supply either smiles or ref`);
+    for (const k of [
+      "smiles",
+      "ref",
+      "molfile",
+      "rightOf",
+      "leftOf",
+      "above",
+      "below",
+      "number",
+    ])
+      if (m[k] !== undefined) text(m[k], `${name}.${k}`);
+    for (const k of ["gap", "rotate", "yield"])
+      if (m[k] !== undefined) number(m[k], `${name}.${k}`);
+    if (m.offset !== undefined) {
+      const xy = array(m.offset, `${name}.offset`);
+      if (xy.length !== 2)
+        throw new Error(`${name}.offset: expected two coordinates`);
+      xy.forEach((v) => number(v, `${name}.offset`));
+    }
+    choice(m.orient, ["auto", "keep"], `${name}.orient`);
+    for (const k of ["methyl", "plus"])
+      choice(m[k], [true, false], `${name}.${k}`);
+    if (m.labels !== undefined) strings(m.labels, `${name}.labels`);
+    if (m.chargeAngles !== undefined)
+      Object.values(object(m.chargeAngles, `${name}.chargeAngles`)).forEach(
+        (v) => number(v, `${name}.chargeAngles`),
+      );
+    if (m.wedges !== undefined)
+      for (const raw of array(m.wedges, `${name}.wedges`)) {
+        const wedge = object(raw, "wedge");
+        text(wedge.from, "wedge.from");
+        text(wedge.to, "wedge.to");
+        if (!["solid", "hashed"].includes(String(wedge.style)))
+          throw new Error("Invalid wedge style");
+      }
+  }
+  if (input.arrows !== undefined)
+    for (const raw of array(input.arrows, "arrows")) {
+      if (typeof raw === "string") continue;
+      const a = object(raw, "arrow");
+      text(a.from, "arrow.from");
+      text(a.to, "arrow.to");
+      choice(a.tone, ["comparison"], "arrow.tone");
+      choice(a.bend, ["left", "right"], "arrow.bend");
+      choice(a.electrons, [1, 2], "arrow.electrons");
+    }
+  if (input.reactions !== undefined)
+    for (const raw of array(input.reactions, "reactions")) {
+      const r = object(raw, "reaction");
+      text(r.from, "reaction.from");
+      text(r.to, "reaction.to");
+      for (const k of ["id", "byproduct", "aboveMolecule", "belowMolecule"])
+        if (r[k] !== undefined) text(r[k], `reaction.${k}`);
+      for (const k of ["above", "below"])
+        if (r[k] !== undefined) strings(r[k], `reaction.${k}`);
+      choice(r.kind, ["forward", "equilibrium"], "reaction.kind");
+      choice(r.lane, ["bottom"], "reaction.lane");
+      choice(r.tone, ["comparison"], "reaction.tone");
+    }
+  if (input.captions !== undefined)
+    Object.values(object(input.captions, "captions")).forEach((v) =>
+      text(v, "caption"),
+    );
+  if (input.focus !== undefined) strings(input.focus, "focus");
+  choice(input.comparison, [true, false], "comparison");
+}
 type Box = { left: number; right: number; top: number; bottom: number };
 /** Compile the short authoring language into the same persistent graph/scene
  * contract used by the site. No case names or example-specific coordinates. */
 export async function compileFigureScene(
-  input: FigureSceneInput,
+  input: unknown,
   existing: Library = {},
   directory = ".",
+  identity?: { id: string; sources: Evidence[] },
 ) {
-  if (!input.title || !input.molecules)
-    throw new Error("Scene requires title and molecules");
+  validateSceneInput(input);
   const rd = await moleculeToolkit(),
     entries: Library = { ...existing };
   const compounds = new Map<string, Compound>(),
@@ -95,7 +194,7 @@ export async function compileFigureScene(
   const atomIndex = (c: Compound, id: string) => c.atomIds.indexOf(id);
   try {
     for (const [name, spec] of Object.entries(input.molecules)) {
-      const id = "cmp_scene_" + name;
+      const id = "cmp_" + (identity ? identity.id + "_" : "scene_") + name;
       let c: Compound;
       if (spec.ref) {
         const source = existing[spec.ref];
@@ -110,7 +209,9 @@ export async function compileFigureScene(
             id,
             title: name,
             smiles: spec.smiles,
-            sources: [{ source: "authored-scene", locator: input.title }],
+            sources: identity?.sources ?? [
+              { source: "authored-scene", locator: input.title },
+            ],
           },
           spec.molfile
             ? await readFile(resolve(directory, spec.molfile), "utf8")
@@ -268,7 +369,8 @@ export async function compileFigureScene(
           (a.z ?? 6) === 6 && a.impHs === 3 ? [c.atomIds[i]] : [],
         );
       if (!spec.ref) {
-        const abbreviations = [];
+        const abbreviations: NonNullable<Compound["layout"]["abbreviations"]> =
+          [];
         for (const label of ["CCl3", "PPh3", "OTMS"] as const) {
           try {
             if (abbreviatedGroups(rd, m, [label]).length)
@@ -544,7 +646,12 @@ export async function compileFigureScene(
       ).filter(
         (g) => !g.atoms.slice(1).some((i) => used.get(name)?.has(c.atomIds[i])),
       );
-      if (c.layout.abbreviations)
+      if (
+        c.layout.abbreviations &&
+        groups.length !==
+          abbreviatedGroups(rd, handles.get(name)!, c.layout.abbreviations)
+            .length
+      )
         c.layout.abbreviationAtoms = groups.map((g) => c.atomIds[g.atoms[0]]);
       const hidden = new Set(
         groups.flatMap((g) => g.atoms.slice(1)).map((i) => c.atomIds[i]),
@@ -802,12 +909,45 @@ export async function compileFigureScene(
     }
     scene.width = Math.max(...allBoxes.map((b) => b.right)) - minX + 1.5;
     scene.height = Math.max(...allBoxes.map((b) => b.bottom)) - minY + 2.5;
-    const id = "mec_authored_scene";
+    if (identity) {
+      for (const placement of scene.molecules) {
+        const sourceId = input.molecules[placement.id].ref;
+        if (!sourceId) continue;
+        const source = existing[sourceId];
+        if (source.kind !== "compound")
+          throw new Error(`Missing compound ${sourceId}`);
+        const generated = compounds.get(placement.id)!;
+        if (
+          JSON.stringify(generated.template) !== JSON.stringify(source.template)
+        )
+          throw new Error(
+            `${sourceId}: template labels belong to the saved compound`,
+          );
+        if (
+          JSON.stringify(generated.layout) !== JSON.stringify(source.layout)
+        ) {
+          const variant = identity.id + "_" + placement.id;
+          const stored = entries[sourceId];
+          if (stored.kind !== "compound")
+            throw new Error(`Missing compound ${sourceId}`);
+          entries[sourceId] = {
+            ...stored,
+            variants: { ...stored.variants, [variant]: generated.layout },
+          };
+          placement.variant = variant;
+        }
+        placement.compound = sourceId;
+        delete entries[generated.id];
+      }
+    }
+    const id = identity?.id ?? "mec_authored_scene";
     entries[id] = {
       kind: "mechanism",
       id,
       title: input.title,
-      sources: [{ source: "authored-scene", locator: input.title }],
+      sources: identity?.sources ?? [
+        { source: "authored-scene", locator: input.title },
+      ],
       category: input.comparison ? "comparison" : "reaction",
       frames: [
         { id: "scene", title: input.title, explanation: input.title, scene },

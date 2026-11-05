@@ -122,3 +122,27 @@ Declare `reagent` and `salt` in `molecules`. The reaction places an `aboveMolecu
 First confirm graph, charge, stereo, selected atoms and electron direction from the source. Then inspect the rendered PNG at normal bond scale. Diagnostics locate overlapping labels, intersecting arrows and clipped ink; they do not validate chemical interpretation.
 
 Prefer a clearer relative placement or larger `gap` before using a local `offset: [x, y]`, `rotate: 30` or arrow `bend`. Aim for zero adjustments and usually no more than one to three fields. If many examples need the same fix, improve the shared default instead of embedding coordinates or control points in each scene. The printed adjustment count includes offset, rotate and bend; report explicit charge angles, wedge declarations and reused conformer work separately when comparing authoring effort.
+
+## Saved library scenes
+
+A library reaction or mechanism may be authored as YAML. Put the scene fields above inside a reaction's `scene` or each mechanism frame's `scene`; retain the entry's stable `id`, `title`, `sources`, participants, explanation and frame IDs. The content build compiles these declarations directly, so no generated JSON copy is needed. Render the saved entry with `--library <content-root> --entry <id>`.
+
+Use `ref` for shared compounds. Scene orientation changes become named layout variants in the compiled library and preserve the saved graph, atom IDs and default layout. New `smiles` receive entry/frame-scoped IDs and inherit the entry's sources. For reuse in other entries, prepare a saved compound first. Routes retain their step graph and refer to these reactions by ID.
+
+```yaml
+kind: reaction
+id: rxn_example
+title: Alcohol oxidation
+sources: [{ source: handbook, locator: Example 1 }]
+reactants: [{ id: input, compound: cmp_alcohol }]
+products: [{ id: output, compound: cmp_carbonyl }]
+explanation: The primary alcohol gives the aldehyde.
+scene:
+  molecules:
+    input: { ref: cmp_alcohol }
+    output: { ref: cmp_carbonyl, rightOf: input }
+  reactions:
+    - { from: input, to: output, above: [Oxidant] }
+```
+
+The first declared reaction arrow supplies the reaction's main arrow and, when omitted, its reagents (`above`) and conditions (`below`). Additional arrows remain in the scene. Mechanisms retain all declared arrows inside each frame.

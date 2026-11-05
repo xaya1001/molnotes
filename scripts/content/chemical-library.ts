@@ -1,5 +1,8 @@
 import { readFile, readdir, lstat } from "node:fs/promises";
-import { join } from "node:path";
+import { join, dirname, extname } from "node:path";
+import { parse as parseYaml } from "yaml";
+import { isObject } from "../../shared/json.ts";
+import { compileFigureScene } from "../figure-scene.ts";
 import {
   validateLibrary,
   validateLibraryEntry,
@@ -21,6 +24,88 @@ import type {
 } from "../../shared/chemical-library/types.ts";
 import type { UnitAsset } from "./content-files.ts";
 
+async function compileEntryScenes(
+  value: unknown,
+  entries: Library,
+  directory: string,
+) {
+  if (
+    !isObject(value) ||
+    !["reaction", "mechanism"].includes(String(value.kind))
+  )
+    return;
+  const { id, title, sources } = value;
+  if (
+    typeof id !== "string" ||
+    typeof title !== "string" ||
+    !Array.isArray(sources)
+  )
+    throw new Error("Authored library entry requires id, title and sources");
+  const evidence = sources.map((s) => {
+    if (
+      !isObject(s) ||
+      typeof s.source !== "string" ||
+      typeof s.locator !== "string" ||
+      (s.note !== undefined && typeof s.note !== "string")
+    )
+      throw new Error(`${id}: invalid source evidence`);
+    return { source: s.source, locator: s.locator, note: s.note };
+  });
+  const compile = async (
+    raw: unknown,
+    namespace: string,
+    frameTitle = title,
+  ) => {
+    if (!isObject(raw) || Array.isArray(raw.molecules)) return null;
+    const result = await compileFigureScene(
+      { ...raw, title: frameTitle },
+      entries,
+      directory,
+      { id: namespace, sources: evidence },
+    );
+    const generated = result.entries[namespace];
+    if (generated.kind !== "mechanism")
+      throw new Error(`${id}: expected compiled scene`);
+    const scene = generated.frames[0].scene;
+    delete result.entries[namespace];
+    Object.assign(entries, result.entries);
+    return scene;
+  };
+  if (value.kind === "reaction") {
+    const scene = await compile(value.scene, id);
+    if (scene) {
+      const main = scene.reactionArrows?.shift();
+      if (!main)
+        throw new Error(`${id}: reaction scene requires a reaction arrow`);
+      value.scene = scene;
+      value.arrow = {
+        from: main.from,
+        to: main.to,
+        textWidth: Math.hypot(main.to.x - main.from.x, main.to.y - main.from.y),
+      };
+      value.reagents ??= main.above ?? [];
+      value.conditions ??= main.below ?? [];
+    }
+  } else {
+    if (!Array.isArray(value.frames))
+      throw new Error(`${id}: frames must be an array`);
+    for (const frame of value.frames) {
+      if (
+        !isObject(frame) ||
+        typeof frame.id !== "string" ||
+        typeof frame.title !== "string"
+      )
+        throw new Error(`${id}: frame requires id and title`);
+      const scene = await compile(
+        frame.scene,
+        `${id}_${frame.id}`,
+        frame.title,
+      );
+      if (scene) frame.scene = scene;
+    }
+  }
+}
+
 export async function readChemicalLibrary(root: string) {
   const entries: Library = {},
     assets: UnitAsset[] = [];
@@ -39,13 +124,17 @@ export async function readChemicalLibrary(root: string) {
       },
     );
     for (const f of files.sort((a, b) => a.name.localeCompare(b.name))) {
-      if (!f.isFile() || !f.name.endsWith(".json"))
-        throw new Error(`library/${dir}/${f.name}: expected JSON file`);
-      const value: unknown = JSON.parse(
-        await readFile(join(base, dir, f.name), "utf8"),
-      );
+      const extension = extname(f.name);
+      if (!f.isFile() || ![".json", ".yaml", ".yml"].includes(extension))
+        throw new Error(`library/${dir}/${f.name}: expected JSON or YAML file`);
+      const path = join(base, dir, f.name),
+        text = await readFile(path, "utf8");
+      const value: unknown =
+        extension === ".json" ? JSON.parse(text) : parseYaml(text);
+      if (extension !== ".json")
+        await compileEntryScenes(value, entries, dirname(path));
       validateLibraryEntry(value, `library/${dir}/${f.name}`);
-      if (f.name !== value.id + ".json" || entries[value.id])
+      if (f.name !== value.id + extension || entries[value.id])
         throw new Error(`library: duplicate or mismatched ID ${value.id}`);
       if (
         {

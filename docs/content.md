@@ -201,7 +201,7 @@ R columns display shared journal abbreviations (including `C` → Me and `CC` �
 
 ## Shared figure library
 
-The content root owns `library/compounds/`, `library/reactions/`, `library/routes/`, `library/mechanisms/` and `library/images/`. Each JSON file is named after its permanent ID (`cmp_…`, `rxn_…`, `rte_…`, `mec_…`, `img_…`). Entries contain `kind`, `id`, `title` and `sources: [{source, locator, note?}]`. The source ID refers to `sources.json`. Image bytes live in `library/assets/<sha256>.<extension>`; the content build verifies their hashes. `/library/` shows the complete inventory, previews, layout checks and reverse references.
+The content root owns `library/compounds/`, `library/reactions/`, `library/routes/`, `library/mechanisms/` and `library/images/`. Each JSON or YAML (`.yaml` / `.yml`) file is named after its permanent ID (`cmp_…`, `rxn_…`, `rte_…`, `mec_…`, `img_…`). Entries contain `kind`, `id`, `title` and `sources: [{source, locator, note?}]`. The source ID refers to `sources.json`. Image bytes live in `library/assets/<sha256>.<extension>`; the content build verifies their hashes. `/library/` shows the complete inventory, previews, layout checks and reverse references.
 
 A topic block uses `{type:"figure-ref", ref:"cmp_example", numbers:{compound:"4"}, caption:"…"}`. An excerpt can supply `figure: {ref:"img_example", caption:"…"}`. Notes use a YAML fence:
 
