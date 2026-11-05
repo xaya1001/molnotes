@@ -322,3 +322,82 @@ test("library dependencies include scene participants and report reverse referen
     /unknown atom/,
   );
 });
+
+test("declarative scenes preserve semantic endpoints and reuse saved graph identity", async () => {
+  const { compileFigureScene } = await import("../scripts/figure-scene.ts");
+  const { validateSceneChemistry } =
+    await import("../shared/chemical-library/chemistry.ts");
+  const input = {
+    title: "Addition",
+    molecules: {
+      substrate: { smiles: "CC(=O)C" },
+      donor: { smiles: "[OH-]", leftOf: "substrate" },
+    },
+    arrows: [
+      "donor:charge(a1) -> between(donor:a1,substrate:a2)",
+      "substrate:pi(a2,a3) -> substrate:atom(a3)",
+    ],
+  };
+  const result = await compileFigureScene(input);
+  validateLibrary(result.entries);
+  const mechanism = result.entries[result.reference.ref];
+  assert.equal(mechanism.kind, "mechanism");
+  if (mechanism.kind !== "mechanism") throw new Error("Expected mechanism");
+  const scene = mechanism.frames[0].scene;
+  validateSceneChemistry(
+    await moleculeToolkit(),
+    result.entries,
+    scene,
+    mechanism.id,
+  );
+  assert.deepEqual(scene.arrows![0].to, {
+    kind: "formingBond",
+    atoms: [
+      { molecule: "donor", atom: "a1" },
+      { molecule: "substrate", atom: "a2" },
+    ],
+  });
+  const reused = await compileFigureScene(
+    {
+      title: "Reuse",
+      molecules: { copy: { ref: "cmp_scene_substrate" } },
+    },
+    result.entries,
+  );
+  assert.equal(
+    (
+      reused.entries
+        .cmp_scene_copy as import("../shared/chemical-library/types.ts").Compound
+    ).graph,
+    (
+      result.entries
+        .cmp_scene_substrate as import("../shared/chemical-library/types.ts").Compound
+    ).graph,
+  );
+  await assert.rejects(
+    compileFigureScene({
+      ...input,
+      arrows: ["donor:charge(a99) -> substrate:atom(a2)"],
+    }),
+    /Unknown atom/,
+  );
+});
+
+test("filled heads meet the visible shaft at their notch and distinguish one electron", async () => {
+  const { solidArrow } = await import("../src/ui/library/arrow-layout.ts");
+  for (const B of [20, 32]) {
+    const p = (x: number, y: number) => ({ x: x * B, y: y * B });
+    const controls = [p(1.5, -1), p(3, -1)];
+    const full = solidArrow(p(0, 0), p(4, 0), B, controls);
+    const half = solidArrow(p(0, 0), p(4, 0), B, controls, true);
+    assert.equal(full.vertices.length, 4);
+    assert.equal(half.vertices.length, 3);
+    for (const shape of [full, half]) {
+      const end = shape.points.at(-1)!,
+        notch = shape.vertices[2];
+      assert.ok(Math.hypot(end.x - notch.x, end.y - notch.y) < 1e-7);
+      assert.ok(Math.hypot(end.x - 4 * B, end.y) > B * 0.29);
+    }
+    assert.deepEqual(half.vertices[0], full.vertices[0]);
+  }
+});
