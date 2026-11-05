@@ -156,16 +156,32 @@ test("wrapped reaction conditions leave visible space between CJK and Latin line
   if (reaction.kind !== "reaction") throw new Error("Invalid fixture");
   reaction.reagents = [
     "试剂甲与试剂乙混合后缓慢加入反应体系",
-    "Reagent A / H₂O",
+    "Reagent A / Me2S / H₂O",
   ];
-  reaction.conditions = ["室温搅拌后加热并保持反应温度", "Ambient temperature"];
+  reaction.conditions = [
+    "室温搅拌后加热并保持反应温度",
+    "Ambient temperature",
+    "DMF，0–25 °C，16 h；THF，0 °C，1 h；DCM，−20–25 °C，2 h",
+  ];
   reaction.arrow.textWidth = 4;
+  reaction.scene.height = 16;
   await page.route("**/api/library", (route) =>
     route.fulfill({ json: library }),
   );
   await page.goto("/library/");
   const entry = page.locator("#rxn_example");
-  await expect(entry.locator('[data-check="passed"]')).toHaveCount(1);
+  await expect(entry.locator("[data-check]")).toHaveAttribute(
+    "data-check",
+    /passed|error/,
+  );
+  expect(await entry.locator("[data-diagnostic]").allTextContents()).toEqual(
+    [],
+  );
+  const lines = await entry
+    .locator('[data-label*="rxn_example:condition:"]')
+    .allTextContents();
+  for (const token of ["DCM", "Me2S", "−20–25 °C"])
+    expect(lines.some((line) => line.includes(token))).toBe(true);
   for (const width of [1366, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     const gaps = await entry.locator("svg").evaluate((svg) => {

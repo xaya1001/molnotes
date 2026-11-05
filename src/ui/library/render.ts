@@ -1156,13 +1156,28 @@ export async function renderFigure(
         parent.append(probe);
         const result: string[] = [];
         for (const text of lines) {
+          const tokens: string[] = [];
+          for (const part of text.trim().match(/.*?(?:[；，、/;\s]+|$)/gu) ??
+            []) {
+            if (!part) continue;
+            const previous = tokens.at(-1);
+            // A quantity and its following unit share one line, including
+            // temperature ranges such as −20–25 °C.
+            if (
+              previous &&
+              /\d\s+$/u.test(previous) &&
+              /^(?:°|\p{L})/u.test(part)
+            )
+              tokens[tokens.length - 1] += part;
+            else tokens.push(part);
+          }
           let line = "";
-          for (const char of text) {
-            probe.textContent = line + char;
+          for (const token of tokens) {
+            probe.textContent = line + token;
             if (line && probe.getComputedTextLength() > textWidth) {
               result.push(line.trim());
-              line = char;
-            } else line += char;
+              line = token;
+            } else line += token;
           }
           if (line) result.push(line.trim());
         }
@@ -1182,9 +1197,16 @@ export async function renderFigure(
         );
         const edge =
           sign < 0
-            ? Math.min(a.y, ...occupied.map((p) => p.bounds.y))
+            ? Math.min(
+                a.y,
+                b.y,
+                ...arrowShape.vertices.map((p) => p.y),
+                ...occupied.map((p) => p.bounds.y),
+              )
             : Math.max(
                 a.y,
+                b.y,
+                ...arrowShape.vertices.map((p) => p.y),
                 ...occupied.map((p) => p.bounds.y + p.bounds.height),
               );
         const gap = token("--chemical-caption-font") / 4;
