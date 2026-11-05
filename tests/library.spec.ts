@@ -247,6 +247,7 @@ test("bond checks detect detached endpoints and accept separate components", asy
     ["cmp_isotope", "[13CH3]O.OC1CCCCO1"],
     ["cmp_radical", "c1ccccc#1.[NH2-]"],
     ["cmp_amine", "CNC1CCCCC1"],
+    ["cmp_hashed", "CN[C@@H](F)Cl"],
   ].map(([id, smiles]) =>
     prepareCompound(toolkit, {
       id,
@@ -255,6 +256,17 @@ test("bond checks detect detached endpoints and accept separate components", asy
       sources: [{ source: "example", locator: "Structures" }],
     }),
   );
+  const hashed = compounds.find((compound) => compound.id === "cmp_hashed")!;
+  hashed.layout = {
+    coords: {
+      a1: { x: -2, y: 1 },
+      a2: { x: -1, y: 1 },
+      a3: { x: 0, y: 0 },
+      a4: { x: 0, y: -1 },
+      a5: { x: 1, y: 0 },
+    },
+    wedgeBonds: [{ from: "a3", to: "a2", style: "hashed" }],
+  };
   const entries = Object.fromEntries(compounds.map((c) => [c.id, c]));
   await page.route("**/api/library", (route) =>
     route.fulfill({
@@ -265,7 +277,8 @@ test("bond checks detect detached endpoints and accept separate components", asy
     }),
   );
   await page.goto("/library/");
-  await expect(page.locator('[data-check="passed"]')).toHaveCount(5);
+  await expect(page.locator("#cmp_chain svg")).toBeVisible();
+  await expect(page.locator('[data-check="passed"]')).toHaveCount(6);
   await expect(
     page
       .locator(
@@ -281,10 +294,20 @@ test("bond checks detect detached endpoints and accept separate components", asy
   await bond.evaluateAll((nodes) =>
     nodes.forEach((node) => node.setAttribute("transform", "translate(0 -20)")),
   );
+  await page
+    .locator('#cmp_hashed [data-bond="compound:b1"]')
+    .evaluateAll((nodes) =>
+      nodes.forEach((node) =>
+        node.setAttribute("transform", "translate(0 -20)"),
+      ),
+    );
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(
     page.locator('#cmp_chain [data-diagnostic="BOND_ENDPOINT_DETACHED"]'),
   ).toHaveCount(2);
+  await expect(
+    page.locator('#cmp_hashed [data-diagnostic="BOND_ENDPOINT_DETACHED"]'),
+  ).not.toHaveCount(0);
   await expect(
     page.locator('#cmp_components [data-check="passed"]'),
   ).toHaveCount(1);

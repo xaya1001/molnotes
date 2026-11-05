@@ -209,7 +209,9 @@ export function figureDiagnostics(svg: SVGSVGElement): Diagnostic[] {
   const drawnBonds = new Map<string, typeof bonds>();
   for (const bond of bonds)
     drawnBonds.set(bond.id, [...(drawnBonds.get(bond.id) ?? []), bond]);
-  const maximumGap = bondLength * scale * 0.15;
+  // Native label clipping, the final hash stroke and crossing-bond gaps can
+  // leave up to a fraction of a bond between the visible ink and its owner.
+  const maximumGap = bondLength * scale * 0.3;
   for (const [id, parts] of drawnBonds) {
     // A solid wedge has a tip and a broad end, represented by its contour.
     // Ordinary lines and hash strokes are checked at their actual endpoints.
