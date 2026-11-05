@@ -358,14 +358,22 @@ export function routeElectronArrow(
               }
             }
           }
+          const shaft = cubicPoints(...visible.points);
           const arc = Math.max(
-            ...points.map((p) => Math.abs(cross(p)) / distance(a, d)),
+            ...shaft.map((p) => Math.abs(cross(p)) / distance(a, d)),
           );
           const short = directions?.compact || distance(a, d) < B * 1.2;
           const arcLength = points
             .slice(1)
             .reduce((sum, p, i) => sum + distance(points[i], p), 0);
           if (arc < B * (short ? 0.45 : 0.3) || arcLength < B * 1.2) continue;
+          // Prefer an open, readable bond-transfer arc when space permits.
+          // Collision penalties still win in constrained rings.
+          if (directions?.compact)
+            score +=
+              ((Math.max(0, B * 0.7 - arc) + Math.max(0, B * 1.6 - arcLength)) /
+                B) *
+              500;
           const side =
             (to.x - from.x) * (points[12].y - from.y) -
             (to.y - from.y) * (points[12].x - from.x);
@@ -373,7 +381,6 @@ export function routeElectronArrow(
           // Prefer a smooth arc over a loop when both avoid the same obstacles.
           score += Math.abs(exit + entry) * 0.008;
           if (score < bestScore) {
-            const shaft = cubicPoints(...visible.points);
             const visibleLength = shaft
               .slice(1)
               .reduce(

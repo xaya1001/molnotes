@@ -258,3 +258,48 @@ test("deuterium uses one full-size native D glyph without changing identity", as
   expect(height).toBeGreaterThan(10);
   expect(compound.graph).toContain("[2H]");
 });
+
+test("adjacent bond transfers use a readable arc when space is available", async ({
+  page,
+}) => {
+  const { compileFigureScene } = await import("../scripts/figure-scene.ts");
+  const { entries, reference } = await compileFigureScene({
+    title: "Bond transfer",
+    molecules: { molecule: { smiles: "[2H]CC(=O)C", orient: "keep" } },
+    arrows: ["molecule:bond(a1,a2) -> molecule:bond(a2,a3)"],
+  });
+  const library: LibrarySnapshot = { entries, uses: {} };
+  await page.route("**/api/library", (route) =>
+    route.fulfill({ json: library }),
+  );
+  await page.goto("/library/");
+  const svg = page.locator(`[data-figure="${reference.ref}"]`);
+  await expect(svg.locator('[data-electron-arrow="electron-1"]')).toBeVisible();
+  const height = await svg.evaluate((svg) => {
+    const shaft = svg.querySelector<SVGPathElement>(
+      '[data-electron-arrow="electron-1"]',
+    )!;
+    const start = shaft.getPointAtLength(0);
+    const tip = JSON.parse(
+      svg.querySelector<SVGPathElement>('[data-arrow-head="electron-1"]')!
+        .dataset.headPoints!,
+    )[0];
+    const chord = Math.hypot(tip.x - start.x, tip.y - start.y);
+    const height = Math.max(
+      ...Array.from({ length: 101 }, (_, i) => {
+        const p = shaft.getPointAtLength((shaft.getTotalLength() * i) / 100);
+        return (
+          Math.abs(
+            (tip.x - start.x) * (p.y - start.y) -
+              (tip.y - start.y) * (p.x - start.x),
+          ) / chord
+        );
+      }),
+    );
+    return (
+      height /
+      parseFloat(getComputedStyle(svg).getPropertyValue("--chemical-bond"))
+    );
+  });
+  expect(height).toBeGreaterThanOrEqual(0.69);
+});
