@@ -277,8 +277,9 @@ test("fused stereocentres use explicit H wedges and salts keep counterions near 
   await page.goto("/library/");
   for (const width of [1366, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
-    for (const id of Object.keys(entries))
-      await expect(page.locator(`#${id} [data-check="passed"]`)).toHaveCount(1);
+    await expect(page.locator('#cmp_fused [data-check="passed"]')).toHaveCount(
+      1,
+    );
     const h = page.locator('#cmp_fused [data-label^="compound:hydrogen-"]');
     expect(
       await h.evaluateAll(
@@ -299,6 +300,17 @@ test("fused stereocentres use explicit H wedges and salts keep counterions near 
             }).length,
         );
       expect(wedges).toBe(0);
+    }
+    for (const id of Object.keys(entries)) {
+      const check = page.locator(`#${id} [data-check]`);
+      await expect
+        .poll(async () =>
+          (await check.count()) ? check.getAttribute("data-check") : "pending",
+        )
+        .not.toBe("pending");
+      expect(
+        await page.locator(`#${id} [data-diagnostic]`).allTextContents(),
+      ).toEqual([]);
     }
     for (const c of pairs) {
       const distance = await page

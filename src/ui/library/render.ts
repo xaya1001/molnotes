@@ -508,7 +508,35 @@ export async function renderFigure(
             right = Math.max(...boxes.map((b) => b.x + b.width));
           const top = Math.min(...boxes.map((b) => b.y)),
             bottom = Math.max(...boxes.map((b) => b.y + b.height));
-          const angle = radians(layout.chargeAngles?.[c.atomIds[i]] ?? -45);
+          let chargeAngle = layout.chargeAngles?.[c.atomIds[i]];
+          const bondAngles = graph.bonds
+            .flatMap(({ atoms: [a, b] }, index) => {
+              if (hiddenBonds.has(index) || (a !== i && b !== i)) return [];
+              const p = positions[a === i ? b : a],
+                origin = positions[i];
+              return [
+                (Math.atan2(p.y - origin.y, p.x - origin.x) + 2 * Math.PI) %
+                  (2 * Math.PI),
+              ];
+            })
+            .sort((a, b) => a - b);
+          if (chargeAngle === undefined && bondAngles.length > 1) {
+            const gaps = bondAngles
+              .map((a, k) => {
+                const gap =
+                  (bondAngles[k + 1] ?? bondAngles[0] + 2 * Math.PI) - a;
+                const middle = a + gap / 2;
+                return { gap, middle };
+              })
+              .sort((a, b) =>
+                Math.abs(a.gap - b.gap) > 1e-6
+                  ? b.gap - a.gap
+                  : Math.cos(b.middle + Math.PI / 4) -
+                    Math.cos(a.middle + Math.PI / 4),
+              );
+            chargeAngle = (gaps[0].middle * 180) / Math.PI;
+          }
+          const angle = radians(chargeAngle ?? -45);
           const ux = Math.cos(angle),
             uy = Math.sin(angle),
             r = B * 0.19;
