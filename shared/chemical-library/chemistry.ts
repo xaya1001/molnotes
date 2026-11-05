@@ -9,7 +9,13 @@ import type { Compound, CompoundLayout, Point } from "./types.ts";
 export type Toolkit =
   import("../../src/ui/chemistry/rdkit.ts").ChemistryToolkit;
 export interface ChemicalGraph {
-  atoms: { z?: number; chg?: number; impHs?: number; stereo?: string }[];
+  atoms: {
+    z?: number;
+    chg?: number;
+    impHs?: number;
+    isotope?: number;
+    stereo?: string;
+  }[];
   bonds: { atoms: [number, number]; bo?: number }[];
   conformers?: { coords: [number, number][] }[];
 }

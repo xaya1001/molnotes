@@ -139,6 +139,12 @@ test("library mechanism previews collect all frames or the explicitly selected f
       { ref: mechanism.id, frame: "second" },
     ],
   );
+  assert.deepEqual(
+    figures.map((f) => f.title),
+    ["first", "second", "second"],
+  );
+  assert.ok(figures[0].where.includes("[first]"));
+  assert.ok(figures[1].where.includes("[second]"));
   topic.chapters[0].blocks = [
     { type: "figure-ref", ref: mechanism.id, frame: "missing" },
   ];

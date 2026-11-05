@@ -237,6 +237,82 @@ test("labelled ions show one circled charge and diagnostics reject duplicate mar
   ).toHaveCount(1);
 });
 
+test("bond checks detect detached endpoints and accept separate components", async ({
+  page,
+}) => {
+  const toolkit = await moleculeToolkit();
+  const compounds = [
+    ["cmp_chain", "CCC"],
+    ["cmp_components", "CO.OC1CCCCO1"],
+    ["cmp_isotope", "[13CH3]O.OC1CCCCO1"],
+    ["cmp_radical", "c1ccccc#1.[NH2-]"],
+    ["cmp_amine", "CNC1CCCCC1"],
+    ["cmp_hashed", "CN[C@@H](F)Cl"],
+  ].map(([id, smiles]) =>
+    prepareCompound(toolkit, {
+      id,
+      title: "Example structure",
+      smiles,
+      sources: [{ source: "example", locator: "Structures" }],
+    }),
+  );
+  const hashed = compounds.find((compound) => compound.id === "cmp_hashed")!;
+  hashed.layout = {
+    coords: {
+      a1: { x: -2, y: 1 },
+      a2: { x: -1, y: 1 },
+      a3: { x: 0, y: 0 },
+      a4: { x: 0, y: -1 },
+      a5: { x: 1, y: 0 },
+    },
+    wedgeBonds: [{ from: "a3", to: "a2", style: "hashed" }],
+  };
+  const entries = Object.fromEntries(compounds.map((c) => [c.id, c]));
+  await page.route("**/api/library", (route) =>
+    route.fulfill({
+      json: {
+        entries,
+        uses: Object.fromEntries(compounds.map((c) => [c.id, []])),
+      },
+    }),
+  );
+  await page.goto("/library/");
+  await expect(page.locator("#cmp_chain svg")).toBeVisible();
+  await expect(page.locator('[data-check="passed"]')).toHaveCount(6);
+  await expect(
+    page
+      .locator(
+        '#cmp_components [data-label="compound:a1"][data-label-text="Me"]',
+      )
+      .first(),
+  ).toBeVisible();
+  await expect(page.locator('#cmp_isotope [data-label-text="Me"]')).toHaveCount(
+    0,
+  );
+  const bond = page.locator('#cmp_chain [data-bond="compound:b0"]');
+  await bond.first().waitFor({ state: "visible" });
+  await bond.evaluateAll((nodes) =>
+    nodes.forEach((node) => node.setAttribute("transform", "translate(0 -20)")),
+  );
+  await page
+    .locator('#cmp_hashed [data-bond="compound:b1"]')
+    .evaluateAll((nodes) =>
+      nodes.forEach((node) =>
+        node.setAttribute("transform", "translate(0 -20)"),
+      ),
+    );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(
+    page.locator('#cmp_chain [data-diagnostic="BOND_ENDPOINT_DETACHED"]'),
+  ).toHaveCount(2);
+  await expect(
+    page.locator('#cmp_hashed [data-diagnostic="BOND_ENDPOINT_DETACHED"]'),
+  ).not.toHaveCount(0);
+  await expect(
+    page.locator('#cmp_components [data-check="passed"]'),
+  ).toHaveCount(1);
+});
+
 test("fused stereocentres use explicit H wedges and salts keep counterions near their charge centre", async ({
   page,
 }) => {
