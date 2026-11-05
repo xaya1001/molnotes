@@ -119,6 +119,10 @@ const settle = () =>
   );
 onMounted(async () => {
   await nextTick();
+  for (const image of document.querySelectorAll<HTMLImageElement>(
+    ".preview-figure img",
+  ))
+    image.loading = "eager";
   // Structures draw once RDKit has loaded; timelines measure their labels first.
   const deadline = Date.now() + 30_000;
   while (
