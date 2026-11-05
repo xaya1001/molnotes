@@ -142,6 +142,10 @@ for (const width of [1366, 390]) {
       1,
     );
     const result = (await page.evaluate(() => window.__previewResult))!;
+    for (const title of ["first", "second"])
+      await expect(
+        page.getByRole("heading", { name: title, exact: true }),
+      ).toBeVisible();
     expect(
       result.slice(0, 5).flatMap((r) => [...r.warnings, ...(r.errors ?? [])]),
     ).toEqual([]);

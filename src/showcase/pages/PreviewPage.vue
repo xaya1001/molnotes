@@ -37,6 +37,7 @@ type Shown =
       kind: "library";
       reference: FigureReference;
       caption: string;
+      title?: string;
     }
   | {
       where: string;
@@ -205,6 +206,9 @@ onMounted(async () => {
         :data-preview="i"
         class="preview-figure"
       >
+        <h3 v-if="figure.kind === 'library' && figure.title">
+          {{ figure.title }}
+        </h3>
         <LibraryFigure
           v-if="figure.kind === 'library'"
           :library="library"

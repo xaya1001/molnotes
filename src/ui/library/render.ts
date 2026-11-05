@@ -254,6 +254,35 @@ export async function renderFigure(
                 ? "CCl<sub>3</sub>"
                 : g.name;
         }
+        // Spell small, separate methyl fragments using the existing Me label.
+        // Their atom positions and semantic arrow anchors remain unchanged.
+        if (graph.atoms.length > 2 && layout.methylLabels === undefined) {
+          const neighbours = graph.atoms.map((): number[] => []);
+          for (const {
+            atoms: [a, b],
+          } of graph.bonds) {
+            neighbours[a].push(b);
+            neighbours[b].push(a);
+          }
+          for (const [i, atom] of graph.atoms.entries()) {
+            if (
+              (atom.z ?? 6) !== 6 ||
+              atom.impHs !== 3 ||
+              atom.chg ||
+              atom.isotope ||
+              neighbours[i].length !== 1 ||
+              folded.has(i)
+            )
+              continue;
+            const j = neighbours[i][0];
+            if (
+              neighbours[j].length === 1 &&
+              !graph.atoms[j].chg &&
+              !folded.has(j)
+            )
+              atomLabels[i] = "Me";
+          }
+        }
         if (layout.compact) {
           for (const i of graph.atoms.keys()) atomLabels[i] = "";
           atomLabels[c.atomIds.indexOf(layout.compact.atom)] =
@@ -443,6 +472,8 @@ export async function renderFigure(
                 })
               : "";
             e.setAttribute("data-label", aid || `${id}:annotation`);
+            if (atomLabels[ai[0]])
+              e.setAttribute("data-label-text", atomLabels[ai[0]]);
             e.style.fontFamily = "Arial, Helvetica, sans-serif";
             if (parseFloat(e.style.fontSize) < token("--chemical-font"))
               e.setAttribute("data-script", "true");
@@ -468,14 +499,16 @@ export async function renderFigure(
           nativeBonds,
           graph.bonds,
         );
+        const localPoints: Record<string, Point> = {};
         positions.forEach((p, i) => {
-          atomPoints[
-            key({
-              molecule: id,
-              atom: c.atomIds[i] ?? `hydrogen-${i - c.atomIds.length}`,
-            })
-          ] = plus(p, shift);
+          const atom = key({
+            molecule: id,
+            atom: c.atomIds[i] ?? `hydrogen-${i - c.atomIds.length}`,
+          });
+          localPoints[atom] = p;
+          atomPoints[atom] = plus(p, shift);
         });
+        g.dataset.atomPoints = JSON.stringify(localPoints);
         if (layout.compact) {
           const idx = c.atomIds.indexOf(layout.compact.atom);
           const glyphs = [

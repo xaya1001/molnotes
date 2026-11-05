@@ -195,6 +195,61 @@ export function figureDiagnostics(svg: SVGSVGElement): Diagnostic[] {
       own: (el.dataset.atoms ?? "").split(" "),
     }),
   );
+  const atomPoints = new Map<string, Point>();
+  for (const molecule of svg.querySelectorAll<SVGGElement>(
+    "[data-atom-points]",
+  )) {
+    const points: Record<string, Point> = JSON.parse(
+      molecule.dataset.atomPoints!,
+    );
+    const matrix = molecule.getScreenCTM()!;
+    for (const [id, p] of Object.entries(points))
+      atomPoints.set(id, new DOMPoint(p.x, p.y).matrixTransform(matrix));
+  }
+  const drawnBonds = new Map<string, typeof bonds>();
+  for (const bond of bonds)
+    drawnBonds.set(bond.id, [...(drawnBonds.get(bond.id) ?? []), bond]);
+  const maximumGap = bondLength * scale * 0.15;
+  for (const [id, parts] of drawnBonds) {
+    // A solid wedge has a tip and a broad end, represented by its contour.
+    // Ordinary lines and hash strokes are checked at their actual endpoints.
+    const ends = parts.flatMap((b) =>
+      getComputedStyle(b.el).fill !== "none"
+        ? b.points
+        : b.points.length
+          ? [b.points[0], b.points.at(-1)!]
+          : [],
+    );
+    for (const owner of new Set(parts.flatMap((b) => b.own))) {
+      const centre = atomPoints.get(owner);
+      const glyphs = labels.filter((l) => l.id === owner);
+      const gap = centre
+        ? Math.min(
+            ...ends.map((p) =>
+              glyphs.length
+                ? Math.min(
+                    ...glyphs.map(({ r }) =>
+                      Math.hypot(
+                        Math.max(r.left - p.x, 0, p.x - r.right),
+                        Math.max(r.top - p.y, 0, p.y - r.bottom),
+                      ),
+                    ),
+                  )
+                : Math.hypot(p.x - centre.x, p.y - centre.y),
+            ),
+          )
+        : Infinity;
+      if (gap > maximumGap)
+        add(
+          "BOND_ENDPOINT_DETACHED",
+          [id, owner],
+          "Reconnect the drawn bond endpoint to its atom or label",
+          centre ? { x: centre.x - outer.x, y: centre.y - outer.y } : undefined,
+          Number.isFinite(gap) ? gap : undefined,
+          maximumGap,
+        );
+    }
+  }
   for (const b of bonds)
     for (const l of labels) {
       const points = b.points;

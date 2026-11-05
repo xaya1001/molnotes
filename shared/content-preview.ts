@@ -16,6 +16,7 @@ import {
 import type { Library } from "./chemical-library/types.ts";
 export interface PreviewFigure {
   where: string;
+  title?: string;
   kind:
     | "timeline"
     | "flow"
@@ -67,8 +68,13 @@ export function topicFigures(
                 : [reference];
             for (const ref of references) {
               validateFigureInstance(library, ref);
+              const frame =
+                entry?.kind === "mechanism"
+                  ? entry.frames.find((frame) => frame.id === ref.frame)
+                  : undefined;
               figures.push({
-                where: at,
+                where: frame ? `${at} [${frame.id}]` : at,
+                ...(frame ? { title: frame.title } : {}),
                 kind: "library",
                 value: ref,
                 caption: reference.caption ?? "",
