@@ -13,6 +13,8 @@ export const abbreviationSmarts = {
   Ms: "*S(=O)(=O)C",
   Tf: "*S(=O)(=O)C(F)(F)F",
   OTMS: "*O[Si](C)(C)C",
+  CCl3: "*C(Cl)(Cl)Cl",
+  PPh3: "*~[P,P+](c1ccccc1)(c1ccccc1)c1ccccc1",
   TMS: "*[Si](C)(C)C",
   TBS: "*[Si](C)(C)C(C)(C)C",
   TIPS: "*[Si](C(C)C)(C(C)C)C(C)C",

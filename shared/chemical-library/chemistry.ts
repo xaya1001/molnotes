@@ -1,5 +1,5 @@
 import type { Mol } from "@rdkit/rdkit";
-import { coordinatesFrom, withCoordinates } from "../molecule-layout.ts";
+import { coordinatesFrom } from "../molecule-layout.ts";
 import {
   validateAbbreviations,
   abbreviatedGroups,
@@ -16,7 +16,7 @@ export function graphOf(mol: Mol): ChemicalGraph {
   return JSON.parse(mol.get_json()).molecules[0];
 }
 export function openMolecule(toolkit: Toolkit, text: string) {
-  const mol = toolkit.get_mol(text);
+  const mol = toolkit.get_mol(text, JSON.stringify({ removeHs: false }));
   if (!mol?.is_valid()) {
     mol?.delete();
     throw new Error("Invalid molecular graph");
@@ -218,20 +218,160 @@ export function drawingMolecule(
   toolkit: Toolkit,
   c: Compound,
   points: Point[],
+  layout?: CompoundLayout,
+  rotate = 0,
+  mirror = false,
 ) {
-  const mapped = openMolecule(
-    toolkit,
-    withCoordinates(
-      c.smiles,
-      points.map((p) => [p.x * 1.5, -p.y * 1.5]),
-    ),
-  );
+  const original = openMolecule(toolkit, c.smiles);
+  let mapped: Mol;
   try {
-    return unmappedMolecule(toolkit, mapped);
+    const description = JSON.parse(original.get_json());
+    description.molecules[0].conformers = [{ dim: 2, coords: [] }];
+    // MinimalLib's conformer reader requires JSON floating-point tokens,
+    // including zero, while atom and bond fields retain integer tokens.
+    const coords = points
+      .map(
+        (p) =>
+          `[${(p.x * 1.5).toExponential()},${(-p.y * 1.5).toExponential()}]`,
+      )
+      .join(",");
+    mapped = openMolecule(
+      toolkit,
+      JSON.stringify(description).replace(
+        '"coords":[]',
+        `"coords":[${coords}]`,
+      ),
+    );
+  } finally {
+    original.delete();
+  }
+  try {
+    // Molblock export adds EITHERDOUBLE to unspecified alkenes. For the
+    // drawing copy, retain their authored parallel geometry; the source graph
+    // continues to own (and validate) the chemical stereochemistry.
+    const source = graphOf(mapped);
+    let inBonds = false;
+    let block = mappedBlock(mapped, Array(mapped.get_num_atoms()).fill(0))
+      .split("\n")
+      .map((line) => {
+        if (line === "M  V30 BEGIN BOND") inBonds = true;
+        else if (line === "M  V30 END BOND") inBonds = false;
+        else if (inBonds) {
+          const fields = line.trim().split(/\s+/);
+          const bond = source.bonds[Number(fields[2]) - 1];
+          if (bond.bo === 2 && !("stereo" in bond))
+            return line.replace(/ CFG=2$/, "");
+        }
+        return line;
+      })
+      .join("\n");
+    if (layout?.wedgeBonds?.length || layout?.hydrogens) {
+      const atomCount = mapped.get_num_atoms();
+      const atomIndex = new Map(c.atomIds.map((id, i) => [id, i + 1]));
+      const addedAtoms: string[] = [],
+        addedBonds: string[] = [];
+      for (const [owner, p] of Object.entries(layout.hydrogens ?? {})) {
+        const idx = atomCount + addedAtoms.length + 1;
+        const angle = (rotate * Math.PI) / 180,
+          x = mirror ? -p.x : p.x;
+        const q = {
+          x: x * Math.cos(angle) - p.y * Math.sin(angle),
+          y: x * Math.sin(angle) + p.y * Math.cos(angle),
+        };
+        atomIndex.set(`${owner}:H`, idx);
+        addedAtoms.push(`M  V30 ${idx} H ${q.x * 1.5} ${-q.y * 1.5} 0 0`);
+        const wedge = layout.wedgeBonds?.find(
+          (w) => w.from === owner && w.to === "H",
+        );
+        const cfg = wedge
+          ? ` CFG=${(wedge.style === "solid") !== mirror ? 1 : 3}`
+          : "";
+        addedBonds.push(
+          `M  V30 ${source.bonds.length + addedBonds.length + 1} 1 ${atomIndex.get(owner)} ${idx}${cfg}`,
+        );
+      }
+      let inBond = false;
+      block = block
+        .split("\n")
+        .flatMap((line) => {
+          if (line.startsWith("M  V30 COUNTS "))
+            return [
+              `M  V30 COUNTS ${atomCount + addedAtoms.length} ${source.bonds.length + addedBonds.length} 0 0 0`,
+            ];
+          if (line === "M  V30 END ATOM") return [...addedAtoms, line];
+          if (line === "M  V30 BEGIN BOND") inBond = true;
+          else if (line === "M  V30 END BOND") {
+            inBond = false;
+            return [...addedBonds, line];
+          } else if (inBond) {
+            const f = line.trim().split(/\s+/);
+            if (f[3] === "1") {
+              const a = Number(f[4]),
+                b = Number(f[5]);
+              const wedge = layout.wedgeBonds?.find(
+                (w) =>
+                  w.to !== "H" &&
+                  [a, b].includes(atomIndex.get(w.from)!) &&
+                  [a, b].includes(atomIndex.get(w.to)!),
+              );
+              line = line.replace(/ CFG=[13]/g, "");
+              if (wedge)
+                return [
+                  `M  V30 ${f[2]} 1 ${atomIndex.get(wedge.from)} ${atomIndex.get(wedge.to)} CFG=${(wedge.style === "solid") !== mirror ? 1 : 3}`,
+                ];
+            }
+          }
+          return [line];
+        })
+        .join("\n");
+    }
+    const drawing = toolkit.get_mol(block, JSON.stringify({ removeHs: false }));
+    if (!drawing) throw new Error(`${c.id}: invalid drawing molblock`);
+    return drawing;
   } finally {
     mapped.delete();
   }
 }
+/** Hide folded internal bonds in the drawing copy, making its label root terminal.
+ * RDKit then anchors the first/last glyph and clips its bond itself. The full
+ * graph remains authoritative; atom indices and coordinates are unchanged.
+ */
+export function abbreviatedDrawing(
+  toolkit: Toolkit,
+  mol: Mol,
+  hidden: Set<number>,
+) {
+  const graph = graphOf(mol);
+  const bonds = graph.bonds.map((_, i) => i).filter((i) => !hidden.has(i));
+  if (!hidden.size) return { mol, bonds };
+  let inBonds = false,
+    index = 0;
+  const block = mol
+    .get_v3Kmolblock()
+    .split("\n")
+    .flatMap((line) => {
+      if (line.startsWith("M  V30 COUNTS "))
+        return [line.replace(/(COUNTS \d+ )\d+/, `$1${bonds.length}`)];
+      if (line === "M  V30 BEGIN BOND") inBonds = true;
+      else if (line === "M  V30 END BOND") inBonds = false;
+      else if (inBonds) {
+        const original = Number(line.trim().split(/\s+/)[2]) - 1;
+        if (hidden.has(original)) return [];
+        // The unmodified source owns stereochemistry; this terminal-label
+        // drawing copy uses the saved double-bond geometry.
+        const renamed = line.replace(/^(M  V30 )\d+/, `$1${++index}`);
+        return [
+          graph.bonds[original].bo === 2
+            ? renamed.replace(/ CFG=2$/, "")
+            : renamed,
+        ];
+      }
+      return [line];
+    })
+    .join("\n");
+  return { mol: openMolecule(toolkit, block), bonds };
+}
+
 /** Align an explicit pair of atom correspondences; the caller persists the resulting coordinates. */
 export function alignCoordinates(
   coords: Record<string, Point>,
@@ -281,9 +421,15 @@ export function validateSceneChemistry(
             compound,
             graph: graphOf(mol),
             hidden: new Set(
-              abbreviatedGroups(toolkit, mol, layout.abbreviations).flatMap(
-                (g) => g.atoms,
-              ),
+              abbreviatedGroups(toolkit, mol, layout.abbreviations)
+                .filter(
+                  (g) =>
+                    !layout.abbreviationAtoms ||
+                    layout.abbreviationAtoms.includes(
+                      compound.atomIds[g.atoms[0]],
+                    ),
+                )
+                .flatMap((g) => g.atoms.slice(1)),
             ),
           },
         ] as const;
@@ -320,13 +466,27 @@ export function validateSceneChemistry(
   for (const label of scene.labels ?? []) atom(label.at);
   for (const arrow of scene.arrows ?? [])
     for (const anchor of [arrow.from, arrow.to]) {
-      if (anchor.kind === "atom") atom(anchor.at);
+      if (anchor.kind === "atom" || anchor.kind === "radical") atom(anchor.at);
       else if (anchor.kind === "charge") {
         const a = atom(anchor.at);
         if (!a.graph.atoms[a.index].chg)
           throw new Error(`${where}: charge anchor requires a charged atom`);
-      } else if (anchor.kind === "bond") bond(anchor.atoms);
-      else if (anchor.kind === "formingBond") anchor.atoms.forEach(atom);
+      } else if (anchor.kind === "bond" || anchor.kind === "pi") {
+        bond(anchor.atoms);
+        if (anchor.kind === "pi") {
+          const a = atom(anchor.atoms[0]),
+            b = atom(anchor.atoms[1]);
+          if (
+            !a.graph.bonds.some(
+              (edge) =>
+                edge.atoms.includes(a.index) &&
+                edge.atoms.includes(b.index) &&
+                (edge.bo ?? 1) >= 2,
+            )
+          )
+            throw new Error(`${where}: pi anchor requires a multiple bond`);
+        }
+      } else if (anchor.kind === "formingBond") anchor.atoms.forEach(atom);
     }
   for (const group of [
     scene.focus?.primary,

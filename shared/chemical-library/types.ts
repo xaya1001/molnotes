@@ -20,6 +20,12 @@ export interface CompoundLayout {
   pins?: Record<string, Point>;
   labels?: Record<string, Point>;
   stereoAnnotations?: boolean;
+  wedgeBonds?: { from: string; to: string; style: "solid" | "hashed" }[];
+  hydrogens?: Record<string, Point>;
+  methylLabels?: string[];
+  chargeAngles?: Record<string, number>;
+  compact?: { atom: string; text: string; anchor: "first" | "last" };
+  abbreviationAtoms?: string[];
   abbreviations?: MoleculeAbbreviation[];
 }
 export interface Compound extends EntryBase {
@@ -53,18 +59,22 @@ export interface Placement {
 export type Anchor =
   | { kind: "atom"; at: AtomRef }
   | { kind: "charge"; at: AtomRef }
+  | { kind: "radical"; at: AtomRef }
   | {
-      kind: "bond" | "formingBond";
+      kind: "bond" | "pi" | "formingBond";
       atoms: [AtomRef, AtomRef];
       fraction?: number;
+      side?: -1 | 1;
     }
   | { kind: "lonePair"; label: string };
 export interface ElectronArrow {
+  tone?: "comparison";
   id: string;
   from: Anchor;
   to: Anchor;
   electrons: 1 | 2;
-  curve: {
+  bend?: "left" | "right";
+  curve?: {
     exitAngle: number;
     entryAngle: number;
     reach: [number, number];
@@ -76,8 +86,9 @@ export interface SceneLabel {
   id: string;
   at: AtomRef;
   offset: Point;
-  kind: "lonePair" | "charge" | "partialCharge" | "text";
+  kind: "lonePair" | "radical" | "charge" | "partialCharge" | "text";
   text?: string;
+  angle?: number;
 }
 export interface Scene {
   width: number;
@@ -87,9 +98,27 @@ export interface Scene {
   labels?: SceneLabel[];
   focus?: Focus;
   transitionState?: boolean;
+  comparison?: boolean;
+  reactionArrows?: {
+    id: string;
+    from: Point;
+    to: Point;
+    kind?: "forward" | "equilibrium";
+    above?: string[];
+    below?: string[];
+    controls?: [Point, Point];
+    tone?: "comparison";
+  }[];
+  captions?: {
+    at: Point;
+    text: string;
+    tone?: "comparison";
+    align?: "start" | "middle" | "end";
+  }[];
   partialBonds?: { atoms: [AtomRef, AtomRef]; order: number }[];
 }
 export interface Participant {
+  position?: "inline" | "above-arrow" | "below-arrow";
   id: string;
   compound: string;
   equivalents?: number;
@@ -101,9 +130,11 @@ export interface Reaction extends EntryBase {
   reactants: Participant[];
   products: Participant[];
   reagents: string[];
+  reagentPosition?: "above-arrow" | "below-arrow";
   conditions: string[];
   tags?: string[];
   plusAt?: Point[];
+  showPlus?: boolean;
   explanation: string;
   scene: Scene;
   arrow: { from: Point; to: Point; textWidth: number };

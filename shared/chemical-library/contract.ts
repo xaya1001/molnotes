@@ -81,8 +81,9 @@ function layout(v: unknown, w: string) {
 }
 function anchor(v: unknown, w: string) {
   object(v, w);
-  if (v.kind === "atom" || v.kind === "charge") ref(v.at, w);
-  else if (v.kind === "bond" || v.kind === "formingBond") {
+  if (v.kind === "atom" || v.kind === "charge" || v.kind === "radical")
+    ref(v.at, w);
+  else if (v.kind === "bond" || v.kind === "pi" || v.kind === "formingBond") {
     pair(v.atoms, w);
     if (v.fraction !== undefined) {
       number(v.fraction, w);
@@ -120,12 +121,12 @@ function scene(v: unknown, w: string): asserts v is Scene {
       ref(l.at, w);
       point(l.offset, w);
       if (
-        !["lonePair", "charge", "partialCharge", "text"].includes(
+        !["lonePair", "radical", "charge", "partialCharge", "text"].includes(
           String(l.kind),
         )
       )
         fail(w, "invalid label kind");
-      if (l.kind !== "lonePair") text(l.text, w);
+      if (l.kind !== "lonePair" && l.kind !== "radical") text(l.text, w);
     }
   }
   if (v.arrows !== undefined) {
@@ -137,6 +138,7 @@ function scene(v: unknown, w: string): asserts v is Scene {
       anchor(a.to, w);
       if (a.electrons !== 1 && a.electrons !== 2)
         fail(w, "electrons must be 1 or 2");
+      if (a.curve === undefined) continue;
       object(a.curve, w);
       number(a.curve.exitAngle, w);
       number(a.curve.entryAngle, w);
@@ -243,6 +245,11 @@ export function validateLibraryEntry(
         object(p, w);
         text(p.id, w);
         text(p.compound, w);
+        if (
+          p.position !== undefined &&
+          !["inline", "above-arrow", "below-arrow"].includes(String(p.position))
+        )
+          fail(w, "invalid participant position");
         if (ids.has(p.id)) fail(w, "duplicate participant");
         ids.add(p.id);
         for (const n of ["equivalents", "yield", "fraction"]) {
@@ -255,11 +262,24 @@ export function validateLibraryEntry(
     }
     if (v.plusAt !== undefined) {
       list(v.plusAt, w);
-      if (v.plusAt.length !== (v.reactants as unknown[]).length - 1)
+      if (
+        v.plusAt.length !==
+        Math.max(
+          0,
+          (v.reactants as { position?: string }[]).filter(
+            (p) => !p.position || p.position === "inline",
+          ).length - 1,
+        )
+      )
         fail(w, "one separator per additional reactant required");
       v.plusAt.forEach((p) => point(p, w));
     }
     strings(v.reagents, w);
+    if (
+      v.reagentPosition !== undefined &&
+      !["above-arrow", "below-arrow"].includes(String(v.reagentPosition))
+    )
+      fail(w, "invalid reagent position");
     strings(v.conditions, w);
     if (v.tags !== undefined) strings(v.tags, w);
     text(v.explanation, w);
@@ -414,7 +434,12 @@ function validateSceneReferences(
   for (const label of scene.labels ?? []) atom(label.at);
   for (const arrow of scene.arrows ?? [])
     for (const anchor of [arrow.from, arrow.to]) {
-      if (anchor.kind === "atom" || anchor.kind === "charge") atom(anchor.at);
+      if (
+        anchor.kind === "atom" ||
+        anchor.kind === "charge" ||
+        anchor.kind === "radical"
+      )
+        atom(anchor.at);
       else if (anchor.kind === "lonePair") {
         if (
           !scene.labels?.some(
