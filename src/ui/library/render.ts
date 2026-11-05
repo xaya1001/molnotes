@@ -251,19 +251,10 @@ export async function renderFigure(
           atomLabels[c.atomIds.indexOf(id)] = "Me";
         for (const [i, atom] of graph.atoms.entries()) {
           if (!atom.chg || atomLabels[i]) continue;
-          const symbol = (
-            {
-              6: "C",
-              7: "N",
-              8: "O",
-              9: "F",
-              15: "P",
-              16: "S",
-              17: "Cl",
-              35: "Br",
-              53: "I",
-            } as Record<number, string>
-          )[atom.z ?? 6];
+          const symbol =
+            "* H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr Rb Sr Y Zr Nb Mo Tc Ru Rh Pd Ag Cd In Sn Sb Te I Xe Cs Ba La Ce Pr Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu Hf Ta W Re Os Ir Pt Au Hg Tl Pb Bi Po At Rn Fr Ra Ac Th Pa U Np Pu Am Cm Bk Cf Es Fm Md No Lr Rf Db Sg Bh Hs Mt Ds Rg Cn Nh Fl Mc Lv Ts Og".split(
+              " ",
+            )[atom.z ?? 6];
           if (!symbol) continue;
           const h = atom.impHs
             ? `H${atom.impHs > 1 ? `<sub>${atom.impHs}</sub>` : ""}`
@@ -1185,26 +1176,36 @@ export async function renderFigure(
           [...(reagentsBelow ? wrap(r.reagents) : []), ...wrap(r.conditions)],
           1,
         ],
-      ] as const)
+      ] as const) {
+        const occupied = overhead.filter(
+          (p) => p.position === (sign < 0 ? "above-arrow" : "below-arrow"),
+        );
+        const edge =
+          sign < 0
+            ? Math.min(a.y, ...occupied.map((p) => p.bounds.y))
+            : Math.max(
+                a.y,
+                ...occupied.map((p) => p.bounds.y + p.bounds.height),
+              );
+        const gap = token("--chemical-caption-font") / 4;
+        let cursor = edge;
         lines.forEach((text, i) => {
-          const occupied = overhead.filter(
-            (p) => p.position === (sign < 0 ? "above-arrow" : "below-arrow"),
-          );
-          const edge =
-            sign < 0
-              ? Math.min(a.y, ...occupied.map((p) => p.bounds.y))
-              : Math.max(
-                  a.y,
-                  ...occupied.map((p) => p.bounds.y + p.bounds.height),
-                );
           const e = label(
-            { x: center, y: edge + sign * (18 + i * 18) },
+            { x: center, y: 0 },
             text,
             "var(--chemical-caption-font)",
           );
           e.setAttribute("data-label", `${prefix}${id}:condition:${sign}:${i}`);
           parent.append(e);
+          const bounds = e.getBBox();
+          const y =
+            sign < 0
+              ? cursor - gap - bounds.y - bounds.height
+              : cursor + gap - bounds.y;
+          e.setAttribute("y", String(y));
+          cursor = y + bounds.y + (sign > 0 ? bounds.height : 0);
         });
+      }
       for (const p of [...r.reactants, ...r.products]) {
         const parts = [
           p.equivalents !== undefined ? `${p.equivalents} eq` : "",
