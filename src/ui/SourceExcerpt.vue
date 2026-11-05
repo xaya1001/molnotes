@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import LibraryReference from "./library/LibraryReference.vue";
 import UiFigure from "./UiFigure.vue";
 import CiteButton from "./CiteButton.vue";
 import {
@@ -32,6 +33,7 @@ const source = computed(() => {
       /><template v-else>{{ excerpt.locator }}</template>
     </p>
     <blockquote v-if="excerpt.text">{{ excerpt.text }}</blockquote>
+    <LibraryReference v-if="excerpt.figure" :reference="excerpt.figure" />
     <UiFigure
       v-if="excerpt.image"
       :src="excerpt.image"

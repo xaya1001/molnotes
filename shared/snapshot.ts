@@ -55,6 +55,7 @@ export interface SnapshotNote {
 }
 
 export interface Snapshot {
+  library?: import("./chemical-library/types.ts").LibrarySnapshot;
   format: 1;
   commit: string | null;
   builtAt: string;

@@ -194,40 +194,16 @@
           "frames": [
             {
               "title": "起始结构",
+              "name": "Sample A",
+              "smiles": "CCO",
               "arrows": [],
-              "explanation": "结构 A。",
-              "molecules": [
-                {
-                  "id": "sample",
-                  "name": "Sample A",
-                  "smiles": "CCO",
-                  "atomMap": [1, 2, 3],
-                  "position": {
-                    "x": 0,
-                    "y": 0
-                  }
-                }
-              ],
-              "step": {
-                "title": "氧化",
-                "reversible": false
-              }
+              "explanation": "结构 A。"
             },
             {
+              "name": "Sample B",
+              "smiles": "CC=O",
               "arrows": [],
-              "explanation": "结构 B。",
-              "molecules": [
-                {
-                  "id": "sample",
-                  "name": "Sample B",
-                  "smiles": "CC=O",
-                  "atomMap": [1, 2, 3],
-                  "position": {
-                    "x": 0,
-                    "y": 0
-                  }
-                }
-              ]
+              "explanation": "结构 B。"
             }
           ]
         },
@@ -249,20 +225,10 @@
           "type": "mechanism",
           "frames": [
             {
+              "name": "Sample",
+              "smiles": "CO",
               "arrows": [],
-              "explanation": "单帧结构。",
-              "molecules": [
-                {
-                  "id": "sample",
-                  "name": "Sample",
-                  "smiles": "CO",
-                  "atomMap": [1, 2],
-                  "position": {
-                    "x": 0,
-                    "y": 0
-                  }
-                }
-              ]
+              "explanation": "单帧结构。"
             }
           ]
         },

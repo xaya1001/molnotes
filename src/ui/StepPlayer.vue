@@ -6,7 +6,6 @@ const props = defineProps<{
   steps: readonly { title?: string; text?: string; state?: string }[];
 }>();
 const index = ref(0);
-const started = ref(false);
 const playing = ref(false);
 const progress = ref(1);
 const speed = ref(1);
@@ -62,7 +61,6 @@ function tick(now: number) {
   running.value = frame !== 0;
 }
 function go(next: number, animate = true) {
-  started.value = animate;
   index.value = Math.max(0, Math.min(props.steps.length - 1, next));
   progress.value = animate && !reduced.value ? 0 : 1;
   dwell = 0;
@@ -133,7 +131,6 @@ onBeforeUnmount(() => {
 });
 
 watch(() => props.steps, reset);
-defineExpose({ go });
 </script>
 <template>
   <section class="player" tabindex="0" :aria-label="label" @keydown="keydown">
@@ -141,13 +138,7 @@ defineExpose({ go });
       <h3 v-if="title">{{ title }}</h3>
       <slot name="head" />
     </div>
-    <slot
-      :index="index"
-      :progress="progress"
-      :reduced="reduced"
-      :started="started"
-      :go="go"
-    />
+    <slot :index="index" :progress="progress" :reduced="reduced" />
     <div class="step-caption" aria-live="polite" aria-atomic="true">
       <span class="number">{{ String(index + 1).padStart(2, "0") }}</span>
       <div>

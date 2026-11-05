@@ -1,0 +1,324 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
+import {
+  prepareCompound,
+  validateCompound,
+  alignCoordinates,
+  atomMaps,
+  placedCoordinates,
+  drawingMolecule,
+} from "../shared/chemical-library/chemistry.ts";
+import {
+  validateLibrary,
+  validateFigureReference,
+} from "../shared/chemical-library/contract.ts";
+import { routeMetrics } from "../shared/chemical-library/routes.ts";
+import type {
+  Library,
+  Reaction,
+  Route,
+} from "../shared/chemical-library/types.ts";
+const sources = [{ source: "handbook", locator: "Example 1" }];
+test("saved molecular identity survives 2D import and rejects a different stereoisomer", async () => {
+  const rd = await moleculeToolkit();
+  const input = {
+    id: "cmp_example",
+    title: "Example",
+    smiles: "C[C@H](O)CO",
+    sources,
+  };
+  const mol = rd.get_mol(input.smiles)!;
+  try {
+    mol.set_new_coords();
+    const c = prepareCompound(rd, input, mol.get_molblock());
+    validateCompound(rd, c);
+    assert.equal(Object.keys(c.layout.coords).length, c.atomIds.length);
+    assert.throws(
+      () =>
+        prepareCompound(
+          rd,
+          { ...input, smiles: "C[C@@H](O)CO" },
+          mol.get_molblock(),
+        ),
+      /stereochemistry/,
+    );
+    const broken = structuredClone(c);
+    delete broken.layout.coords.a1;
+    assert.throws(() => validateCompound(rd, broken), /coordinates/);
+  } finally {
+    mol.delete();
+  }
+});
+test("page references cannot own molecular facts or layout and limit semantic focus", () => {
+  assert.throws(
+    () => validateFigureReference({ ref: "cmp_example", smiles: "CC" }),
+    /unknown reference/,
+  );
+  assert.throws(
+    () =>
+      validateFigureReference({
+        ref: "cmp_example",
+        focus: { supporting: [{}, {}, {}] },
+      }),
+    /two supporting/,
+  );
+  validateFigureReference({
+    ref: "cmp_example",
+    numbers: { compound: "7" },
+    focus: { primary: { atoms: [{ molecule: "compound", atom: "a1" }] } },
+  });
+});
+test("a convergent route calculates longest path and explicit-path yield without multiplying independent branches", async () => {
+  const rd = await moleculeToolkit();
+  const c = prepareCompound(rd, {
+    id: "cmp_example",
+    title: "Example",
+    smiles: "CCO",
+    sources,
+  });
+  const rx = (id: string, yieldValue: number): Reaction => ({
+    kind: "reaction",
+    id,
+    title: id,
+    sources,
+    reactants: [{ id: "input", compound: c.id }],
+    products: [{ id: "output", compound: c.id, yield: yieldValue }],
+    reagents: [],
+    conditions: [],
+    explanation: "Example transformation",
+    scene: {
+      width: 12,
+      height: 6,
+      molecules: [
+        { id: "input", compound: c.id, at: { x: 2, y: 3 } },
+        { id: "output", compound: c.id, at: { x: 10, y: 3 } },
+      ],
+    },
+    arrow: { from: { x: 4, y: 3 }, to: { x: 8, y: 3 }, textWidth: 4 },
+  });
+  const library: Library = {
+    [c.id]: c,
+    rxn_a: rx("rxn_a", 0.8),
+    rxn_b: rx("rxn_b", 0.4),
+    rxn_c: rx("rxn_c", 0.5),
+  };
+  const convergent = library.rxn_c as Reaction;
+  convergent.reactants.push({ id: "second", compound: c.id });
+  convergent.scene.molecules.push({
+    id: "second",
+    compound: c.id,
+    at: { x: 2, y: 5 },
+  });
+  const route: Route = {
+    kind: "route",
+    id: "rte_example",
+    title: "Convergent",
+    sources,
+    width: 30,
+    height: 20,
+    steps: [
+      { id: "a", reaction: "rxn_a", at: { x: 0, y: 0 } },
+      { id: "b", reaction: "rxn_b", at: { x: 15, y: 0 } },
+      { id: "c", reaction: "rxn_c", at: { x: 7, y: 10 } },
+    ],
+    edges: [
+      { from: "a", to: "c", product: "output", reactant: "input" },
+      { from: "b", to: "c", product: "output", reactant: "second" },
+    ],
+    yieldPath: ["a", "c"],
+  };
+  library[route.id] = route;
+  validateLibrary(library);
+  assert.deepEqual(routeMetrics(route, library).totalYield, 0.4);
+  assert.equal(routeMetrics(route, library).longestLinearSteps, 2);
+  assert.equal(
+    routeMetrics(
+      { ...route, combinedYields: [{ steps: ["a", "c"], value: 0.32 }] },
+      library,
+    ).totalYield,
+    0.32,
+  );
+  delete (library.rxn_c as Reaction).products[0].yield;
+  assert.equal(routeMetrics(route, library).totalYield, null);
+  assert.throws(
+    () =>
+      routeMetrics(
+        {
+          ...route,
+          edges: [
+            ...route.edges,
+            { from: "c", to: "a", product: "output", reactant: "input" },
+          ],
+        },
+        library,
+      ),
+    /cycle/,
+  );
+  assert.throws(
+    () => routeMetrics({ ...route, yieldPath: ["a", "b"] }, library),
+    /disconnected/,
+  );
+});
+test("alignment preserves distances while placing explicitly corresponding atoms", () => {
+  const coords = { a: { x: 0, y: 0 }, b: { x: 1, y: 0 }, c: { x: 1, y: 1 } };
+  const result = alignCoordinates(
+    coords,
+    { p: { x: 2, y: 2 }, q: { x: 2, y: 3 } },
+    [
+      ["a", "p"],
+      ["b", "q"],
+    ],
+  );
+  assert.deepEqual(result.a, { x: 2, y: 2 });
+  assert.ok(Math.abs(result.c.x - 1) < 1e-10);
+  assert.ok(Math.abs(result.c.y - 3) < 1e-10);
+});
+
+test("R templates join only the selected permitted attachment and retain a real molecular graph", async () => {
+  const { instantiateTemplate } =
+    await import("../shared/chemical-library/templates.ts");
+  const rd = await moleculeToolkit();
+  const t = prepareCompound(rd, {
+    id: "cmp_template",
+    title: "Template",
+    smiles: "CC(=O)[*:1]",
+    sources,
+  });
+  const side = prepareCompound(rd, {
+    id: "cmp_side",
+    title: "Substituent",
+    smiles: "[*:1]OC",
+    sources,
+  });
+  side.attachment = side.atomIds[0];
+  validateCompound(rd, side);
+  t.template = [
+    {
+      atom: t.atomIds[3],
+      label: "R¹",
+      allowed: [side.id],
+      description: "Acyl substituent",
+    },
+  ];
+  const result = instantiateTemplate(
+    rd,
+    t,
+    { [t.atomIds[3]]: side.id },
+    { [side.id]: side },
+  );
+  const mol = rd.get_mol(result)!;
+  try {
+    assert.equal(mol.get_smiles(), "COC(C)=O");
+  } finally {
+    mol.delete();
+  }
+  assert.throws(
+    () =>
+      instantiateTemplate(
+        rd,
+        t,
+        { [t.atomIds[3]]: "cmp_missing" },
+        { [side.id]: side },
+      ),
+    /not allowed/,
+  );
+});
+
+test("persistent atom maps survive traversal changes and mirrored geometry preserves stereochemistry", async () => {
+  const rd = await moleculeToolkit();
+  const c = prepareCompound(rd, {
+    id: "cmp_mapped",
+    title: "Mapped",
+    smiles: "C[C@H](O)CO",
+    sources,
+  });
+  const m = rd.get_mol(c.smiles)!;
+  try {
+    c.smiles = m.get_smiles();
+  } finally {
+    m.delete();
+  }
+  const reordered = rd.get_mol(c.smiles)!;
+  try {
+    c.atomIds = atomMaps(reordered).map((n) => `a${n}`);
+  } finally {
+    reordered.delete();
+  }
+  validateCompound(rd, c);
+  const mirrored = drawingMolecule(
+    rd,
+    c,
+    placedCoordinates(c, c.layout, 30, true),
+  );
+  try {
+    assert.equal(mirrored.get_smiles(), c.graph);
+  } finally {
+    mirrored.delete();
+  }
+  const invalid = structuredClone(c);
+  [invalid.atomIds[0], invalid.atomIds[1]] = [
+    invalid.atomIds[1],
+    invalid.atomIds[0],
+  ];
+  assert.throws(() => validateCompound(rd, invalid), /persistent SMILES maps/);
+});
+
+test("library dependencies include scene participants and report reverse references without copying facts", async () => {
+  const { libraryUsage } =
+    await import("../scripts/content/chemical-library.ts");
+  const rd = await moleculeToolkit();
+  const compound = prepareCompound(rd, {
+    id: "cmp_example",
+    title: "Example",
+    smiles: "CCO",
+    sources,
+  });
+  const entries: Library = { [compound.id]: compound };
+  const usage = libraryUsage(entries, [
+    {
+      value: {
+        blocks: [
+          { type: "figure-ref", ref: compound.id, numbers: { compound: "1" } },
+        ],
+      },
+      path: "/sites/example/",
+      title: "Topic",
+    },
+    {
+      value: { type: "figure-ref", ref: compound.id },
+      path: "/notes/example/first",
+      title: "Note",
+    },
+  ]);
+  assert.equal(usage.snapshot.uses[compound.id].length, 2);
+  assert.equal(usage.snapshot.entries[compound.id], compound);
+  assert.throws(
+    () =>
+      libraryUsage(entries, [
+        {
+          value: { type: "figure-ref", ref: compound.id, variant: "missing" },
+          path: "/notes/example/first",
+          title: "Note",
+        },
+      ]),
+    /variant/,
+  );
+  assert.throws(
+    () =>
+      libraryUsage(entries, [
+        {
+          value: {
+            type: "figure-ref",
+            ref: compound.id,
+            focus: {
+              primary: { atoms: [{ molecule: "compound", atom: "missing" }] },
+            },
+          },
+          path: "/notes/example/first",
+          title: "Note",
+        },
+      ]),
+    /unknown atom/,
+  );
+});

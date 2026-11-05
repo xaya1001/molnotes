@@ -1,3 +1,4 @@
+import { validateFigureReference } from "./chemical-library/contract.ts";
 import type { TopicBlock } from "../src/ui/topic/blocks.ts";
 import type { PredictionEntry, TopicContent } from "../src/ui/topic/content.ts";
 import { isInteger, isList, isObject, type JsonObject } from "./json.ts";
@@ -247,9 +248,11 @@ function checkTopicContent(
       `${name}: excerpt ${excerpt.id} refers to unknown source ${excerpt.source}`,
     );
     assert(
-      excerpt.text || excerpt.image,
+      excerpt.text || excerpt.image || excerpt.figure,
       `${name}: excerpt ${excerpt.id} has no text or image`,
     );
+    if (excerpt.figure !== undefined)
+      validateFigureReference(excerpt.figure, `${name}: excerpt ${excerpt.id}`);
   }
   for (const [id, where] of found.excerpts)
     assert(excerptIds.has(id), `${where} refers to unknown excerpt ${id}`);

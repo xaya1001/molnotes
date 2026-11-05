@@ -78,24 +78,6 @@ export function labelAbbreviations(
   const context = globalThis.document.createElement("canvas").getContext("2d")!;
   context.font = `${moleculeDrawingOptions.fixedFontSize}px Arial, Helvetica, sans-serif`;
   for (const group of groups) {
-    if (group.name === "LnPd") {
-      const p = atoms[group.attachment];
-      svg
-        .querySelectorAll(`text.atom-${group.attachment}`)
-        .forEach((node) => node.remove());
-      const text = svg.createElementNS("http://www.w3.org/2000/svg", "text");
-      text.setAttribute("class", `atom-${group.attachment} abbreviation-label`);
-      text.setAttribute("data-abbreviation", "LnPd");
-      text.setAttribute("x", String(p.x - 10));
-      text.setAttribute("y", String(p.y + 3.5));
-      text.setAttribute(
-        "style",
-        "font-size:10px;font-family:Arial,Helvetica,sans-serif;fill:#000000;stroke:none",
-      );
-      text.textContent = "LₙPd";
-      svg.documentElement.append(text);
-      continue;
-    }
     const root = group.atoms[0],
       attachment = group.attachment;
     svg.querySelectorAll(`text.atom-${root}`).forEach((node) => node.remove());

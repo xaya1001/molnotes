@@ -35,13 +35,9 @@ test("molecule selection supports mouse and keyboard; result is absent until sub
   await expect(variants).toContainText("94.11");
   await expect(variants).toContainText("20.23");
   const mechanism = page.getByRole("region", { name: "分步机理" });
-  await expect(
-    mechanism.locator(".mechanism-overview .electron-arrow"),
-  ).toHaveCount(3);
+  await expect(mechanism.locator(".electron-arrow")).toHaveCount(1);
   await mechanism.getByRole("button", { name: "下一步" }).click();
-  await expect(
-    mechanism.locator(".mechanism-detail .electron-arrow"),
-  ).toHaveCount(2);
+  await expect(mechanism.locator(".electron-arrow")).toHaveCount(2);
 });
 test("structures label specified stereocentres", async ({ page }) => {
   await page.goto("/showcase/molecule");

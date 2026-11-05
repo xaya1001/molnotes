@@ -25,7 +25,7 @@ caption: aspirin
 
 SMILES 在发布时由 RDKit 校验，页面使用共享 MoleculeView。不能解析或缺少配对 caption 时明确报错。
 
-结构默认完整绘制。分子对象可写 `abbreviations: ["Boc", "CO₂Et"]`；笔记围栏在 `smiles` 与 `caption` 之间写 `abbreviations: Boc, CO₂Et`。共享白名单为 Boc、Cbz、Fmoc、Ts、Ms、Tf、TBS、TIPS、Bn、PMB、Ac、Bz、Piv、Ph、CO₂Me、CO₂Et、CO₂tBu、OMe、OEt、CF₃。只折叠声明的完整末端基团；声明未知、缺失或与另一声明重叠的基团时发布失败。缩写保持原 SMILES 的原子与键编号，折叠原子不生成点选目标；预测答案、原子标签、高亮和箭头端点引用折叠原子或以其为端点的键时，发布失败并指出内容位置。
+结构默认完整绘制。分子对象可写 `abbreviations: ["Boc", "CO₂Et"]`；笔记围栏在 `smiles` 与 `caption` 之间写 `abbreviations: Boc, CO₂Et`。共享白名单为 Boc、Cbz、Fmoc、Ts、Ms、Tf、OTMS、TMS、TBS、TIPS、Bn、PMB、Ac、Bz、Piv、Ph、CO₂Me、CO₂Et、CO₂tBu、OMe、OEt、CF₃。只折叠声明的完整末端基团；声明未知、缺失或与另一声明重叠的基团时发布失败。缩写保持原 SMILES 的原子与键编号，折叠原子不生成点选目标；预测答案、原子标签、高亮和箭头端点引用折叠原子或以其为端点的键时，发布失败并指出内容位置。
 
 结构式在 SMILES 指定构型的手性中心旁标 (R)/(S)、双键旁标 (E)/(Z)，所以立体标记按原始资料写：原文画出或命名了构型的照写；外消旋、构型未指派或机理中不涉及构型的不写；只有一个手性中心的外消旋体不写；多个手性中心、相对构型确定的外消旋体或某一中心为差向异构混合物时，用 CXSMILES 的增强立体写法（`C[C@]12CCC(=O)C[C@@]1(O)CCCC2=O |&1:1,7|`），图上标 and1；单一异构体但绝对构型未知时用 `|o1:…|`，图上标 or1。专题与笔记的 `smiles` 字段都接受这种写法。
 
@@ -198,3 +198,35 @@ A `{type:"substrate-scope",scope:...}` block accepts an inline scope or the stri
 R values are rooted SMILES (the first atom attaches to the template), a SMILES with a terminal `*` attachment, or an entry in the shared abbreviation whitelist such as `OMe` or `Ph`. Use `*[H]` for hydrogen and an explicit `*` when declaring attachment stereochemistry. The compiler substitutes the R fragments with RDKit and compares canonical isomeric SMILES with the verified row product. Different connectivity or stereochemistry fails the build with the row index and number. For a neutral complete example, see `src/showcase/data/reactions.ts` and `/showcase/molecule`.
 
 R columns display shared journal abbreviations (including `C` → Me and `CC` → Et), and use content-provided `labels` for other fragments. Unknown fragments without display text fail validation. Generic structures display mapped groups as R¹, R², and so on. Preview and scheme alignment share atom overlap, atom-on-bond, and atomic-label collision checks.
+
+## Shared figure library
+
+The content root owns `library/compounds/`, `library/reactions/`, `library/routes/`, `library/mechanisms/` and `library/images/`. Each JSON file is named after its permanent ID (`cmp_…`, `rxn_…`, `rte_…`, `mec_…`, `img_…`). Entries contain `kind`, `id`, `title` and `sources: [{source, locator, note?}]`. The source ID refers to `sources.json`. Image bytes live in `library/assets/<sha256>.<extension>`; the content build verifies their hashes. `/library/` shows the complete inventory, previews, layout checks and reverse references.
+
+A topic block uses `{type:"figure-ref", ref:"cmp_example", numbers:{compound:"4"}, caption:"…"}`. An excerpt can supply `figure: {ref:"img_example", caption:"…"}`. Notes use a YAML fence:
+
+````markdown
+```figure-ref
+ref: rxn_example
+numbers:
+  input: "1"
+  output: "2"
+caption: Example transformation
+```
+````
+
+References accept only `ref`, `variant`, `frame`, `numbers`, `focus` and `caption`; the block also accepts its standard `type` and `id`. Molecular facts, coordinates, reagents and conditions belong to entries. `numbers` keys name placements (`compound` for a standalone structure, `step/participant` in a route). A reference cannot change the chemical graph. Missing entries, placements, variants, atoms and frames fail the build.
+
+Compounds store mapped `smiles`, the unmapped canonical isomeric `graph` signature, persistent `atomIds` of the form `a<map number>`, and `layout`. The IDs are checked against the explicit SMILES atom maps. `layout.coords` maps every ID to `{x,y}` in bond units, with positive y downward; `pins` replaces individual positions, `labels` offsets atom labels, `abbreviations` selects shared whitelist groups, and `stereoAnnotations` opts into configuration labels. `variants` stores named layouts. Rotation and mirrored placement regenerate wedges from the same chemical graph. `--prepare` imports a verified 2D molfile and rejects differing connectivity or stereochemistry. Template compounds declare `template: [{atom,label,allowed,description}]`; allowed substituent entries declare one terminal dummy `attachment` ID. Instantiation joins only the selected permitted attachments.
+
+Reaction entries declare `reactants` and `products` as `{id,compound,equivalents?,yield?,fraction?}`, plus `reagents`, `conditions`, optional free-text `tags`, `explanation`, a `scene`, and `arrow: {from,to,textWidth}`. Yields and mixture fractions are separate numbers in [0,1]. A scene saves `width`, `height` and `molecules: [{id,compound,variant?,at,rotate?,mirror?}]`. `plusAt` optionally saves the position of each separator between reactants. Conditions wrap within the declared text width. Product values stay with their products. Selecting an arrow opens its explanation.
+
+Routes save `steps: [{id,reaction,at}]`, `edges: [{from,to,product,reactant}]`, canvas dimensions and an explicit `yieldPath`. Edges must connect matching compounds in a directed acyclic graph. Coincident connected intermediates are drawn once; a new row repeats its input. The longest linear sequence is computed from the graph. Cumulative yield uses only the declared path, with `combinedYields: [{steps,value}]` replacing exactly the named contiguous factors. Missing yields produce an unknown total; independent branches are not multiplied together.
+
+Mechanisms declare `category` (`reaction`, `resonance`, `comparison` or `examples`) and static `frames: [{id,title,scene,explanation}]`. `maps` can record explicit `{from,to,fromFrame,toFrame}` atom correspondences. Scene labels declare `{id,at:{molecule,atom},offset,kind,text?}`; kinds are `lonePair`, `charge`, `partialCharge` and `text`. Electron arrows use `{id,from,to,electrons,curve}`. Anchors name an atom or charge (`at`), a real or forming bond (`atoms`, optional `fraction`), or a displayed lone pair (`label`). Curves save `exitAngle`, `entryAngle`, `reach:[start,end]` and optional relative `control1`/`control2`. The renderer clips endpoints against displayed labels and draws a full or half head for two or one electrons. `partialBonds` and `transitionState` add dashed bonds and transition-state brackets.
+
+A `focus` has one optional `primary` group and at most two `supporting` groups. Groups reference `atoms`, `bonds` and `arrows`. The primary group uses the shared red token and heavier strokes. Other structure remains gray. Desktop geometry is reused on phones; figures stop shrinking at the readable scale and scroll locally.
+
+Image entries save `asset`, `mime`, original `width`/`height`, `purpose`, `rights`, `alt`, and an optional pixel `crop: {x,y,width,height}`. Source images remain original bytes. Crop bounds and decoded dimensions are verified. Images fit the reading width and open in the shared image viewer.
+
+Use `npm run figure:render -- --library <content-root> --out <output-directory> [--entry <id>]` to render desktop and phone SVGs, PNGs, context screenshots and JSON geometry/diagnostics. The command and website use the same renderer. `--prepare <compound-json> [--molfile <file>]` writes a prepared compound entry to the output directory. Content builds check default figures, variants, mechanism frames and actual reference contexts at both viewport sizes; invalid graphs, overlapping labels, crossing or invisible electron arrows, clipped ink and unreadable geometry reject publication. Chemical interpretation still requires the source evidence recorded on each entry. `--references <json-file>` renders an array of page references with local numbers, focus and captions. `--check` writes diagnostics without screenshots. `--inventory` writes a read-only `migration-candidates.json` with original JSON pointers or note lines, graph/hash matches and proposed permanent IDs; matching structures remain review candidates, and the command does not rewrite source content.

@@ -1,3 +1,4 @@
+import { validateFigureReference } from "./chemical-library/contract.ts";
 import { isInteger } from "./json.ts";
 import MarkdownIt from "markdown-it";
 import type { Env } from "markdown-it";
@@ -33,6 +34,12 @@ export interface NoteMolecules {
   }[];
 }
 export type NoteDiagram =
+  | {
+      id: string;
+      kind: "library";
+      reference: import("./chemical-library/types.ts").FigureReference;
+      caption: string;
+    }
   | { id: string; kind: "timeline"; timeline: Timeline; caption: string }
   | { id: string; kind: "flow"; flow: Flow; caption: string };
 export interface Note {
@@ -331,6 +338,22 @@ export async function compileNotes({
             },
       );
       env.text.push(caption ?? "", ...rendered.words);
+      return `<div id="${id}" class="note-diagram"></div>`;
+    }
+    if (kind === "figure-ref") {
+      const parsed = parseDocument(token.content);
+      if (parsed.errors.length)
+        fail(env.file, env.line, parsed.errors[0].message);
+      const reference: unknown = parsed.toJS();
+      validateFigureReference(reference, env.file);
+      const id = `note-diagram-${env.diagrams.length}`;
+      env.diagrams.push({
+        id,
+        kind: "library",
+        reference,
+        caption: reference.caption ?? "",
+      });
+      env.text.push(reference.caption ?? "");
       return `<div id="${id}" class="note-diagram"></div>`;
     }
     if (kind !== "molecule")

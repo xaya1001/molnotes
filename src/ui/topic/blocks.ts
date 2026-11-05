@@ -1,4 +1,3 @@
-import type { CatalyticCycle } from "../../../shared/mechanism.ts";
 import type { SubstrateScope } from "../../../shared/reaction-scheme.ts";
 import type { ProcessData } from "../../../shared/process.ts";
 // The block catalogue as the runtime reads it. shared/topic-blocks.ts is
@@ -92,8 +91,6 @@ export interface MechanismBlock extends BlockBase {
   type: "mechanism";
   title?: string;
   frames: DataRef<MechanismFrame[]>;
-  cycle?: CatalyticCycle;
-  overall?: import("../../../shared/reaction-scheme.ts").ReactionStep;
 }
 /** A table cell: text, or a linked value. */
 export type TableCell = string | { text: string; href: string };
@@ -264,6 +261,10 @@ export type PatentBlock =
   | { type: "sar-cases"; cases: string; collection: string };
 
 export type TopicBlock =
+  | (BlockBase &
+      import("../../../shared/chemical-library/types.ts").FigureReference & {
+        type: "figure-ref";
+      })
   | (BlockBase & PatentBlock)
   | HeadingBlock
   | ParagraphBlock

@@ -29,33 +29,21 @@ const excerpt = {
 };
 const frames: MechanismFrame[] = [
   {
-    molecules: [
-      {
-        id: "carbonyl",
-        name: "羰基的电子对位移",
-        smiles: "CC=O",
-        atomMap: [1, 2, 3],
-        position: { x: 0, y: 0 },
-      },
-    ],
-    arrows: [{ from: { bond: [2, 3] }, to: { atom: 3 }, electrons: 2 }],
-    explanation: "羰基 π 电子对位移。",
+    name: "羰基的电子对位移",
+    smiles: "CC=O",
+    arrows: [{ from: { bond: 1 }, to: { atom: 2 }, electrons: 2 }],
+    explanation:
+      "双钩箭头从 C=O 键指向氧，仅表示羰基 π 电子对位移这一局部步骤。",
   },
   {
-    molecules: [
-      {
-        id: "chlorine",
-        name: "氯分子的均裂",
-        smiles: "ClCl",
-        atomMap: [4, 5],
-        position: { x: 0, y: 0 },
-      },
-    ],
+    name: "氯分子的均裂",
+    smiles: "ClCl",
     arrows: [
-      { from: { bond: [4, 5] }, to: { atom: 4 }, electrons: 1 },
-      { from: { bond: [4, 5] }, to: { atom: 5 }, electrons: 1 },
+      { from: { bond: 0 }, to: { atom: 0 }, electrons: 1 },
+      { from: { bond: 0 }, to: { atom: 1 }, electrons: 1 },
     ],
-    explanation: "两个鱼钩箭头各表示一个电子，此帧独立演示 Cl–Cl 的均裂。",
+    explanation:
+      "两个鱼钩箭头各表示一个电子；此帧独立演示 Cl–Cl 的均裂，不是上一帧的后续反应。",
   },
 ];
 </script>
