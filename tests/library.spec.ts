@@ -78,10 +78,10 @@ test("complete library previews share one saved layout and preserve local scroll
     a1: {
       x:
         compound.layout.coords.a1.x +
-        (compound.layout.coords.a2.x - compound.layout.coords.a1.x) * 0.2,
+        (compound.layout.coords.a2.x - compound.layout.coords.a1.x) * 0.4,
       y:
         compound.layout.coords.a1.y +
-        (compound.layout.coords.a2.y - compound.layout.coords.a1.y) * 0.2,
+        (compound.layout.coords.a2.y - compound.layout.coords.a1.y) * 0.4,
     },
   };
   await page.reload();
@@ -327,6 +327,8 @@ test("adjacent bond transfers use a readable arc when space is available", async
 test("a saved process reuses scenario controls and keyboard steps at both widths", async ({
   page,
 }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
   const process = {
     kind: "process",
     id: "prc_transfer",
@@ -393,4 +395,5 @@ test("a saved process reuses scenario controls and keyboard steps at both widths
       ),
     ).toBe(true);
   }
+  expect(errors).toEqual([]);
 });
