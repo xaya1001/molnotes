@@ -208,6 +208,18 @@ export function figureDiagnostics(svg: SVGSVGElement): Diagnostic[] {
   const arrows = [
     ...svg.querySelectorAll<SVGPathElement>("[data-electron-arrow]"),
   ].map((el) => ({ el, id: el.dataset.electronArrow!, points: samples(el) }));
+  for (const edge of svg.querySelectorAll<SVGPathElement>(
+    "[data-route-edge]",
+  )) {
+    const points = samples(edge);
+    for (const label of labels)
+      if (points.some((p) => inside(p, label.r, 0.5)))
+        add(
+          "ROUTE_EDGE_LABEL_OVERLAP",
+          [edge.dataset.routeEdge!, label.id],
+          "Move the route connection clear of labels",
+        );
+  }
   for (const a of arrows) {
     const head = svg.querySelector<SVGPathElement>(
       `[data-arrow-head="${CSS.escape(a.id)}"]`,
