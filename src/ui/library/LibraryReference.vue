@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
-import { api } from "../api.ts";
+import { loadLibrary } from "./client.ts";
 import type {
   FigureReference,
   LibrarySnapshot,
@@ -11,7 +11,7 @@ const library = ref<LibrarySnapshot>();
 const error = ref("");
 onMounted(async () => {
   try {
-    library.value = await api<LibrarySnapshot>("/api/library");
+    library.value = await loadLibrary();
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
   }

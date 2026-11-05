@@ -1373,6 +1373,14 @@ export async function renderFigure(
     svg.setAttribute("height", String(height));
     const minimumScale = Math.max(
       token("--chemical-min-bond") / B,
+      ...[...svg.querySelectorAll<SVGGElement>("[data-bond-lengths]")].flatMap(
+        (molecule) => {
+          const lengths: number[] = JSON.parse(molecule.dataset.bondLengths!);
+          return lengths.length
+            ? [token("--chemical-min-bond") / Math.min(...lengths)]
+            : [];
+        },
+      ),
       ...[...svg.querySelectorAll("text")].map(
         (e) =>
           token(

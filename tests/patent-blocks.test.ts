@@ -56,6 +56,19 @@ test("patent records preserve missing grades, numeric filters, ids and ordered b
 });
 test("content rejects bad cross references and page locations", () => {
   validateTopicContent(fixture());
+  const migrated = fixture(),
+    source = migrated.data.sources.alpha;
+  const images = Array.from({ length: source.pages }, () => ({
+    ref: "img_example",
+  }));
+  Reflect.set(source, "images", images);
+  Reflect.deleteProperty(source, "image");
+  validateTopicContent(migrated);
+  images.pop();
+  assert.throws(
+    () => validateTopicContent(migrated),
+    /one image reference per page/,
+  );
   for (const mutate of [
     (c: typeof FixtureFixture) =>
       Reflect.apply(

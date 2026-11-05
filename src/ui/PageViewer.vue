@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import type { FigureReference } from "../../shared/chemical-library/types.ts";
+import LibraryImage from "./library/LibraryImage.vue";
 
 /** One original page image with an optional marked region and zoom; the default slot adds tools before the zoom. */
 defineProps<{
-  image: string;
+  image: string | FigureReference;
   /** Page width and height in PDF points; `rect` uses the same units. */
   size: readonly number[];
   rect?: readonly number[] | null;
@@ -40,7 +42,7 @@ const zoom = ref(100);
         class="page-frame"
         :style="{ width: `calc(min(100%, 50rem) * ${zoom / 100})` }"
       >
-        <img :src="image" :alt="alt" />
+        <LibraryImage :image="image" :alt="alt" />
         <div
           v-if="rect"
           class="page-highlight"

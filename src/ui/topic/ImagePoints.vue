@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import LibraryImage from "../library/LibraryImage.vue";
+import type { FigureReference } from "../../../shared/chemical-library/types.ts";
 /**
  * A picture with marked points the reader can pick. `picked` is the chosen
  * point id; `answer` ids are highlighted when the result shows.
  */
 defineProps<{
-  image: { src: string; alt: string };
+  image: { src: string; alt: string } | FigureReference;
   points: { id: string; label: string; x: number; y: number }[];
   picked?: string;
   answer?: string[];
@@ -16,7 +18,10 @@ const emit = defineEmits<{ pick: [id: string] }>();
 <template>
   <figure class="figure image-points">
     <div class="frame">
-      <img :src="image.src" :alt="image.alt" />
+      <LibraryImage
+        :image="'ref' in image ? image : image.src"
+        :alt="'alt' in image ? image.alt : undefined"
+      />
       <button
         v-for="point in points"
         :key="point.id"

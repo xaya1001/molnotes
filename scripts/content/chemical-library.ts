@@ -116,6 +116,7 @@ export async function readChemicalLibrary(root: string) {
     "routes",
     "mechanisms",
     "images",
+    "processes",
   ]) {
     const files = await readdir(join(base, dir), { withFileTypes: true }).catch(
       (e: NodeJS.ErrnoException) => {
@@ -143,6 +144,7 @@ export async function readChemicalLibrary(root: string) {
           route: "routes",
           mechanism: "mechanisms",
           image: "images",
+          process: "processes",
         }[value.kind] !== dir
       )
         throw new Error(`${value.id}: wrong library directory`);
@@ -203,7 +205,12 @@ export function libraryUsage(
       return;
     }
     if (!value || typeof value !== "object") return;
-    if ("type" in value && value.type === "figure-ref") {
+    if (
+      ("type" in value && value.type === "figure-ref") ||
+      ("ref" in value &&
+        typeof value.ref === "string" &&
+        /^(cmp|rxn|rte|mec|img|prc)_/.test(value.ref))
+    ) {
       validateFigureReference(value);
       if (!entries[value.ref])
         throw new Error(`${path}: unknown figure ${value.ref}`);

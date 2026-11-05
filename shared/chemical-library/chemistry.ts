@@ -56,19 +56,25 @@ function mappedBlock(mol: Mol, maps: number[]) {
     .join("\n");
 }
 export function unmappedMolecule(toolkit: Toolkit, mol: Mol) {
-  return openMolecule(
-    toolkit,
-    mappedBlock(mol, Array(mol.get_num_atoms()).fill(0)),
-  );
+  return openMolecule(toolkit, molecularSmiles(mol).replace(/:\d+(?=\])/g, ""));
 }
-function graphSignature(toolkit: Toolkit, mol: Mol) {
+/** Isomeric SMILES plus enhanced stereo groups, excluding depiction coordinates. */
+export function molecularSmiles(mol: Mol, details = "{}") {
+  const smiles = mol.get_smiles(details);
+  const cx = mol.get_cxsmiles(details).split(" |", 2)[1] ?? "";
+  const groups = [...cx.matchAll(/(?:^|,)((?:&|o)\d+|a):(\d+(?:,\d+)*)/g)].map(
+    (m) => `${m[1]}:${m[2]}`,
+  );
+  return groups.length ? `${smiles} |${groups.join(",")}|` : smiles;
+}
+export function graphSignature(toolkit: Toolkit, mol: Mol) {
   const copy = unmappedMolecule(toolkit, mol);
   try {
     // The SMILES parser removes ordinary explicit H while retaining isotopes.
     // MinimalLib remove_hs_in_place also removes isotope-labelled hydrogens.
-    const normalized = toolkit.get_mol(copy.get_smiles())!;
+    const normalized = toolkit.get_mol(molecularSmiles(copy))!;
     try {
-      return normalized.get_smiles();
+      return molecularSmiles(normalized);
     } finally {
       normalized.delete();
     }
@@ -118,7 +124,7 @@ export function prepareCompound(
     const mapped = openMolecule(toolkit, mappedBlock(mol, maps));
     let smiles: string;
     try {
-      smiles = mapped.get_smiles(JSON.stringify({ canonical: false }));
+      smiles = molecularSmiles(mapped, JSON.stringify({ canonical: false }));
     } finally {
       mapped.delete();
     }

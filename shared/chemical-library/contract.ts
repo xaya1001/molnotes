@@ -1,4 +1,5 @@
 import { isObject } from "../json.ts";
+import { validateProcess } from "../process.ts";
 import type {
   Library,
   LibraryEntry,
@@ -175,17 +176,33 @@ export function validateFigureReference(
         "numbers",
         "focus",
         "caption",
+        "alt",
+        "presentation",
       ].includes(k)
     )
       fail(w, `unknown reference field ${k}`);
-  for (const k of ["variant", "frame", "caption"])
+  for (const k of ["variant", "frame", "caption", "alt"])
     if (v[k] !== undefined) text(v[k], w);
+  if (
+    v.presentation !== undefined &&
+    !["figure", "note"].includes(String(v.presentation))
+  )
+    fail(w, "unknown image presentation");
   if (v.numbers !== undefined) {
     object(v.numbers, w);
     Object.values(v.numbers).forEach((x) => text(x, w));
   }
   focus(v.focus, w);
 }
+/** Image slots accept saved image identity while retaining their own controls and layout. */
+export function validateImageReference(
+  value: unknown,
+  where = "image",
+): asserts value is FigureReference {
+  validateFigureReference(value, where);
+  if (!value.ref.startsWith("img_")) fail(where, "expected image reference");
+}
+
 export function validateLibraryEntry(
   v: unknown,
   w = "library",
@@ -193,7 +210,7 @@ export function validateLibraryEntry(
   object(v, w);
   text(v.id, w);
   text(v.title, w);
-  if (!/^(cmp|rxn|rte|mec|img)_[a-z0-9_-]+$/.test(v.id))
+  if (!/^(cmp|rxn|rte|mec|img|prc)_[a-z0-9_-]+$/.test(v.id))
     fail(w, "invalid stable ID");
   list(v.sources, w);
   if (!v.sources.length) fail(w, "source required");
@@ -201,6 +218,7 @@ export function validateLibraryEntry(
     object(s, w);
     text(s.source, w);
     text(s.locator, w);
+    if (s.source === "unknown") text(s.note, w);
   }
   const prefixes = {
     compound: "cmp",
@@ -208,6 +226,7 @@ export function validateLibraryEntry(
     route: "rte",
     mechanism: "mec",
     image: "img",
+    process: "prc",
   };
   if (
     !Object.hasOwn(prefixes, String(v.kind)) ||
@@ -349,6 +368,8 @@ export function validateLibraryEntry(
         text(m.toFrame, w);
       }
     }
+  } else if (v.kind === "process") {
+    validateProcess(v, w);
   } else {
     for (const field of ["author", "prompt"])
       if (v[field] !== undefined) text(v[field], w);
@@ -463,6 +484,13 @@ export function validateFigureInstance(
 ) {
   const entry = library[reference.ref];
   if (!entry) fail(reference.ref, "unknown figure");
+  if (
+    reference.presentation !== undefined &&
+    (entry.kind !== "image" || entry.crop)
+  )
+    fail(entry.id, "presentation requires an uncropped image");
+  if (reference.alt !== undefined && entry.kind !== "image")
+    fail(entry.id, "alt requires an image");
   if (
     reference.variant &&
     (entry.kind !== "compound" || !entry.variants?.[reference.variant])

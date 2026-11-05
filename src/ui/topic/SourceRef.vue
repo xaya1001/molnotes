@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { sourceLink, patentData, type PageRef } from "./patent.ts";
+import { sourceLink, patentData, pageImage, type PageRef } from "./patent.ts";
 import { useTopic } from "./context.ts";
 import UiFigure from "../UiFigure.vue";
 const props = defineProps<{
@@ -21,9 +21,7 @@ const src = computed(
 <template>
   <UiFigure
     v-if="image && (reference.asset || src)"
-    :src="
-      reference.asset ?? src!.image.replace('{page}', String(reference.page))
-    "
+    :src="reference.asset ?? pageImage(src!, reference.page)"
     :alt="`原文 p.${reference.page}`"
     :caption="`原文 p.${reference.page}`"
   />

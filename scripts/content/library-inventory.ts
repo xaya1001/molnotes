@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { sha256 } from "../../shared/assets.ts";
 import { moleculeToolkit } from "../../shared/molecule-toolkit.ts";
-import { unmappedMolecule } from "../../shared/chemical-library/chemistry.ts";
+import { graphSignature } from "../../shared/chemical-library/chemistry.ts";
 import type { Library } from "../../shared/chemical-library/types.ts";
 
 /** Read-only migration candidates. Source locations remain distinct until reviewed. */
@@ -40,13 +40,7 @@ export async function libraryInventory(root: string, library: Library) {
     if (!parsed) error = "Invalid molecular graph";
     else
       try {
-        const clean = unmappedMolecule(toolkit, parsed);
-        try {
-          clean.remove_hs_in_place();
-          graph = clean.get_smiles();
-        } finally {
-          clean.delete();
-        }
+        graph = graphSignature(toolkit, parsed);
       } finally {
         parsed.delete();
       }
@@ -73,7 +67,7 @@ export async function libraryInventory(root: string, library: Library) {
     if (!value || typeof value !== "object") return;
     for (const [key, v] of Object.entries(value)) {
       const pointer = `${location}/${key.replaceAll("~", "~0").replaceAll("/", "~1")}`;
-      if (key === "smiles" && typeof v === "string" && v.trim())
+      if (/smiles$/i.test(key) && typeof v === "string" && v.trim())
         molecule(v, pointer);
       else json(v, pointer);
     }
@@ -94,7 +88,11 @@ export async function libraryInventory(root: string, library: Library) {
         continue;
       }
       const bytes = await readFile(join(root, path));
-      if (entry.name.endsWith(".json"))
+      if (
+        entry.name.endsWith(".json") &&
+        (!path.startsWith("sites/") ||
+          /^sites\/[^/]+\/(content\.json|static\/.*\.json)$/.test(path))
+      )
         json(JSON.parse(bytes.toString()), path);
       else if (entry.name.endsWith(".md")) {
         const lines = bytes.toString().split("\n");

@@ -75,7 +75,14 @@ test("complete library previews share one saved layout and preserve local scroll
   const compound = library.entries.cmp_example;
   if (compound.kind !== "compound") throw new Error("Invalid fixture");
   compound.layout.pins = {
-    a1: { ...compound.layout.coords.a1, x: compound.layout.coords.a1.x + 0.2 },
+    a1: {
+      x:
+        compound.layout.coords.a1.x +
+        (compound.layout.coords.a2.x - compound.layout.coords.a1.x) * 0.2,
+      y:
+        compound.layout.coords.a1.y +
+        (compound.layout.coords.a2.y - compound.layout.coords.a1.y) * 0.2,
+    },
   };
   await page.reload();
   await expect(
@@ -109,6 +116,19 @@ test("complete library previews share one saved layout and preserve local scroll
       );
     });
   expect(smallestText).toBeGreaterThanOrEqual(11 - 0.1);
+  const smallestBond = await canvas
+    .locator("[data-bond-lengths]")
+    .evaluateAll((nodes) =>
+      Math.min(
+        ...nodes.map((node) => {
+          const molecule = node as SVGGElement,
+            matrix = molecule.getScreenCTM()!;
+          const lengths: number[] = JSON.parse(molecule.dataset.bondLengths!);
+          return Math.min(...lengths) * Math.hypot(matrix.a, matrix.b);
+        }),
+      ),
+    );
+  expect(smallestBond).toBeGreaterThanOrEqual(20 - 0.2);
 });
 
 test("diagnostics reject a saved label collision while keeping the full entry visible for repair", async ({
@@ -302,4 +322,75 @@ test("adjacent bond transfers use a readable arc when space is available", async
     );
   });
   expect(height).toBeGreaterThanOrEqual(0.69);
+});
+
+test("a saved process reuses scenario controls and keyboard steps at both widths", async ({
+  page,
+}) => {
+  const process = {
+    kind: "process",
+    id: "prc_transfer",
+    title: "Transfer process",
+    sources: [{ source: "handbook", locator: "Example" }],
+    label: "Transfer steps",
+    nodes: [{ name: "Input" }, { name: "Output" }],
+    scenarios: [
+      {
+        name: "Transfer",
+        steps: [
+          {
+            title: "Prepare",
+            text: "Prepare input",
+            state: "Ready",
+            kind: "local",
+            from: 0,
+            to: 0,
+          },
+          {
+            title: "Move",
+            text: "Transfer input",
+            state: "At output",
+            kind: "transfer",
+            from: 0,
+            to: 1,
+          },
+        ],
+      },
+      {
+        name: "Blocked",
+        steps: [
+          {
+            title: "Wait",
+            text: "Blocked transfer",
+            state: "At input",
+            kind: "blocked",
+            from: 0,
+            to: 1,
+          },
+        ],
+      },
+    ],
+  };
+  await page.route("**/api/library", (route) =>
+    route.fulfill({
+      json: { entries: { [process.id]: process }, uses: { [process.id]: [] } },
+    }),
+  );
+  for (const width of [1366, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/library/");
+    const player = page.getByRole("region", { name: process.title });
+    await expect(
+      player.getByRole("heading", { name: process.title, exact: true }),
+    ).toBeVisible();
+    await player.press("ArrowRight");
+    await expect(player.locator(".step-caption")).toContainText("Move");
+    await player.getByRole("button", { name: "Blocked", exact: true }).click();
+    await expect(player.locator(".step-caption")).toContainText("Wait");
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  }
 });

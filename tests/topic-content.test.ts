@@ -895,6 +895,18 @@ test("image-points predictions name their points and answer", () => {
     explanation: "e",
   };
   assert.doesNotThrow(() => validateTopicContent(blocksContent([picture])));
+  assert.doesNotThrow(() =>
+    validateTopicContent(
+      blocksContent([{ ...picture, image: { ref: "img_example" } }]),
+    ),
+  );
+  assert.throws(
+    () =>
+      validateTopicContent(
+        blocksContent([{ ...picture, image: { ref: "cmp_example" } }]),
+      ),
+    /expected image reference/,
+  );
   assert.throws(
     () => validateTopicContent(blocksContent([{ ...picture, answer: ["zz"] }])),
     /answer must list point ids/,

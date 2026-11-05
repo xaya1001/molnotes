@@ -4,10 +4,15 @@ import type {
   FigureReference,
   Library,
 } from "../../../shared/chemical-library/types.ts";
+import UiFigure from "../UiFigure.vue";
 import ImageViewer from "../ImageViewer.vue";
+import ProcessViewer from "../topic/ProcessViewer.vue";
 import { figureDiagnostics } from "./diagnostics.ts";
 import { renderFigure } from "./render.ts";
-const props = defineProps<{ library: Library; reference: FigureReference }>();
+const props = defineProps<{
+  library: Library;
+  reference: FigureReference;
+}>();
 const emit = defineEmits<{
   diagnostics: [
     value: import("../../../shared/chemical-library/types.ts").Diagnostic[],
@@ -41,8 +46,9 @@ let observer: ResizeObserver | undefined;
 watch(
   [root, () => props.library, () => JSON.stringify(displayed.value)],
   async () => {
-    if (!root.value) return;
     const current = ++generation;
+    observer?.disconnect();
+    if (!root.value) return;
     try {
       const result = await renderFigure(props.library, displayed.value);
       if (current !== generation) return;
@@ -102,9 +108,9 @@ watch(
           host.value.style.marginLeft = `${(parent.clientWidth - w) / 2}px`;
         }
         const available = root.value!.clientWidth;
-        const scale = Math.min(
-          1,
-          Math.max(result.minimumScale, available / result.width),
+        const scale = Math.max(
+          result.minimumScale,
+          Math.min(1, available / result.width),
         );
         result.svg.style.width = `${result.width * scale}px`;
         result.svg.style.height = `${result.height * scale}px`;
@@ -127,7 +133,45 @@ onBeforeUnmount(() => {
 });
 </script>
 <template>
-  <figure ref="host" class="library-figure">
+  <template v-if="entry?.kind === 'process'">
+    <ProcessViewer :key="entry.id" :data="entry" />
+    <p v-if="reference.caption" class="figure-caption">
+      {{ reference.caption }}
+    </p>
+  </template>
+  <template
+    v-else-if="entry?.kind === 'image' && reference.presentation && !entry.crop"
+  >
+    <template v-if="reference.presentation === 'note'">
+      <button
+        type="button"
+        class="note-image"
+        :aria-label="`放大图片：${reference.caption ?? entry.alt}`"
+        @click="viewing = true"
+      >
+        <img
+          :src="`/library/assets/${entry.asset}`"
+          :alt="reference.alt ?? entry.alt"
+        />
+      </button>
+      <span v-if="reference.caption" class="note-caption">{{
+        reference.caption
+      }}</span>
+      <ImageViewer
+        v-model:open="viewing"
+        :src="`/library/assets/${entry.asset}`"
+        :alt="reference.alt ?? entry.alt"
+        :title="reference.caption ?? entry.title"
+      />
+    </template>
+    <UiFigure
+      v-else
+      :src="`/library/assets/${entry.asset}`"
+      :alt="reference.alt ?? entry.alt"
+      :caption="reference.caption ?? ''"
+    />
+  </template>
+  <figure v-else ref="host" class="library-figure">
     <nav
       v-if="
         entry?.kind === 'mechanism' &&
@@ -161,7 +205,7 @@ onBeforeUnmount(() => {
       v-if="entry?.kind === 'image'"
       v-model:open="viewing"
       :src="`/library/assets/${entry.asset}`"
-      :alt="entry.alt"
+      :alt="reference.alt ?? entry.alt"
       :title="entry.title"
     />
     <p v-if="error" role="alert">{{ error }}</p>
@@ -183,7 +227,8 @@ onBeforeUnmount(() => {
   margin: auto;
   max-width: none;
 }
-figcaption {
+figcaption,
+.figure-caption {
   color: var(--ink-muted);
   font-size: var(--text-sm);
   margin-top: var(--space-2);

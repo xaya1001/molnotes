@@ -1,3 +1,4 @@
+import type { FigureReference } from "../../../shared/chemical-library/types.ts";
 /** Data checked by the topic block contract at publication and mount. */
 export type RecordId = string | number;
 export interface PageRef {
@@ -5,13 +6,14 @@ export interface PageRef {
   page: number;
   end?: number;
   rect?: number[];
-  asset?: string;
+  asset?: string | FigureReference;
 }
 export interface PageSource {
   size: [number, number];
   title: string;
   pages: number;
-  image: string;
+  image?: string;
+  images?: FigureReference[];
   text: string;
   paragraphs: Record<string, number>;
 }
@@ -231,4 +233,13 @@ export interface SynthesisNetwork {
   procedures?: Record<string, Procedure>;
   steps: SynthesisStep[];
   routes: ResearchRoute[];
+}
+
+export function pageImage(
+  source: PageSource,
+  page: number,
+): string | FigureReference {
+  return (
+    source.images?.[page - 1] ?? source.image!.replace("{page}", String(page))
+  );
 }

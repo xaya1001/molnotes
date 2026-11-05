@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useTopic } from "./context.ts";
-import { patentData, sourceLink } from "./patent.ts";
+import { patentData, sourceLink, pageImage } from "./patent.ts";
 import PageHeading from "../PageHeading.vue";
 import PageViewer from "../PageViewer.vue";
 const props = defineProps<{ source?: string; mode?: "page" | "search" }>();
@@ -185,7 +185,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", key));
       </form>
       <PageViewer
         class="patent-page"
-        :image="source.image.replace('{page}', String(page))"
+        :image="pageImage(source, page)"
         :size="source.size"
         :rect="rect"
         :alt="`原始 PDF 第 ${page} 页`"

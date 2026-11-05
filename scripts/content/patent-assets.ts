@@ -34,7 +34,7 @@ export async function validatePatentAssets(
   }
   for (const source of Object.values(data.sources ?? {})) {
     for (let n = 1; n <= source.pages; n++)
-      get(source.image.replace("{page}", String(n)));
+      if (source.image) get(source.image.replace("{page}", String(n)));
     const text = await json(source.text);
     if (
       !Array.isArray(text) ||
@@ -101,7 +101,8 @@ export async function validatePatentAssets(
       }
   for (const set of Object.values(data.claims ?? {}))
     for (const claim of set.claims) {
-      for (const segment of claim.segments) get(segment.asset!);
+      for (const segment of claim.segments)
+        if (typeof segment.asset === "string") get(segment.asset);
       if (claim.scope) {
         const cache = `smarts:${claim.scope.smarts}`;
         if (!checked.has(cache)) {

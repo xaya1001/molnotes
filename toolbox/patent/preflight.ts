@@ -3,6 +3,10 @@
 import type { TopicContent } from "../../src/ui/topic/content.ts";
 import type { BodyRef } from "../../src/ui/topic/patent.ts";
 import fs from "node:fs/promises";
+import {
+  readChemicalLibrary,
+  libraryUsage,
+} from "../../scripts/content/chemical-library.ts";
 import path from "node:path";
 const [directory] = process.argv.slice(2);
 if (!directory) throw new Error("Usage: node preflight.ts sites/<slug>");
@@ -56,7 +60,20 @@ for (const [id, collection] of Object.entries(
   }
   counts[id] = { records: collection.records.length, withSmiles };
 }
+if (
+  Object.values(content.data?.sources ?? {}).some((source) => source.images)
+) {
+  try {
+    const { entries } = await readChemicalLibrary(path.resolve(root, "../.."));
+    libraryUsage(entries, [
+      { value: content, path: "/", title: path.basename(root) },
+    ]);
+  } catch (error) {
+    errors.push((error as Error).message);
+  }
+}
 for (const [id, source] of Object.entries(content.data?.sources ?? {})) {
+  if (!source.image) continue;
   for (let page = 1; page <= source.pages; page++) {
     const prefix = `/sites/${path.basename(root)}/static/`;
     const url = source.image.replace("{page}", String(page));
