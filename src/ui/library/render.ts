@@ -289,6 +289,7 @@ export async function renderFigure(
             noFreetype: false,
             fontFile: "BuiltinRobotoRegular",
             atomColourPalette: "bw",
+            atomLabelDeuteriumTritium: true,
             addStereoAnnotation: layout.stereoAnnotations ?? false,
             annotationFontScale: 0.65,
             atomLabels,

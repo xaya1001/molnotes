@@ -226,3 +226,35 @@ test("mechanism step selection keeps the explanation with its drawing", async ({
     figure.getByText("Explanation for first", { exact: true }),
   ).toHaveCount(0);
 });
+
+test("deuterium uses one full-size native D glyph without changing identity", async ({
+  page,
+}) => {
+  const compound = prepareCompound(await moleculeToolkit(), {
+    id: "cmp_isotope",
+    title: "Labelled structure",
+    smiles: "[2H]CC(=O)C",
+    sources: [{ source: "handbook", locator: "Example" }],
+  });
+  const library = { entries: { [compound.id]: compound }, uses: {} };
+  await page.route("**/api/library", (route) =>
+    route.fulfill({ json: library }),
+  );
+  await page.route("**/api/topics/minimal", async (route) => {
+    const response = await route.fetch();
+    const topic = await response.json();
+    topic.content.chapters[0].blocks = [
+      { type: "figure-ref", ref: compound.id },
+    ];
+    await route.fulfill({ json: topic });
+  });
+  await page.goto("/sites/minimal/start");
+  const atom = page.locator('[data-label="compound:a1"]');
+  await expect(atom).toHaveCount(1);
+  await expect(atom).toBeVisible();
+  const height = await atom.evaluate(
+    (glyph) => glyph.getBoundingClientRect().height,
+  );
+  expect(height).toBeGreaterThan(10);
+  expect(compound.graph).toContain("[2H]");
+});
