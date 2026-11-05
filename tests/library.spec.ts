@@ -97,13 +97,18 @@ test("complete library previews share one saved layout and preserve local scroll
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
-  const scale = await canvas
+  const smallestText = await canvas
     .locator("svg")
-    .evaluate(
-      (svg: SVGSVGElement) =>
-        svg.getBoundingClientRect().width / svg.viewBox.baseVal.width,
-    );
-  expect(scale).toBeGreaterThanOrEqual(11 / 14 - 0.01);
+    .evaluate((svg: SVGSVGElement) => {
+      const scale =
+        svg.getBoundingClientRect().width / svg.viewBox.baseVal.width;
+      return Math.min(
+        ...[...svg.querySelectorAll("text")].map(
+          (text) => parseFloat(getComputedStyle(text).fontSize) * scale,
+        ),
+      );
+    });
+  expect(smallestText).toBeGreaterThanOrEqual(11 - 0.1);
 });
 
 test("diagnostics reject a saved label collision while keeping the full entry visible for repair", async ({
