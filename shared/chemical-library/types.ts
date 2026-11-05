@@ -1,4 +1,5 @@
 import type { MoleculeAbbreviation } from "../molecule-abbreviations.ts";
+import type { ProcessData } from "../process.ts";
 
 export type Point = { x: number; y: number };
 export type Evidence = { source: string; locator: string; note?: string };
@@ -170,8 +171,11 @@ export interface LibraryImage extends EntryBase {
   derivedFrom?: string[];
   crop?: { x: number; y: number; width: number; height: number };
 }
+export interface LibraryProcess extends EntryBase, ProcessData {
+  kind: "process";
+}
 export type LibraryEntry =
-  Compound | Reaction | Route | Mechanism | LibraryImage;
+  Compound | Reaction | Route | Mechanism | LibraryImage | LibraryProcess;
 export type Library = Record<string, LibraryEntry>;
 export interface FigureReference {
   ref: string;
@@ -180,6 +184,10 @@ export interface FigureReference {
   numbers?: Record<string, string>;
   focus?: Focus;
   caption?: string;
+  /** Context-specific accessible description for a reused image. */
+  alt?: string;
+  /** Preserve the reading context of an ordinary image or note illustration. */
+  presentation?: "figure" | "note";
 }
 export interface Diagnostic {
   code: string;

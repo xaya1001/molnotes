@@ -1,4 +1,7 @@
-import { validateFigureReference } from "./chemical-library/contract.ts";
+import {
+  validateFigureReference,
+  validateImageReference,
+} from "./chemical-library/contract.ts";
 import {
   validateSynthesisRoutes,
   validateSubstrateScope,
@@ -357,8 +360,11 @@ export function validatePrediction(
     // One point picked on a picture, optionally with a choice.
     const { image, points: pts, answer } = prediction;
     assert(isObject(image), `${where} image must be { src, alt }`);
-    text(image.src, `${where} image src`);
-    text(image.alt, `${where} image alt`);
+    if ("ref" in image) validateImageReference(image, `${where} image`);
+    else {
+      text(image.src, `${where} image src`);
+      text(image.alt, `${where} image alt`);
+    }
     assert(
       isList(pts) && pts.length >= 2,
       `${where} needs at least two points`,
@@ -598,7 +604,8 @@ export function resolveData<T>(
 
 /** Allowed fields for each block type; shared identity fields apply to every block. */
 const blockFields: Record<string, string[]> = {
-  "figure-ref": "ref variant frame numbers focus caption".split(" "),
+  "figure-ref":
+    "ref variant frame numbers focus caption alt presentation".split(" "),
   "source-pages": ["source"],
   "synthesis-network": ["network"],
   "record-collection": ["collection"],
@@ -996,8 +1003,15 @@ export function validateBlocks(
                 isObject(frame.image),
                 `${w} frame ${i + 1} image must be { src, alt }`,
               );
-              text(frame.image.src, `${w} frame ${i + 1} image src`);
-              text(frame.image.alt, `${w} frame ${i + 1} image alt`);
+              if ("ref" in frame.image)
+                validateImageReference(
+                  frame.image,
+                  `${w} frame ${i + 1} image`,
+                );
+              else {
+                text(frame.image.src, `${w} frame ${i + 1} image src`);
+                text(frame.image.alt, `${w} frame ${i + 1} image alt`);
+              }
             }
           });
         });

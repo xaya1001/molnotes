@@ -354,7 +354,8 @@ export async function compileNotes({
         caption: reference.caption ?? "",
       });
       env.text.push(reference.caption ?? "");
-      return `<div id="${id}" class="note-diagram"></div>`;
+      const tag = reference.presentation === "note" ? "p" : "div";
+      return `<${tag} id="${id}" class="note-diagram"></${tag}>`;
     }
     if (kind !== "molecule")
       return originalFence!(tokens, i, options, env, self);

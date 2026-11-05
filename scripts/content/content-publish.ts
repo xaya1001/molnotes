@@ -358,7 +358,7 @@ export async function buildSnapshot(
   ]);
   for (const entry of Object.values(library.entries))
     for (const evidence of entry.sources)
-      if (!registry?.[evidence.source])
+      if (evidence.source !== "unknown" && !registry?.[evidence.source])
         throw new Error(`${entry.id}: unknown source ${evidence.source}`);
   const proofs = await verifyLibraryFigures(
     library.entries,

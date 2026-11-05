@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LibraryImage from "../library/LibraryImage.vue";
 import StepPlayer from "../StepPlayer.vue";
 import type { SceneFrame } from "./blocks.ts";
 defineProps<{ label: string; title?: string; frames: SceneFrame[] }>();
@@ -7,9 +8,15 @@ defineProps<{ label: string; title?: string; frames: SceneFrame[] }>();
   <StepPlayer :label="label" :title="title" :steps="frames">
     <template #default="{ index }">
       <figure v-if="frames[index].image" class="figure">
-        <img
-          :src="frames[index].image!.src"
-          :alt="frames[index].image!.alt"
+        <LibraryImage
+          :image="
+            'ref' in frames[index].image!
+              ? frames[index].image!
+              : frames[index].image!.src
+          "
+          :alt="
+            'alt' in frames[index].image! ? frames[index].image!.alt : undefined
+          "
           loading="lazy"
         />
       </figure>

@@ -99,7 +99,7 @@ if (input) {
           : [1366, 390]) {
           const result = await runner.render(ref, width);
           const name = `${ref.ref}${"frame" in ref ? "-" + ref.frame : ""}-${width}`;
-          if (!args.includes("--check"))
+          if (!args.includes("--check") && result.svg !== null)
             await writeFile(join(out, name + ".svg"), result.svg);
           await writeFile(
             join(out, name + ".json"),

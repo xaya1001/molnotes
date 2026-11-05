@@ -1,3 +1,4 @@
+import { validateImageReference } from "./chemical-library/contract.ts";
 import type { PatentBlock, TopicBlock } from "../src/ui/topic/blocks.ts";
 import type { PageSource, PatentData } from "../src/ui/topic/patent.ts";
 import {
@@ -44,6 +45,10 @@ function asset(v: unknown, at?: string): asserts v is string {
       !v.includes(".."),
     `${at}: expected static resource path`,
   );
+}
+function imageAsset(value: unknown, at = "image") {
+  if (typeof value === "string") asset(value, at);
+  else validateImageReference(value, at);
 }
 const patentTypes: readonly unknown[] = [
   "source-pages",
@@ -161,7 +166,7 @@ export function validatePatentData(
           v.rect[3] <= src.size[1],
         `${at}: invalid rectangle`,
       );
-    if (v.asset !== undefined) asset(v.asset, at);
+    if (v.asset !== undefined) imageAsset(v.asset, at);
   };
   for (const [name, s] of Object.entries(sources)) {
     ok(isObject(s), `${name}: expected text`);
@@ -173,8 +178,19 @@ export function validatePatentData(
       `${name}: size must contain positive width and height in PDF points`,
     );
     ok(isInteger(s.pages) && s.pages > 0, `${name}: invalid pages`);
-    asset(s.image, name);
-    ok(s.image.includes("{page}"), `${name}: image needs {page}`);
+    if (s.images !== undefined) {
+      ok(
+        isList(s.images) && s.images.length === s.pages,
+        `${name}: one image reference per page required`,
+      );
+      s.images.forEach((image, i) =>
+        validateImageReference(image, `${name}: image ${i + 1}`),
+      );
+      ok(s.image === undefined, `${name}: choose images or image pattern`);
+    } else {
+      asset(s.image, name);
+      ok(s.image.includes("{page}"), `${name}: image needs {page}`);
+    }
     asset(s.text, name);
     for (const [p, n] of entries(s.paragraphs, name))
       ok(
@@ -350,7 +366,7 @@ export function validatePatentData(
       refs(c.examples, "examples", at);
       for (const segment of list(c.segments, at)) {
         ref(segment, set.source, at);
-        asset(field(segment, "asset"), at);
+        imageAsset(field(segment, "asset"), at);
       }
       if (c.scope) {
         text(field(c.scope, "smarts"), at);

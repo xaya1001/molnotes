@@ -256,8 +256,15 @@ export function createWebServer({
           return;
         }
         const handle = await open(snapshot.file(asset));
-        res.writeHead(range ? 206 : 200, responseHeaders);
-        await pipeline(handle.createReadStream(range ?? {}), res);
+        try {
+          res.writeHead(range ? 206 : 200, responseHeaders);
+          await pipeline(
+            handle.createReadStream({ ...range, autoClose: false }),
+            res,
+          );
+        } finally {
+          await handle.close();
+        }
         return;
       }
       if (!["GET", "HEAD"].includes(method)) {

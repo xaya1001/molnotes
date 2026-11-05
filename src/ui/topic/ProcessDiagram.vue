@@ -17,6 +17,7 @@ const arrowId = useId();
 const stage = ref<HTMLElement | null>(null);
 const containerWidth = ref(680);
 let observer: ResizeObserver;
+let resizeFrame = 0;
 const vertical = computed(() => containerWidth.value < 600);
 const diagramWidth = computed(() => containerWidth.value);
 const hasLoss = computed(() =>
@@ -156,11 +157,19 @@ const lossPoint = computed(() => {
 });
 onMounted(() => {
   observer = new ResizeObserver(([entry]) => {
-    containerWidth.value = entry.contentRect.width;
+    cancelAnimationFrame(resizeFrame);
+    const width = entry.contentRect.width;
+    if (width !== containerWidth.value)
+      resizeFrame = requestAnimationFrame(() => {
+        containerWidth.value = width;
+      });
   });
   observer.observe(stage.value!);
 });
-onBeforeUnmount(() => observer.disconnect());
+onBeforeUnmount(() => {
+  cancelAnimationFrame(resizeFrame);
+  observer.disconnect();
+});
 </script>
 <template>
   <div

@@ -95,7 +95,9 @@ export interface RankingPrediction extends PredictionBase {
 /** The reader picks one marked point on a picture, optionally with a choice; both must be right. */
 export interface ImagePointsPrediction extends PredictionBase {
   kind: "image-points";
-  image: { src: string; alt: string };
+  image:
+    | { src: string; alt: string }
+    | import("../../../shared/chemical-library/types.ts").FigureReference;
   /** Marked positions as percentages of the picture's width and height. */
   points: { id: string; label: string; x: number; y: number }[];
   answer: string[];

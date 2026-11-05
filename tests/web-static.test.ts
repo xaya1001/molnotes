@@ -302,3 +302,29 @@ test("notebook metadata leaves out bodies and is built once per snapshot", async
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("aborted asset reads survive forced garbage collection without abandoned handles", async () => {
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const root = await mkdtemp(join(tmpdir(), "il-asset-gc-"));
+  const bytes = Buffer.alloc(4_000_000, 65);
+  bytes.write("0123456789");
+  await snapshot(root, "one", {}, { "sites/test/static/movie.mp4": bytes });
+  try {
+    const { stderr } = await promisify(execFile)(
+      process.execPath,
+      [
+        "--expose-gc",
+        new URL("./helpers/asset-handle-gc.ts", import.meta.url).pathname,
+        join(root, "one"),
+      ],
+      { timeout: 30000 },
+    );
+    assert.doesNotMatch(
+      stderr,
+      /FileHandle object was closed|Closing file descriptor.*garbage collection/,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

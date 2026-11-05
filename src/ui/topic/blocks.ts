@@ -178,7 +178,9 @@ export interface DiagnosticSummaryBlock extends BlockBase {
 export interface SceneFrame {
   title?: string;
   text: string;
-  image?: { src: string; alt: string };
+  image?:
+    | { src: string; alt: string }
+    | import("../../../shared/chemical-library/types.ts").FigureReference;
 }
 export interface ProcessBlock extends BlockBase {
   type: "process";

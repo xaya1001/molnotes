@@ -12,6 +12,7 @@ import {
 import {
   validateLibrary,
   validateFigureReference,
+  validateLibraryEntry,
 } from "../shared/chemical-library/contract.ts";
 import { routeMetrics } from "../shared/chemical-library/routes.ts";
 import type {
@@ -508,4 +509,75 @@ test("content builds compile YAML scenes while keeping saved compounds shared", 
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("process entries load once and accept reusable references while validating node boundaries", async () => {
+  const { mkdtemp, mkdir, writeFile, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { readChemicalLibrary, libraryUsage } =
+    await import("../scripts/content/chemical-library.ts");
+  const entry = {
+    kind: "process",
+    id: "prc_transfer",
+    title: "Transfer",
+    sources,
+    label: "Transfer steps",
+    nodes: [{ name: "Input" }, { name: "Output" }],
+    scenarios: [
+      {
+        name: "Default",
+        steps: [
+          {
+            title: "Move",
+            text: "Transfer the input",
+            state: "At output",
+            kind: "transfer",
+            from: 0,
+            to: 1,
+          },
+        ],
+      },
+    ],
+  };
+  validateLibraryEntry(entry);
+  const invalid = structuredClone(entry);
+  invalid.scenarios[0].steps[0].to = 2;
+  assert.throws(() => validateLibraryEntry(invalid), /unknown node/);
+  assert.throws(
+    () => validateLibraryEntry({ ...entry, id: "img_transfer" }),
+    /kind mismatch/,
+  );
+  const root = await mkdtemp(join(tmpdir(), "process-library-"));
+  try {
+    await mkdir(join(root, "library/processes"), { recursive: true });
+    await writeFile(
+      join(root, "library/processes/prc_transfer.json"),
+      JSON.stringify(entry),
+    );
+    const { entries } = await readChemicalLibrary(root);
+    const usage = libraryUsage(
+      entries,
+      ["first", "second"].map((name) => ({
+        value: { type: "figure-ref", ref: entry.id },
+        path: `/sites/${name}/`,
+        title: name,
+      })),
+    );
+    assert.deepEqual(entries[entry.id], entry);
+    assert.equal(usage.snapshot.uses[entry.id].length, 2);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("compound identity preserves relative stereo groups as well as isotopes", async () => {
+  const rd = await moleculeToolkit();
+  const make = (smiles: string) =>
+    prepareCompound(rd, { id: "cmp_stereo", title: "Stereo", smiles, sources });
+  const absolute = make("C[C@H](O)F"),
+    relative = make("C[C@H](O)F |&1:1|");
+  assert.notEqual(absolute.graph, relative.graph);
+  assert.match(relative.smiles, /&1:/);
+  validateCompound(rd, relative);
 });

@@ -30,7 +30,7 @@ arrows:
   - substrate:pi(a2,a3) -> substrate:atom(a3)
 ```
 
-For process diagrams, use the existing `process` block and [ProcessData contract](../../../shared/process.ts), with scenario steps and nodes; check it through `content:preview`. `figure:render` accepts chemical library scenes, not process blocks. Timeline and generic flow fields are in the [data-figure recipe](../../../toolbox/recipes/figures.md).
+For process diagrams, save a `kind: process` entry in `library/processes/prc_<id>.yaml`, using the [ProcessData contract](../../../shared/process.ts) (`title`, `label`, `nodes`, optional `total`, and `scenarios`) plus `id` and `sources`. Pages use `figure-ref` with its `prc_` ID. The existing process player renders it, including scenario selection, trace and budget. Check it with `figure:render --library <content-root> --entry <id>` or `content:preview`; process output includes PNGs and diagnostics, while SVG export applies to static figures. Timeline and generic flow fields are in the [data-figure recipe](../../../toolbox/recipes/figures.md).
 
 ## Endpoint vocabulary
 
@@ -40,8 +40,9 @@ For process diagrams, use the existing `process` block and [ProcessData contract
 
 ## Identity, references and style
 
-- Save one entry per stable `cmp_`, `rxn_`, `rte_`, `mec_` or `img_` ID. Reactions reference compounds; routes reference reactions; mechanism frames reference compounds. Preserve graph identity when saving layout variants.
+- Save one entry per stable `cmp_`, `rxn_`, `rte_`, `mec_`, `img_` or `prc_` ID. Reactions reference compounds; routes reference reactions; mechanism frames reference compounds. Preserve graph identity when saving layout variants.
 - A page uses `figure-ref` with `ref`, optional `variant`/`frame`, local `numbers`, focus and caption. Keep structures, reagents, yields, coordinates and source evidence in the library entry. Notes use a `figure-ref` fenced block; topics use `{ "type": "figure-ref", "ref": "rxn_example" }`.
+- Image references keep local `alt` and caption. Use `presentation: figure` for the ordinary framed image, or `presentation: note` for a centered note illustration. Existing SVG library presentation is the default. Scene, picture-question and original-page image slots accept `{ref: img_<id>}` while retaining their own controls.
 - Use gray/black plus the shared red accent. At most one primary focus and two supporting focuses; one coordinated electron event may include several related arrows. Keep background structures readable and use the shared design tokens for color, weight, bond length and glyph sizes.
 
 ## Common fixes
