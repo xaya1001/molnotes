@@ -15,8 +15,11 @@ export interface ChemicalGraph {
 export function graphOf(mol: Mol): ChemicalGraph {
   return JSON.parse(mol.get_json()).molecules[0];
 }
-export function openMolecule(toolkit: Toolkit, text: string) {
-  const mol = toolkit.get_mol(text, JSON.stringify({ removeHs: false }));
+export function openMolecule(toolkit: Toolkit, text: string, sanitize = true) {
+  const mol = toolkit.get_mol(
+    text,
+    JSON.stringify({ removeHs: false, sanitize }),
+  );
   if (!mol?.is_valid()) {
     mol?.delete();
     throw new Error("Invalid molecular graph");
@@ -175,6 +178,24 @@ export function validateCompound(toolkit: Toolkit, c: Compound) {
     if (atomMaps(mol).some((map, i) => map <= 0 || c.atomIds[i] !== `a${map}`))
       throw new Error(`${c.id}: atom IDs must match persistent SMILES maps`);
     for (const layout of [c.layout, ...Object.values(c.variants ?? {})]) {
+      if (layout.molblock) {
+        const variant = openMolecule(toolkit, layout.molblock, false);
+        try {
+          if (graphSignature(toolkit, variant) !== c.graph)
+            throw new Error(
+              `${c.id}: variant molecular graph or stereochemistry differs`,
+            );
+          if (
+            atomMaps(variant).some((map, i) => c.atomIds[i] !== `a${map}`) ||
+            variant.get_num_atoms() !== c.atomIds.length
+          )
+            throw new Error(
+              `${c.id}: variant atom maps must match atomIds in order`,
+            );
+        } finally {
+          variant.delete();
+        }
+      }
       if (
         Object.keys(layout.coords).length !== c.atomIds.length ||
         c.atomIds.some((id) => !layout.coords[id])
@@ -234,7 +255,11 @@ export function drawingMolecule(
   rotate = 0,
   mirror = false,
 ) {
-  const original = openMolecule(toolkit, c.smiles);
+  const original = openMolecule(
+    toolkit,
+    layout?.molblock ?? c.smiles,
+    !layout?.molblock,
+  );
   let mapped: Mol;
   try {
     const description = JSON.parse(original.get_json());
@@ -253,6 +278,7 @@ export function drawingMolecule(
         '"coords":[]',
         `"coords":[${coords}]`,
       ),
+      !layout?.molblock,
     );
   } finally {
     original.delete();
@@ -337,7 +363,10 @@ export function drawingMolecule(
         })
         .join("\n");
     }
-    const drawing = toolkit.get_mol(block, JSON.stringify({ removeHs: false }));
+    const drawing = toolkit.get_mol(
+      block,
+      JSON.stringify({ removeHs: false, sanitize: !layout?.molblock }),
+    );
     if (!drawing) throw new Error(`${c.id}: invalid drawing molblock`);
     return drawing;
   } finally {
@@ -381,7 +410,7 @@ export function abbreviatedDrawing(
       return [line];
     })
     .join("\n");
-  return { mol: openMolecule(toolkit, block), bonds };
+  return { mol: openMolecule(toolkit, block, false), bonds };
 }
 
 /** Align an explicit pair of atom correspondences; the caller persists the resulting coordinates. */
@@ -422,11 +451,15 @@ export function validateSceneChemistry(
       const compound = library[placement.compound];
       if (compound?.kind !== "compound")
         throw new Error(`${where}: missing compound`);
-      const mol = openMolecule(toolkit, compound.smiles);
+      const layout = placement.variant
+        ? compound.variants![placement.variant]
+        : compound.layout;
+      const mol = openMolecule(
+        toolkit,
+        layout.molblock ?? compound.smiles,
+        !layout.molblock,
+      );
       try {
-        const layout = placement.variant
-          ? compound.variants![placement.variant]
-          : compound.layout;
         return [
           placement.id,
           {

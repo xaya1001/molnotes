@@ -16,6 +16,8 @@ export interface EntryBase {
   sources: Evidence[];
 }
 export interface CompoundLayout {
+  /** Mapped molblock with explicit Kekulé bonds; atom order matches atomIds. */
+  molblock?: string;
   /** Coordinates in bond units, positive y downward. Keys are persistent atom IDs. */
   coords: Record<string, Point>;
   pins?: Record<string, Point>;

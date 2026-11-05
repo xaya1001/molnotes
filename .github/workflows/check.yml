@@ -33,6 +33,7 @@ jobs:
           python3 -m venv "${RUNNER_TEMP}/python"
           "${RUNNER_TEMP}/python/bin/pip" install --quiet -r scripts/requirements-material.txt
           echo "${RUNNER_TEMP}/python/bin" >> "${GITHUB_PATH}"
+          echo "MOLNOTES_PYTHON=${RUNNER_TEMP}/python/bin/python3" >> "${GITHUB_ENV}"
       - name: Plan browser checks
         id: plan
         env:

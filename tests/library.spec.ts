@@ -148,6 +148,95 @@ test("diagnostics reject a saved label collision while keeping the full entry vi
   await expect(page.locator(".entry")).toHaveCount(2);
 });
 
+test("wrapped reaction conditions leave visible space between CJK and Latin lines", async ({
+  page,
+}) => {
+  const library = await fixture();
+  const reaction = library.entries.rxn_example;
+  if (reaction.kind !== "reaction") throw new Error("Invalid fixture");
+  reaction.reagents = [
+    "试剂甲与试剂乙混合后缓慢加入反应体系",
+    "Reagent A / Me2S / H₂O",
+  ];
+  reaction.conditions = [
+    "室温搅拌后加热并保持反应温度",
+    "Ambient temperature",
+    "DMF，0–25 °C，16 h；THF，0 °C，1 h；DCM，−20–25 °C，2 h",
+  ];
+  reaction.arrow.textWidth = 4;
+  reaction.scene.height = 16;
+  await page.route("**/api/library", (route) =>
+    route.fulfill({ json: library }),
+  );
+  await page.goto("/library/");
+  const entry = page.locator("#rxn_example");
+  await expect(entry.locator("[data-check]")).toHaveAttribute(
+    "data-check",
+    /passed|error/,
+  );
+  expect(await entry.locator("[data-diagnostic]").allTextContents()).toEqual(
+    [],
+  );
+  const lines = await entry
+    .locator('[data-label*="rxn_example:condition:"]')
+    .allTextContents();
+  for (const token of ["DCM", "Me2S", "−20–25 °C"])
+    expect(lines.some((line) => line.includes(token))).toBe(true);
+  for (const width of [1366, 390]) {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    const gaps = await entry.locator("svg").evaluate((svg) => {
+      return [-1, 1].flatMap((sign) => {
+        const lines = [
+          ...svg.querySelectorAll(
+            `[data-label^="rxn_example:condition:${sign}:"]`,
+          ),
+        ]
+          .map((el) => el.getBoundingClientRect())
+          .sort((a, b) => a.top - b.top);
+        return lines.slice(1).map((line, i) => line.top - lines[i].bottom);
+      });
+    });
+    expect(gaps.length).toBeGreaterThan(2);
+    expect(Math.min(...gaps)).toBeGreaterThan(0);
+  }
+});
+
+test("labelled ions show one circled charge and diagnostics reject duplicate markers", async ({
+  page,
+}) => {
+  const compound = prepareCompound(await moleculeToolkit(), {
+    id: "cmp_ion",
+    title: "Example ion",
+    smiles: "[Na+]",
+    sources: [{ source: "handbook", locator: "Example 3" }],
+  });
+  await page.route("**/api/library", (route) =>
+    route.fulfill({
+      json: {
+        entries: { [compound.id]: compound },
+        uses: { [compound.id]: [] },
+      },
+    }),
+  );
+  await page.goto("/library/");
+  const entry = page.locator("#cmp_ion");
+  await expect(entry.locator('[data-check="passed"]')).toHaveCount(1);
+  // N and a are the only native glyphs; the charge is drawn by the shared renderer.
+  await expect(
+    entry.locator('path.atom-0[data-label="compound:a1"]'),
+  ).toHaveCount(2);
+  await expect(entry.locator('[data-charge-owner="compound:a1"]')).toHaveCount(
+    1,
+  );
+  await entry
+    .locator('[data-charge-owner="compound:a1"]')
+    .evaluate((el) => el.parentElement!.append(el.cloneNode(true)));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(
+    entry.locator('[data-diagnostic="DUPLICATE_CHARGE"]'),
+  ).toHaveCount(1);
+});
+
 test("local numbers sit below the visible ink of folded groups", async ({
   page,
 }) => {

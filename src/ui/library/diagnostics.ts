@@ -58,6 +58,23 @@ export function figureDiagnostics(svg: SVGSVGElement): Diagnostic[] {
       field: "layout",
     });
   if (!svg.querySelector("[data-molecule]")) return errors;
+  const charges = new Map<string, number>();
+  for (const marker of svg.querySelectorAll<SVGGraphicsElement>(
+    "[data-charge-owner]",
+  )) {
+    const owner = marker.dataset.chargeOwner!;
+    charges.set(owner, (charges.get(owner) ?? 0) + 1);
+  }
+  for (const [owner, count] of charges)
+    if (count > 1)
+      add(
+        "DUPLICATE_CHARGE",
+        [owner],
+        "Display one charge marker per atom",
+        undefined,
+        count,
+        1,
+      );
   const labels = [...svg.querySelectorAll<SVGGraphicsElement>("[data-label]")]
     .filter((e) => e.getBBox().width > 0)
     .map((el) => ({

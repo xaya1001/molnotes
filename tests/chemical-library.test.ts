@@ -8,6 +8,8 @@ import {
   atomMaps,
   placedCoordinates,
   drawingMolecule,
+  graphOf,
+  validateSceneChemistry,
 } from "../shared/chemical-library/chemistry.ts";
 import {
   validateLibrary,
@@ -19,8 +21,116 @@ import type {
   Library,
   Reaction,
   Route,
+  Scene,
 } from "../shared/chemical-library/types.ts";
 const sources = [{ source: "handbook", locator: "Example 1" }];
+test("Kekulé variants preserve identity and bind pi anchors to their explicit bond orders", async () => {
+  const rd = await moleculeToolkit();
+  const c = prepareCompound(rd, {
+    id: "cmp_ring",
+    title: "Example ring",
+    smiles: "c1ccccc1",
+    sources,
+  });
+  const original = rd.get_mol(c.smiles)!;
+  let molblock: string;
+  try {
+    molblock = original
+      .get_v3Kmolblock()
+      .split("\n")
+      .map((line) =>
+        /^M  V30 \d+ [12] \d+ \d+$/.test(line)
+          ? line.replace(
+              /^(M  V30 \d+ )([12])/,
+              (_, prefix, order) => prefix + (order === "1" ? "2" : "1"),
+            )
+          : line,
+      )
+      .join("\n");
+  } finally {
+    original.delete();
+  }
+  c.variants = { alternate: { ...structuredClone(c.layout), molblock } };
+  validateCompound(rd, c);
+  const scene: Scene = {
+    width: 10,
+    height: 8,
+    molecules: [
+      { id: "ring", compound: c.id, variant: "alternate", at: { x: 4, y: 4 } },
+    ],
+    arrows: [
+      {
+        id: "push",
+        electrons: 2,
+        from: {
+          kind: "pi",
+          atoms: [
+            { molecule: "ring", atom: "a2" },
+            { molecule: "ring", atom: "a3" },
+          ],
+        },
+        to: { kind: "atom", at: { molecule: "ring", atom: "a3" } },
+      },
+    ],
+  };
+  validateSceneChemistry(rd, { [c.id]: c }, scene, "example");
+  const { compileFigureScene } = await import("../scripts/figure-scene.ts");
+  const compiled = await compileFigureScene(
+    {
+      title: "Example",
+      molecules: { ring: { ref: c.id, variant: "alternate" } },
+      arrows: ["ring:pi(a2,a3) -> ring:atom(a3)"],
+    },
+    { [c.id]: c },
+    ".",
+    { id: "mec_example", sources },
+  );
+  const mechanism = compiled.entries.mec_example;
+  if (mechanism.kind !== "mechanism") throw new Error("Invalid fixture");
+  assert.equal(mechanism.frames[0].scene.molecules[0].variant, "alternate");
+  validateSceneChemistry(
+    rd,
+    compiled.entries,
+    mechanism.frames[0].scene,
+    "example",
+  );
+  const drawing = drawingMolecule(
+    rd,
+    c,
+    placedCoordinates(c, c.variants.alternate),
+    c.variants.alternate,
+  );
+  try {
+    assert.equal(
+      graphOf(drawing).bonds.find(
+        (b) => b.atoms.includes(1) && b.atoms.includes(2),
+      )?.bo,
+      2,
+    );
+  } finally {
+    drawing.delete();
+  }
+  assert.throws(
+    () =>
+      validateSceneChemistry(
+        rd,
+        { [c.id]: c },
+        {
+          ...scene,
+          molecules: [{ ...scene.molecules[0], variant: undefined }],
+        },
+        "example",
+      ),
+    /multiple bond/,
+  );
+  c.variants.alternate.molblock = molblock.replace(
+    /(M  V30 \d+ C [^\n]* )1\n/,
+    "$199\n",
+  );
+  assert.throws(() => validateCompound(rd, c), /atom maps/);
+  c.variants.alternate.molblock = molblock.replace(" 1 C ", " 1 N ");
+  assert.throws(() => validateCompound(rd, c), /graph|molecular/);
+});
 test("saved molecular identity survives 2D import and rejects a different stereoisomer", async () => {
   const rd = await moleculeToolkit();
   const input = {

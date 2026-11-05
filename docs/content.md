@@ -119,6 +119,8 @@ edges:
 
 ## 内容命令
 
+引用素材的 Python 解释器默认使用 `~/miniconda3/bin/python3`，与调用终端的 PATH 无关。其他安装方式通过 `MOLNOTES_PYTHON`（或 `MOLNOTES_PYTHON_FILE`）指定已安装 `scripts/requirements-material.txt` 依赖的解释器绝对路径；CI 使用其创建的虚拟环境。
+
 `MOLNOTES_CONTENT_DIR` 指定内容目录，未设置时内容命令报错。内容命令每次读取内容目录里的全部单元，校验整站的站内链接、术语、SMILES、引用与资源完整性并编译笔记；校验错误给出文件与位置。删除单元就是在内容仓库删除并提交它，仍有内容引用它时发布拒绝并指出引用文件与位置。
 
 `npm run content -- build <输出目录>` 读取内容目录里的全部单元、`sources.json` 与 `glossary.json`，校验、解析引用并编译，把结果写成快照：`snapshot.json`（`format: 1`、`commit`、`builtAt`，以及 `topics`、`directories`、`notes`、`glossary`、`registry`、`assets`）和 `files/<单元>/<路径>`（内容资源原样复制，被引页渲染在 `<单元>/cited/`）。输出目录不能已存在；任何校验失败都不写出。`build` 不检查提交，`commit` 为 `null`。
@@ -219,7 +221,9 @@ References accept only `ref`, `variant`, `frame`, `numbers`, `focus`, `caption`,
 
 Compounds store mapped `smiles`, the unmapped canonical isomeric `graph` signature, persistent `atomIds` of the form `a<map number>`, and `layout`. The IDs are checked against the explicit SMILES atom maps. `layout.coords` maps every ID to `{x,y}` in bond units, with positive y downward; `pins` replaces individual positions, `labels` offsets atom labels, `abbreviations` selects shared whitelist groups, and `stereoAnnotations` opts into configuration labels. `variants` stores named layouts. Rotation and mirrored placement regenerate wedges from the same chemical graph. `--prepare` imports a verified 2D molfile and rejects differing connectivity or stereochemistry. Template compounds declare `template: [{atom,label,allowed,description}]`; allowed substituent entries declare one terminal dummy `attachment` ID. Instantiation joins only the selected permitted attachments.
 
-Reaction entries declare `reactants` and `products` as `{id,compound,equivalents?,yield?,fraction?}`, plus `reagents`, `conditions`, optional free-text `tags`, `explanation`, a `scene`, and `arrow: {from,to,textWidth}`. Yields and mixture fractions are separate numbers in [0,1]. A scene saves `width`, `height` and `molecules: [{id,compound,variant?,at,rotate?,mirror?}]`. `plusAt` optionally saves the position of each separator between reactants. Conditions wrap within the declared text width. Product values stay with their products. Selecting an arrow opens its explanation.
+For aromatic electron flow, save a named variant with `coords` and a mapped `molblock` containing explicit Kekulé single/double bonds. Its atom order and maps must match `atomIds`; its aromatized graph, stereochemistry and isotopes must match the compound identity. Scene placements select it with `variant`. Rendering retains its explicit bond orders and saved coordinates, and π anchors require a multiple bond in that selected variant.
+
+Reaction entries declare `reactants` and `products` as `{id,compound,equivalents?,yield?,fraction?}`, plus `reagents`, `conditions`, optional free-text `tags`, `explanation`, a `scene`, and `arrow: {from,to,textWidth}`. Yields and mixture fractions are separate numbers in [0,1]. A scene saves `width`, `height` and `molecules: [{id,compound,variant?,at,rotate?,mirror?}]`. `plusAt` optionally saves the position of each separator between reactants. Conditions wrap at separator or whitespace boundaries within the declared text width; reagent/solvent names and quantities with units stay intact. An oversized token occupies its own line. Product values stay with their products. Selecting an arrow opens its explanation.
 
 Routes save `steps: [{id,reaction,at}]`, `edges: [{from,to,product,reactant}]`, canvas dimensions and an explicit `yieldPath`. Edges must connect matching compounds in a directed acyclic graph. Coincident connected intermediates are drawn once; a new row repeats its input. The longest linear sequence is computed from the graph. Cumulative yield uses only the declared path, with `combinedYields: [{steps,value}]` replacing exactly the named contiguous factors. Missing yields produce an unknown total; independent branches are not multiplied together.
 
