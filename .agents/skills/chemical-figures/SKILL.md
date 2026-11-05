@@ -49,5 +49,6 @@ For process diagrams, save a `kind: process` entry in `library/processes/prc_<id
 ## Common fixes
 
 - Display deuterium as `D` through native isotope-label drawing. Retain `[2H]` in the chemical graph; replacing it with ordinary hydrogen changes identity.
+- Fused stereocentres use native explicit H wedges so ring framework bonds remain plain; prefer H or exocyclic substituents for stereochemical wedges. Counterions default near the opposite charge centre at 1.5 bond lengths. Preserve a deliberate separation with `layout.ionPairs: keep` or a pinned counterion, then inspect the rendered charges and labels.
 - A large intermolecular arc usually needs reacting ends to face one another. Adjust orientation and separation so the molecules remain visibly distinct and the electron arrow has a clear medium arc; excessive tightening turns it into a small hook.
 - For crowded adjacent-bond transfers, turn the explicit H/D bond toward free space and bring the base near that atom. Keep the tail at the original bond midpoint. Routing measures the visible shaft, prefers a fuller short arc where space permits, and prioritizes collision avoidance in constrained rings. Inspect neighboring arrows as well as the edited one.

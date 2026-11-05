@@ -73,6 +73,11 @@ function layout(v: unknown, w: string) {
   object(v, w);
   if (v.molblock !== undefined) text(v.molblock, w);
   object(v.coords, w);
+  if (
+    v.ionPairs !== undefined &&
+    !["near", "keep"].includes(String(v.ionPairs))
+  )
+    fail(w, "ionPairs must be near or keep");
   for (const p of Object.values(v.coords)) point(p, w);
   for (const k of ["pins", "labels"]) {
     if (v[k] !== undefined) {

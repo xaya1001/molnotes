@@ -237,6 +237,84 @@ test("labelled ions show one circled charge and diagnostics reject duplicate mar
   ).toHaveCount(1);
 });
 
+test("fused stereocentres use explicit H wedges and salts keep counterions near their charge centre", async ({
+  page,
+}) => {
+  const toolkit = await moleculeToolkit();
+  const sources = [{ source: "example", locator: "structures" }];
+  const fused = prepareCompound(toolkit, {
+    id: "cmp_fused",
+    title: "Fused stereocentres",
+    sources,
+    smiles: "C[C@]12CC[C@H]3[C@H]([C@@H]1CC[C@@H]2O)CCC4=C3C=CC(=C4)O",
+  });
+  const source = toolkit.get_mol(fused.smiles)!;
+  const query = toolkit.get_qmol("[R]@[R]")!;
+  const ringBonds: number[] = JSON.parse(
+    source.get_substruct_matches(query),
+  ).flatMap((m: { bonds: number[] }) => m.bonds);
+  source.delete();
+  query.delete();
+  const pairs = ["CC(=O)[O-].[Na+]", "C[N+](C)(C)C.[Cl-]"].map((smiles, i) => {
+    const c = prepareCompound(toolkit, {
+      id: `cmp_pair${i}`,
+      title: "Ion pair",
+      smiles,
+      sources,
+    });
+    c.layout.coords[c.atomIds.at(-1)!].x += 10;
+    return c;
+  });
+  const entries = Object.fromEntries([fused, ...pairs].map((c) => [c.id, c]));
+  await page.route("**/api/library", (route) =>
+    route.fulfill({
+      json: {
+        entries,
+        uses: Object.fromEntries(Object.keys(entries).map((id) => [id, []])),
+      },
+    }),
+  );
+  await page.goto("/library/");
+  for (const width of [1366, 390]) {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    for (const id of Object.keys(entries))
+      await expect(page.locator(`#${id} [data-check="passed"]`)).toHaveCount(1);
+    const h = page.locator('#cmp_fused [data-label^="compound:hydrogen-"]');
+    expect(
+      await h.evaluateAll(
+        (nodes) => new Set(nodes.map((e) => e.getAttribute("data-label"))).size,
+      ),
+    ).toBe(3);
+    for (const i of ringBonds) {
+      const wedges = await page
+        .locator(`#cmp_fused [data-bond="compound:b${i}"]`)
+        .evaluateAll(
+          (nodes) =>
+            nodes.filter((e) => {
+              const p = e as SVGPathElement;
+              return (
+                (p.style.fill && p.style.fill !== "none") ||
+                (p.getAttribute("d")?.match(/M/g)?.length ?? 0) > 2
+              );
+            }).length,
+        );
+      expect(wedges).toBe(0);
+    }
+    for (const c of pairs) {
+      const distance = await page
+        .locator(`#${c.id} [data-molecule]`)
+        .evaluate((g) => {
+          const markers = [
+            ...g.querySelectorAll<SVGGElement>("[data-charge-owner]"),
+          ];
+          const boxes = markers.map((e) => e.getBBox());
+          return Math.hypot(boxes[0].x - boxes[1].x, boxes[0].y - boxes[1].y);
+        });
+      expect(distance).toBeLessThan(80);
+    }
+  }
+});
+
 test("local numbers sit below the visible ink of folded groups", async ({
   page,
 }) => {

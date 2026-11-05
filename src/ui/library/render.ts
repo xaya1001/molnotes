@@ -218,7 +218,7 @@ export async function renderFigure(
       parent: SVGGraphicsElement = svg,
     ) {
       validateCompound(toolkit, c);
-      const coords = placedCoordinates(c, layout, rotate, mirror);
+      const coords = placedCoordinates(toolkit, c, layout, rotate, mirror);
       const mol = drawingMolecule(toolkit, c, coords, layout, rotate, mirror);
       let depiction = mol;
       try {
@@ -271,37 +271,54 @@ export async function renderFigure(
           atomLabels[c.atomIds.indexOf(t.atom)] = t.label;
         const xs = coords.map((p) => p.x),
           ys = coords.map((p) => p.y);
-        const markup = depiction.get_svg_with_highlights(
-          JSON.stringify({
-            width: Math.ceil((Math.max(...xs) - Math.min(...xs)) * B + 100),
-            height: Math.ceil((Math.max(...ys) - Math.min(...ys)) * B + 100),
-            scalingFactor: B / 1.5,
-            fixedBondLength: B / 1.5,
-            bondLineWidth: token("--chemical-line"),
-            scaleBondWidth: false,
-            additionalAtomLabelPadding: 0.066,
-            fixedFontSize: token("--chemical-font"),
-            noFreetype: false,
-            fontFile: "BuiltinRobotoRegular",
-            atomColourPalette: "bw",
-            atomLabelDeuteriumTritium: true,
-            addStereoAnnotation: layout.stereoAnnotations ?? false,
-            annotationFontScale: 0.65,
-            atomLabels,
-            atoms: graph.atoms.map((_, i) => i),
-            bonds: [],
-            highlightRadius: 0.1,
-            atomHighlightsAreCircles: true,
-            prepareMolsBeforeDrawing: true,
-            addChiralHs: false,
-            useMolBlockWedging: !!layout.wedgeBonds?.length,
-            wedgeBonds: !layout.wedgeBonds?.length,
-          }),
+        const draw = (count: number): Document =>
+          new DOMParser().parseFromString(
+            depiction.get_svg_with_highlights(
+              JSON.stringify({
+                width: Math.ceil((Math.max(...xs) - Math.min(...xs)) * B + 100),
+                height: Math.ceil(
+                  (Math.max(...ys) - Math.min(...ys)) * B + 100,
+                ),
+                scalingFactor: B / 1.5,
+                fixedBondLength: B / 1.5,
+                bondLineWidth: token("--chemical-line"),
+                scaleBondWidth: false,
+                additionalAtomLabelPadding: 0.066,
+                fixedFontSize: token("--chemical-font"),
+                noFreetype: false,
+                fontFile: "BuiltinRobotoRegular",
+                atomColourPalette: "bw",
+                atomLabelDeuteriumTritium: true,
+                addStereoAnnotation: layout.stereoAnnotations ?? false,
+                annotationFontScale: 0.65,
+                atomLabels,
+                atoms: Array.from({ length: count }, (_, i) => i),
+                bonds: [],
+                highlightRadius: 0.1,
+                atomHighlightsAreCircles: true,
+                prepareMolsBeforeDrawing: true,
+                addChiralHs: true,
+                useMolBlockWedging: !!layout.wedgeBonds?.length,
+                wedgeBonds: !layout.wedgeBonds?.length,
+              }),
+            ),
+            "image/svg+xml",
+          );
+        let doc = draw(graph.atoms.length);
+        // Native preparation adds drawing-only H atoms for fused stereocentres.
+        // Include their highlight centres so bond-size diagnostics measure them too.
+        const count = Math.max(
+          graph.atoms.length,
+          ...[...doc.querySelectorAll("[class]")].flatMap((e) =>
+            [...(e.getAttribute("class") ?? "").matchAll(/atom-(\d+)/g)].map(
+              (m) => Number(m[1]) + 1,
+            ),
+          ),
         );
-        const doc = new DOMParser().parseFromString(markup, "image/svg+xml");
+        if (count > graph.atoms.length) doc = draw(count);
         if (doc.querySelector("parsererror"))
           throw new Error(`${c.id}: depiction failed`);
-        const positions = graph.atoms.map((_, i) => {
+        const positions = Array.from({ length: count }, (_, i) => {
           const e = doc.querySelector(`ellipse.atom-${i}`);
           if (!e) throw new Error(`${c.id}: missing atom position ${i}`);
           return {
@@ -318,15 +335,28 @@ export async function renderFigure(
           "data-molecule": id,
           "data-compound": c.id,
         });
+        const nativeBonds = new Map<number, [number, number]>();
+        for (const e of doc.querySelectorAll("path[class*='bond-']")) {
+          const cls = e.getAttribute("class")!;
+          const i = Number(/bond-(\d+)/.exec(cls)![1]);
+          const atoms = [...cls.matchAll(/atom-(\d+)/g)].map((m) =>
+            Number(m[1]),
+          );
+          if (i >= drawn.bonds.length && atoms.length === 2)
+            nativeBonds.set(i, [atoms[0], atoms[1]]);
+        }
         g.dataset.bondLengths = JSON.stringify(
-          graph.bonds
-            .filter((_, i) => !hiddenBonds.has(i))
-            .map(({ atoms: [a, b] }) =>
-              Math.hypot(
-                positions[a].x - positions[b].x,
-                positions[a].y - positions[b].y,
-              ),
+          [
+            ...graph.bonds
+              .filter((_, i) => !hiddenBonds.has(i))
+              .map(({ atoms }) => atoms),
+            ...nativeBonds.values(),
+          ].map(([a, b]) =>
+            Math.hypot(
+              positions[a].x - positions[b].x,
+              positions[a].y - positions[b].y,
             ),
+          ),
         );
         parent.append(g);
         positions.forEach((p, i) => {
@@ -370,7 +400,10 @@ export async function renderFigure(
           if (!(e instanceof SVGGraphicsElement)) continue;
           if (e.tagName === "path" && !bi && !ai.length) continue;
           if (e.tagName === "path" && bi) {
-            const index = drawn.bonds[Number(bi[1])];
+            const drawnIndex = Number(bi[1]);
+            const index =
+              drawn.bonds[drawnIndex] ??
+              graph.bonds.length + drawnIndex - drawn.bonds.length;
             const ids = ai.map((i) =>
               key({
                 molecule: id,
