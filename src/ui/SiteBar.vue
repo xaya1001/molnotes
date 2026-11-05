@@ -67,6 +67,7 @@ const currentLabel = computed(
       >
     </nav>
     <div class="site-tools">
+      <a href="/library/" class="button button--quiet">图库</a>
       <div class="site-menu">
         <DropdownMenuRoot v-model:open="menuOpen" :modal="false">
           <DropdownMenuTrigger

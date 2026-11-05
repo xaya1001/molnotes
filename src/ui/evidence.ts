@@ -8,6 +8,7 @@ export interface Excerpt {
   locator: string;
   text?: string;
   image?: string;
+  figure?: import("../../shared/chemical-library/types.ts").FigureReference;
   guide: string;
   /** Opens the original from the locator. */
   cite?: string;
@@ -37,6 +38,6 @@ export function validateEvidence(
   for (const item of [...excerpts, ...reading])
     evidenceSource(sources, item.source);
   for (const item of excerpts)
-    if (!item.text && !item.image)
+    if (!item.text && !item.image && !item.figure)
       throw new Error(`Excerpt has no text or image: ${item.id}`);
 }

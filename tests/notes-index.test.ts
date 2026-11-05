@@ -288,3 +288,25 @@ test("molecule fences preserve declared abbreviations and reject unknown or abse
     );
   }
 });
+
+test("library fences preserve references, local numbering and searchable captions", async (t) => {
+  const root = fixture(
+    t,
+    '## Section\n```figure-ref\nref: cmp_example\nnumbers:\n  compound: "4"\ncaption: A shared structure\n```',
+  );
+  const result = await compile(root);
+  const figure = result.notes[0].diagrams?.[0];
+  assert.equal(figure?.kind, "library");
+  if (figure?.kind !== "library") throw new Error("Missing library figure");
+  assert.deepEqual(figure.reference, {
+    ref: "cmp_example",
+    numbers: { compound: "4" },
+    caption: "A shared structure",
+  });
+  assert.match(result.notes[0].html, /note-diagram-0/);
+  const invalid = fixture(
+    t,
+    "## Section\n```figure-ref\nref: cmp_example\nsmiles: CC\n```",
+  );
+  await assert.rejects(compile(invalid), /unknown reference field smiles/);
+});

@@ -1,3 +1,4 @@
+import { validateFigureReference } from "./chemical-library/contract.ts";
 import {
   validateSynthesisRoutes,
   validateSubstrateScope,
@@ -530,6 +531,8 @@ export function blockSearchText(
         return resolveData(block.items, data, "molecules").map((m) => m.name);
       case "formula":
         return block.caption === undefined ? [] : [block.caption];
+      case "figure-ref":
+        return block.caption === undefined ? [] : [block.caption];
       case "figure":
         return [block.caption];
       case "process": {
@@ -595,6 +598,7 @@ export function resolveData<T>(
 
 /** Allowed fields for each block type; shared identity fields apply to every block. */
 const blockFields: Record<string, string[]> = {
+  "figure-ref": "ref variant frame numbers focus caption".split(" "),
   "source-pages": ["source"],
   "synthesis-network": ["network"],
   "record-collection": ["collection"],
@@ -751,6 +755,9 @@ export function validateBlocks(
       case "formula":
         text(block.tex, `${here} tex`);
         optionalText(block.caption, `${here} caption`);
+        break;
+      case "figure-ref":
+        validateFigureReference(block, here);
         break;
       case "molecule":
         molecule(block, here);

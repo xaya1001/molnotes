@@ -153,9 +153,13 @@ export function substituteProduct(
       const abbreviation = Object.entries(abbreviationSmarts).find(
         ([name]) => name === value,
       )?.[1];
-      const fragment =
-        abbreviation ?? (value.startsWith("*") ? value : `*${value}`);
-      const side = parse(toolkit, fragment);
+      let fragment = abbreviation ?? value;
+      let side = parse(toolkit, fragment);
+      if (!mappedDummies(side).length) {
+        side.delete();
+        fragment = `*${fragment}`;
+        side = parse(toolkit, fragment);
+      }
       const reaction = toolkit.get_rxn(
         `[${key}#0:1]-[*:2].[#0:3]-[*:4]>>[*:2]-[*:4]`,
       );

@@ -22,7 +22,8 @@
     "serve": "node server/web/web.ts",
     "content": "node scripts/content.ts",
     "content:preview": "node scripts/preview.ts",
-    "molecule:layout": "node scripts/layout.ts"
+    "molecule:layout": "node scripts/layout.ts",
+    "figure:render": "node scripts/figure-render.ts"
   },
   "dependencies": {
     "@fontsource/noto-serif-sc": "5.3.1",

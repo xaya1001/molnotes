@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LibraryReference from "./library/LibraryReference.vue";
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import MoleculeView from "./MoleculeView.vue";
 import FlowFigure from "./diagrams/FlowFigure.vue";
@@ -165,7 +166,12 @@ defineExpose({ showMatch });
         :timeline="row.timeline"
         :caption="row.caption"
       />
-      <FlowFigure v-else :flow="row.flow" :caption="row.caption" />
+      <FlowFigure
+        v-else-if="row.kind === 'flow'"
+        :flow="row.flow"
+        :caption="row.caption"
+      />
+      <LibraryReference v-else :reference="row.reference" />
     </Teleport>
   </template>
   <TermDefinition v-model:open="termOpen" :term="term" />

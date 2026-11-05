@@ -8,6 +8,7 @@ const entries = Object.fromEntries(
     notes: "notes/index.html",
     review: "review/index.html",
     glossary: "glossary/index.html",
+    library: "library/index.html",
     system: "system/index.html",
     showcase: "showcase/index.html",
     topic: "topic/index.html",
@@ -35,6 +36,7 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": backend,
+      "^/library/assets/": backend,
       "/system/api": backend,
       "^/sites/[^/]+/static/": backend,
       "^/notes/[^/]+/assets/": backend,

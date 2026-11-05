@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LibraryReference from "../library/LibraryReference.vue";
 import ProblemBlock from "./ProblemBlock.vue";
 import SourceText from "./SourceText.vue";
 import SourcePages from "./SourcePages.vue";
@@ -118,7 +119,11 @@ const toneClass = (tone?: string) =>
 
 <template>
   <template v-for="(block, index) in blocks" :key="index">
-    <SourcePages v-if="block.type === 'source-pages'" :source="block.source" />
+    <LibraryReference v-if="block.type === 'figure-ref'" :reference="block" />
+    <SourcePages
+      v-else-if="block.type === 'source-pages'"
+      :source="block.source"
+    />
     <SynthesisNetwork
       v-else-if="block.type === 'synthesis-network'"
       :network="block.network"

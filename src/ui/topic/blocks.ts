@@ -261,6 +261,10 @@ export type PatentBlock =
   | { type: "sar-cases"; cases: string; collection: string };
 
 export type TopicBlock =
+  | (BlockBase &
+      import("../../../shared/chemical-library/types.ts").FigureReference & {
+        type: "figure-ref";
+      })
   | (BlockBase & PatentBlock)
   | HeadingBlock
   | ParagraphBlock

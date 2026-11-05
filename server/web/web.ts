@@ -105,6 +105,7 @@ export function createWebServer({
           "/api/review",
           "/api/notes",
           "/api/glossary",
+          "/api/library",
         ].includes(path)
       ) {
         const builders: Record<
@@ -116,6 +117,7 @@ export function createWebServer({
           "/api/review": reviewIndex,
           "/api/notes": notebookIndex,
           "/api/glossary": glossaryIndex,
+          "/api/library": (snapshot) => snapshot.library,
         };
         const snapshot = await content();
         const entry = await snapshot.cached(path, () =>
@@ -190,7 +192,7 @@ export function createWebServer({
         return;
       }
       const assetMatch =
-        /^\/(sites\/[^/]+|notes\/[^/]+)\/(static\/.+|assets\/.+|cited\/[a-f0-9]{64}\.[a-z]+)$/.exec(
+        /^\/(sites\/[^/]+|notes\/[^/]+|library)\/(static\/.+|assets\/.+|cited\/[a-f0-9]{64}\.[a-z]+)$/.exec(
           path,
         );
       if (assetMatch) {

@@ -1,3 +1,5 @@
+import { readChemicalLibrary, libraryUsage } from "./chemical-library.ts";
+import { verifyLibraryFigures } from "../figure-browser.ts";
 import {
   validateSchemeCompounds,
   validateScopeProducts,
@@ -66,6 +68,7 @@ function context(data: PublishData) {
     "/review/",
     "/system/",
     "/glossary/",
+    "/library/",
   ]);
   const terms = Object.fromEntries(data.glossary.map((t) => [t.term, t]));
   for (const topic of sortSites(data.topics)) {
@@ -301,6 +304,7 @@ export async function buildSnapshot(
     for (const unit of await contentUnits(root))
       inputs.push({ ...(await readUnit(root, unit)), citations: {} });
   });
+  const library = await readChemicalLibrary(root);
   const glossary = await readGlossary(root);
   const registry = await readRegistry(root);
   if (!registry && inputs.some((input) => input.occurrences.length))
@@ -334,10 +338,35 @@ export async function buildSnapshot(
     notes: books.flatMap((input) =>
       input.notes.map((note) => ({ ...note, dir: input.slug })),
     ),
-    assets: inputs.flatMap((input) => input.assets),
+    assets: [...inputs.flatMap((input) => input.assets), ...library.assets],
     glossary,
   };
   const compiled = await measureStage("publish.compile", () => compile(data));
+  const usage = libraryUsage(library.entries, [
+    ...sites.map((s) => ({
+      value: s.content,
+      path: topicBasePath(s.site),
+      title: s.site.title,
+    })),
+    ...compiled.notes.map((n) => ({
+      value: n.diagrams
+        ?.filter((d) => d.kind === "library")
+        .map((d) => ({ type: "figure-ref", ...d.reference })),
+      path: n.path,
+      title: n.title,
+    })),
+  ]);
+  for (const entry of Object.values(library.entries))
+    for (const evidence of entry.sources)
+      if (!registry?.[evidence.source])
+        throw new Error(`${entry.id}: unknown source ${evidence.source}`);
+  const proofs = await verifyLibraryFigures(
+    library.entries,
+    usage.references,
+    root,
+  );
+  data.assets.push(...proofs.assets);
+  usage.snapshot.previews = proofs.previews;
   const directories = new Map(compiled.directories.map((d) => [d.slug, d]));
   // Author identity belongs to the row key, not the reader-facing compiled body.
   const notes = new Map(
@@ -349,6 +378,7 @@ export async function buildSnapshot(
   return {
     snapshot: {
       format: 1,
+      library: usage.snapshot,
       commit,
       builtAt: new Date().toISOString(),
       topics: sites.map(({ slug, site, content, citations }) => ({

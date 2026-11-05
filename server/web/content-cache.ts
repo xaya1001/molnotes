@@ -45,6 +45,7 @@ async function loadSnapshot(
     directories: data.directories,
     notes: data.notes,
     glossary: data.glossary,
+    library: data.library ?? { entries: {}, uses: {} },
     topic: (slug: string) => topics.get(slug),
     directory: (dir: string) => directories.get(dir),
     note: (dir: string, slug: string) => notes.get(`${dir}/${slug}`),
