@@ -50,6 +50,21 @@ test("saved molecular identity survives 2D import and rejects a different stereo
     mol.delete();
   }
 });
+test("isotope labels remain part of saved molecular identity", async () => {
+  const rd = await moleculeToolkit();
+  const make = (smiles: string) =>
+    prepareCompound(rd, {
+      id: "cmp_isotope",
+      title: "Isotope",
+      smiles,
+      sources,
+    });
+  const labelled = make("[2H]CC(=O)C");
+  assert.notEqual(labelled.graph, make("CC(=O)C").graph);
+  assert.equal(make("[H]C([H])([H])O").graph, make("CO").graph);
+  validateCompound(rd, labelled);
+});
+
 test("page references cannot own molecular facts or layout and limit semantic focus", () => {
   assert.throws(
     () => validateFigureReference({ ref: "cmp_example", smiles: "CC" }),

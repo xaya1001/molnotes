@@ -64,8 +64,14 @@ export function unmappedMolecule(toolkit: Toolkit, mol: Mol) {
 function graphSignature(toolkit: Toolkit, mol: Mol) {
   const copy = unmappedMolecule(toolkit, mol);
   try {
-    copy.remove_hs_in_place();
-    return copy.get_smiles();
+    // The SMILES parser removes ordinary explicit H while retaining isotopes.
+    // MinimalLib remove_hs_in_place also removes isotope-labelled hydrogens.
+    const normalized = toolkit.get_mol(copy.get_smiles())!;
+    try {
+      return normalized.get_smiles();
+    } finally {
+      normalized.delete();
+    }
   } finally {
     copy.delete();
   }
