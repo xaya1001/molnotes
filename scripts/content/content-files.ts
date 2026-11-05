@@ -12,6 +12,11 @@ import {
 import { validateGlossary } from "../../shared/glossary.ts";
 import { parseSiteManifest } from "../../shared/site-catalog.ts";
 import { validateTopicContent } from "../../shared/topic-content.ts";
+import { resolveCompoundSlots } from "./compound-slots.ts";
+import type {
+  Library,
+  FigureReference,
+} from "../../shared/chemical-library/types.ts";
 import { sha256, contentType } from "../../shared/assets.ts";
 import type {
   DirectoryMetadata,
@@ -38,6 +43,7 @@ export interface SiteUnit extends UnitBase {
   kind: "sites";
   site: SnapshotSite;
   content: TopicContent;
+  compoundReferences: FigureReference[];
 }
 export interface NotesUnit extends UnitBase {
   kind: "notes";
@@ -100,6 +106,7 @@ function checkDirectoryMetadata(
 export async function readUnit(
   root: string,
   unit: string,
+  library: Library = {},
 ): Promise<ContentUnit> {
   const { kind, slug } = unitName(unit);
   const folder = join(root, unit);
@@ -139,8 +146,13 @@ export async function readUnit(
         site[key] = metadata[key];
       }
     }
-    const content = validateTopicContent(
+    const resolved = resolveCompoundSlots(
       await json(join(folder, "content.json")),
+      library,
+      `${unit}/content.json`,
+    );
+    const content = validateTopicContent(
+      resolved.value,
       `${unit}/content.json`,
     );
     if ("glossary" in content && content.glossary !== undefined)
@@ -153,7 +165,16 @@ export async function readUnit(
           `${unit}/content.json: source ${source.id} names a shelf file; register it in sources.json and cite it`,
         );
     const occurrences = contentCitations(content, `${unit}/content.json`);
-    return { unit, kind, slug, site, content, assets, occurrences };
+    return {
+      unit,
+      kind,
+      slug,
+      site,
+      content,
+      assets,
+      occurrences,
+      compoundReferences: resolved.references,
+    };
   }
   const metadata = await json(join(folder, "directory.json"));
   checkDirectoryMetadata(metadata, unit);

@@ -30,12 +30,17 @@ function textWarnings(root: HTMLElement): string[] {
       `图比版面宽 ${root.scrollWidth - root.clientWidth}px，手机上会出现横向滚动`,
     );
   const seen = new Set<number>();
-  for (const el of root.querySelectorAll<HTMLElement>("*")) {
+  for (const el of root.querySelectorAll<HTMLElement | SVGGraphicsElement>(
+    "*",
+  )) {
     if (
       ![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent?.trim())
     )
       continue;
-    const size = parseFloat(getComputedStyle(el).fontSize);
+    const matrix = el instanceof SVGGraphicsElement ? el.getScreenCTM() : null;
+    const size =
+      parseFloat(getComputedStyle(el).fontSize) *
+      (matrix ? Math.hypot(matrix.a, matrix.b) : 1);
     if (size < smallestText && !seen.has(size)) {
       seen.add(size);
       warnings.push(`「${short(el)}」字号 ${size}px，小于 ${smallestText}px`);

@@ -169,6 +169,25 @@ export function prepareCompound(
     mol.delete();
   }
 }
+/** Keep an existing indexed input in the library without changing its parser order. */
+export function prepareInputVariant(
+  toolkit: Toolkit,
+  c: Compound,
+  smiles: string,
+  abbreviations: NonNullable<CompoundLayout["abbreviations"]> = [],
+): CompoundLayout {
+  const layout = {
+    ...structuredClone(c.layout),
+    inputSmiles: smiles,
+    abbreviations: structuredClone(abbreviations),
+  };
+  validateCompound(toolkit, {
+    ...c,
+    variants: { ...c.variants, input: layout },
+  });
+  return layout;
+}
+
 export function validateCompound(toolkit: Toolkit, c: Compound) {
   const mol = openMolecule(toolkit, c.smiles);
   try {
@@ -179,6 +198,17 @@ export function validateCompound(toolkit: Toolkit, c: Compound) {
     if (atomMaps(mol).some((map, i) => map <= 0 || c.atomIds[i] !== `a${map}`))
       throw new Error(`${c.id}: atom IDs must match persistent SMILES maps`);
     for (const layout of [c.layout, ...Object.values(c.variants ?? {})]) {
+      if (layout.inputSmiles) {
+        const input = openMolecule(toolkit, layout.inputSmiles);
+        try {
+          if (graphSignature(toolkit, input) !== c.graph)
+            throw new Error(
+              `${c.id}: indexed input graph or stereochemistry differs`,
+            );
+        } finally {
+          input.delete();
+        }
+      }
       if (layout.molblock) {
         const variant = openMolecule(toolkit, layout.molblock, false);
         try {

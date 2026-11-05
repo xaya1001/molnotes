@@ -17,6 +17,7 @@ Use this as the authoring entrypoint. Read the current [content contract](../../
    npm run figure:render -- --scene figure.yaml --out <output>
    ```
    The default renders desktop and phone widths. Inspect the PNG and JSON diagnostics; a clean diagnostic report does not establish chemical correctness.
+   `content:preview` collects topic `figure-ref` blocks and every mechanism frame, including tabs, and reports the website renderer's diagnostics. Resolve every diagnostic before accepting the preview; the command fails when a library figure has diagnostics or cannot render.
 4. Adjust orientation, `gap`, a small `offset`, saved coordinates or arrow `bend`; render and inspect again. Check normal-size labels, visible gaps, arrow origins and heads, and mobile scrolling.
 5. Make the requested comparison HTML, publish it with `artifact publish --task <task> --name <name> <directory>`, run `artifact shot <published-index>`, and inspect that screenshot before returning `artifact url <published-index>`. Artifact review and product/content publication follow the task's separate permissions.
 
@@ -43,6 +44,7 @@ For process diagrams, save a `kind: process` entry in `library/processes/prc_<id
 - Save one entry per stable `cmp_`, `rxn_`, `rte_`, `mec_`, `img_` or `prc_` ID. Reactions reference compounds; routes reference reactions; mechanism frames reference compounds. Preserve graph identity when saving layout variants.
 - 芳香环推电子先存 Kekulé 变体：在 `variants.<name>` 保存完整 `coords` 和含持久原子映射、明确单/双键的 `molblock`，原子顺序与 `atomIds` 一致。场景的分子用 `variant` 选它；π 锚点只接受该变体中的多键。变体经芳香化后的图、立体化学与同位素必须保持原化合物身份。
 - A page uses `figure-ref` with `ref`, optional `variant`/`frame`, local `numbers`, focus and caption. Keep structures, reagents, yields, coordinates and source evidence in the library entry. Notes use a `figure-ref` fenced block; topics use `{ "type": "figure-ref", "ref": "rxn_example" }`.
+- Existing structure controls accept `{ref: cmp_<id>, variant?: <name>}` in place of `smiles`, including comparisons, properties, prediction molecules and matrix rows. Keep local labels, highlight/answer indices and question IDs. For migrated indexed controls, first save an `inputSmiles` variant with the original input and abbreviations through the [content contract](../../../docs/content.md); graph deduplication can change parser indices, so use that variant to retain existing records and drawing.
 - Image references keep local `alt` and caption. Use `presentation: figure` for the ordinary framed image, or `presentation: note` for a centered note illustration. Existing SVG library presentation is the default. Scene, picture-question and original-page image slots accept `{ref: img_<id>}` while retaining their own controls.
 - Use gray/black plus the shared red accent. At most one primary focus and two supporting focuses; one coordinated electron event may include several related arrows. Keep background structures readable and use the shared design tokens for color, weight, bond length and glyph sizes.
 

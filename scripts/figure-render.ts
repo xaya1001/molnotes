@@ -10,7 +10,12 @@ import {
 } from "../shared/chemical-library/contract.ts";
 import { figureBrowser } from "./figure-browser.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
-import { prepareCompound } from "../shared/chemical-library/chemistry.ts";
+import {
+  prepareCompound,
+  prepareInputVariant,
+  validateCompound,
+} from "../shared/chemical-library/chemistry.ts";
+import type { Compound } from "../shared/chemical-library/types.ts";
 const args = process.argv.slice(2);
 const value = (flag: string) => {
   const i = args.indexOf(flag);
@@ -29,11 +34,36 @@ const input = value("--prepare");
 if (input) {
   const draft = JSON.parse(await readFile(input, "utf8"));
   const molfile = value("--molfile");
-  const entry = prepareCompound(
-    await moleculeToolkit(),
-    draft,
-    molfile ? await readFile(molfile, "utf8") : undefined,
-  );
+  const toolkit = await moleculeToolkit();
+  let entry: Compound;
+  if (draft.compound !== undefined) {
+    validateLibraryEntry(draft.compound);
+    if (
+      draft.compound.kind !== "compound" ||
+      typeof draft.variant !== "string" ||
+      !draft.variant.trim() ||
+      typeof draft.inputSmiles !== "string"
+    )
+      throw new Error(
+        "Input variant requires compound, variant and inputSmiles",
+      );
+    const layout = prepareInputVariant(
+      toolkit,
+      draft.compound,
+      draft.inputSmiles,
+      draft.abbreviations,
+    );
+    entry = {
+      ...draft.compound,
+      variants: { ...draft.compound.variants, [draft.variant]: layout },
+    };
+    validateCompound(toolkit, entry);
+  } else
+    entry = prepareCompound(
+      toolkit,
+      draft,
+      molfile ? await readFile(molfile, "utf8") : undefined,
+    );
   validateLibraryEntry(entry);
   await writeFile(
     join(out, `${entry.id}.json`),
