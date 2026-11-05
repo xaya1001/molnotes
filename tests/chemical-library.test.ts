@@ -97,7 +97,7 @@ test("Kekulé variants preserve identity and bind pi anchors to their explicit b
   const drawing = drawingMolecule(
     rd,
     c,
-    placedCoordinates(c, c.variants.alternate),
+    placedCoordinates(rd, c, c.variants.alternate),
     c.variants.alternate,
   );
   try {
@@ -375,7 +375,7 @@ test("persistent atom maps survive traversal changes and mirrored geometry prese
   const mirrored = drawingMolecule(
     rd,
     c,
-    placedCoordinates(c, c.layout, 30, true),
+    placedCoordinates(rd, c, c.layout, 30, true),
   );
   try {
     assert.equal(mirrored.get_smiles(), c.graph);

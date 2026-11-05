@@ -1,5 +1,6 @@
 import type { Mol } from "@rdkit/rdkit";
 import { coordinatesFrom } from "../molecule-layout.ts";
+import { ionPairCoordinates } from "./ion-layout.ts";
 import {
   validateAbbreviations,
   abbreviatedGroups,
@@ -232,15 +233,30 @@ export function validateCompound(toolkit: Toolkit, c: Compound) {
   }
 }
 export function placedCoordinates(
+  toolkit: Toolkit,
   c: Compound,
   layout: CompoundLayout,
   rotate = 0,
   mirror = false,
 ) {
+  let points = c.atomIds.map((id) => layout.pins?.[id] ?? layout.coords[id]);
+  if (layout.ionPairs !== "keep" && c.smiles.includes(".")) {
+    const mol = openMolecule(toolkit, c.smiles);
+    try {
+      points = ionPairCoordinates(
+        graphOf(mol),
+        points,
+        new Set(
+          Object.keys(layout.pins ?? {}).map((id) => c.atomIds.indexOf(id)),
+        ),
+      );
+    } finally {
+      mol.delete();
+    }
+  }
   const a = (rotate * Math.PI) / 180;
-  return c.atomIds.map((id) => {
-    const p = layout.pins?.[id] ?? layout.coords[id],
-      x = mirror ? -p.x : p.x;
+  return points.map((p) => {
+    const x = mirror ? -p.x : p.x;
     return {
       x: x * Math.cos(a) - p.y * Math.sin(a),
       y: x * Math.sin(a) + p.y * Math.cos(a),

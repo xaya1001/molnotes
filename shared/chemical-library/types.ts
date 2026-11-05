@@ -21,6 +21,8 @@ export interface CompoundLayout {
   /** Coordinates in bond units, positive y downward. Keys are persistent atom IDs. */
   coords: Record<string, Point>;
   pins?: Record<string, Point>;
+  /** Counterions sit near the charge centre by default; keep preserves authored separation. */
+  ionPairs?: "near" | "keep";
   labels?: Record<string, Point>;
   stereoAnnotations?: boolean;
   wedgeBonds?: { from: string; to: string; style: "solid" | "hashed" }[];
