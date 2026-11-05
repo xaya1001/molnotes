@@ -1,4 +1,8 @@
-import { routeElectronArrow, solidArrow } from "./arrow-layout.ts";
+import {
+  routeElectronArrow,
+  solidArrow,
+  routeConnection,
+} from "./arrow-layout.ts";
 import { loadChemistry } from "../chemistry/rdkit.ts";
 import {
   drawingMolecule,
@@ -1244,17 +1248,16 @@ export async function renderFigure(
             `[data-label="${CSS.escape(prefix + p.id + ":number")}"]`,
           );
           const box = (number ?? group).getBBox();
-          const shift = group.transform.baseVal.consolidate()?.matrix;
           const e = label(
             {
-              x: box.x + box.width / 2 + (shift?.e ?? 0),
-              y: box.y + box.height + (shift?.f ?? 0) + B * 0.42,
+              x: box.x + box.width / 2,
+              y: box.y + box.height + B * 0.42,
             },
             parts.join(" · "),
             "var(--chemical-caption-font)",
           );
           e.setAttribute("data-label", `${prefix}${p.id}:quantity`);
-          parent.append(e);
+          group.append(e);
         }
       }
     }
@@ -1371,20 +1374,17 @@ export async function renderFigure(
           b.remove();
           continue;
         }
-        const vertical = Math.abs(rb.y - ra.y) > Math.abs(rb.x - ra.x);
-        const p = vertical
-          ? { x: ra.x, y: rb.y > ra.y ? ra.bottom + 8 : ra.top - 8 }
-          : { x: rb.x > ra.x ? ra.right + 8 : ra.left - 8, y: ra.y };
-        const q = vertical
-          ? { x: rb.x, y: rb.y > ra.y ? rb.top - 8 : rb.bottom + 8 }
-          : { x: rb.x > ra.x ? rb.left - 8 : rb.right + 8, y: rb.y };
-        const middle = vertical
-          ? `L${p.x} ${(p.y + q.y) / 2}L${q.x} ${(p.y + q.y) / 2}`
-          : `L${(p.x + q.x) / 2} ${p.y}L${(p.x + q.x) / 2} ${q.y}`;
+        const rowY = (step: typeof from, reaction: typeof source) =>
+          step.at.y + (reaction.arrow.from.y + reaction.arrow.to.y) / 2;
+        const vertical =
+          Math.abs(rowY(from, source) - rowY(to, target)) > 0.001;
+        const fromRow = bounds(a.closest<SVGGElement>("[data-step]")!),
+          toRow = bounds(b.closest<SVGGElement>("[data-step]")!);
+        const points = routeConnection(ra, rb, fromRow, toRow, vertical);
         svg.append(
           stroke(
             element("path", {
-              d: `M${p.x} ${p.y}${middle}L${q.x} ${q.y}`,
+              d: points.map((p, i) => `${i ? "L" : "M"}${p.x} ${p.y}`).join(""),
               "data-route-edge": `${edge.from}/${edge.product}->${edge.to}/${edge.reactant}`,
             }),
           ),

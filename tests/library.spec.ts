@@ -286,6 +286,117 @@ test("local numbers sit below the visible ink of folded groups", async ({
   expect(Math.abs(geometry.numberCenter - geometry.center)).toBeLessThan(1);
 });
 
+test("wrapped route connections clear quantities and reaction heads at every row", async ({
+  page,
+}) => {
+  const library = await fixture();
+  const base = library.entries.rxn_example;
+  if (base.kind !== "reaction") throw new Error("Invalid fixture");
+  for (const [id, count, shift] of [
+    ["rte_two", 2, 0],
+    ["rte_seven", 7, 0],
+    ["rte_quantity", 3, 16],
+  ] as const) {
+    const steps = Array.from({ length: count }, (_, i) => {
+      const reaction = structuredClone(base);
+      reaction.id = `rxn_${id}_${i}`;
+      reaction.products[0].yield = i % 2 ? 1 : 0.677;
+      library.entries[reaction.id] = reaction;
+      return {
+        id: `step${i}`,
+        reaction: reaction.id,
+        at: { x: shift * i, y: 11 * i },
+      };
+    });
+    library.entries[id] = {
+      kind: "route",
+      id,
+      title: "Example route",
+      sources: base.sources,
+      steps,
+      edges: steps.slice(1).map((s, i) => ({
+        from: steps[i].id,
+        to: s.id,
+        product: "output",
+        reactant: "input",
+      })),
+      width: 24 + shift * (count - 1),
+      height: 11 * count,
+      yieldPath: steps.map((s) => s.id),
+    };
+  }
+  for (const id of Object.keys(library.entries)) library.uses[id] ??= [];
+  library.previews = Object.fromEntries(
+    Object.keys(library.entries)
+      .filter((id) => !id.startsWith("rte_"))
+      .map((id) => [id, "/sites/minimal/static/sample.svg"]),
+  );
+  await page.route("**/api/library", (route) =>
+    route.fulfill({ json: library }),
+  );
+  await page.goto("/library/");
+  for (const id of ["rte_two", "rte_seven", "rte_quantity"]) {
+    const entry = page.locator(`#${id}`);
+    await expect(entry.locator("[data-check]")).toHaveAttribute(
+      "data-check",
+      /passed|error/,
+      { timeout: 30000 },
+    );
+    expect(await entry.locator("[data-diagnostic]").allTextContents()).toEqual(
+      [],
+    );
+    const connections = await entry.locator("svg").evaluate((svg) =>
+      [...svg.querySelectorAll<SVGPathElement>("[data-route-edge]")].map(
+        (edge) => {
+          const [from, to] = edge.dataset.routeEdge!.split("->");
+          const quantity = svg
+            .querySelector(`[data-label="${from}:quantity"]`)!
+            .getBoundingClientRect();
+          const target = svg
+            .querySelector(`[data-molecule="${to}"]`)!
+            .getBoundingClientRect();
+          const matrix = edge.getScreenCTM()!;
+          const start = edge.getPointAtLength(0).matrixTransform(matrix),
+            next = edge.getPointAtLength(1).matrixTransform(matrix),
+            end = edge
+              .getPointAtLength(edge.getTotalLength())
+              .matrixTransform(matrix);
+          return {
+            afterQuantity: start.y > quantity.bottom,
+            beforeInput: end.y < target.top,
+            verticalStart: Math.abs(next.x - start.x) < 0.1,
+          };
+        },
+      ),
+    );
+    expect(
+      connections.every(
+        (c) => c.afterQuantity && c.beforeInput && c.verticalStart,
+      ),
+    ).toBe(true);
+  }
+  const route = page.locator("#rte_quantity");
+  await route.locator("svg").evaluate((svg) => {
+    const edge = svg.querySelector<SVGPathElement>("[data-route-edge]")!;
+    const owner = edge.dataset.routeEdge!.split("->")[0];
+    const box = svg
+      .querySelector(`[data-label="${owner}:quantity"]`)!
+      .getBoundingClientRect();
+    const matrix = edge.getScreenCTM()!.inverse();
+    const a = new DOMPoint(box.left, box.y + box.height / 2).matrixTransform(
+        matrix,
+      ),
+      b = new DOMPoint(box.right, box.y + box.height / 2).matrixTransform(
+        matrix,
+      );
+    edge.setAttribute("d", `M${a.x} ${a.y}L${b.x} ${b.y}`);
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(
+    route.locator('[data-diagnostic="ROUTE_EDGE_LABEL_OVERLAP"]'),
+  ).toHaveCount(1);
+});
+
 test("mechanism step selection keeps the explanation with its drawing", async ({
   page,
 }) => {
