@@ -692,3 +692,19 @@ test("publication rejects invalid abbreviations and references to collapsed atom
     await restore();
   }
 });
+
+test("publication rejects a substrate row that differs from its instantiated product", async (t) => {
+  const root = await temporary(t);
+  await writeFile(join(root, "glossary.json"), "[]");
+  await cp(join(fixtures, "sites/minimal"), join(root, "sites/minimal"), {
+    recursive: true,
+  });
+  const file = join(root, "sites/minimal/content.json");
+  const content = JSON.parse(await readFile(file, "utf8"));
+  const scope = content.chapters.find(
+    (chapter: { id: string }) => chapter.id === "schemes",
+  ).blocks[1].scope;
+  scope.rows[1].product.smiles = "COC(=O)c1ccccc1";
+  await writeFile(file, JSON.stringify(content));
+  await assert.rejects(buildSnapshot(root), /rows\[1\].*2b.*differs/);
+});

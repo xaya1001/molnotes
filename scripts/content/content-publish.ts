@@ -1,4 +1,10 @@
 import {
+  validateSchemeCompounds,
+  validateScopeProducts,
+} from "../../shared/reaction-chemistry.ts";
+import { resolveData } from "../../shared/topic-blocks.ts";
+import type { TopicBlock } from "../../src/ui/topic/blocks.ts";
+import {
   abbreviatedGroups,
   validateAbbreviations,
   validateAbbreviatedReferences,
@@ -90,6 +96,32 @@ async function validateTopics(data: PublishData, ctx: BuildContext) {
             `${where}: chapter ${chapter.id} uses unknown term ${term}`,
           );
     await validatePatentAssets(topic.content, topic.slug, data.assets);
+    async function schemes(blocks: TopicBlock[]) {
+      for (const block of blocks) {
+        if (block.type === "tabs")
+          for (const item of block.items) await schemes(item.blocks);
+        if (block.type === "route") {
+          toolkit ??= await moleculeToolkit();
+          for (const route of resolveData(
+            block.routes,
+            topic.content.data,
+            where,
+          ))
+            validateSchemeCompounds(toolkit, route, where);
+        }
+        if (block.type === "substrate-scope") {
+          toolkit ??= await moleculeToolkit();
+          validateScopeProducts(
+            toolkit,
+            resolveData(block.scope, topic.content.data, where),
+            where,
+          );
+        }
+      }
+    }
+    for (const chapter of topic.content.chapters)
+      await schemes(chapter.blocks ?? []);
+
     async function visit(
       value: unknown,
       path: string,

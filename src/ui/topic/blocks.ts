@@ -1,3 +1,4 @@
+import type { SubstrateScope } from "../../../shared/reaction-scheme.ts";
 import type { ProcessData } from "../../../shared/process.ts";
 // The block catalogue as the runtime reads it. shared/topic-blocks.ts is
 // the definition and checks every topic's content.json against it; these
@@ -81,6 +82,10 @@ export interface SubstituentsBlock extends BlockBase {
 export interface RouteBlock extends BlockBase {
   type: "route";
   routes: DataRef<SynthesisRoute[]>;
+}
+export interface SubstrateScopeBlock extends BlockBase {
+  type: "substrate-scope";
+  scope: DataRef<SubstrateScope>;
 }
 export interface MechanismBlock extends BlockBase {
   type: "mechanism";
@@ -268,6 +273,7 @@ export type TopicBlock =
   | PropertiesBlock
   | SubstituentsBlock
   | RouteBlock
+  | SubstrateScopeBlock
   | MechanismBlock
   | TableBlock
   | SpectrumBlock

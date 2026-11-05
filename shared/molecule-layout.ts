@@ -4,6 +4,7 @@
 // CXSMILES coordinate block so the SMILES text and its atom order stay as
 // authored.
 
+import { moleculeSvg } from "../src/ui/chemistry/drawing.ts";
 import type { MainModule, Mol } from "@rdkit/rdkit";
 
 const BOND = 1.5; // RDKit's depiction bond length
@@ -92,7 +93,11 @@ function ringBonds(count: number, pairs: [number, number][]) {
  * of the stereocentres it marks with one, then lays out the molecule with
  * them. Returns heavy-atom coordinates and each such centre's H position.
  */
-function drawnLayout(toolkit: MainModule, base: string, centres: Set<number>) {
+function drawnLayout(
+  toolkit: Pick<MainModule, "get_mol">,
+  base: string,
+  centres: Set<number>,
+) {
   // The graph parsed the same SMILES, so RDKit accepts it.
   const mol = toolkit.get_mol(base)!;
   try {
@@ -154,7 +159,7 @@ function drawnLayout(toolkit: MainModule, base: string, centres: Set<number>) {
  * and the stereocentres RDKit draws with an explicit H: those with one H
  * whose three bonds all lie on rings.
  */
-function graph(toolkit: MainModule, smiles: string): Graph {
+function graph(toolkit: Pick<MainModule, "get_mol">, smiles: string): Graph {
   const mol = toolkit.get_mol(smiles);
   if (!mol) throw new Error("无法解析 SMILES");
   let json;
@@ -379,9 +384,64 @@ function describe(found: Problems) {
 }
 
 /** What is wrong with the drawing of this SMILES, in its own or RDKit's coordinates. */
-export function layoutProblems(toolkit: MainModule, smiles: string) {
+export function layoutProblems(
+  toolkit: Pick<MainModule, "get_mol">,
+  smiles: string,
+) {
   const g = graph(toolkit, smiles);
-  return describe(problemsAt(g, g.points, g.hydrogens));
+  const mol = toolkit.get_mol(smiles)!;
+  try {
+    const labels = [
+      ...moleculeSvg(mol).matchAll(/<text\b([^>]*)>([^<]*)<\/text>/g),
+    ].flatMap(([, attrs, value]) => {
+      const atom = /atom-(\d+)/.exec(attrs)?.[1];
+      // Generated stereocentre hydrogens are checked by graph geometry above.
+      if (atom === undefined || Number(atom) >= mol.get_num_atoms()) return [];
+      const x = Number(/\bx=['"]([^'"]+)/.exec(attrs)?.[1]);
+      const y = Number(/\by=['"]([^'"]+)/.exec(attrs)?.[1]);
+      const size = Number(/font-size:([\d.]+)px/.exec(attrs)?.[1]);
+      // Arial glyph advances in ems for the atomic symbols and hydrogen counts
+      // drawn by the same noFreetype ACS renderer used in preview.
+      const widths: Record<string, number> = {
+        I: 0.278,
+        i: 0.222,
+        l: 0.222,
+        r: 0.333,
+        F: 0.611,
+        P: 0.667,
+        C: 0.722,
+        N: 0.722,
+        O: 0.778,
+        S: 0.667,
+        H: 0.722,
+        B: 0.667,
+      };
+      const width =
+        [...value].reduce((sum, char) => sum + (widths[char] ?? 0.556), 0) *
+        size;
+      return [{ atom, x, y, width, height: size }];
+    });
+    let collisions = 0;
+    labels.forEach((a, i) =>
+      labels.slice(i + 1).forEach((b) => {
+        if (
+          a.atom !== b.atom &&
+          g.fragment[Number(a.atom)] === g.fragment[Number(b.atom)] &&
+          a.x < b.x + b.width - 0.1 &&
+          b.x < a.x + a.width - 0.1 &&
+          a.y - a.height < b.y - 0.1 &&
+          b.y - b.height < a.y - 0.1
+        )
+          collisions++;
+      }),
+    );
+    return [
+      ...describe(problemsAt(g, g.points, g.hydrogens)),
+      ...(collisions ? [`${collisions} 处原子标签重叠`] : []),
+    ];
+  } finally {
+    mol.delete();
+  }
 }
 
 /**
@@ -502,7 +562,11 @@ function polish(
 }
 
 /** Heavy-atom coordinates of `source` moved onto the atom order of `smiles`. */
-function mapped(toolkit: MainModule, smiles: string, source: string) {
+function mapped(
+  toolkit: Pick<MainModule, "get_mol">,
+  smiles: string,
+  source: string,
+) {
   // Callers pass a SMILES that already parsed.
   const mol = toolkit.get_mol(smiles)!;
   const query = toolkit.get_mol(source, JSON.stringify({ removeHs: true }));
@@ -521,7 +585,11 @@ function mapped(toolkit: MainModule, smiles: string, source: string) {
 }
 
 /** Coordinates aligned on a template's matching atoms, the rest placed by RDKit. */
-function aligned(toolkit: MainModule, smiles: string, template: string) {
+function aligned(
+  toolkit: Pick<MainModule, "get_mol">,
+  smiles: string,
+  template: string,
+) {
   const mol = toolkit.get_mol(splitCx(smiles).base)!;
   const reference = toolkit.get_mol(template);
   try {
@@ -538,7 +606,7 @@ function aligned(toolkit: MainModule, smiles: string, template: string) {
   }
 }
 
-function coordgen(toolkit: MainModule, smiles: string) {
+function coordgen(toolkit: Pick<MainModule, "get_mol">, smiles: string) {
   const mol = toolkit.get_mol(splitCx(smiles).base)!;
   try {
     return coordinatesOf(described(mol, true));
@@ -578,7 +646,7 @@ function crossingCount(g: Graph, points: Point[]) {
  * are always tried, and a `template` CXSMILES adds a layout aligned on it.
  */
 export function layoutCandidates(
-  toolkit: MainModule,
+  toolkit: Pick<MainModule, "get_mol">,
   smiles: string,
   {
     starts = {},
@@ -637,7 +705,7 @@ export function layoutCandidates(
 
 /** Heavy-atom coordinates from a 2D molblock (for example PubChem's), in the SMILES' atom order. */
 export function coordinatesFrom(
-  toolkit: MainModule,
+  toolkit: Pick<MainModule, "get_mol">,
   smiles: string,
   molblock: string,
 ) {

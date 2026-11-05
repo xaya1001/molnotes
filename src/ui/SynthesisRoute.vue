@@ -1,18 +1,20 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import ReactionStep from "./ReactionStep.vue";
-import type { SynthesisRoute } from "./chemistry/types.ts";
+import ReactionScheme from "./ReactionScheme.vue";
+import type { SynthesisRoute } from "../../shared/reaction-scheme.ts";
 const props = defineProps<{ routes: readonly SynthesisRoute[] }>();
-const routeIndex = ref(0),
-  index = ref(0);
+const routeIndex = ref(0);
+watch(
+  () => props.routes,
+  () => {
+    routeIndex.value = 0;
+  },
+);
 const route = computed(() => props.routes[routeIndex.value]);
-watch(route, () => {
-  index.value = 0;
-});
 </script>
 <template>
-  <section aria-label="分步合成路线">
-    <div class="controls">
+  <section aria-label="合成方案">
+    <div v-if="routes.length > 1" class="controls">
       <button
         v-for="(r, i) in routes"
         :key="r.id"
@@ -23,30 +25,7 @@ watch(route, () => {
         {{ r.title }}
       </button>
     </div>
-    <div class="controls">
-      <button
-        v-for="(step, i) in route.steps"
-        :key="i"
-        class="button"
-        :aria-pressed="index === i"
-        @click="index = i"
-      >
-        {{ i + 1 }} · {{ step.title }}
-      </button>
-    </div>
-    <div aria-live="polite"><ReactionStep :step="route.steps[index]" /></div>
-    <div class="controls">
-      <button class="button" :disabled="index === 0" @click="index--">
-        上一步</button
-      ><span>{{ index + 1 }} / {{ route.steps.length }}</span
-      ><button
-        class="button"
-        :disabled="index === route.steps.length - 1"
-        @click="index++"
-      >
-        下一步
-      </button>
-    </div>
+    <ReactionScheme :route="route" />
   </section>
 </template>
 <style scoped>

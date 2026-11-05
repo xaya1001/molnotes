@@ -103,6 +103,7 @@ test("figures open in a zoomable viewer and report images that fail", async ({
 }) => {
   await page.goto("/showcase/molecule");
   const figure = page.getByRole("img", { name: /乙醇的二维结构/ });
+  await figure.scrollIntoViewIfNeeded();
   await expect
     .poll(() =>
       figure.evaluate((image: HTMLImageElement) => image.naturalWidth),
@@ -126,6 +127,7 @@ test("figures open in a zoomable viewer and report images that fail", async ({
 
   await page.route("**/ethanol.svg", (route) => route.abort());
   await page.reload();
+  await figure.scrollIntoViewIfNeeded();
   await page.getByRole("button", { name: /放大查看/ }).click();
   await expect(
     page.getByRole("dialog", { name: /乙醇/ }).getByRole("alert"),

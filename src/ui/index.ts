@@ -32,6 +32,7 @@ export { default as MoleculeView } from "./MoleculeView.vue";
 export { default as MolecularProperties } from "./MolecularProperties.vue";
 export { default as SubstituentExplorer } from "./SubstituentExplorer.vue";
 export { default as ReactionStep } from "./ReactionStep.vue";
+export { default as SubstrateScope } from "./SubstrateScope.vue";
 export { default as SynthesisRoute } from "./SynthesisRoute.vue";
 export { default as MechanismViewer } from "./MechanismViewer.vue";
 export { default as PredictionExercise } from "./PredictionExercise.vue";

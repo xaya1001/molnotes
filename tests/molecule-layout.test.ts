@@ -5,7 +5,7 @@ import {
   layoutCandidates,
   layoutProblems,
   withCoordinates,
-} from "../scripts/molecule-layout.ts";
+} from "../shared/molecule-layout.ts";
 
 const toolkit = await moleculeToolkit();
 // RDKit's own layout folds the peroxide bridge of this cage onto itself and

@@ -1,5 +1,9 @@
 import type { TopicContent } from "../src/ui/topic/content.ts";
 import type { TopicBlock } from "../src/ui/topic/blocks.ts";
+import {
+  validateSynthesisRoutes,
+  validateSubstrateScope,
+} from "../shared/reaction-scheme.ts";
 import type { MoleculeData } from "../src/ui/chemistry/types.ts";
 // Renders the figures of content units as a reader will see them, without
 // publishing: timelines, flows, processes and structures from the content directory,
@@ -20,7 +24,7 @@ import { defineFlow } from "../src/ui/diagrams/flow.ts";
 import { defineTimeline } from "../src/ui/diagrams/model.ts";
 import { resolveData } from "../shared/topic-blocks.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
-import { layoutProblems } from "./molecule-layout.ts";
+import { layoutProblems } from "../shared/molecule-layout.ts";
 import { setting } from "../shared/settings.ts";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
@@ -28,7 +32,8 @@ import type { Server } from "node:http";
 /** A figure to draw: a timeline, flow or process model, or a list of structures. */
 interface Figure {
   where: string;
-  kind: "timeline" | "flow" | "process" | "molecule";
+  kind:
+    "timeline" | "flow" | "process" | "molecule" | "route" | "substrate-scope";
   value: unknown;
   caption: string;
 }
@@ -131,6 +136,16 @@ function topicFigures(topic: TopicContent, file: string, errors: string[]) {
         } catch (error) {
           errors.push(`${at}: ${(error as Error).message}`);
         }
+      }
+      if (block.type === "route" || block.type === "substrate-scope") {
+        const value = resolveData(
+          block.type === "route" ? block.routes : block.scope,
+          topic.data,
+          at,
+        );
+        if (block.type === "route") validateSynthesisRoutes(value, at);
+        else validateSubstrateScope(value, at);
+        figures.push({ where: at, kind: block.type, value, caption: "" });
       }
       if (block.type === "molecule")
         figures.push({

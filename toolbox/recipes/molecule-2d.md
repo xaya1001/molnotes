@@ -22,8 +22,9 @@
 
 ## 反应与机理
 
-- `ReactionStep` 的 `step` 包含 `title`、`reactants` / `products`（`{ name, smiles }[]`）、`reagents`、`conditions`、可选 `yield` 与 `explanation`。试剂在箭头上方，条件/收率在下方；低宽度屏幕纵向排布。
-- `SynthesisRoute` 的 `routes` 为 `{ id, title, steps: ReactionStepData[] }[]`，支持路线切换、步骤按钮与前后浏览。各步的收率统计范围由内容作者写明。
+- `ReactionStep` renders one complete journal-style step. Its compounds require `{ name, smiles, number }`; `reagents` and `conditions` are arrays of source-ordered lines, with optional `yield` last below the arrow. Numbering belongs to content.
+- `SynthesisRoute` takes `{ id, title, core?, direction?, steps }[]`. It displays the whole route, wraps at arrows and runs vertically on phones. Selecting an arrow changes the explanation below. `core` declares SMARTS/SMILES for alignment; otherwise the common substructure is computed. Preview reports alignment failures and keeps the default layout.
+- `SubstrateScope` takes a generic step, R columns, source reading columns and numbered rows with verified products. Publication checks each product against the template after R substitution. See [the content contract](../../docs/content.md#reaction-schemes-and-substrate-scope) and the neutral showcase for the full data shape.
 - `MechanismViewer` 的 `frames` 为 `{ name, smiles, explanation, arrows }[]`。每个箭头 `{ from, to, electrons: 1 | 2, bend? }` 的端点是 `{ atom: index }` 或 `{ bond: index }`，不是像素；`bend` 为有符号曲率比例。双钩表示电子对，鱼钩表示单电子。多个分子用同一 SMILES 的点号分隔，索引在该整体图内编号；帧内键中心和原子坐标由 RDKit 绘图取得。每帧需独立核对电子流、电荷与产物，绘图库不证明机理成立。
 
 ## 先预测再揭晓

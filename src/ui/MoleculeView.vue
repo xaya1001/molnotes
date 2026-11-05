@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { rGroupLabel } from "../../shared/reaction-scheme.ts";
+import { mappedDummies } from "../../shared/reaction-chemistry.ts";
 import { computed, nextTick, ref, useId, watch } from "vue";
 import { loadChemistry, molecule } from "./chemistry/rdkit.ts";
 import {
@@ -97,6 +99,8 @@ watch(
         const folded = new Set(groups.flatMap((group) => group.atoms));
         const hiddenBonds = new Set(groups.flatMap((group) => group.bonds));
         const atomLabels: Record<number, string> = {};
+        const rGroups = mappedDummies(mol).filter((group) => group.map);
+        for (const { atom } of rGroups) atomLabels[atom] = "R";
         for (const group of groups) {
           for (const atom of group.atoms) atomLabels[atom] = "";
           // Reserve a single attachment glyph; the full abbreviation is placed
@@ -116,6 +120,12 @@ watch(
         );
         if (document.querySelector("parsererror"))
           throw new Error("RDKit 结构绘图失败");
+        // MinimalLib splits UTF-8 superscripts into separate glyphs. Give it an
+        // ASCII label for placement, then let the browser draw the journal label.
+        for (const { atom, map } of rGroups) {
+          const label = document.querySelector(`text.atom-${atom}`);
+          if (label) label.textContent = rGroupLabel(map);
+        }
         const points: Point[] = [];
         for (let i = 0; i < count; i++) {
           const ellipse = document.querySelector(`ellipse.atom-${i}`);
@@ -411,7 +421,9 @@ function toggle(index: number) {
         <title>{{ arrow.electrons === 2 ? "电子对" : "单电子" }}转移</title>
       </path>
     </svg>
-    <figcaption>{{ name }}</figcaption>
+    <figcaption>
+      <slot name="caption">{{ name }}</slot>
+    </figcaption>
     <p v-if="selectable" class="selection" aria-live="polite">
       {{
         selected.length
