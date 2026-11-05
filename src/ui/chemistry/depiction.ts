@@ -28,6 +28,7 @@ export function drawMolecule(
     const rGroups = mappedDummies(mol).filter((group) => group.map);
     for (const { atom } of rGroups) atomLabels[atom] = "R";
     for (const group of groups) {
+      if (!group.atoms.length) continue;
       for (const atom of group.atoms) atomLabels[atom] = "";
       // Reserve a single attachment glyph; the full abbreviation is placed
       // using the visible bond direction after the folded drawing is removed.

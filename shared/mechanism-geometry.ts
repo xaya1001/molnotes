@@ -28,10 +28,8 @@ export function atomSources(frames: readonly MechanismFrame[]) {
   let source = 0;
   for (const f of frames)
     for (const m of f.molecules) {
-      const inherited = m.atomMap
-        .map((id) => result.get(id))
-        .find((id) => id !== undefined);
-      const origin = inherited ?? source++;
+      const origin = source;
+      if (m.atomMap.some((id) => !result.has(id))) source++;
       for (const id of m.atomMap) if (!result.has(id)) result.set(id, origin);
     }
   return result;
@@ -64,7 +62,7 @@ export function anchorPoint(
       ? frame.lonePairs!.find((p) => p.atom === id)!.angle
       : -45;
   const r = (angle * Math.PI) / 180,
-    d = bondLength * 0.48;
+    d = bondLength * ("charge" in end ? 0.82 : 0.48);
   return { x: a.x + Math.cos(r) * d, y: a.y + Math.sin(r) * d };
 }
 export function cubicPoint(a: Point, c: Point, d: Point, b: Point, t: number) {

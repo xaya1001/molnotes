@@ -3,6 +3,7 @@ import type { ReactionStep } from "../../shared/reaction-scheme.ts";
 defineProps<{
   step: ReactionStep;
   retro?: boolean;
+  equilibrium?: boolean;
   selected: boolean;
   controls: string;
 }>();
@@ -22,12 +23,21 @@ defineEmits<{ select: [] }>();
     >
     <svg
       class="arrow-line"
+      :data-arrow-kind="
+        equilibrium ? 'equilibrium' : retro ? 'retro' : 'forward'
+      "
       :class="{ retro }"
       aria-hidden="true"
       width="1"
       height="18"
     >
-      <template v-if="retro">
+      <template v-if="equilibrium">
+        <line x1="0" y1="6" x2="100%" y2="6" />
+        <svg x="100%" overflow="visible"><path d="M -8 2 L 0 6" /></svg>
+        <line x1="0" y1="12" x2="100%" y2="12" />
+        <path d="M 8 16 L 0 12" />
+      </template>
+      <template v-else-if="retro">
         <line x1="0" y1="6" x2="100%" y2="6" />
         <line x1="0" y1="12" x2="100%" y2="12" />
         <svg x="100%" overflow="visible">

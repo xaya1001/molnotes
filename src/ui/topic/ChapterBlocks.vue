@@ -229,6 +229,7 @@ const toneClass = (tone?: string) =>
       <MechanismViewer
         :frames="content.dataOf(block.frames)"
         :cycle="block.cycle"
+        :overall="block.overall"
       />
     </template>
     <TopicTable

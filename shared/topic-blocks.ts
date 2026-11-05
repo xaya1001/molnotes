@@ -592,7 +592,7 @@ const blockFields: Record<string, string[]> = {
   substituents: "site variants".split(" "),
   route: "routes".split(" "),
   "substrate-scope": ["scope"],
-  mechanism: "title frames cycle".split(" "),
+  mechanism: "title frames cycle overall".split(" "),
   table: "caption columns rows note rowHeader".split(" "),
   spectrum: "molecule peaks caption assignAfter".split(" "),
   "data-table":
@@ -792,6 +792,11 @@ export function validateBlocks(
         break;
       case "mechanism":
         optionalText(block.title, `${here} title`);
+        if (block.overall !== undefined)
+          validateSynthesisRoutes(
+            [{ id: "overall", title: "Overall", steps: [block.overall] }],
+            here,
+          );
         field("frames", (frames, at) => {
           validateMechanismFrames(frames, at);
           validateCatalyticCycle(block.cycle, frames, at);

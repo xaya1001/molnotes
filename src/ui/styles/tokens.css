@@ -60,6 +60,14 @@
   --sidebar-width: 17.5rem;
   --topbar-height: 3.25rem;
 
+  --mechanism-source-0: #3155a0;
+  --mechanism-source-1: #216435;
+  --mechanism-source-2: #82396d;
+  --mechanism-source-3: #85500b;
+  --mechanism-line: 1.333333333;
+  --mechanism-stage-padding: 1rem;
+  --mechanism-cycle-width: 38rem;
+
   --scheme-arrow-min: 6rem;
   --scheme-arrow-max: 14rem;
   --scheme-caption-height: 1.8rem;
@@ -68,4 +76,13 @@
   --focus-ring: 2px solid var(--accent);
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --duration: 160ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-theme="dark"] .mechanism-ink {
+    --mechanism-source-0: #9cbbff;
+    --mechanism-source-1: #9cd7ab;
+    --mechanism-source-2: #e9a5d6;
+    --mechanism-source-3: #e6bd7c;
+  }
 }

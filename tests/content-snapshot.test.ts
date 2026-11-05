@@ -662,19 +662,26 @@ test("publication rejects invalid abbreviations and references to collapsed atom
     }),
     /answer/,
   );
-  for (const from of [{ atom: 11 }, { bond: 10 }])
+  for (const from of [{ atom: 12 }, { bond: [9, 12] }])
     await rejects(
       update({
         type: "mechanism",
         frames: [
           {
-            ...molecule,
+            molecules: [
+              {
+                ...molecule,
+                id: "sample",
+                position: { x: 0, y: 0 },
+                atomMap: Array.from({ length: 18 }, (_, i) => i + 1),
+              },
+            ],
             explanation: "Sample",
-            arrows: [{ from, to: { atom: 8 }, electrons: 2 }],
+            arrows: [{ from, to: { atom: 9 }, electrons: 2 }],
           },
         ],
       }),
-      /arrows\[0\].from.*abbreviated/,
+      /abbreviated atom/,
     );
   const restore = await edit(
     update({

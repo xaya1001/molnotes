@@ -240,10 +240,17 @@ test("a blocks chapter passes when every block fits the catalogue", () => {
         rows: [["1", "2"]],
         frames: [
           {
-            name: "m",
-            smiles: "CC",
+            molecules: [
+              {
+                id: "m",
+                name: "m",
+                smiles: "CC",
+                atomMap: [1, 2],
+                position: { x: 0, y: 0 },
+              },
+            ],
             explanation: "e",
-            arrows: [{ from: { atom: 0 }, to: { bond: 0 }, electrons: 2 }],
+            arrows: [{ from: { atom: 1 }, to: { bond: [1, 2] }, electrons: 2 }],
           },
         ],
       },
@@ -295,15 +302,22 @@ test("blocks are checked against the catalogue and their references", () => {
           type: "mechanism",
           frames: [
             {
-              name: "m",
-              smiles: "CC",
+              molecules: [
+                {
+                  id: "m",
+                  name: "m",
+                  smiles: "CC",
+                  atomMap: [1, 2],
+                  position: { x: 0, y: 0 },
+                },
+              ],
               explanation: "e",
-              arrows: [{ from: {}, to: { atom: 0 }, electrons: 2 }],
+              arrows: [{ from: {}, to: { atom: 1 }, electrons: 2 }],
             },
           ],
         },
       ],
-      /arrow from must name an atom or a bond/,
+      /invalid endpoint/,
     ],
   ];
   for (const [blocks, message] of cases)

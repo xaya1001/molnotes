@@ -6,6 +6,7 @@ import type {
 // The first query atom is the attachment outside the group. A match must have
 // exactly that one external bond, so a larger substituent cannot be truncated.
 export const abbreviationSmarts = {
+  LnPd: "[Pd]",
   Boc: "*C(=O)OC(C)(C)C",
   Cbz: "*C(=O)OCc1ccccc1",
   Fmoc: "*C(=O)OCC1c2ccccc2-c2ccccc21",
@@ -75,6 +76,16 @@ export function abbreviatedGroups(
         mol.get_substruct_matches(query),
       );
       for (const match of Array.isArray(matches) ? matches : []) {
+        if (name === "LnPd") {
+          candidates.push({
+            name,
+            attachment: match.atoms[0],
+            bond: -1,
+            atoms: [],
+            bonds: [],
+          });
+          continue;
+        }
         const atoms = match.atoms.slice(1);
         const set = new Set(atoms);
         const internal: number[] = [],

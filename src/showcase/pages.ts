@@ -42,6 +42,11 @@ const sections: { label: string; pages: ShowcasePage[] }[] = [
         component: () => import("./pages/DiagramPage.vue"),
       },
       {
+        path: "/mechanisms",
+        label: "机理与催化循环",
+        component: () => import("./pages/MechanismPage.vue"),
+      },
+      {
         path: "/molecule",
         label: "二维分子结构",
         component: () => import("./pages/MoleculePage.vue"),

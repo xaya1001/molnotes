@@ -93,6 +93,7 @@ export interface MechanismBlock extends BlockBase {
   title?: string;
   frames: DataRef<MechanismFrame[]>;
   cycle?: CatalyticCycle;
+  overall?: import("../../../shared/reaction-scheme.ts").ReactionStep;
 }
 /** A table cell: text, or a linked value. */
 export type TableCell = string | { text: string; href: string };

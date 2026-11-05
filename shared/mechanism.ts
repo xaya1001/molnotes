@@ -13,6 +13,7 @@ export interface MechanismMolecule {
   /** Relative centre in shared bond-length units. */
   position: { x: number; y: number };
   rotation?: number;
+  substituents?: { key: number; atoms: number[]; attachment: number }[];
   abbreviations?: MoleculeAbbreviation[];
 }
 export type MechanismAnchor =
@@ -37,6 +38,7 @@ export interface MechanismFrame {
   partialCharges?: { atom: number; charge: "+" | "-"; angle?: number }[];
   partialBonds?: [number, number][];
   transitionState?: boolean;
+  step?: { title: string; reversible: boolean; definitions?: string[] };
 }
 export interface CatalyticCycle {
   /** One molecule id in each corresponding frame, in reaction order. */
@@ -45,9 +47,8 @@ export interface CatalyticCycle {
     title: string;
     branches?: {
       direction: "in" | "out";
-      name: string;
-      smiles: string;
-      abbreviations?: MoleculeAbbreviation[];
+      frame: number;
+      molecule: string;
     }[];
   }[];
 }
@@ -118,6 +119,35 @@ export function validateMechanismFrames(
       );
       x.forEach(atom);
     };
+    if (f.step !== undefined) {
+      assert(
+        isObject(f.step) &&
+          text(f.step.title) &&
+          typeof f.step.reversible === "boolean",
+        `${at}: step needs title and reversible`,
+      );
+      assert(
+        f.step.definitions === undefined ||
+          (Array.isArray(f.step.definitions) && f.step.definitions.every(text)),
+        `${at}: invalid substituent definitions`,
+      );
+    }
+    for (const m of f.molecules)
+      if (isObject(m) && m.substituents !== undefined) {
+        assert(Array.isArray(m.substituents), `${at}: invalid substituents`);
+        for (const g of m.substituents) {
+          assert(
+            isObject(g) &&
+              map(g.key) &&
+              Array.isArray(g.atoms) &&
+              g.atoms.length &&
+              new Set(g.atoms).size === g.atoms.length,
+            `${at}: invalid substituent`,
+          );
+          g.atoms.forEach(atom);
+          atom(g.attachment);
+        }
+      }
     for (const [key, kind] of [
       ["lonePairs", "pair"],
       ["partialCharges", "charge"],
@@ -214,11 +244,13 @@ export function validateCatalyticCycle(
       assert(
         isObject(b) &&
           (b.direction === "in" || b.direction === "out") &&
-          text(b.name) &&
-          text(b.smiles),
-        `${where}: invalid cycle branch`,
+          typeof b.frame === "number" &&
+          Number.isInteger(b.frame) &&
+          b.frame >= 0 &&
+          b.frame < frames.length &&
+          frames[b.frame].molecules.some((m) => m.id === b.molecule),
+        `${where}: cycle branch needs a mapped frame molecule`,
       );
-      validateAbbreviations(b.abbreviations, where);
     }
   }
 }
