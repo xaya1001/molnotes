@@ -67,6 +67,16 @@ test("counterions approach their charged fragment while pins and authored separa
       );
     }
   }
+  const mixture = prepareCompound(rd, {
+    id: "cmp_mixture",
+    title: "Charged mixture",
+    smiles: "C[N+](C)(C)C.[Cl-].[OH-]",
+    sources,
+  });
+  assert.deepEqual(
+    placedCoordinates(rd, mixture, mixture.layout),
+    mixture.atomIds.map((id) => mixture.layout.coords[id]),
+  );
 });
 
 test("native chiral-H preparation preserves a saved fused stereochemical graph", async () => {

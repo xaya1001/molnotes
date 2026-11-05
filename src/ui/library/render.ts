@@ -5,6 +5,14 @@ import {
 } from "./arrow-layout.ts";
 import { loadChemistry } from "../chemistry/rdkit.ts";
 import {
+  bondTraces,
+  contains,
+  inkBox,
+  labelBoxes,
+  overlap,
+  spaceChiralHydrogens,
+} from "./depiction-spacing.ts";
+import {
   drawingMolecule,
   abbreviatedDrawing,
   graphOf,
@@ -359,14 +367,6 @@ export async function renderFigure(
           ),
         );
         parent.append(g);
-        positions.forEach((p, i) => {
-          atomPoints[
-            key({
-              molecule: id,
-              atom: c.atomIds[i] ?? `hydrogen-${i - c.atomIds.length}`,
-            })
-          ] = plus(p, shift);
-        });
         const f = focusKeys(focus);
         const ink = [f.atoms, f.bonds, f.support, f.supportBonds].some(
           (set) => set.size,
@@ -461,6 +461,21 @@ export async function renderFigure(
           }
           g.append(e);
         }
+        spaceChiralHydrogens(
+          g,
+          positions,
+          graph.atoms.length,
+          nativeBonds,
+          graph.bonds,
+        );
+        positions.forEach((p, i) => {
+          atomPoints[
+            key({
+              molecule: id,
+              atom: c.atomIds[i] ?? `hydrogen-${i - c.atomIds.length}`,
+            })
+          ] = plus(p, shift);
+        });
         if (layout.compact) {
           const idx = c.atomIds.indexOf(layout.compact.atom);
           const glyphs = [
@@ -489,7 +504,7 @@ export async function renderFigure(
               `[data-label="${CSS.escape(aid)}"]`,
             ),
           ];
-          let boxes = labels.map((e) => e.getBBox());
+          let boxes = labels.map((e) => inkBox(e, g));
           if (groups.some((g) => g.name === "PPh3" && g.atoms[0] === i)) {
             boxes.sort(
               (a, b) =>
@@ -508,7 +523,7 @@ export async function renderFigure(
             right = Math.max(...boxes.map((b) => b.x + b.width));
           const top = Math.min(...boxes.map((b) => b.y)),
             bottom = Math.max(...boxes.map((b) => b.y + b.height));
-          let chargeAngle = layout.chargeAngles?.[c.atomIds[i]];
+          const chargeAngle = layout.chargeAngles?.[c.atomIds[i]];
           const bondAngles = graph.bonds
             .flatMap(({ atoms: [a, b] }, index) => {
               if (hiddenBonds.has(index) || (a !== i && b !== i)) return [];
@@ -520,41 +535,72 @@ export async function renderFigure(
               ];
             })
             .sort((a, b) => a - b);
-          if (chargeAngle === undefined && bondAngles.length > 1) {
-            const gaps = bondAngles
-              .map((a, k) => {
-                const gap =
-                  (bondAngles[k + 1] ?? bondAngles[0] + 2 * Math.PI) - a;
-                const middle = a + gap / 2;
-                return { gap, middle };
-              })
-              .sort((a, b) =>
-                Math.abs(a.gap - b.gap) > 1e-6
-                  ? b.gap - a.gap
-                  : Math.cos(b.middle + Math.PI / 4) -
-                    Math.cos(a.middle + Math.PI / 4),
-              );
-            chargeAngle = (gaps[0].middle * 180) / Math.PI;
-          }
-          const angle = radians(chargeAngle ?? -45);
-          const ux = Math.cos(angle),
-            uy = Math.sin(angle),
-            r = B * 0.19;
-          const distance =
-            Math.min(
-              Math.abs(ux) < 1e-5
-                ? Infinity
-                : (right - left) / 2 / Math.abs(ux),
-              Math.abs(uy) < 1e-5
-                ? Infinity
-                : (bottom - top) / 2 / Math.abs(uy),
-            ) +
-            r +
-            B * 0.09;
-          const center = {
-            x: (left + right) / 2 + ux * distance,
-            y: (top + bottom) / 2 + uy * distance,
+          const gaps = bondAngles
+            .map((a, k) => {
+              const gap =
+                (bondAngles[k + 1] ?? bondAngles[0] + 2 * Math.PI) - a;
+              const middle = a + gap / 2;
+              return { gap, middle };
+            })
+            .sort((a, b) =>
+              Math.abs(a.gap - b.gap) > 1e-6
+                ? b.gap - a.gap
+                : Math.cos(b.middle + Math.PI / 4) -
+                  Math.cos(a.middle + Math.PI / 4),
+            );
+          const r = B * 0.19;
+          const centerAt = (angle: number) => {
+            const ux = Math.cos(angle),
+              uy = Math.sin(angle);
+            const distance =
+              Math.min(
+                Math.abs(ux) < 1e-5
+                  ? Infinity
+                  : (right - left) / 2 / Math.abs(ux),
+                Math.abs(uy) < 1e-5
+                  ? Infinity
+                  : (bottom - top) / 2 / Math.abs(uy),
+              ) +
+              r +
+              B * 0.09;
+            return {
+              x: (left + right) / 2 + ux * distance,
+              y: (top + bottom) / 2 + uy * distance,
+            };
           };
+          const angles =
+            chargeAngle === undefined
+              ? [
+                  -Math.PI / 4,
+                  ...gaps.map((g) => g.middle),
+                  ...Array.from({ length: 24 }, (_, i) => (i * Math.PI) / 12),
+                ]
+              : [radians(chargeAngle)];
+          const otherLabels = labelBoxes(g),
+            traces = bondTraces(g);
+          const candidates = angles.map((angle) => {
+            const center = centerAt(angle);
+            const marker = new DOMRect(
+              center.x - r,
+              center.y - r,
+              2 * r,
+              2 * r,
+            );
+            const combined = new DOMRect(
+              Math.min(left, marker.left),
+              Math.min(top, marker.top),
+              Math.max(right, marker.right) - Math.min(left, marker.left),
+              Math.max(bottom, marker.bottom) - Math.min(top, marker.top),
+            );
+            let cost = 0;
+            for (const [other, box] of otherLabels)
+              if (other !== aid) cost += overlap(combined, box);
+            for (const trace of traces)
+              cost += trace.points.filter((p) => contains(marker, p)).length;
+            return { center, cost };
+          });
+          candidates.sort((a, b) => a.cost - b.cost);
+          const { center } = candidates[0];
           const charge = element("g", {
             "data-label": `${aid}:charge`,
             "data-charge-owner": aid,
@@ -1327,9 +1373,6 @@ export async function renderFigure(
         ? entry.variants?.[reference.variant]
         : entry.layout;
       if (!l) throw new Error("Unknown layout variant");
-      const ps = Object.keys(l.coords).map(
-        (id) => l.pins?.[id] ?? l.coords[id],
-      );
       validateSceneChemistry(
         toolkit,
         library,
@@ -1348,21 +1391,28 @@ export async function renderFigure(
         },
         entry.id,
       );
-      const minX = Math.min(...ps.map((p) => p.x)),
-        maxX = Math.max(...ps.map((p) => p.x)),
-        minY = Math.min(...ps.map((p) => p.y)),
-        maxY = Math.max(...ps.map((p) => p.y));
-      width = (maxX - minX + 3) * B;
-      height = (maxY - minY + 3) * B;
+      const group = element("g");
+      svg.append(group);
       await molecule(
         entry,
         l,
         "compound",
-        { x: 1.5 - minX, y: 1.5 - minY },
+        { x: 0, y: 0 },
         0,
         false,
         reference.focus,
+        group,
       );
+      const box = group.getBBox();
+      const dx = 1.5 * B - box.x,
+        dy = 1.5 * B - box.y;
+      group.setAttribute("transform", `translate(${dx} ${dy})`);
+      width = box.width + 3 * B;
+      height = box.height + 3 * B;
+      for (const p of Object.values(atomPoints)) {
+        p.x += dx;
+        p.y += dy;
+      }
     } else if (entry.kind === "reaction") {
       width = entry.scene.width * B;
       height = entry.scene.height * B;

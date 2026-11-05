@@ -255,17 +255,30 @@ test("fused stereocentres use explicit H wedges and salts keep counterions near 
   ).flatMap((m: { bonds: number[] }) => m.bonds);
   source.delete();
   query.delete();
-  const pairs = ["CC(=O)[O-].[Na+]", "C[N+](C)(C)C.[Cl-]"].map((smiles, i) => {
+  const rotated = structuredClone(fused);
+  rotated.id = "cmp_fused_rotated";
+  for (const p of Object.values(rotated.layout.coords)) {
+    const x = -p.y;
+    p.y = p.x;
+    p.x = x;
+  }
+  const pairs = [
+    "CC(=O)[O-].[Na+]",
+    "C[N+](C)(C)C.[Cl-]",
+    "C[NH2+]CCO.[O-]C(=O)c1ccccc1",
+  ].map((smiles, i) => {
     const c = prepareCompound(toolkit, {
       id: `cmp_pair${i}`,
       title: "Ion pair",
       smiles,
       sources,
     });
-    c.layout.coords[c.atomIds.at(-1)!].x += 10;
+    if (i < 2) c.layout.coords[c.atomIds.at(-1)!].x += 10;
     return c;
   });
-  const entries = Object.fromEntries([fused, ...pairs].map((c) => [c.id, c]));
+  const entries = Object.fromEntries(
+    [fused, rotated, ...pairs].map((c) => [c.id, c]),
+  );
   await page.route("**/api/library", (route) =>
     route.fulfill({
       json: {
@@ -286,21 +299,38 @@ test("fused stereocentres use explicit H wedges and salts keep counterions near 
         (nodes) => new Set(nodes.map((e) => e.getAttribute("data-label"))).size,
       ),
     ).toBe(3);
-    for (const i of ringBonds) {
-      const wedges = await page
-        .locator(`#cmp_fused [data-bond="compound:b${i}"]`)
-        .evaluateAll(
-          (nodes) =>
-            nodes.filter((e) => {
-              const p = e as SVGPathElement;
-              return (
-                (p.style.fill && p.style.fill !== "none") ||
-                (p.getAttribute("d")?.match(/M/g)?.length ?? 0) > 2
-              );
-            }).length,
-        );
-      expect(wedges).toBe(0);
-    }
+    for (const id of [fused.id, rotated.id])
+      for (const i of ringBonds) {
+        const wedges = await page
+          .locator(`#${id} [data-bond="compound:b${i}"]`)
+          .evaluateAll(
+            (nodes) =>
+              nodes.filter((e) => {
+                const p = e as SVGPathElement;
+                return (
+                  (p.style.fill && p.style.fill !== "none") ||
+                  (p.getAttribute("d")?.match(/M/g)?.length ?? 0) > 2
+                );
+              }).length,
+          );
+        expect(wedges).toBe(0);
+      }
+    const adjustments = await page
+      .locator("#cmp_fused_rotated [data-bond][transform]")
+      .evaluateAll((nodes) =>
+        nodes.map((node) => {
+          const m = (
+            node as SVGGraphicsElement
+          ).transform.baseVal.consolidate()!.matrix;
+          return [
+            Math.hypot(m.a, m.b),
+            Math.hypot(m.c, m.d),
+            m.a * m.d - m.b * m.c,
+          ];
+        }),
+      );
+    for (const values of adjustments)
+      for (const value of values) expect(value).toBeCloseTo(1, 6);
     for (const id of Object.keys(entries)) {
       const check = page.locator(`#${id} [data-check]`);
       await expect
@@ -323,6 +353,19 @@ test("fused stereocentres use explicit H wedges and salts keep counterions near 
           return Math.hypot(boxes[0].x - boxes[1].x, boxes[0].y - boxes[1].y);
         });
       expect(distance).toBeLessThan(80);
+      const margins = await page
+        .locator(`#${c.id} svg`)
+        .evaluate((svg: SVGSVGElement) => {
+          const outer = svg.getBoundingClientRect();
+          const ink = svg
+            .querySelector<SVGGElement>("[data-molecule]")!
+            .getBoundingClientRect();
+          return [
+            Math.abs(ink.left - outer.left - (outer.right - ink.right)),
+            Math.abs(ink.top - outer.top - (outer.bottom - ink.bottom)),
+          ];
+        });
+      expect(Math.max(...margins)).toBeLessThan(1);
     }
   }
 });

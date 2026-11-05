@@ -39,7 +39,10 @@ export function ionPairCoordinates(
     .filter((f) => f.charge)
     .sort((a, b) => b.atoms.length - a.atoms.length);
   const parent = charged[0];
-  if (!parent) return points;
+  // A charged mixture can contain a reactive ion as well as a counterion.
+  // Its saved separation carries meaning; only pack charge-balanced salts.
+  if (!parent || charged.reduce((sum, f) => sum + f.charge, 0) !== 0)
+    return points;
   const result = points.map((p) => ({ ...p }));
   const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
   const segmentDistance = (p: Point, a: Point, b: Point) => {
