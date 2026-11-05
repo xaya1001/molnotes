@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
+import { validateLibraryEntry } from "../shared/chemical-library/contract.ts";
 import {
   prepareCompound,
   placedCoordinates,
@@ -20,6 +21,14 @@ test("counterions approach their charged fragment while pins and authored separa
       smiles,
       sources,
     });
+    assert.throws(
+      () =>
+        validateLibraryEntry({
+          ...c,
+          layout: { ...c.layout, ionPairs: ["keep"] },
+        }),
+      /ionPairs/,
+    );
     const mol = rd.get_mol(c.smiles)!;
     const graph = graphOf(mol);
     mol.delete();

@@ -75,7 +75,8 @@ function layout(v: unknown, w: string) {
   object(v.coords, w);
   if (
     v.ionPairs !== undefined &&
-    !["near", "keep"].includes(String(v.ionPairs))
+    v.ionPairs !== "near" &&
+    v.ionPairs !== "keep"
   )
     fail(w, "ionPairs must be near or keep");
   for (const p of Object.values(v.coords)) point(p, w);
