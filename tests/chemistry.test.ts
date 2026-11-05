@@ -79,8 +79,13 @@ test("abbreviations fold only declared complete terminal groups using original i
   } finally {
     mol.delete();
   }
-  for (const [name, smiles] of Object.entries(abbreviationSmarts)) {
-    const mol = toolkit.get_mol(smiles.replace("*", "N"))!;
+  for (const [name, pattern] of Object.entries(abbreviationSmarts)) {
+    // Query atoms/bonds are not SMILES; use a real phosphine oxide for this group.
+    const smiles =
+      name === "PPh3"
+        ? "O=P(c1ccccc1)(c1ccccc1)c1ccccc1"
+        : pattern.replace("*", "N");
+    const mol = toolkit.get_mol(smiles)!;
     assert.ok(mol, name);
     try {
       assert.equal(
