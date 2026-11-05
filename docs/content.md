@@ -119,6 +119,8 @@ edges:
 
 ## 内容命令
 
+引用素材的 Python 解释器默认使用 `~/miniconda3/bin/python3`，与调用终端的 PATH 无关。其他安装方式通过 `MOLNOTES_PYTHON`（或 `MOLNOTES_PYTHON_FILE`）指定已安装 `scripts/requirements-material.txt` 依赖的解释器绝对路径；CI 使用其创建的虚拟环境。
+
 `MOLNOTES_CONTENT_DIR` 指定内容目录，未设置时内容命令报错。内容命令每次读取内容目录里的全部单元，校验整站的站内链接、术语、SMILES、引用与资源完整性并编译笔记；校验错误给出文件与位置。删除单元就是在内容仓库删除并提交它，仍有内容引用它时发布拒绝并指出引用文件与位置。
 
 `npm run content -- build <输出目录>` 读取内容目录里的全部单元、`sources.json` 与 `glossary.json`，校验、解析引用并编译，把结果写成快照：`snapshot.json`（`format: 1`、`commit`、`builtAt`，以及 `topics`、`directories`、`notes`、`glossary`、`registry`、`assets`）和 `files/<单元>/<路径>`（内容资源原样复制，被引页渲染在 `<单元>/cited/`）。输出目录不能已存在；任何校验失败都不写出。`build` 不检查提交，`commit` 为 `null`。

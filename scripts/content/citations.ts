@@ -1,9 +1,11 @@
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { extname } from "node:path";
+import { extname, isAbsolute, join } from "node:path";
+import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { citedSource } from "../../shared/source-citations.ts";
 import { contentType, sha256 } from "../../shared/assets.ts";
+import { setting } from "../../shared/settings.ts";
 import type { Citations } from "../../shared/snapshot.ts";
 import type { SourceRegistry } from "../../shared/source-citations.ts";
 import type { CitationOccurrence, UnitAsset } from "./content-files.ts";
@@ -43,11 +45,17 @@ function material(
   requests: ShelfRequest[],
   shelf: Shelf,
 ): Promise<MaterialResult[]> {
+  const python =
+    process.env.MOLNOTES_PYTHON || process.env.MOLNOTES_PYTHON_FILE
+      ? setting("MOLNOTES_PYTHON")
+      : join(homedir(), "miniconda3", "bin", "python3");
+  if (!isAbsolute(python))
+    throw new Error("MOLNOTES_PYTHON must be an absolute interpreter path");
   return new Promise((resolve, reject) => {
     const env = { ...process.env };
     if (shelf.materials) env.MOLNOTES_MATERIALS_DIR = shelf.materials;
     if (shelf.cache) env.MOLNOTES_MATERIALS_CACHE = shelf.cache;
-    const child = spawn("python3", ["-I", script, "cite"], { env });
+    const child = spawn(python, ["-I", script, "cite"], { env });
     let stdout = "",
       stderr = "";
     child.stdout.setEncoding("utf8").on("data", (chunk) => (stdout += chunk));

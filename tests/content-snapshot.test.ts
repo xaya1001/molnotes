@@ -10,6 +10,7 @@ import { createHash } from "node:crypto";
 import {
   cp,
   mkdtemp,
+  mkdir,
   readFile,
   readdir,
   readlink,
@@ -707,4 +708,65 @@ test("publication rejects a substrate row that differs from its instantiated pro
   scope.rows[1].product.smiles = "COC(=O)c1ccccc1";
   await writeFile(file, JSON.stringify(content));
   await assert.rejects(buildSnapshot(root), /rows\[1\].*2b.*differs/);
+});
+
+test("content publish uses the configured Python when PATH selects one without PDF dependencies", async (t) => {
+  const root = await temporary(t);
+  const repo = join(root, "repo");
+  const python = (
+    await execFileAsync("python3", [
+      "-I",
+      "-c",
+      "import pymupdf, sys; print(sys.executable)",
+    ])
+  ).stdout.trim();
+  const shadow = join(root, "bin");
+  await mkdir(shadow);
+  const quoted = "'" + python.replaceAll("'", "'\\''") + "'";
+  await writeFile(
+    join(shadow, "python3"),
+    `#!/bin/sh\nexec ${quoted} -S "$@"\n`,
+    { mode: 0o755 },
+  );
+  await cp(fixtures, join(repo, "content"), { recursive: true });
+  const git = (...args: string[]) =>
+    execFileAsync("git", ["-C", repo, ...args]);
+  await git("init", "-q");
+  await git("add", ".");
+  await git(
+    "-c",
+    "user.name=t",
+    "-c",
+    "user.email=t@example.invalid",
+    "commit",
+    "-qm",
+    "content",
+  );
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ["scripts/content.ts", "publish"],
+    {
+      env: {
+        ...process.env,
+        PATH: `${shadow}:/usr/bin:/bin`,
+        MOLNOTES_PYTHON: python,
+        MOLNOTES_CONTENT_DIR: join(repo, "content"),
+        MOLNOTES_CONTENT_RELEASES: join(root, "releases"),
+        MOLNOTES_MATERIALS_DIR: materials,
+        MOLNOTES_MATERIALS_CACHE: join(root, "shelf-cache"),
+      },
+    },
+  );
+  const current = await readlink(join(root, "releases/current"));
+  assert.match(stdout, new RegExp(`current: ${current}`));
+  const saved: Snapshot = JSON.parse(
+    await readFile(join(root, "releases", current, "snapshot.json"), "utf8"),
+  );
+  assert.ok(
+    saved.assets.some(
+      (asset) =>
+        asset.path.startsWith("cited/") &&
+        asset.content_type.startsWith("image/"),
+    ),
+  );
 });
