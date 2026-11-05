@@ -183,7 +183,7 @@ onMounted(() => {
   height: auto;
 }
 main {
-  padding-top: var(--space-6);
+  padding: var(--space-6) var(--gutter) var(--space-8);
 }
 .controls {
   display: flex;
