@@ -134,7 +134,7 @@ function anchor(
   );
 }
 
-function mechanismFrames(
+export function validateMechanismFrames(
   frames: unknown,
   where: string,
 ): asserts frames is MechanismFrame[] {
@@ -829,7 +829,7 @@ export function validateBlocks(
         break;
       case "mechanism":
         optionalText(block.title, `${here} title`);
-        field("frames", mechanismFrames);
+        field("frames", validateMechanismFrames);
         break;
       case "table": {
         text(block.caption, `${here} caption`);

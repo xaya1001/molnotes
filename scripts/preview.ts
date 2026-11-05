@@ -1,10 +1,3 @@
-import type { TopicContent } from "../src/ui/topic/content.ts";
-import type { TopicBlock } from "../src/ui/topic/blocks.ts";
-import {
-  validateSynthesisRoutes,
-  validateSubstrateScope,
-} from "../shared/reaction-scheme.ts";
-import type { MoleculeData } from "../src/ui/chemistry/types.ts";
 // Renders the figures of content units as a reader will see them, without
 // publishing: timelines, flows, processes and structures from the content directory,
 // drawn by this checkout's components at desktop and phone width. Prints
@@ -19,42 +12,32 @@ import { homedir } from "node:os";
 import { extname, join, resolve } from "node:path";
 import { parseDocument } from "yaml";
 import { chromium } from "playwright";
-import { validateProcess } from "../shared/process.ts";
 import { defineFlow } from "../src/ui/diagrams/flow.ts";
 import { defineTimeline } from "../src/ui/diagrams/model.ts";
-import { resolveData } from "../shared/topic-blocks.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
+import {
+  topicFigures,
+  type PreviewFigure as Figure,
+} from "../shared/content-preview.ts";
+import { readChemicalLibrary } from "./content/chemical-library.ts";
+import { resolveCompoundSlots } from "./content/compound-slots.ts";
+import { validateTopicContent } from "../shared/topic-content.ts";
 import { layoutProblems } from "../shared/molecule-layout.ts";
 import { setting } from "../shared/settings.ts";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 
-/** A figure to draw: a timeline, flow or process model, or a list of structures. */
-interface Figure {
-  where: string;
-  kind:
-    "timeline" | "flow" | "process" | "molecule" | "route" | "substrate-scope";
-  value: unknown;
-  caption: string;
-}
-
 const repo = resolve(import.meta.dirname, "..");
 const content = setting("MOLNOTES_CONTENT_DIR");
+const library = await readChemicalLibrary(content);
 const cache = join(homedir(), ".cache/molnotes");
 const widths = [
   [1366, 900],
   [390, 844],
 ];
-const define: Record<
-  "timeline" | "flow" | "process",
-  (value: unknown) => unknown
-> = {
+const define: Record<"timeline" | "flow", (value: unknown) => unknown> = {
   timeline: defineTimeline,
   flow: defineFlow,
-  process: (value) => {
-    validateProcess(value, "process");
-    return value;
-  },
 };
 
 /** The figures of one note: fenced timeline, flow and molecule blocks. */
@@ -99,88 +82,19 @@ function noteFigures(source: string, file: string, errors: string[]) {
   return figures;
 }
 
-/** The figures of a topic's blocks, tabs included. */
-// `topic` is a content.json the preview reads as written; it is not validated.
-function topicFigures(topic: TopicContent, file: string, errors: string[]) {
-  const figures: Figure[] = [];
-  const visit = (blocks: TopicBlock[], where: string) =>
-    blocks.forEach((block, i) => {
-      const at = `${where} 第 ${i + 1} 块`;
-      if (block.type === "tabs")
-        block.items.forEach((item) =>
-          visit(item.blocks, `${at}「${item.label}」`),
-        );
-      if (
-        block.type === "timeline" ||
-        block.type === "flow" ||
-        block.type === "process"
-      ) {
-        try {
-          const kind = block.type;
-          const value = resolveData(
-            block.type === "timeline"
-              ? block.timeline
-              : block.type === "flow"
-                ? block.flow
-                : block.process,
-            topic.data,
-            at,
-          );
-          define[kind](value);
-          figures.push({
-            where: at,
-            kind,
-            value,
-            caption: "caption" in block ? (block.caption ?? "") : "",
-          });
-        } catch (error) {
-          errors.push(`${at}: ${(error as Error).message}`);
-        }
-      }
-      if (block.type === "route" || block.type === "substrate-scope") {
-        const value = resolveData(
-          block.type === "route" ? block.routes : block.scope,
-          topic.data,
-          at,
-        );
-        if (block.type === "route") validateSynthesisRoutes(value, at);
-        else validateSubstrateScope(value, at);
-        figures.push({ where: at, kind: block.type, value, caption: "" });
-      }
-      if (block.type === "molecule")
-        figures.push({
-          where: at,
-          kind: "molecule",
-          value: [{ smiles: block.smiles, caption: block.name }],
-          caption: "",
-        });
-      if (block.type === "molecules")
-        figures.push({
-          where: at,
-          kind: "molecule",
-          value: resolveData<MoleculeData[]>(block.items, topic.data, at).map(
-            (m) => ({
-              smiles: m.smiles,
-              caption: m.name,
-            }),
-          ),
-          caption: "",
-        });
-    });
-  topic.chapters.forEach((chapter, c: number) =>
-    visit(chapter.blocks ?? [], `${file} 第 ${c + 1} 章「${chapter.title}」`),
-  );
-  return figures;
-}
-
 async function unitFigures(unit: string, errors: string[]) {
   const [kind, slug, note] = unit.split("/");
   if (kind === "sites" && slug && !note) {
     const file = `sites/${slug}/content.json`;
+    const source = JSON.parse(await readFile(join(content, file), "utf8"));
+    const resolved = resolveCompoundSlots(source, library.entries, file);
     return topicFigures(
-      JSON.parse(await readFile(join(content, file), "utf8")),
+      resolved.references.length
+        ? validateTopicContent(resolved.value, file)
+        : source,
       file,
       errors,
+      library.entries,
     );
   }
   if (kind === "notes" && slug) {
@@ -256,6 +170,14 @@ function serve(root: string) {
       response.end(JSON.stringify(emptyApi[path]));
       return;
     }
+    const asset = library.assets.find(
+      (asset) => `/${asset.scope}/${asset.path}` === path,
+    );
+    if (asset) {
+      response.writeHead(200, { "content-type": asset.content_type });
+      response.end(asset.bytes);
+      return;
+    }
     const file = extname(path)
       ? join(root, path)
       : join(root, path.split("/")[1], "index.html");
@@ -307,9 +229,13 @@ try {
       viewport: { width, height },
       reducedMotion: "reduce",
     });
-    await page.addInitScript((value) => {
-      window.__previewFigures = value;
-    }, figures);
+    await page.addInitScript(
+      ({ figures, entries }) => {
+        window.__previewFigures = figures;
+        window.__previewLibrary = entries;
+      },
+      { figures, entries: library.entries },
+    );
     await page.goto(
       `http://127.0.0.1:${(server.address() as AddressInfo).port}/showcase/preview`,
     );
@@ -324,6 +250,11 @@ try {
       entry.shots.push(shot);
       for (const warning of result[i].warnings)
         entry.warnings.push(`${width}px：${warning}`);
+      for (const error of result[i].errors ?? []) {
+        const message = `${entry.where} ${width}px: ${error}`;
+        errors.push(message);
+        console.error(message);
+      }
     }
     await page.close();
   }
@@ -333,7 +264,7 @@ try {
 }
 const toolkit = await moleculeToolkit();
 for (const entry of report)
-  if (entry.kind === "molecule")
+  if (entry.kind === "molecule" || entry.kind === "mechanism")
     (entry.value as { smiles: string }[]).forEach(
       ({ smiles }: { smiles: string }, k: number) => {
         // A SMILES RDKit cannot read already shows as a render failure above.

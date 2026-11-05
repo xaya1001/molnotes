@@ -300,11 +300,14 @@ export async function buildSnapshot(
   { shelf = {}, commit = null }: { shelf?: Shelf; commit?: string | null } = {},
 ): Promise<{ snapshot: Snapshot; files: Map<string, Buffer> }> {
   const inputs: Resolved<ContentUnit>[] = [];
+  const library = await readChemicalLibrary(root);
   await measureStage("publish.read", async () => {
     for (const unit of await contentUnits(root))
-      inputs.push({ ...(await readUnit(root, unit)), citations: {} });
+      inputs.push({
+        ...(await readUnit(root, unit, library.entries)),
+        citations: {},
+      });
   });
-  const library = await readChemicalLibrary(root);
   const glossary = await readGlossary(root);
   const registry = await readRegistry(root);
   if (!registry && inputs.some((input) => input.occurrences.length))
@@ -344,7 +347,7 @@ export async function buildSnapshot(
   const compiled = await measureStage("publish.compile", () => compile(data));
   const usage = libraryUsage(library.entries, [
     ...sites.map((s) => ({
-      value: s.content,
+      value: [s.content, ...s.compoundReferences],
       path: topicBasePath(s.site),
       title: s.site.title,
     })),
