@@ -176,3 +176,53 @@ test("local numbers sit below the visible ink of folded groups", async ({
   expect(geometry.numberTop).toBeGreaterThan(geometry.bottom);
   expect(Math.abs(geometry.numberCenter - geometry.center)).toBeLessThan(1);
 });
+
+test("mechanism step selection keeps the explanation with its drawing", async ({
+  page,
+}) => {
+  const library = await fixture();
+  const compound = library.entries.cmp_example;
+  library.entries.mec_example = {
+    kind: "mechanism",
+    id: "mec_example",
+    title: "Example steps",
+    sources: compound.sources,
+    category: "reaction",
+    frames: ["first", "second"].map((id) => ({
+      id,
+      title: id,
+      explanation: `Explanation for ${id}`,
+      scene: {
+        width: 12,
+        height: 8,
+        molecules: [
+          { id: "structure", compound: compound.id, at: { x: 6, y: 4 } },
+        ],
+      },
+    })),
+  };
+  await page.route("**/api/library", (route) =>
+    route.fulfill({ json: library }),
+  );
+  await page.route("**/api/topics/minimal", async (route) => {
+    const response = await route.fetch();
+    const topic = await response.json();
+    topic.content.chapters[0].blocks = [
+      { type: "figure-ref", ref: "mec_example" },
+    ];
+    await route.fulfill({ json: topic });
+  });
+  await page.goto("/sites/minimal/start");
+  const figure = page.locator(".library-figure");
+  await expect(figure.locator('[data-figure="mec_example"]')).toBeVisible();
+  await expect(
+    figure.getByText("Explanation for first", { exact: true }),
+  ).toBeVisible();
+  await figure.getByRole("button", { name: "second", exact: true }).click();
+  await expect(
+    figure.getByText("Explanation for second", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    figure.getByText("Explanation for first", { exact: true }),
+  ).toHaveCount(0);
+});

@@ -27,6 +27,12 @@ const displayed = computed(() =>
       }
     : props.reference,
 );
+const frameExplanation = computed(() =>
+  entry.value?.kind === "mechanism"
+    ? entry.value.frames.find((frame) => frame.id === displayed.value.frame)
+        ?.explanation
+    : undefined,
+);
 const host = ref<HTMLElement>();
 const root = ref<HTMLElement>();
 const error = ref("");
@@ -149,6 +155,7 @@ onBeforeUnmount(() => {
       role="group"
       :aria-label="library[reference.ref]?.title"
     />
+    <p v-if="frameExplanation">{{ frameExplanation }}</p>
     <p v-if="explanation">{{ explanation }}</p>
     <ImageViewer
       v-if="entry?.kind === 'image'"
