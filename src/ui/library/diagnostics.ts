@@ -223,19 +223,20 @@ export function figureDiagnostics(svg: SVGSVGElement): Diagnostic[] {
     for (const owner of new Set(parts.flatMap((b) => b.own))) {
       const centre = atomPoints.get(owner);
       const glyphs = labels.filter((l) => l.id === owner);
+      // A radical dot or explicit H can sit beside a bond-bearing atom centre.
+      // Contact with either the centre or its own visible label is valid.
       const gap = centre
         ? Math.min(
             ...ends.map((p) =>
-              glyphs.length
-                ? Math.min(
-                    ...glyphs.map(({ r }) =>
-                      Math.hypot(
-                        Math.max(r.left - p.x, 0, p.x - r.right),
-                        Math.max(r.top - p.y, 0, p.y - r.bottom),
-                      ),
-                    ),
-                  )
-                : Math.hypot(p.x - centre.x, p.y - centre.y),
+              Math.min(
+                Math.hypot(p.x - centre.x, p.y - centre.y),
+                ...glyphs.map(({ r }) =>
+                  Math.hypot(
+                    Math.max(r.left - p.x, 0, p.x - r.right),
+                    Math.max(r.top - p.y, 0, p.y - r.bottom),
+                  ),
+                ),
+              ),
             ),
           )
         : Infinity;

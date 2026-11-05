@@ -245,6 +245,8 @@ test("bond checks detect detached endpoints and accept separate components", asy
     ["cmp_chain", "CCC"],
     ["cmp_components", "CO.OC1CCCCO1"],
     ["cmp_isotope", "[13CH3]O.OC1CCCCO1"],
+    ["cmp_radical", "c1ccccc#1.[NH2-]"],
+    ["cmp_amine", "CNC1CCCCC1"],
   ].map(([id, smiles]) =>
     prepareCompound(toolkit, {
       id,
@@ -263,7 +265,7 @@ test("bond checks detect detached endpoints and accept separate components", asy
     }),
   );
   await page.goto("/library/");
-  await expect(page.locator('[data-check="passed"]')).toHaveCount(3);
+  await expect(page.locator('[data-check="passed"]')).toHaveCount(5);
   await expect(
     page
       .locator(
