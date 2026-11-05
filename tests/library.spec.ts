@@ -127,3 +127,52 @@ test("diagnostics reject a saved label collision while keeping the full entry vi
   ).not.toHaveCount(0);
   await expect(page.locator(".entry")).toHaveCount(2);
 });
+
+test("local numbers sit below the visible ink of folded groups", async ({
+  page,
+}) => {
+  const library = await fixture();
+  const compound = prepareCompound(await moleculeToolkit(), {
+    id: "cmp_folded",
+    title: "Phosphine oxide",
+    smiles: "O=P(c1ccccc1)(c1ccccc1)c1ccccc1",
+    sources: [{ source: "handbook", locator: "Example 2" }],
+  });
+  compound.layout.abbreviations = ["PPh3"];
+  library.entries[compound.id] = compound;
+  await page.route("**/api/library", (route) =>
+    route.fulfill({ json: library }),
+  );
+  await page.route("**/api/topics/minimal", async (route) => {
+    const response = await route.fetch();
+    const topic = await response.json();
+    topic.content.chapters[0].blocks = [
+      { type: "figure-ref", ref: compound.id, numbers: { compound: "4" } },
+    ];
+    await route.fulfill({ json: topic });
+  });
+  await page.goto("/sites/minimal/start");
+  const molecule = page.locator('[data-compound="cmp_folded"]');
+  await expect(molecule).toBeVisible();
+  const geometry = await molecule.evaluate((node) => {
+    const number = node
+      .querySelector('[data-label="compound:number"]')!
+      .getBoundingClientRect();
+    const ink = [
+      ...node.querySelectorAll(
+        '[data-label]:not([data-label="compound:number"]), [data-bond]',
+      ),
+    ].map((e) => e.getBoundingClientRect());
+    return {
+      numberTop: number.top,
+      numberCenter: (number.left + number.right) / 2,
+      bottom: Math.max(...ink.map((b) => b.bottom)),
+      center:
+        (Math.min(...ink.map((b) => b.left)) +
+          Math.max(...ink.map((b) => b.right))) /
+        2,
+    };
+  });
+  expect(geometry.numberTop).toBeGreaterThan(geometry.bottom);
+  expect(Math.abs(geometry.numberCenter - geometry.center)).toBeLessThan(1);
+});

@@ -521,11 +521,12 @@ export async function renderFigure(
         }
         const number = reference.numbers?.[id];
         if (number) {
-          const maxY = Math.max(
-            ...positions.filter((_, i) => !folded.has(i)).map((p) => p.y),
-          );
+          const bounds = g.getBBox();
           const e = label(
-            { x: at.x * B - shift.x, y: maxY + 24 },
+            {
+              x: bounds.x + bounds.width / 2,
+              y: bounds.y + bounds.height + B * 0.55,
+            },
             number,
             "var(--chemical-caption-font)",
           );
@@ -1204,7 +1205,6 @@ export async function renderFigure(
           parent.append(e);
         });
       for (const p of [...r.reactants, ...r.products]) {
-        const m = r.scene.molecules.find((m) => m.id === p.id)!;
         const parts = [
           p.equivalents !== undefined ? `${p.equivalents} eq` : "",
           p.yield !== undefined ? `${Number((p.yield * 100).toFixed(2))}%` : "",
@@ -1223,7 +1223,7 @@ export async function renderFigure(
           const shift = group.transform.baseVal.consolidate()?.matrix;
           const e = label(
             {
-              x: m.at.x * B,
+              x: box.x + box.width / 2 + (shift?.e ?? 0),
               y: box.y + box.height + (shift?.f ?? 0) + B * 0.42,
             },
             parts.join(" · "),
