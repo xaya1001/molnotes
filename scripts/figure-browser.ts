@@ -63,6 +63,7 @@ export async function figureBrowser(library: Library, contentRoot: string) {
   const address = server.httpServer!.address();
   if (!address || typeof address === "string")
     throw new Error("No preview address");
+  const previewUrl = `http://127.0.0.1:${address.port}/__figure.html`;
   let browser: Browser | undefined;
   let page: Page;
   let rendered = 0;
@@ -70,7 +71,7 @@ export async function figureBrowser(library: Library, contentRoot: string) {
     const next = await chromium.launch();
     try {
       const target = await next.newPage();
-      await target.goto(`http://127.0.0.1:${address.port}/__figure.html`);
+      await target.goto(previewUrl);
       await target.waitForFunction(() => "proof" in window);
       await target.evaluate((value) => {
         (window as unknown as { figureLibrary: Library }).figureLibrary = value;
