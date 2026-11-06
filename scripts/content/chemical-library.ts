@@ -23,6 +23,7 @@ import type {
   LibrarySnapshot,
 } from "../../shared/chemical-library/types.ts";
 import type { UnitAsset } from "./content-files.ts";
+import { assetResource, type AssetStage } from "./asset-stage.ts";
 
 async function compileEntryScenes(
   value: unknown,
@@ -106,7 +107,7 @@ async function compileEntryScenes(
   }
 }
 
-export async function readChemicalLibrary(root: string) {
+export async function readChemicalLibrary(root: string, stage?: AssetStage) {
   const entries: Library = {},
     assets: UnitAsset[] = [];
   const base = join(root, "library");
@@ -181,9 +182,7 @@ export async function readChemicalLibrary(root: string) {
       assets.push({
         scope: "library",
         path: `assets/${e.asset}`,
-        bytes,
-        sha256: hash,
-        size: bytes.length,
+        ...(await assetResource(bytes, stage)),
         content_type: e.mime,
         prompt: null,
       });

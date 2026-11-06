@@ -1,5 +1,6 @@
 import { readChemicalLibrary, libraryUsage } from "./chemical-library.ts";
 import { verifyLibraryFigures } from "../figure-browser.ts";
+import { assetStage, type AssetStage, type AssetBytes } from "./asset-stage.ts";
 import {
   validateSchemeCompounds,
   validateScopeProducts,
@@ -295,20 +296,21 @@ async function contentUnits(root: string) {
  * name the materials and render cache directories (MOLNOTES_MATERIALS_DIR,
  * MOLNOTES_MATERIALS_CACHE); `commit` is recorded in the snapshot.
  */
-export async function buildSnapshot(
+async function build(
   root: string,
   {
     shelf = {},
     commit = null,
     figureCache,
-  }: { shelf?: Shelf; commit?: string | null; figureCache?: string } = {},
-): Promise<{ snapshot: Snapshot; files: Map<string, Buffer> }> {
+  }: { shelf?: Shelf; commit?: string | null; figureCache?: string },
+  stage: AssetStage,
+): Promise<{ snapshot: Snapshot; files: Map<string, AssetBytes> }> {
   const inputs: Resolved<ContentUnit>[] = [];
-  const library = await readChemicalLibrary(root);
+  const library = await readChemicalLibrary(root, stage);
   await measureStage("publish.read", async () => {
     for (const unit of await contentUnits(root))
       inputs.push({
-        ...(await readUnit(root, unit, library.entries)),
+        ...(await readUnit(root, unit, library.entries, stage)),
         citations: {},
       });
   });
@@ -323,6 +325,7 @@ export async function buildSnapshot(
       registry ?? {},
       inputs.map(({ unit, occurrences }) => ({ scope: unit, occurrences })),
       shelf,
+      stage,
     ),
   );
   for (const [i, input] of inputs.entries()) {
@@ -348,17 +351,6 @@ export async function buildSnapshot(
     assets: [...inputs.flatMap((input) => input.assets), ...library.assets],
     glossary,
   };
-  // Asset bytes remain immutable through compilation and snapshot writing.
-  // Share identical content before the browser starts while keeping every path.
-  const buffers = new Map<string, Buffer>();
-  function shareBytes(assets: UnitAsset[]) {
-    for (const asset of assets) {
-      const prior = buffers.get(asset.sha256);
-      if (prior) asset.bytes = prior;
-      else buffers.set(asset.sha256, asset.bytes);
-    }
-  }
-  shareBytes(data.assets);
   const compiled = await measureStage("publish.compile", () => compile(data));
   const usage = libraryUsage(library.entries, [
     ...sites.map((s) => ({
@@ -383,8 +375,8 @@ export async function buildSnapshot(
     usage.references,
     root,
     figureCache,
+    stage,
   );
-  shareBytes(proofs.assets);
   data.assets.push(...proofs.assets);
   usage.snapshot.previews = proofs.previews;
   const directories = new Map(compiled.directories.map((d) => [d.slug, d]));
@@ -436,3 +428,18 @@ export async function buildSnapshot(
     ),
   };
 }
+
+/** A caller writes the result with writeSnapshot, or disposes its staged files. */
+export async function buildSnapshot(
+  root: string,
+  options: { shelf?: Shelf; commit?: string | null; figureCache?: string } = {},
+) {
+  const stage = await assetStage();
+  try {
+    return { ...(await build(root, options, stage)), dispose: stage.dispose };
+  } catch (error) {
+    await stage.dispose();
+    throw error;
+  }
+}
+export type BuiltSnapshot = Awaited<ReturnType<typeof buildSnapshot>>;

@@ -12,8 +12,13 @@ import { tmpdir } from "node:os";
 import { contentType } from "../shared/assets.ts";
 import { verifyFigureProofs } from "./content/figure-proofs.ts";
 import { figureRendererFingerprint } from "./content/figure-renderer-fingerprint.ts";
+import type { AssetStage } from "./content/asset-stage.ts";
 
-export async function figureBrowser(library: Library, contentRoot: string) {
+export async function figureBrowser(
+  library: Library,
+  contentRoot: string,
+  stage?: AssetStage,
+) {
   const cache = await mkdtemp(join(tmpdir(), "figure-vite-"));
   const server = await createServer({
     cacheDir: cache,
@@ -43,10 +48,16 @@ export async function figureBrowser(library: Library, contentRoot: string) {
                 return;
               }
               try {
+                const path = stage
+                  ? (await stage.get(file.slice(0, 64)))?.file
+                  : join(contentRoot, "library/assets", file);
+                if (!path) {
+                  res.statusCode = 404;
+                  res.end();
+                  return;
+                }
                 res.setHeader("Content-Type", contentType(file));
-                res.end(
-                  await readFile(join(contentRoot, "library/assets", file)),
-                );
+                res.end(await readFile(path));
               } catch {
                 res.statusCode = 404;
                 res.end();
@@ -97,7 +108,7 @@ export async function figureBrowser(library: Library, contentRoot: string) {
     },
     async render(reference: FigureReference, width = 1366) {
       // Reuse Vite, but bound the lifetime of image decoders and the WASM page.
-      if (rendered >= 100) {
+      if (rendered >= 1000) {
         await browser!.close();
         browser = undefined;
         await openBrowser();
@@ -171,6 +182,7 @@ export async function verifyLibraryFigures(
   references: FigureReference[],
   root: string,
   cacheDirectory?: string,
+  stage?: AssetStage,
 ) {
   if (!Object.keys(library).length) return { assets: [], previews: {} };
   const temporary = cacheDirectory
@@ -179,10 +191,11 @@ export async function verifyLibraryFigures(
   try {
     const proof = await verifyFigureProofs(library, references, {
       directory: cacheDirectory ?? temporary!,
+      stage,
       renderer: await figureRendererFingerprint(
         join(import.meta.dirname, ".."),
       ),
-      createRunner: () => figureBrowser(library, root),
+      createRunner: () => figureBrowser(library, root, stage),
     });
     console.log(
       `Figure proofs: ${proof.stats.hits} cached, ${proof.stats.rendered} rendered, ${proof.stats.total} total`,

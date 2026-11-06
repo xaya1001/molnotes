@@ -10,6 +10,7 @@ import { isObject } from "../../shared/json.ts";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import type { AssetStage } from "./asset-stage.ts";
 
 const stable = (value: unknown) =>
   JSON.stringify(value, (_key, item) =>
@@ -71,6 +72,7 @@ export interface ProofRunner {
 export interface ProofOptions {
   directory: string;
   renderer: string;
+  stage?: AssetStage;
   createRunner(): Promise<ProofRunner>;
 }
 export async function verifyFigureProofs(
@@ -184,7 +186,7 @@ export async function verifyFigureProofs(
           assets.push({
             scope: "library",
             path,
-            bytes: png,
+            bytes: options.stage ? await options.stage.save(png, hash) : png,
             sha256: hash,
             size: png.length,
             content_type: "image/png",

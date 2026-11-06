@@ -17,17 +17,22 @@ import type {
   Library,
   FigureReference,
 } from "../../shared/chemical-library/types.ts";
-import { sha256, contentType } from "../../shared/assets.ts";
+import { contentType } from "../../shared/assets.ts";
 import type {
   DirectoryMetadata,
   SnapshotAsset,
   SnapshotSite,
 } from "../../shared/snapshot.ts";
 import type { TopicContent } from "../../src/ui/topic/content.ts";
+import {
+  assetResource,
+  type AssetBytes,
+  type AssetStage,
+} from "./asset-stage.ts";
 
-/** An asset of a unit with its bytes. */
+/** An asset with resident bytes or a frozen build-owned file. */
 export interface UnitAsset extends SnapshotAsset {
-  bytes: Buffer;
+  bytes: AssetBytes;
 }
 export interface CitationOccurrence {
   href: unknown;
@@ -107,6 +112,7 @@ export async function readUnit(
   root: string,
   unit: string,
   library: Library = {},
+  stage?: AssetStage,
 ): Promise<ContentUnit> {
   const { kind, slug } = unitName(unit);
   const folder = join(root, unit);
@@ -119,11 +125,9 @@ export async function readUnit(
     assets.push({
       scope: unit,
       path: `${prefix}/${path}`,
-      sha256: sha256(bytes),
-      size: bytes.length,
+      ...(await assetResource(bytes, stage)),
       content_type: contentType(path),
       prompt: null,
-      bytes,
     });
   }
   // A generated note image keeps the prompt that produced it; readers never receive it.
