@@ -1,6 +1,6 @@
 import { createServer } from "vite";
 import vue from "@vitejs/plugin-vue";
-import { chromium } from "@playwright/test";
+import { chromium, type Browser, type Page } from "@playwright/test";
 import type {
   FigureReference,
   Library,
@@ -9,8 +9,9 @@ import type {
 import { readFile, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { sha256, contentType } from "../shared/assets.ts";
-import type { UnitAsset } from "./content/content-files.ts";
+import { contentType } from "../shared/assets.ts";
+import { verifyFigureProofs } from "./content/figure-proofs.ts";
+import { figureRendererFingerprint } from "./content/figure-renderer-fingerprint.ts";
 
 export async function figureBrowser(library: Library, contentRoot: string) {
   const cache = await mkdtemp(join(tmpdir(), "figure-vite-"));
@@ -62,30 +63,45 @@ export async function figureBrowser(library: Library, contentRoot: string) {
   const address = server.httpServer!.address();
   if (!address || typeof address === "string")
     throw new Error("No preview address");
-  let browser;
-  try {
-    browser = await chromium.launch();
-  } catch (e) {
-    await server.close();
-    await rm(cache, { recursive: true, force: true });
-    throw e;
+  let browser: Browser | undefined;
+  let page: Page;
+  let rendered = 0;
+  async function openBrowser() {
+    const next = await chromium.launch();
+    try {
+      const target = await next.newPage();
+      await target.goto(`http://127.0.0.1:${address.port}/__figure.html`);
+      await target.waitForFunction(() => "proof" in window);
+      await target.evaluate((value) => {
+        (window as unknown as { figureLibrary: Library }).figureLibrary = value;
+      }, library);
+      browser = next;
+      page = target;
+      rendered = 0;
+    } catch (error) {
+      await next.close();
+      throw error;
+    }
   }
-  const page = await browser.newPage();
   try {
-    await page.goto(`http://127.0.0.1:${address.port}/__figure.html`);
-    await page.waitForFunction(() => "proof" in window);
-    await page.evaluate((value) => {
-      (window as unknown as { figureLibrary: Library }).figureLibrary = value;
-    }, library);
+    await openBrowser();
   } catch (error) {
-    await browser.close();
     await server.close();
     await rm(cache, { recursive: true, force: true });
     throw error;
   }
   return {
-    page,
+    get page() {
+      return page;
+    },
     async render(reference: FigureReference, width = 1366) {
+      // Reuse Vite, but bound the lifetime of image decoders and the WASM page.
+      if (rendered >= 100) {
+        await browser!.close();
+        browser = undefined;
+        await openBrowser();
+      }
+      rendered++;
       await page.setViewportSize({ width, height: width === 1366 ? 900 : 844 });
       return page.evaluate(async (reference) => {
         const proof = (
@@ -140,9 +156,12 @@ export async function figureBrowser(library: Library, contentRoot: string) {
       }
     },
     async close() {
-      await browser.close();
-      await server.close();
-      await rm(cache, { recursive: true, force: true });
+      try {
+        await browser?.close();
+      } finally {
+        await server.close();
+        await rm(cache, { recursive: true, force: true });
+      }
     },
   };
 }
@@ -150,64 +169,25 @@ export async function verifyLibraryFigures(
   library: Library,
   references: FigureReference[],
   root: string,
+  cacheDirectory?: string,
 ) {
-  const assets: UnitAsset[] = [];
-  const previews: Record<string, string> = {};
-  if (!Object.keys(library).length) return { assets, previews };
-  const runner = await figureBrowser(library, root);
+  if (!Object.keys(library).length) return { assets: [], previews: {} };
+  const temporary = cacheDirectory
+    ? undefined
+    : await mkdtemp(join(tmpdir(), "figure-proofs-"));
   try {
-    const refs = [
-      ...Object.values(library).flatMap((e) =>
-        e.kind === "mechanism"
-          ? e.frames.map((f) => ({ ref: e.id, frame: f.id }))
-          : e.kind === "compound"
-            ? [
-                { ref: e.id },
-                ...Object.keys(e.variants ?? {}).map((variant) => ({
-                  ref: e.id,
-                  variant,
-                })),
-              ]
-            : [{ ref: e.id }],
+    const proof = await verifyFigureProofs(library, references, {
+      directory: cacheDirectory ?? temporary!,
+      renderer: await figureRendererFingerprint(
+        join(import.meta.dirname, ".."),
       ),
-      ...references,
-    ];
-    const unique = [
-      ...new Map(
-        refs.map((ref) => {
-          const kind = library[ref.ref]?.kind;
-          const instance =
-            kind === "image" || kind === "process" ? { ref: ref.ref } : ref;
-          return [JSON.stringify(instance), instance];
-        }),
-      ).values(),
-    ];
-    for (const ref of unique)
-      for (const width of [1366, 390]) {
-        const result = await runner.render(ref, width);
-        const errors = result.diagnostics.filter((d) => d.severity === "error");
-        if (width === 1366 && !previews[ref.ref]) {
-          const bytes = await runner.thumbnail();
-          const hash = sha256(bytes);
-          const path = `assets/${hash}.png`;
-          assets.push({
-            scope: "library",
-            path,
-            bytes,
-            sha256: hash,
-            size: bytes.length,
-            content_type: "image/png",
-            prompt: null,
-          });
-          previews[ref.ref] = `/library/${path}`;
-        }
-        if (errors.length)
-          throw new Error(
-            `${ref.ref}: ${errors.map((d) => `${d.code} ${d.elements.join(",")}`).join("; ")}`,
-          );
-      }
+      createRunner: () => figureBrowser(library, root),
+    });
+    console.log(
+      `Figure proofs: ${proof.stats.hits} cached, ${proof.stats.rendered} rendered, ${proof.stats.total} total`,
+    );
+    return proof;
   } finally {
-    await runner.close();
+    if (temporary) await rm(temporary, { recursive: true, force: true });
   }
-  return { assets, previews };
 }

@@ -129,10 +129,14 @@ async function prune(releases: string) {
 export async function publishSnapshot(
   root: string,
   releases: string,
-  { shelf }: { shelf?: Shelf } = {},
+  { shelf, figureCache }: { shelf?: Shelf; figureCache?: string } = {},
 ) {
   const source = await committedSource(root, ["."]);
-  const built = await buildSnapshot(root, { shelf, commit: source.commit });
+  const built = await buildSnapshot(root, {
+    shelf,
+    commit: source.commit,
+    figureCache,
+  });
   await source.verify();
   await mkdir(releases, { recursive: true });
   const name = nameOf(source.commit, built.snapshot.builtAt);

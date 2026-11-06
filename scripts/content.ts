@@ -1,4 +1,5 @@
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
+import { homedir } from "node:os";
 import { setting } from "../shared/settings.ts";
 import { buildSnapshot } from "./content/content-publish.ts";
 import {
@@ -32,6 +33,13 @@ try {
     const name = await publishSnapshot(
       setting("MOLNOTES_CONTENT_DIR"),
       setting("MOLNOTES_CONTENT_RELEASES"),
+      {
+        figureCache: join(
+          process.env.XDG_CACHE_HOME || join(homedir(), ".cache"),
+          "molnotes",
+          "figure-proofs",
+        ),
+      },
     );
     console.log(`current: ${name}`);
   }
