@@ -297,7 +297,11 @@ async function contentUnits(root: string) {
  */
 export async function buildSnapshot(
   root: string,
-  { shelf = {}, commit = null }: { shelf?: Shelf; commit?: string | null } = {},
+  {
+    shelf = {},
+    commit = null,
+    figureCache,
+  }: { shelf?: Shelf; commit?: string | null; figureCache?: string } = {},
 ): Promise<{ snapshot: Snapshot; files: Map<string, Buffer> }> {
   const inputs: Resolved<ContentUnit>[] = [];
   const library = await readChemicalLibrary(root);
@@ -344,6 +348,17 @@ export async function buildSnapshot(
     assets: [...inputs.flatMap((input) => input.assets), ...library.assets],
     glossary,
   };
+  // Asset bytes remain immutable through compilation and snapshot writing.
+  // Share identical content before the browser starts while keeping every path.
+  const buffers = new Map<string, Buffer>();
+  function shareBytes(assets: UnitAsset[]) {
+    for (const asset of assets) {
+      const prior = buffers.get(asset.sha256);
+      if (prior) asset.bytes = prior;
+      else buffers.set(asset.sha256, asset.bytes);
+    }
+  }
+  shareBytes(data.assets);
   const compiled = await measureStage("publish.compile", () => compile(data));
   const usage = libraryUsage(library.entries, [
     ...sites.map((s) => ({
@@ -367,7 +382,9 @@ export async function buildSnapshot(
     library.entries,
     usage.references,
     root,
+    figureCache,
   );
+  shareBytes(proofs.assets);
   data.assets.push(...proofs.assets);
   usage.snapshot.previews = proofs.previews;
   const directories = new Map(compiled.directories.map((d) => [d.slug, d]));

@@ -48,6 +48,7 @@ const content = (root: string, ...args: string[]) =>
       MOLNOTES_CONTENT_RELEASES: join(root, "releases"),
       MOLNOTES_MATERIALS_DIR: materials,
       MOLNOTES_MATERIALS_CACHE: join(root, "shelf-cache"),
+      XDG_CACHE_HOME: join(root, "cache"),
     },
   });
 
@@ -754,6 +755,7 @@ test("content publish uses the configured Python when PATH selects one without P
         MOLNOTES_CONTENT_RELEASES: join(root, "releases"),
         MOLNOTES_MATERIALS_DIR: materials,
         MOLNOTES_MATERIALS_CACHE: join(root, "shelf-cache"),
+        XDG_CACHE_HOME: join(root, "cache"),
       },
     },
   );
