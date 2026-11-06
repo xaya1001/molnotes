@@ -4,6 +4,7 @@ import { moleculeToolkit } from "../../shared/molecule-toolkit.ts";
 import { patentBlocks } from "../../shared/patent-contract.ts";
 import type { TopicContent } from "../../src/ui/topic/content.ts";
 import type { UnitAsset } from "./content-files.ts";
+import { readFile } from "node:fs/promises";
 let toolkit: Awaited<ReturnType<typeof moleculeToolkit>> | undefined;
 const checked = new Set<string>();
 export async function validatePatentAssets(
@@ -25,7 +26,10 @@ export async function validatePatentAssets(
     if (!jsonCache.has(path)) {
       const { bytes } = get(path);
       try {
-        jsonCache.set(path, JSON.parse(bytes.toString("utf8")));
+        const value = Buffer.isBuffer(bytes)
+          ? bytes
+          : await readFile(bytes.file);
+        jsonCache.set(path, JSON.parse(value.toString("utf8")));
       } catch {
         throw new Error(`${where}: invalid JSON ${path}`);
       }

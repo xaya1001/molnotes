@@ -4,11 +4,12 @@ import { extname, isAbsolute, join } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { citedSource } from "../../shared/source-citations.ts";
-import { contentType, sha256 } from "../../shared/assets.ts";
+import { contentType } from "../../shared/assets.ts";
 import { setting } from "../../shared/settings.ts";
 import type { Citations } from "../../shared/snapshot.ts";
 import type { SourceRegistry } from "../../shared/source-citations.ts";
 import type { CitationOccurrence, UnitAsset } from "./content-files.ts";
+import { assetResource, type AssetStage } from "./asset-stage.ts";
 
 /** The materials shelf and its render cache (MOLNOTES_MATERIALS_DIR, MOLNOTES_MATERIALS_CACHE). */
 export interface Shelf {
@@ -84,6 +85,7 @@ export async function resolveCitations(
   registry: SourceRegistry,
   units: { scope: string; occurrences: CitationOccurrence[] }[],
   shelf: Shelf = {},
+  stage?: AssetStage,
 ): Promise<{ citations: Citations; assets: UnitAsset[] }[]> {
   const requests: ShelfRequest[] = [],
     requestIndex = new Map<string, number>();
@@ -118,111 +120,118 @@ export async function resolveCitations(
     }),
   );
   const results = requests.length ? await material(requests, shelf) : [];
-  const files = new Map<string, Promise<Buffer>>();
+  type Resource = Awaited<ReturnType<typeof assetResource>>;
+  const files = new Map<string, Promise<Resource>>();
   const read = (path: string) => {
-    if (!files.has(path)) files.set(path, readFile(path));
+    if (!files.has(path))
+      files.set(
+        path,
+        readFile(path).then((bytes) => assetResource(bytes, stage)),
+      );
     return files.get(path)!;
   };
-  return Promise.all(
-    units.map(async ({ scope }, unitIndex) => {
-      const citations: Citations = {},
-        assets = new Map<string, UnitAsset>();
-      const asset = (bytes: Buffer, extension: string) => {
-        const hash = sha256(bytes);
-        const path = `cited/${hash}${extension}`;
-        assets.set(path, {
-          scope,
-          path,
-          sha256: hash,
-          size: bytes.length,
-          content_type: contentType(path),
-          prompt: null,
-          bytes,
-        });
-        return `/${scope}/${path}`;
-      };
-      // Cleaned HTML with its image placeholders pointing at the uploaded images.
-      const body = async ({
-        html,
-        images,
-      }: {
-        html: string;
-        images: string[];
-      }) => {
-        for (const [index, image] of images.entries())
-          html = html.replaceAll(
-            `src="IMAGE:${index}"`,
-            `src="${asset(await read(image), extname(image).toLowerCase())}"`,
+  const resolved: { citations: Citations; assets: UnitAsset[] }[] = [];
+  for (const [unitIndex, { scope }] of units.entries()) {
+    const citations: Citations = {},
+      assets = new Map<string, UnitAsset>();
+    const asset = (resource: Resource, extension: string) => {
+      const hash = resource.sha256;
+      const path = `cited/${hash}${extension}`;
+      assets.set(path, {
+        scope,
+        path,
+        ...resource,
+        content_type: contentType(path),
+        prompt: null,
+      });
+      return `/${scope}/${path}`;
+    };
+    // Cleaned HTML with its image placeholders pointing at the uploaded images.
+    const body = async ({
+      html,
+      images,
+    }: {
+      html: string;
+      images: string[];
+    }) => {
+      for (const [index, image] of images.entries())
+        html = html.replaceAll(
+          `src="IMAGE:${index}"`,
+          `src="${asset(await read(image), extname(image).toLowerCase())}"`,
+        );
+      return asset(
+        await assetResource(Buffer.from(JSON.stringify({ html })), stage),
+        ".json",
+      );
+    };
+    for (const item of planned[unitIndex]) {
+      if (Object.hasOwn(citations, item.href)) continue;
+      const result = results[item.result];
+      if (result.error) throw new Error(`${item.where}: ${result.error}`);
+      const { title, kind, author, edition } = item.source;
+      const data = { title, kind, author, edition };
+      const { first, last, print, rect, chapter, section } = item.citation;
+      if (first !== undefined) {
+        const firstPage = result.shown.find(
+          (page: ShownPage) => page.page === first,
+        )!;
+        if (
+          rect &&
+          (rect[2] > firstPage.size[0] || rect[3] > firstPage.size[1])
+        )
+          throw new Error(
+            `${item.where}: ${item.href} rectangle lies outside page ${first}`,
           );
-        return asset(Buffer.from(JSON.stringify({ html })), ".json");
-      };
-      for (const item of planned[unitIndex]) {
-        if (Object.hasOwn(citations, item.href)) continue;
-        const result = results[item.result];
-        if (result.error) throw new Error(`${item.where}: ${result.error}`);
-        const { title, kind, author, edition } = item.source;
-        const data = { title, kind, author, edition };
-        const { first, last, print, rect, chapter, section } = item.citation;
-        if (first !== undefined) {
-          const firstPage = result.shown.find(
-            (page: ShownPage) => page.page === first,
-          )!;
-          if (
-            rect &&
-            (rect[2] > firstPage.size[0] || rect[3] > firstPage.size[1])
-          )
-            throw new Error(
-              `${item.where}: ${item.href} rectangle lies outside page ${first}`,
-            );
-          // A numeric printed page numbers its neighbours; any other label names only the first page.
-          const label = (page: number) =>
-            /^\d+$/.test(print ?? "")
-              ? Number(print) + page - first >= 1
-                ? String(Number(print) + page - first)
-                : undefined
-              : page === first
-                ? print
-                : undefined;
-          Object.assign(data, {
-            type: "pdf",
-            first,
-            last,
-            print,
-            rect,
-            pages: await Promise.all(
-              result.shown.map(async ({ page, size, image }: ShownPage) => ({
-                page,
-                label: label(page),
-                size,
-                image: asset(await read(image), ".webp"),
-              })),
-            ),
+        // A numeric printed page numbers its neighbours; any other label names only the first page.
+        const label = (page: number) =>
+          /^\d+$/.test(print ?? "")
+            ? Number(print) + page - first >= 1
+              ? String(Number(print) + page - first)
+              : undefined
+            : page === first
+              ? print
+              : undefined;
+        const pages = [];
+        for (const { page, size, image } of result.shown)
+          pages.push({
+            page,
+            label: label(page),
+            size,
+            image: asset(await read(image), ".webp"),
           });
-        } else if (chapter !== undefined) {
-          if (section !== undefined && !Object.hasOwn(result.sections, section))
-            throw new Error(
-              `${item.where}: ${item.href} section ${section} is not in chapter ${chapter}`,
-            );
-          Object.assign(data, {
-            type: "epub",
-            chapter: result.chapter,
-            section: section && {
-              key: section,
-              title: result.sections[section],
-            },
-            body: await body(result),
-          });
-        } else {
-          Object.assign(data, {
-            type: "web",
-            url: result.url,
-            downloaded: result.downloaded,
-            body: await body(result),
-          });
-        }
-        citations[item.href] = JSON.parse(JSON.stringify(data));
+        Object.assign(data, {
+          type: "pdf",
+          first,
+          last,
+          print,
+          rect,
+          pages,
+        });
+      } else if (chapter !== undefined) {
+        if (section !== undefined && !Object.hasOwn(result.sections, section))
+          throw new Error(
+            `${item.where}: ${item.href} section ${section} is not in chapter ${chapter}`,
+          );
+        Object.assign(data, {
+          type: "epub",
+          chapter: result.chapter,
+          section: section && {
+            key: section,
+            title: result.sections[section],
+          },
+          body: await body(result),
+        });
+      } else {
+        Object.assign(data, {
+          type: "web",
+          url: result.url,
+          downloaded: result.downloaded,
+          body: await body(result),
+        });
       }
-      return { citations, assets: [...assets.values()] };
-    }),
-  );
+      citations[item.href] = JSON.parse(JSON.stringify(data));
+    }
+    resolved.push({ citations, assets: [...assets.values()] });
+  }
+  return resolved;
 }

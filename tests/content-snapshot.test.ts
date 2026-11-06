@@ -106,6 +106,48 @@ test("a snapshot holds every unit's rows and its asset files", async (t) => {
   );
 });
 
+test("snapshot assets stay frozen on disk until writing or disposal", async (t) => {
+  const root = await temporary(t);
+  const source = join(root, "content");
+  await cp(fixtures, source, { recursive: true });
+  const built = await buildSnapshot(source, {
+    shelf: { materials, cache: join(root, "shelf-cache") },
+  });
+  t.after(built.dispose);
+  const staged = [...built.files.values()];
+  assert.ok(staged.length);
+  assert.ok(staged.every((asset) => !Buffer.isBuffer(asset)));
+  const asset = built.snapshot.assets.find(
+    (a) => a.path === "assets/sample.svg",
+  )!;
+  await writeFile(
+    join(source, asset.scope, asset.path),
+    "changed after validation",
+  );
+  const output = join(root, "snapshot");
+  await writeSnapshot(output, built);
+  assert.equal(
+    createHash("sha256")
+      .update(await readFile(join(output, "files", asset.scope, asset.path)))
+      .digest("hex"),
+    asset.sha256,
+  );
+  for (const asset of staged) {
+    assert.ok(!Buffer.isBuffer(asset));
+    await assert.rejects(stat(asset.file), { code: "ENOENT" });
+  }
+
+  const retry = await buildSnapshot(fixtures, {
+    shelf: { materials, cache: join(root, "shelf-cache") },
+  });
+  const files = [...retry.files.values()];
+  await assert.rejects(writeSnapshot(output, retry), /already exists/);
+  for (const asset of files) {
+    assert.ok(!Buffer.isBuffer(asset));
+    await assert.rejects(stat(asset.file), { code: "ENOENT" });
+  }
+});
+
 test("publish switches current to the committed snapshot, keeps five and rolls back", async (t) => {
   const root = await temporary(t);
   const repo = join(root, "repo");
@@ -260,7 +302,11 @@ async function editableContent(t: TestContext, units?: string[]) {
     },
   });
   const shelf = { materials, cache: join(root, "shelf-cache") };
-  const build = () => buildSnapshot(directory, { shelf });
+  const build = async () => {
+    const built = await buildSnapshot(directory, { shelf });
+    t.after(built.dispose);
+    return built;
+  };
   async function edit(edits: Edit[]) {
     const originals: [string, string | undefined][] = [];
     for (const [path, change] of edits) {

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   link,
+  copyFile,
   mkdir,
   readFile,
   readdir,
@@ -12,7 +13,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { buildSnapshot } from "./content-publish.ts";
+import { buildSnapshot, type BuiltSnapshot } from "./content-publish.ts";
 import { committedSource } from "./content-files.ts";
 import type { Shelf } from "./citations.ts";
 import type { Snapshot } from "../../shared/snapshot.ts";
@@ -59,25 +60,32 @@ async function assetHashes(
  */
 export async function writeSnapshot(
   output: string,
-  { snapshot, files }: { snapshot: Snapshot; files: Map<string, Buffer> },
+  { snapshot, files, dispose }: BuiltSnapshot,
   { previous }: { previous?: string } = {},
 ) {
   const temporary = join(
     dirname(output),
     `.${basename(output)}.${randomUUID()}`,
   );
-  const earlier = await assetHashes(previous);
-  const hashes = new Map(
-    snapshot.assets.map((a) => [`${a.scope}/${a.path}`, a.sha256]),
-  );
   try {
+    const earlier = await assetHashes(previous);
+    const hashes = new Map(
+      snapshot.assets.map((a) => [`${a.scope}/${a.path}`, a.sha256]),
+    );
     await mkdir(temporary, { recursive: true });
     for (const [path, bytes] of files) {
       const file = join(temporary, "files", path);
       await mkdir(dirname(file), { recursive: true });
       if (earlier.get(path) && earlier.get(path) === hashes.get(path))
         await link(join(previous!, "files", path), file);
-      else await writeFile(file, bytes);
+      else if (Buffer.isBuffer(bytes)) await writeFile(file, bytes);
+      else
+        try {
+          await link(bytes.file, file);
+        } catch (error) {
+          if (errorCode(error) !== "EXDEV") throw error;
+          await copyFile(bytes.file, file);
+        }
     }
     await writeFile(join(temporary, "snapshot.json"), JSON.stringify(snapshot));
     await rename(temporary, output);
@@ -86,6 +94,8 @@ export async function writeSnapshot(
     if (errorCode(error) === "ENOTEMPTY" || errorCode(error) === "EEXIST")
       throw new Error(`${output}: already exists`);
     throw error;
+  } finally {
+    await dispose();
   }
 }
 
@@ -137,16 +147,20 @@ export async function publishSnapshot(
     commit: source.commit,
     figureCache,
   });
-  await source.verify();
-  await mkdir(releases, { recursive: true });
-  const name = nameOf(source.commit, built.snapshot.builtAt);
-  const current = await currentName(releases);
-  await writeSnapshot(join(releases, name), built, {
-    previous: current && join(releases, current),
-  });
-  await switchCurrent(releases, name);
-  await prune(releases);
-  return name;
+  try {
+    await source.verify();
+    await mkdir(releases, { recursive: true });
+    const name = nameOf(source.commit, built.snapshot.builtAt);
+    const current = await currentName(releases);
+    await writeSnapshot(join(releases, name), built, {
+      previous: current && join(releases, current),
+    });
+    await switchCurrent(releases, name);
+    await prune(releases);
+    return name;
+  } finally {
+    await built.dispose();
+  }
 }
 
 /**
