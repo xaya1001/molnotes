@@ -4,15 +4,15 @@
 
 ## 选写法
 
-| 要表达的                                         | 写法                                                                               |
-| ------------------------------------------------ | ---------------------------------------------------------------------------------- |
-| 事件发生在什么时候、间隔多长                     | `timeline`                                                                         |
-| 只看先后，不看间隔                               | `timeline` 加 `axis: {even: true}`                                                 |
-| 几条线索并行（几家公司、几种病毒）               | `timeline` 加 `lanes`                                                              |
-| 一步接一步的流程、分出几条路、判断、汇合、侧出口 | `flow`                                                                             |
-| 数值、曲线、坐标                                 | 专题用 `chart` 块；笔记按 note-figures skill 用代码出图                            |
-| 分子结构、反应、路线、机理、过程图               | 使用 [chemical-figures 项目 skill](../../.agents/skills/chemical-figures/SKILL.md) |
-| 器官、空间关系、历史场景                         | 按 note-figures skill 出图                                                         |
+| 要表达的                                         | 写法                                                                                                  |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| 事件发生在什么时候、间隔多长                     | `timeline`                                                                                            |
+| 只看先后，不看间隔                               | `timeline` 加 `axis: {even: true}`                                                                    |
+| 几条线索并行（几家公司、几种病毒）               | `timeline` 加 `lanes`                                                                                 |
+| 一步接一步的流程、分出几条路、判断、汇合、侧出口 | `flow`                                                                                                |
+| 数值、曲线、坐标                                 | 专题用 `chart` 块；笔记按 [note-figures skill](../../.agents/skills/note-figures/SKILL.md) 用代码出图 |
+| 分子结构、反应、路线、机理、过程图               | 使用 [chemical-figures 项目 skill](../../.agents/skills/chemical-figures/SKILL.md)                    |
+| 器官、空间关系、历史场景                         | 按 [note-figures skill](../../.agents/skills/note-figures/SKILL.md) 出图                              |
 
 一张图只回答一个问题：图注说清它回答什么，图里只放回答所需的事件或步骤。
 
@@ -208,4 +208,4 @@ npm run content:preview -- notes/<dir>/<slug>
 
 ## 边界
 
-流程图最多 20 个节点，只能单向（不能连成环）；催化循环、反馈环、通路网络和需要空间位置的示意图按 note-figures skill 出图。时间线不画数值；要比较数字，用图表或表格，数字也要在正文里写出。
+流程图最多 20 个节点，只能单向（不能连成环）；催化循环、反馈环、通路网络和需要空间位置的示意图按 [note-figures skill](../../.agents/skills/note-figures/SKILL.md) 出图。时间线不画数值；要比较数字，用图表或表格，数字也要在正文里写出。

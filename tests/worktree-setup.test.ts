@@ -20,7 +20,7 @@ const setup = fileURLToPath(
   new URL("../scripts/worktree-setup.ts", import.meta.url),
 );
 
-test("setup replaces the config link with a directory and refreshes its contents", () => {
+test("setup preserves shared skills and refreshes the copied config directory", () => {
   const temp = mkdtempSync(join(tmpdir(), "worktree-setup-"));
   try {
     const checkout = join(temp, "checkout");
@@ -41,6 +41,11 @@ test("setup replaces the config link with a directory and refreshes its contents
     writeFileSync(join(external, "value.txt"), "external\n");
     symlinkSync(external, join(source, "external"));
     symlinkSync(join("private", ".codex"), destination);
+    const skills = join(checkout, ".agents", "skills");
+    mkdirSync(join(skills, "sample"), { recursive: true });
+    writeFileSync(join(skills, "sample", "SKILL.md"), "Shared instructions\n");
+    mkdirSync(join(checkout, ".claude"));
+    symlinkSync("../.agents/skills", join(checkout, ".claude", "skills"));
     const run = () =>
       execFileSync(process.execPath, [setup], {
         cwd: checkout,
@@ -55,8 +60,19 @@ test("setup replaces the config link with a directory and refreshes its contents
     );
     assert.ok(lstatSync(join(destination, "external")).isSymbolicLink());
     assert.equal(readlinkSync(join(destination, "external")), external);
-    for (const name of ["private", "AGENTS.md", ".claude"])
+    for (const name of ["private", "AGENTS.md"])
       assert.ok(lstatSync(join(checkout, name)).isSymbolicLink());
+    assert.equal(
+      readlinkSync(join(checkout, ".claude", "skills")),
+      "../.agents/skills",
+    );
+    assert.equal(
+      readFileSync(
+        join(checkout, ".claude", "skills", "sample", "SKILL.md"),
+        "utf8",
+      ),
+      "Shared instructions\n",
+    );
 
     writeFileSync(join(destination, "stale.txt"), "stale\n");
     writeFileSync(join(source, "config.toml"), "value = 2\n");
