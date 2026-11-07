@@ -32,8 +32,7 @@ if (root !== canonical && existsSync(shelf))
 const companion = `${canonical}-private`;
 if (existsSync(companion)) {
   link(companion, join(root, "private"));
-  for (const name of ["AGENTS.md", ".claude"])
-    link(join("private", name), join(root, name));
+  link(join("private", "AGENTS.md"), join(root, "AGENTS.md"));
   const config = join(root, ".codex");
   rmSync(config, { recursive: true, force: true });
   cpSync(join(companion, ".codex"), config, {
