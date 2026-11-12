@@ -5,7 +5,11 @@ import type {
   FigureNode,
   FigureTextRun,
 } from "../../../shared/chemical-library/geometry.ts";
-import { shapeFigureText, type FigureFontResolver } from "./font-geometry.ts";
+import {
+  shapeFigureText,
+  figureTextMetrics,
+  type FigureFontResolver,
+} from "./font-geometry.ts";
 import {
   figureGroup,
   figurePath,
@@ -222,7 +226,8 @@ export function createFigureScene(
       if (script) {
         const face = fonts(run, "A").font;
         run.shift =
-          (face["OS/2"].ySubscriptYOffset / face.unitsPerEm) * fontSize;
+          figureTextMetrics(face, run.size).ascent -
+          figureTextMetrics(face, fontSize).central;
       }
       runs.push(run);
     }

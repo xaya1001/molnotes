@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import { figureBrowser } from "../scripts/figure-browser.ts";
 import { loadFigureFonts } from "../scripts/figure-fonts.ts";
+import { createFigureScene } from "../src/ui/library/scene-geometry.ts";
+import { figureStyle } from "./fixtures/figures/style.ts";
 import { shapeFigureText } from "../src/ui/library/font-geometry.ts";
 import { geometrySvg } from "../src/ui/library/geometry-tree.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
@@ -100,6 +102,37 @@ test("Node and browser shape identical geometry and the outlined SVG matches its
       expect(Math.abs(measured[key] - node.inkBounds![key])).toBeLessThan(
         0.001,
       );
+    const primaryBytes = fontBytes.find((face) =>
+      face.id.endsWith("/arimo-latin-400-normal.woff2"),
+    )!.bytes;
+    const scriptBoxes = await runner.page.evaluate(async (bytes) => {
+      const face = new FontFace("FigureParity", new Uint8Array(bytes));
+      await face.load();
+      document.fonts.add(face);
+      const ns = "http://www.w3.org/2000/svg",
+        svg = document.createElementNS(ns, "svg");
+      document.querySelector("#canvas")!.replaceChildren(svg);
+      return [17, 20].map((size) => {
+        const text = document.createElementNS(ns, "text");
+        text.setAttribute("font-family", "FigureParity");
+        text.setAttribute("font-size", String(size));
+        text.setAttribute("dominant-baseline", "central");
+        const script = document.createElementNS(ns, "tspan");
+        script.textContent = "2";
+        script.setAttribute("font-size", "0.8em");
+        script.setAttribute("baseline-shift", "sub");
+        text.append("H", script, "O");
+        svg.append(text);
+        const box = text.getBBox();
+        return { size, y: box.y, height: box.height };
+      });
+    }, primaryBytes);
+    const scene = createFigureScene(figureStyle, fonts);
+    for (const measured of scriptBoxes) {
+      const node = scene.label({ x: 0, y: 0 }, "H₂O", `${measured.size}px`);
+      expect(node.bounds!.y).toBe(measured.y);
+      expect(node.bounds!.height).toBe(measured.height);
+    }
   } finally {
     await runner.close();
   }

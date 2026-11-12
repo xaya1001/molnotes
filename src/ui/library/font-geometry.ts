@@ -25,6 +25,18 @@ export function decodeFigureFont(bytes: Parameters<typeof create>[0]): Font {
   return font;
 }
 
+/** SVG line metrics at the desktop design scale. */
+export function figureTextMetrics(font: Font, size: number) {
+  const ascent = Math.round((font.ascent * size) / font.unitsPerEm),
+    descent = -Math.round((-font.descent * size) / font.unitsPerEm);
+  return {
+    ascent,
+    descent,
+    height: ascent - descent,
+    central: (ascent + descent) / 2,
+  };
+}
+
 export function shapeFigureText(
   runs: FigureTextRun[],
   resolve: FigureFontResolver,
@@ -40,13 +52,10 @@ export function shapeFigureText(
   const primary = first && resolve(first, "A").font;
   const central =
     primary && baseline === "central"
-      ? (((primary.ascent + primary.descent) / primary.unitsPerEm) *
-          first.size) /
-        2
+      ? figureTextMetrics(primary, first.size).central
       : 0;
   for (const run of runs) {
-    const lineFont = resolve(run, "A").font,
-      lineScale = run.size / lineFont.unitsPerEm;
+    const line = figureTextMetrics(resolve(run, "A").font, run.size);
     const chunks: { face: FigureFont; text: string }[] = [];
     for (const character of run.text) {
       const face = resolve(run, character);
@@ -91,9 +100,9 @@ export function shapeFigureText(
       });
       boxes.push({
         x: at.x + start,
-        y: y - lineFont.ascent * lineScale,
+        y: y - line.ascent,
         width: cursor - start,
-        height: (lineFont.ascent - lineFont.descent) * lineScale,
+        height: line.height,
       });
     }
   }

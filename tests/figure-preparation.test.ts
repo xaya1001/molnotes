@@ -188,3 +188,17 @@ test("wrapping measures SVG text without a trailing space", async () => {
   });
   assert.deepEqual(lines, ["AAAA BBBB CCCC", "DDDD"]);
 });
+
+test("SVG subscript line boxes follow the central baseline", async () => {
+  const { createFigureScene } =
+    await import("../src/ui/library/scene-geometry.ts");
+  const scene = createFigureScene(style, fonts);
+  for (const [size, y, height] of [
+    [17, -9.5, 24.5],
+    [20, -11, 28],
+  ]) {
+    const node = scene.label({ x: 0, y: 0 }, "H₂O", `${size}px`);
+    assert.equal(node.bounds!.y, y);
+    assert.equal(node.bounds!.height, height);
+  }
+});
