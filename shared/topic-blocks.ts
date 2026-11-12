@@ -27,7 +27,11 @@ import type {
   MoleculeData,
   StructureAnchor,
 } from "../src/ui/chemistry/types.ts";
-import type { TableCell, TopicBlock } from "../src/ui/topic/blocks.ts";
+import type {
+  TableCell,
+  TableRow,
+  TopicBlock,
+} from "../src/ui/topic/blocks.ts";
 import type { PredictionEntry } from "../src/ui/topic/content.ts";
 import {
   isFiniteNumber,
@@ -172,9 +176,13 @@ function tableRows(
   rows: unknown,
   columns: readonly string[],
   where: string,
-): asserts rows is TableCell[][] {
+): asserts rows is TableRow[] {
   assert(isList(rows) && rows.length > 0, `${where} needs at least one row`);
   rows.forEach((row, index) => {
+    if (typeof row === "string") {
+      text(row, `${where} group row ${index + 1}`);
+      return;
+    }
     assert(
       isList(row) && row.length === columns.length && row.every(tableCell),
       `${where} row ${index + 1} needs one text, link or structure cell per column`,

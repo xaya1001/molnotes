@@ -98,6 +98,7 @@ export type TableCell =
   | {
       figure: import("../../../shared/chemical-library/types.ts").FigureReference;
     };
+export type TableRow = TableCell[] | string;
 export interface TableSpan {
   label: string;
   from: number;
@@ -108,7 +109,7 @@ export interface TableBlock extends BlockBase {
   caption: string;
   columns: string[];
   spans?: TableSpan[];
-  rows: DataRef<TableCell[][]>;
+  rows: DataRef<TableRow[]>;
   note?: string;
   /** The first cell of each row is a row header. */
   rowHeader?: boolean;

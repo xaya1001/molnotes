@@ -114,12 +114,18 @@ test("all list filters, ordering, paging and view restore from URL", async ({
     await expect(count).toHaveText(`匹配 ${n} / 12 条`);
   }
   await page.getByRole("button", { name: "清除筛选" }).click();
+  await page
+    .getByRole("combobox", { name: "浏览方式", exact: true })
+    .selectOption("cards");
   await page.getByRole("button", { name: "下一页 →" }).click();
   await expect(page).toHaveURL(/page=2/);
   await page.reload();
   await expect(page.getByRole("navigation", { name: "分页" })).toContainText(
     "2 / 2",
   );
+  await page
+    .getByRole("combobox", { name: "浏览方式", exact: true })
+    .selectOption("table");
   await page
     .getByRole("combobox", { name: "浏览方式", exact: true })
     .selectOption("cards");

@@ -10,6 +10,11 @@ import {
   prepareCompound,
   prepareInputVariant,
 } from "../shared/chemical-library/chemistry.ts";
+import {
+  tableDisplayText,
+  tableTextAlign,
+} from "../src/ui/topic/table-text.ts";
+import { blockSearchText } from "../shared/topic-blocks.ts";
 import { validateTopicContent } from "../shared/topic-content.ts";
 import { recordsCsv, filterRecords } from "../src/ui/topic/patent-filter.ts";
 import type { Library } from "../shared/chemical-library/types.ts";
@@ -156,4 +161,37 @@ test("unresolved table structures and invalid compound variants reject compilati
       compileTableStructures(content, { [c.id]: c }, "sample"),
     );
   }
+});
+
+test("table group rows span the data columns and remain searchable", async () => {
+  const content = await fixture();
+  content.chapters[0].blocks = [
+    {
+      type: "table",
+      caption: "Samples",
+      columns: ["ID", "Readout"],
+      rows: ["Series **2**", ["**2a**", "81"]],
+    },
+  ];
+  assert.doesNotThrow(() => validateTopicContent(content));
+  assert.ok(
+    blockSearchText(content.chapters[0].blocks).includes("Series **2**"),
+  );
+});
+
+test("table text keeps quantities together and aligns prose separately from short readings", () => {
+  assert.equal(
+    tableDisplayText("25 °C; 2 h; 4 nM; 95 %"),
+    "25\u00a0°C; 2\u00a0h; 4\u00a0nM; 95\u00a0%",
+  );
+  assert.equal(
+    tableTextAlign("A long experimental annotation with several conditions"),
+    "start",
+  );
+  assert.equal(
+    tableDisplayText("≥ 95%; ≤ 2 h; <0.1; > 5 nM; ~ 3"),
+    "≥\u00a095%; ≤\u00a02\u00a0h; <0.1; >\u00a05\u00a0nM; ~\u00a03",
+  );
+  assert.equal(tableTextAlign("0.74\n8.2"), "center");
+  assert.equal(tableTextAlign("假定 25 °C"), "center");
 });

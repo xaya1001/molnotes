@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TableText from "./TableText.vue";
 import { measurementText } from "./patent-measurements.ts";
 import type { Measurement, Assignment } from "./patent.ts";
 import SourceText from "./SourceText.vue";
@@ -126,9 +127,9 @@ watch(
   <span v-else-if="field.kind === 'tags'">{{
     (record[field.key] as string[] | undefined)?.join(" · ")
   }}</span>
-  <span v-else-if="field.kind !== 'body'">{{
-    record[field.key] ?? "未列"
-  }}</span>
+  <span v-else-if="field.kind !== 'body'"
+    ><TableText :text="String(record[field.key] ?? '未列')"
+  /></span>
   <SourceRef v-if="field.ref" :reference="field.ref" :source="record.source" />
 </template>
 <style scoped>
