@@ -2,7 +2,7 @@ export const figureStyle = {
   values: {
     "--chemical-bond": "32px",
     "--chemical-route-width": "1882px",
-    "--chemical-route-gap": "25.6px",
+    "--chemical-route-gap": "19.2px",
     "--chemical-min-bond": "20px",
     "--chemical-min-text": "11px",
     "--chemical-min-script": "11px",
