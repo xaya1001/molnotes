@@ -25,7 +25,7 @@ import { assetResource, type AssetStage } from "./asset-stage.ts";
 
 export async function readChemicalLibrary(root: string, stage?: AssetStage) {
   const entries: Library = {},
-    files: Record<string, string> = {},
+    entryFiles: Record<string, string> = {},
     assets: UnitAsset[] = [];
   const base = join(root, "library");
   for (const dir of [
@@ -65,7 +65,7 @@ export async function readChemicalLibrary(root: string, stage?: AssetStage) {
       )
         throw new Error(`${value.id}: wrong library directory`);
       entries[value.id] = value;
-      files[value.id] = path;
+      entryFiles[value.id] = path;
     }
   }
   validateLibrary(entries);
@@ -104,7 +104,7 @@ export async function readChemicalLibrary(root: string, stage?: AssetStage) {
       });
     }
   }
-  return { entries, assets, files };
+  return { entries, assets, files: entryFiles };
 }
 export function libraryUsage(
   entries: Library,

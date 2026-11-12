@@ -21,6 +21,7 @@ import {
   validateLibraryEntry,
   validateLibrary,
 } from "../shared/chemical-library/contract.ts";
+import { finishFigureEntry } from "./figure-output.ts";
 import { routeMetrics } from "../shared/chemical-library/routes.ts";
 import {
   validateFigureInput,
@@ -164,6 +165,7 @@ export async function compileFigure(
   const rd = await moleculeToolkit(),
     entries: Library = structuredClone(existing),
     generated = new Set<string>();
+  for (const entry of Object.values(entries)) finishFigureEntry(entry);
   const previous = Object.values(entries).find(
     (e) => e.sourceKey === sourceKey && !e.owner,
   );
@@ -213,10 +215,12 @@ export async function compileFigure(
       if (!compound) {
         const cid = "cmp_" + figureKey(signature);
         if (spec.coordgen ?? input.coordgen) m.set_new_coords(true);
-        compound = prepareCompound(
-          rd,
-          { id: cid, title: "Compound", smiles: unmapped, sources },
-          (spec.coordgen ?? input.coordgen) ? m.get_molblock() : undefined,
+        compound = finishFigureEntry(
+          prepareCompound(
+            rd,
+            { id: cid, title: "Compound", smiles: unmapped, sources },
+            (spec.coordgen ?? input.coordgen) ? m.get_molblock() : undefined,
+          ),
         );
         const abbrevs = [
           ...new Set(
@@ -871,6 +875,7 @@ export async function compileFigure(
   }
   entries[id] = top;
   generated.add(id);
+  for (const gid of generated) finishFigureEntry(entries[gid]);
   validateLibrary(entries);
   for (const gid of generated) {
     const e = entries[gid];

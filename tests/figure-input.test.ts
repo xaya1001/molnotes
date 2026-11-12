@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFile, readdir, mkdtemp, writeFile } from "node:fs/promises";
+import {
+  readFile,
+  readdir,
+  mkdtemp,
+  writeFile,
+  unlink,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execFile } from "node:child_process";
@@ -79,7 +85,10 @@ test("chemical identity ignores source maps and labels, retaining stereo, isotop
     m = r.entries[r.reference.ref] as Mechanism;
   assert.equal(m.frames[0].scene.molecules[0].compound, saved.id);
   assert.equal(m.frames[0].scene.labels![0].at.atom, "a23");
-  assert.deepEqual(r.entries[saved.id], saved);
+  const retained = r.entries[saved.id] as Compound;
+  assert.deepEqual(retained.atomIds, saved.atomIds);
+  assert.equal(retained.graph, saved.graph);
+  assert.equal(retained.title, "Saved");
   const route = await compileFigure(
     {
       compounds: {
@@ -228,7 +237,7 @@ test("mechanism YAML preserves explanation, maps, arrow IDs and focus", async ()
   const comparison = await compileFigure(await fixture("comparison")),
     cmp = comparison.entries[comparison.reference.ref] as Mechanism;
   assert.equal(cmp.category, "comparison");
-  assert.deepEqual(cmp.frames[0].scene.reactionArrows, []);
+  assert.equal(cmp.frames[0].scene.reactionArrows, undefined);
   for (const arrow of [
     "forward",
     "equilibrium",
@@ -337,9 +346,41 @@ test("compilation stores source and stable entries, and recompilation writes no 
     return files;
   };
   const before = await scan();
+  const first = parse(
+    before[
+      `reactions/${(parse(before[`routes/${id}.yaml`]) as Route).steps[0].reaction}.yaml`
+    ],
+  ) as Reaction;
+  assert.equal(first.scene.arrows, undefined);
+  assert.equal(first.scene.labels, undefined);
+  assert.equal(first.scene.focus, undefined);
+  assert.ok(
+    first.scene.molecules.every(
+      (p) =>
+        Number(p.at.x.toFixed(3)) === p.at.x &&
+        Number(p.at.y.toFixed(3)) === p.at.y,
+    ),
+  );
+
   assert.equal(before[`sources/${id}.yaml`], text);
   await run(process.execPath, args);
   assert.deepEqual(await scan(), before);
+  const compounds = Object.entries(before).filter(([path]) =>
+    path.startsWith("compounds/"),
+  );
+  const [yamlPath, compoundText] = compounds.find(
+    ([, text]) => parse(text).variants,
+  )!;
+  const compound = parse(compoundText),
+    jsonPath = join(root, "library", yamlPath.replace(/\.yaml$/, ".json"));
+  await writeFile(jsonPath, JSON.stringify(compound));
+  await unlink(join(root, "library", yamlPath));
+  await run(process.execPath, args);
+  const { readChemicalLibrary } =
+    await import("../scripts/content/chemical-library.ts");
+  const loaded = await readChemicalLibrary(root);
+  assert.equal(loaded.entries[compound.id].kind, "compound");
+
   await writeFile(
     source,
     text.replace("First transformation.", "Updated explanation."),

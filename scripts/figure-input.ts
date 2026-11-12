@@ -81,9 +81,9 @@ export interface FigureInput {
 }
 
 type Rule = (v: unknown, path: string) => void;
-const fail = (p: string, message: string): never => {
+function fail(p: string, message: string): never {
   throw new Error(`${p}: ${message}`);
-};
+}
 const text: Rule = (v, p) => {
   if (typeof v !== "string" && (typeof v !== "number" || !Number.isFinite(v)))
     fail(p, "expected text or number");
