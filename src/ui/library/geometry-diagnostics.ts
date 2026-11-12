@@ -214,14 +214,14 @@ export function figureGeometryDiagnostics(
     const sorted = [...lengths].sort((a, b) => a - b),
       median = sorted[Math.floor(sorted.length / 2)],
       maximum = Math.max(...lengths);
-    if (maximum > median * 1.4 + 0.2)
+    if (maximum > median * 1.5 + 0.2)
       add(
         "BOND_TOO_LONG",
         [molecule.data.molecule!],
         "Restore the stretched bond to the molecule's shared bond length",
         undefined,
         maximum / median,
-        1.4,
+        1.5,
       );
     const matrix = molecule.matrix!;
     const minimum = Math.min(...lengths) * Math.hypot(matrix[0], matrix[1]);

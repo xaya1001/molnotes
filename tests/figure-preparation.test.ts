@@ -37,9 +37,14 @@ test("bond diagnostics catch a stretched bond within an enlarged structure", asy
     );
   assert.ok(!(await diagnostics()).some((d) => d.code === "BOND_TOO_LONG"));
   const p = c.layout.coords[c.atomIds[0]],
-    q = c.layout.coords[c.atomIds[1]];
-  p.x = q.x + 2 * (p.x - q.x);
-  p.y = q.y + 2 * (p.y - q.y);
+    q = c.layout.coords[c.atomIds[1]],
+    dx = p.x - q.x,
+    dy = p.y - q.y;
+  p.x = q.x + Math.SQRT2 * dx;
+  p.y = q.y + Math.SQRT2 * dy;
+  assert.ok(!(await diagnostics()).some((d) => d.code === "BOND_TOO_LONG"));
+  p.x = q.x + 2 * dx;
+  p.y = q.y + 2 * dy;
   assert.ok((await diagnostics()).some((d) => d.code === "BOND_TOO_LONG"));
 });
 
