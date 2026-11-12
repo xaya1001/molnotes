@@ -5,11 +5,14 @@ import { useTopic } from "./context.ts";
 import { patentData, type RecordId, type Assignment } from "./patent.ts";
 import { filterRecords, queryText, recordsCsv } from "./patent-filter.ts";
 import { substructureMatches } from "./patent-chemistry.ts";
+import { tableTextAlign } from "./table-text.ts";
+import { provideTableStructureScales } from "./table-structure-scale.ts";
 import TableText from "./TableText.vue";
 import RecordValue from "./RecordValue.vue";
 import SourceRef from "./SourceRef.vue";
 import PageHeading from "../PageHeading.vue";
 import { downloadFile } from "../notify.ts";
+provideTableStructureScales();
 const props = defineProps<{
   collection: string;
   mode?: "list" | "detail" | "compare";
@@ -652,7 +655,13 @@ const incoming = computed(() =>
                     />
                   </div>
                 </th>
-                <td v-for="field in tableFields" :key="field.key">
+                <td
+                  v-for="field in tableFields"
+                  :key="field.key"
+                  :style="{
+                    textAlign: tableTextAlign(String(record[field.key] ?? '')),
+                  }"
+                >
                   <RecordValue
                     :collection="collection"
                     :field="field"
@@ -793,6 +802,9 @@ dt {
 }
 .data-table tbody tr + tr td {
   border-top: none;
+}
+.data-table thead th {
+  font-weight: 600;
 }
 .record-identifier a {
   white-space: nowrap;

@@ -10,6 +10,10 @@ import {
   prepareCompound,
   prepareInputVariant,
 } from "../shared/chemical-library/chemistry.ts";
+import {
+  tableDisplayText,
+  tableTextAlign,
+} from "../src/ui/topic/table-text.ts";
 import { blockSearchText } from "../shared/topic-blocks.ts";
 import { validateTopicContent } from "../shared/topic-content.ts";
 import { recordsCsv, filterRecords } from "../src/ui/topic/patent-filter.ts";
@@ -173,4 +177,17 @@ test("table group rows span the data columns and remain searchable", async () =>
   assert.ok(
     blockSearchText(content.chapters[0].blocks).includes("Series **2**"),
   );
+});
+
+test("table text keeps quantities together and aligns prose separately from short readings", () => {
+  assert.equal(
+    tableDisplayText("25 °C; 2 h; 4 nM; 95 %"),
+    "25\u00a0°C; 2\u00a0h; 4\u00a0nM; 95\u00a0%",
+  );
+  assert.equal(
+    tableTextAlign("A long experimental annotation with several conditions"),
+    "start",
+  );
+  assert.equal(tableTextAlign("0.74\n8.2"), "center");
+  assert.equal(tableTextAlign("假定 25 °C"), "center");
 });

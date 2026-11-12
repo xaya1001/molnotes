@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { tableTextAlign } from "./table-text.ts";
+import { provideTableStructureScales } from "./table-structure-scale.ts";
 import TableText from "./TableText.vue";
 import TableStructure from "./TableStructure.vue";
 import type { TableRow, TableSpan } from "./blocks.ts";
@@ -12,6 +14,7 @@ import TopicRefs from "./TopicRefs.vue";
  * buttons), a link or a compound drawing; data columns are centered; with `rowHeader` the first
  * cell of each row is a row header.
  */
+provideTableStructureScales();
 const props = defineProps<{
   caption: string;
   columns: string[];
@@ -83,6 +86,15 @@ const pieces = (cell: string) =>
                 v-for="(cell, i) in row"
                 :key="i"
                 :scope="rowHeader && i === 0 ? 'row' : undefined"
+                :style="{
+                  textAlign: tableTextAlign(
+                    typeof cell === 'string'
+                      ? cell
+                      : 'text' in cell
+                        ? cell.text
+                        : '',
+                  ),
+                }"
               >
                 <TableStructure
                   v-if="typeof cell !== 'string' && 'figure' in cell"

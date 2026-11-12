@@ -31,6 +31,15 @@ async function screenshot(
 test("table groups and compound cells share library identity and keep local phone scrolling", async ({
   page,
 }, info) => {
+  await page.route("**/api/library", async (route) => {
+    const response = await route.fetch();
+    const library = await response.json();
+    const key = Object.keys(library.renders).find((key) =>
+      key.includes("cmp_table_sample"),
+    )!;
+    library.renders[key].minimumScale = 0.9;
+    await route.fulfill({ response, json: library });
+  });
   await page.goto("/sites/table-samples/start");
   const table = page.getByRole("table", {
     name: "条件优化",
@@ -47,6 +56,17 @@ test("table groups and compound cells share library identity and keep local phon
     2,
   );
   await expect(table.locator(".table-structure svg")).toHaveCount(3);
+  const scales = await table
+    .locator(".table-structure svg")
+    .evaluateAll((elements) =>
+      elements.map(
+        (svg) =>
+          svg.getBoundingClientRect().width / Number(svg.getAttribute("width")),
+      ),
+    );
+  expect(Math.min(...scales)).toBeGreaterThanOrEqual(0.899);
+  expect(Math.max(...scales) - Math.min(...scales)).toBeLessThan(0.001);
+
   await expect(table.locator("thead strong")).toHaveCount(1);
   await expect(
     table.locator("thead tr:last-child th").nth(2).locator("br"),
@@ -161,7 +181,13 @@ test("record tables stack values and names and paginate twelve rows", async ({
       label: "IC50\n(nM)",
       kind: "text",
     });
+    collection.fields.push({
+      key: "annotation",
+      label: "Details",
+      kind: "text",
+    });
     for (const record of collection.records) {
+      record.annotation = "A long experimental annotation at 25 °C for 2 h";
       record.name = record.id === 1 ? "Sample A" : "";
       record.readings = "0.7\n8.2";
     }
@@ -179,6 +205,13 @@ test("record tables stack values and names and paginate twelve rows", async ({
   await expect(first.locator(".record-identifier strong")).toHaveCount(1);
   await expect(first.locator(".identifier-name")).toHaveCount(1);
   await expect(first.locator("td").nth(4).locator("br")).toHaveCount(1);
+  await expect(first.locator("td").nth(4)).toHaveCSS("text-align", "center");
+  await expect(first.locator("td").nth(5)).toHaveCSS("text-align", "start");
+  await expect(page.locator(".record-collection thead th").first()).toHaveCSS(
+    "font-weight",
+    "600",
+  );
+
   for (const table of await page.locator(".record-collection table").all()) {
     expect(
       await table.evaluate(
