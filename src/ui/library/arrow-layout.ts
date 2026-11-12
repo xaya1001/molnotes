@@ -1,3 +1,10 @@
+import {
+  angleBetween,
+  polygonHitsSegment,
+  polygonsOverlap,
+  segmentDistance,
+  crosses,
+} from "./geometry-collision.ts";
 import type {
   Point,
   ElectronArrow,
@@ -60,65 +67,6 @@ export function arrowHead(
 const cross = (a: Point, b: Point, c: Point) =>
   (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 
-export function insidePolygon(p: Point, polygon: Point[]) {
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const a = polygon[i],
-      b = polygon[j];
-    if (
-      a.y > p.y !== b.y > p.y &&
-      p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x
-    )
-      inside = !inside;
-  }
-  return inside;
-}
-export function polygonHitsSegment(
-  polygon: Point[],
-  a: Point,
-  b: Point,
-  pad = 0,
-) {
-  return (
-    insidePolygon(a, polygon) ||
-    insidePolygon(b, polygon) ||
-    polygon.some((p, i) => {
-      const q = polygon[(i + 1) % polygon.length];
-      return (
-        crosses(a, b, p, q) ||
-        Math.min(
-          segmentDistance(a, p, q),
-          segmentDistance(b, p, q),
-          segmentDistance(p, a, b),
-          segmentDistance(q, a, b),
-        ) <= pad
-      );
-    })
-  );
-}
-export function polygonsOverlap(a: Point[], b: Point[], pad = 0) {
-  return (
-    insidePolygon(a[0], b) ||
-    b.some((p, i) => polygonHitsSegment(a, p, b[(i + 1) % b.length], pad))
-  );
-}
-
-export function angleBetween(a: Point, b: Point) {
-  return (
-    (Math.acos(
-      Math.max(
-        -1,
-        Math.min(
-          1,
-          (a.x * b.x + a.y * b.y) /
-            (Math.hypot(a.x, a.y) * Math.hypot(b.x, b.y)),
-        ),
-      ),
-    ) *
-      180) /
-    Math.PI
-  );
-}
 const vector = (a: Point, b: Point) => ({ x: b.x - a.x, y: b.y - a.y });
 
 /** Orient the head along the visible cutoff-to-tip chord. The shaft ends at
@@ -184,23 +132,6 @@ export function solidArrow(
   };
 }
 
-function segmentDistance(p: Point, a: Point, b: Point) {
-  const dx = b.x - a.x,
-    dy = b.y - a.y,
-    t = Math.max(
-      0,
-      Math.min(
-        1,
-        ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy || 1),
-      ),
-    );
-  return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
-}
-function crosses(a: Point, b: Point, c: Point, d: Point) {
-  const s = (p: Point, q: Point, r: Point) =>
-    (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
-  return s(a, b, c) * s(a, b, d) < 0 && s(c, d, a) * s(c, d, b) < 0;
-}
 function cubicPoints(a: Point, b: Point, c: Point, d: Point) {
   return Array.from({ length: 25 }, (_, i) => {
     const t = i / 24,
@@ -274,6 +205,33 @@ export function routeElectronArrow(
       p = q;
     }
   }
+  return routeElectronArrowGeometry(
+    from,
+    to,
+    B,
+    { boxes, heads, segments },
+    clearance,
+    bend,
+    directions,
+  );
+}
+
+export function routeElectronArrowGeometry(
+  from: Point,
+  to: Point,
+  B: number,
+  obstacles: { boxes: Rect[]; heads: Point[][]; segments: Segment[] },
+  clearance: (end: "from" | "to", angle: number) => number,
+  bend?: "left" | "right",
+  directions?: {
+    from?: number[];
+    to?: number[];
+    compact?: boolean;
+    half?: boolean;
+  },
+): NonNullable<ElectronArrow["curve"]> {
+  const { boxes, heads, segments } = obstacles;
+
   const direction = (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI;
   const length = Math.max(B * 1.25, distance(from, to) * 0.5);
   let best: NonNullable<ElectronArrow["curve"]> | undefined,

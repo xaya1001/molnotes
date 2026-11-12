@@ -7,6 +7,10 @@ import {
   validateLibraryEntry,
 } from "../shared/chemical-library/contract.ts";
 import { figureBrowser } from "./figure-browser.ts";
+import { figureBuildRunner } from "./content/figure-build.ts";
+import { diagnoseFigure } from "./figure-diagnostics.ts";
+import { parseFigureStyle } from "../src/ui/library/scene-geometry.ts";
+import { geometryObservation } from "../src/ui/library/geometry-observation.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import {
   prepareCompound,
@@ -87,7 +91,13 @@ if (input) {
       references.push(ref);
     }
   }
-  const runner = await figureBrowser(entries, resolve(root));
+  const css = await readFile(
+      new URL("../src/ui/styles/tokens.css", import.meta.url),
+      "utf8",
+    ),
+    style = parseFigureStyle(css);
+  const runner = figureBuildRunner(entries, resolve(root), css, "preview");
+  let browser: Awaited<ReturnType<typeof figureBrowser>> | undefined;
   let failed = false;
   try {
     for (const entry of Object.values(entries).filter(
@@ -104,8 +114,36 @@ if (input) {
         for (const width of value("--width")
           ? [Number(value("--width"))]
           : [1366]) {
-          await runner.prepareBatch();
-          const result = await runner.render(ref, width);
+          const prepared = await runner.prepare(ref, 0);
+          let result;
+          if (prepared.kind === "chemical") {
+            const geometry = prepared.geometry;
+            const diagnostics = diagnoseFigure(geometry, style, width);
+            result = {
+              svg: prepared.svg,
+              diagnostics,
+              width: geometry.width,
+              height: geometry.height,
+              minimumScale: geometry.minimumScale,
+              atoms: geometry.atomPoints,
+              geometry: geometryObservation(geometry, diagnostics),
+            };
+            if (!args.includes("--check")) {
+              browser ??= await figureBrowser(entries, resolve(root));
+              await browser.prepareBatch();
+              await browser.mount({ svg: prepared.svg, ...geometry }, 0, width);
+              await browser.page
+                .locator("#title")
+                .evaluate(
+                  (element, title) => (element.textContent = title),
+                  entry.title,
+                );
+            }
+          } else {
+            browser ??= await figureBrowser(entries, resolve(root));
+            await browser.prepareBatch();
+            result = await browser.render(ref, width);
+          }
           const name = `${ref.ref}${"frame" in ref ? "-" + ref.frame : ""}-${width}`;
           if (!args.includes("--check") && result.svg !== null)
             await writeFile(join(out, name + ".svg"), result.svg);
@@ -114,10 +152,10 @@ if (input) {
             JSON.stringify(result, null, 2),
           );
           if (!args.includes("--check")) {
-            await runner.page
+            await browser!.page
               .locator("#canvas")
               .screenshot({ path: join(out, name + ".png") });
-            await runner.page.screenshot({
+            await browser!.page.screenshot({
               path: join(out, name + "-context.png"),
             });
           }
@@ -130,7 +168,11 @@ if (input) {
     if (selected && !entries[selected])
       throw new Error(`Unknown entry ${selected}`);
   } finally {
-    await runner.close();
+    try {
+      await browser?.close();
+    } finally {
+      await runner.close();
+    }
   }
   console.log(
     `Rendered in ${((performance.now() - started) / 1000).toFixed(1)} s`,

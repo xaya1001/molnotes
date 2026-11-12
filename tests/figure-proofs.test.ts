@@ -7,6 +7,12 @@ import {
   verifyFigureProofs,
   type ProofOptions,
 } from "../scripts/content/figure-proofs.ts";
+import {
+  figureGroup,
+  figurePath,
+  geometrySvg,
+} from "../src/ui/library/geometry-tree.ts";
+import type { FigureGeometry } from "../shared/chemical-library/geometry.ts";
 import type {
   Library,
   Compound,
@@ -54,33 +60,57 @@ async function fixture(t: TestContext) {
   };
   const calls: { ref: string; width: number }[] = [],
     blocked = new Set<string>();
-  let starts = 0;
+  let starts = 0,
+    diagnosed = 0,
+    thumbnails = 0;
+  const geometry = (ref: string): FigureGeometry => {
+    const root = figureGroup([]);
+    root.attributes["data-figure"] = ref;
+    root.attributes["data-input"] = JSON.stringify({
+      entry: library[ref],
+      compounds: ref === "rxn_example" ? [library.cmp_a, library.cmp_b] : [],
+    });
+    root.children.push(figurePath("M0 0L32 0"));
+    return {
+      format: 1,
+      width: 100,
+      height: 100,
+      minimumScale: 1,
+      atomPoints: {},
+      root,
+    };
+  };
   const options: ProofOptions = {
     directory,
     renderer: "renderer-one",
+    diagnostics: "diagnostics-one",
+    processRenderer: "process-one",
     async createRunner() {
       starts++;
-      const current: string[] = [];
       return {
-        async render(reference, width, slot = 0) {
-          current[slot] = reference.ref;
-          calls.push({ ref: reference.ref, width });
-          return {
-            diagnostics: blocked.has(reference.ref)
-              ? [
-                  {
-                    code: "BOND_TOO_SMALL",
-                    severity: "error" as const,
-                    object: reference.ref,
-                    elements: ["a1", "a2"],
-                    message: "Restore bond geometry",
-                  },
-                ]
-              : [],
-          };
+        async prepare(reference) {
+          calls.push({ ref: reference.ref, width: 1366 });
+          const value = geometry(reference.ref);
+          return { kind: "chemical", geometry: value, svg: geometrySvg(value) };
         },
-        async thumbnail(slot = 0) {
-          return Buffer.from(`example preview ${current[slot]}`);
+        async diagnose(value) {
+          diagnosed++;
+          const ref = value.root.attributes["data-figure"];
+          return blocked.has(ref)
+            ? [
+                {
+                  code: "BOND_TOO_SMALL",
+                  severity: "error",
+                  object: ref,
+                  elements: ["a1", "a2"],
+                  message: "Restore bond geometry",
+                },
+              ]
+            : [];
+        },
+        async thumbnail(reference) {
+          thumbnails++;
+          return Buffer.from(`example preview ${reference.ref}`);
         },
         async close() {},
       };
@@ -95,6 +125,9 @@ async function fixture(t: TestContext) {
     options,
     run,
     starts: () => starts,
+    diagnosed: () => diagnosed,
+    thumbnails: () => thumbnails,
+    geometry,
   };
 }
 
@@ -116,22 +149,28 @@ test("a changed compound invalidates its dependent figure and preserves unrelate
   await f.run();
   assert.deepEqual(f.calls.map((r) => r.ref).sort(), ["cmp_a", "rxn_example"]);
 });
-test("a changed renderer fingerprint invalidates every desktop proof", async (t) => {
+test("a renderer change recomputes geometry and reuses unchanged proofs and thumbnails", async (t) => {
   const f = await fixture(t);
   await f.run();
   f.calls.length = 0;
   await f.run();
   assert.equal(f.calls.length, 0);
+  const diagnosed = f.diagnosed(),
+    thumbnails = f.thumbnails();
   f.options.renderer = "renderer-two";
   await f.run();
   assert.equal(f.calls.length, 4);
+  assert.equal(f.diagnosed(), diagnosed);
+  assert.equal(f.thumbnails(), thumbnails);
 });
 test("a corrupt cache record is rendered again", async (t) => {
   const f = await fixture(t);
   await f.run();
   f.calls.length = 0;
-  const record = (await readdir(f.directory)).find((p) => p.endsWith(".json"))!;
-  await writeFile(join(f.directory, record), "{");
+  const record = (await readdir(join(f.directory, "inputs"))).find((p) =>
+    p.endsWith(".json"),
+  )!;
+  await writeFile(join(f.directory, "inputs", record), "{");
   await f.run();
   assert.equal(f.calls.length, 1);
 });
@@ -186,11 +225,12 @@ test("all failures are reported after successful proofs have been cached", async
   f.calls.length = 0;
   f.blocked.clear();
   const result = await f.run();
-  assert.equal(result.stats.hits, 2);
-  assert.equal(result.stats.rendered, 2);
+  assert.equal(result.stats.proofHits, 2);
+  assert.equal(result.stats.diagnosed, 2);
+  assert.equal(result.stats.prepared, 0);
 });
 
-test("two page slots render concurrently and commit previews in reference order", async (t) => {
+test("two worker slots prepare concurrently and commit previews in reference order", async (t) => {
   const f = await fixture(t);
   let active = 0,
     maximum = 0;
@@ -202,15 +242,19 @@ test("two page slots render concurrently and commit previews in reference order"
       batches++;
       await new Promise((resolve) => setTimeout(resolve, 1));
     },
-    async render(_reference, _width, slot = 0) {
+    async prepare(reference, slot) {
       assert.ok(!slots.has(slot));
       slots.add(slot);
       maximum = Math.max(maximum, ++active);
       await new Promise((resolve) => setTimeout(resolve, slot === 0 ? 10 : 1));
       active--;
-      return { diagnostics: [] };
+      const geometry = f.geometry(reference.ref);
+      return { kind: "chemical", geometry, svg: geometrySvg(geometry) };
     },
-    async thumbnail(slot = 0) {
+    async diagnose() {
+      return [];
+    },
+    async thumbnail(_reference, _render, slot) {
       slots.delete(slot);
       return Buffer.from(`page ${slot}`);
     },
@@ -220,15 +264,34 @@ test("two page slots render concurrently and commit previews in reference order"
   });
   const result = await f.run();
   assert.equal(maximum, 2);
-  assert.equal(batches, 2);
+  assert.equal(batches, 1);
   assert.deepEqual(Object.keys(result.previews), Object.keys(f.library));
   assert.deepEqual(
-    result.assets.map((asset) => asset.bytes),
-    [
-      Buffer.from("page 0"),
-      Buffer.from("page 1"),
-      Buffer.from("page 0"),
-      Buffer.from("page 1"),
-    ],
+    result.assets
+      .filter((asset) => asset.content_type === "image/png")
+      .map((asset) => asset.bytes),
+    [Buffer.from("page 0"), Buffer.from("page 1")],
+  );
+  const urls = Object.values(result.previews);
+  assert.equal(urls[0], urls[2]);
+  assert.equal(urls[1], urls[3]);
+});
+
+test("diagnostic code changes reuse geometry and thumbnails but recompute proofs", async (t) => {
+  const f = await fixture(t);
+  const first = await f.run();
+  f.calls.length = 0;
+  const thumbnails = f.thumbnails();
+  f.options.diagnostics = "diagnostics-two";
+  const result = await f.run();
+  assert.equal(f.calls.length, 0);
+  assert.equal(result.stats.diagnosed, 4);
+  assert.equal(f.thumbnails(), thumbnails);
+  assert.deepEqual(result.renders, first.renders);
+  assert.equal(Object.keys(result.renders).length, 4);
+  assert.ok(
+    result.assets
+      .filter((asset) => asset.content_type === "image/svg+xml")
+      .every((asset) => asset.size > 0),
   );
 });

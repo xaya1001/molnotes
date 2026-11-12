@@ -226,8 +226,17 @@ export interface Diagnostic {
   field?: string;
 }
 export interface LibrarySnapshot {
+  renders?: Record<string, LibraryFigureRender>;
   previews?: Record<string, string>;
   audit?: { orphans: string[]; duplicates: string[][] };
   entries: Library;
   uses: Record<string, { path: string; title: string }[]>;
+}
+
+export interface LibraryFigureRender {
+  asset: string;
+  width: number;
+  height: number;
+  minimumScale: number;
+  diagnostics: Diagnostic[];
 }

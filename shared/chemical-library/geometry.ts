@@ -8,6 +8,13 @@ export interface FigureBox {
   width: number;
   height: number;
 }
+export type FigureRect = FigureBox & {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+};
+
 export interface FigurePaint {
   fill: string;
   stroke: string;
@@ -51,6 +58,10 @@ export type FigureNode = NodeBase &
     | {
         kind: "text";
         text: string;
+        position: Point;
+        fontSize: number;
+        anchor: "start" | "middle" | "end";
+        baseline: "alphabetic" | "central";
         runs: FigureTextRun[];
         advance: number;
         glyphs: FigureGlyph[];
