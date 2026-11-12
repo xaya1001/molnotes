@@ -842,3 +842,30 @@ test("saved product separators are rendered once", async () => {
     await browser.close();
   }
 });
+
+test("page-owned generated compounds stay out of the library list and search", async ({
+  page,
+}) => {
+  const library = await fixture();
+  library.entries.cmp_owned = {
+    ...library.entries.cmp_example,
+    id: "cmp_owned",
+    title: "Page-only structure",
+    owner: "sites/sample/collections/examples",
+  };
+  library.entries.rxn_example.owner = "rte_example";
+  library.uses.cmp_owned = [{ path: "/sites/sample", title: "Sample" }];
+  await page.route("**/api/library", (route) =>
+    route.fulfill({ json: library }),
+  );
+  await page.goto("/library/");
+  await expect(page.locator(".entry")).toHaveCount(2);
+  await expect(page.locator("#cmp_example")).toBeVisible();
+  await expect(page.locator("#cmp_owned")).toHaveCount(0);
+  const search = page.getByRole("searchbox", { name: "查找" });
+  await search.fill("Page-only structure");
+  await expect(page.locator(".entry")).toHaveCount(0);
+  await search.fill("Example structure");
+  await expect(page.locator(".entry")).toHaveCount(1);
+  await expect(page.locator("#cmp_example")).toBeVisible();
+});

@@ -145,7 +145,7 @@ git diff --word-diff=plain --word-diff-regex='[A-Za-z0-9_]+|[^[:space:]]' main..
 
 ## 专题表格
 
-`table` 块使用 `caption`、`columns`、`rows`（二维数组或 `data` 键），可选 `note` 和 `rowHeader`。单元格是文字、`{text,href}` 链接，或化合物结构：`{ref:"cmp_…",variant?:"命名版式"}`、`{smiles:"CCO"}`。结构引用使用图库的版式；SMILES 按完整化学身份复用已有化合物，缺少时在内容快照中生成化合物条目。单元格使用图库画法，点击放大结构。
+`table` 块使用 `caption`、`columns`、`rows`（二维数组或 `data` 键），可选 `note` 和 `rowHeader`。单元格是文字、`{text,href}` 链接，或化合物结构：`{ref:"cmp_…",variant?:"命名版式"}`、`{smiles:"CCO"}`。结构引用使用图库的版式；SMILES 按完整化学身份复用已有化合物，缺少时在内容快照中生成化合物条目。自动生成的条目记录所属专题或集合的 `owner`，只在引用页面显示，不进入图库列表与搜索；已存在的图库化合物仍保留原有归属与展示。反向引用照常记录。单元格使用图库画法，点击放大结构。
 
 `spans:[{label:"产物",from:4,to:5}]` 在普通表头上方增加跨列标题。列号从 1 开始，包含两端；可声明多个不重叠的连续范围，未覆盖的列留空。表格在窄屏内横向滚动。越界、重叠、无效 SMILES、缺失化合物或命名版式均拒绝发布。
 

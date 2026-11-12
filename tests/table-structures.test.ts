@@ -90,13 +90,15 @@ test("table structures reuse compound identities and named layouts, including ke
       ],
     },
   ];
-  await compileTableStructures(content, library, "sample");
+  await compileTableStructures(content, library, "sites/sample/content.json");
   const resolved = resolveCompoundSlots(content, library, "sample");
   const checked = validateTopicContent(resolved.value);
   assert.equal(content.data.rows[0][0].figure.variant, "reverse");
   assert.equal(content.data.rows[0][1].figure.ref, compound.id);
   const generated = library[content.data.rows[0][2].figure.ref];
   assert.equal(generated.kind, "compound");
+  assert.equal(generated.owner, "sites/sample");
+  assert.equal(compound.owner, undefined);
   assert.doesNotThrow(() => validateLibraryEntry(generated));
   const usage = libraryUsage(library, [
     { value: checked, path: "/samples", title: "Samples" },
@@ -114,7 +116,8 @@ test("record structures share drawings while queries and CSV keep their original
     source: "alpha",
     sort: "amount",
   }).map((r) => r.id);
-  await compileTableStructures(content, {}, "sample");
+  const library: Library = {};
+  await compileTableStructures(content, library, "sites/sample/content.json");
   const collection = validateTopicContent(content).data!.collections!.examples;
   assert.equal(recordsCsv(collection, collection.records), csv);
   assert.deepEqual(
@@ -124,6 +127,10 @@ test("record structures share drawings while queries and CSV keep their original
     expected,
   );
   assert.ok(collection.structureFigures!["1"].smiles.ref.startsWith("cmp_"));
+  assert.equal(
+    library[collection.structureFigures!["1"].smiles.ref].owner,
+    "sites/sample/collections/examples",
+  );
   assert.equal(collection.records[0].smiles, before.records[0].smiles);
 });
 

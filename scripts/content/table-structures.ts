@@ -24,9 +24,11 @@ export async function compileTableStructures(
 ) {
   if (!isObject(value)) return;
   const data = isObject(value.data) ? value.data : {};
+  const unit = where.replace(/\/content\.json$/, "");
   async function reference(
     input: unknown,
     path: string,
+    owner: string,
   ): Promise<FigureReference & { type: "figure-ref" }> {
     if (!isObject(input)) throw new Error(`${path}: expected structure`);
     if ("smiles" in input) {
@@ -59,6 +61,7 @@ export async function compileTableStructures(
               },
             ],
           });
+          compound.owner = owner;
           library[id] = compound;
         }
         return { type: "figure-ref", ref: compound.id };
@@ -91,6 +94,7 @@ export async function compileTableStructures(
                     figure: await reference(
                       "figure" in cell ? cell.figure : cell,
                       `${path}.rows[${i}][${j}]`,
+                      unit,
                     ),
                   };
         return;
@@ -122,6 +126,7 @@ export async function compileTableStructures(
           const drawing = await reference(
             { smiles: record[field.key] },
             `${where}.data.collections.${key}/${record.id}.${field.key}`,
+            `${unit}/collections/${key}`,
           );
           (figures[String(record.id)] ??= {})[field.key] = drawing;
         }
