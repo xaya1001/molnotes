@@ -218,7 +218,7 @@ function alternativeLabel(
         </p>
         <p v-if="claim.markush?.unmodeled">{{ claim.markush.unmodeled }}</p>
         <div v-if="verdicts[claim.id].groups.length" class="table-scroll">
-          <table class="three-line" :aria-label="`Claim ${claim.id} 逐位判定`">
+          <table class="data-table" :aria-label="`Claim ${claim.id} 逐位判定`">
             <thead>
               <tr>
                 <th>位置</th>
@@ -295,7 +295,7 @@ function alternativeLabel(
           <p v-else-if="!coverage[claim.id]" role="status">正在统计…</p>
           <div v-else class="table-scroll">
             <table
-              class="three-line"
+              class="data-table"
               :aria-label="`Claim ${claim.id} 实施例覆盖`"
             >
               <thead>
@@ -381,9 +381,6 @@ function alternativeLabel(
   </section>
 </template>
 <style scoped>
-.table-scroll {
-  overflow-x: auto;
-}
 .coverage td a {
   display: inline-block;
   margin-inline-end: var(--space-1);

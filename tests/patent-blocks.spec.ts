@@ -594,8 +594,10 @@ test("Markush query shows six outcomes and per-alternative example coverage", as
       await expect(result.locator('[data-group-status="matched"]')).toHaveCount(
         1,
       );
+      await result.scrollIntoViewIfNeeded();
       await page.screenshot({ path: testInfo.outputPath("query-1366.png") });
       await page.setViewportSize({ width: 390, height: 844 });
+      await result.scrollIntoViewIfNeeded();
       await page.screenshot({ path: testInfo.outputPath("query-390.png") });
       await page.setViewportSize({ width: 1366, height: 900 });
       await coverage.scrollIntoViewIfNeeded();
