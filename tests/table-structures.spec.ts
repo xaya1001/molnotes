@@ -47,6 +47,36 @@ test("table groups and compound cells share library identity and keep local phon
     2,
   );
   await expect(table.locator(".table-structure svg")).toHaveCount(3);
+  await expect(table.locator("thead strong")).toHaveCount(1);
+  await expect(
+    table.locator("thead tr:last-child th").nth(2).locator("br"),
+  ).toHaveCount(1);
+  await expect(table.locator('tbody th[scope="rowgroup"]')).toHaveAttribute(
+    "colspan",
+    "5",
+  );
+  await expect(table.locator('tbody th[scope="rowgroup"] strong')).toHaveCount(
+    1,
+  );
+  const layout = await table.evaluate((table) => {
+    const groups = [...table.querySelectorAll<HTMLElement>(".group-label")];
+    const cell = table.querySelector<HTMLElement>("tbody tr:last-child td")!;
+    return {
+      shortRules: groups.every(
+        (label) =>
+          getComputedStyle(label).borderBottomStyle === "solid" &&
+          label.getBoundingClientRect().width <
+            label.parentElement!.getBoundingClientRect().width,
+      ),
+      align: getComputedStyle(cell).textAlign,
+      border: getComputedStyle(cell).borderTopStyle,
+      font: getComputedStyle(cell).fontFamily,
+    };
+  });
+  expect(layout.shortRules).toBeTruthy();
+  expect(layout.align).toBe("center");
+  expect(layout.border).toBe("none");
+  expect(layout.font).not.toMatch(/monospace/);
   await screenshot(
     page,
     info,
@@ -112,4 +142,69 @@ test("record, SAR, detail and compare structures retain filters and CSV values",
   await expect(
     page.locator(".compare-column .table-structure svg"),
   ).toHaveCount(2);
+});
+
+test("record tables stack values and names and paginate twelve rows", async ({
+  page,
+}) => {
+  await page.route("**/api/topics/fable-patent", async (route) => {
+    const response = await route.fetch();
+    const topic = await response.json();
+    const collection = topic.content.data.collections.examples;
+    collection.fields = collection.fields.filter((f: { key: string }) =>
+      ["name", "smiles", "amount", "activity", "binding"].includes(f.key),
+    );
+    collection.fields.find((f: { key: string }) => f.key === "name").placement =
+      "identifier";
+    collection.fields.push({
+      key: "readings",
+      label: "IC50\n(nM)",
+      kind: "text",
+    });
+    for (const record of collection.records) {
+      record.name = record.id === 1 ? "Sample A" : "";
+      record.readings = "0.7\n8.2";
+    }
+    const extra = { ...collection.records[0], id: "2a", name: "Sample B" };
+    collection.records.push(extra);
+    collection.structureFigures[extra.id] = collection.structureFigures["1"];
+    await route.fulfill({ response, json: topic });
+  });
+  await page.goto(base + "/examples");
+  const rows = page.locator(".record-collection tbody tr");
+  await expect(rows).toHaveCount(12);
+  const first = rows.filter({
+    has: page.locator('th[scope="row"] a[href$="/1"]'),
+  });
+  await expect(first.locator(".record-identifier strong")).toHaveCount(1);
+  await expect(first.locator(".identifier-name")).toHaveCount(1);
+  await expect(first.locator("td").nth(4).locator("br")).toHaveCount(1);
+  for (const table of await page.locator(".record-collection table").all()) {
+    expect(
+      await table.evaluate(
+        (e) => e.parentElement!.scrollWidth <= e.parentElement!.clientWidth,
+      ),
+    ).toBeTruthy();
+  }
+  await page.getByRole("button", { name: "下一页 →" }).click();
+  await expect(rows).toHaveCount(1);
+  expect(
+    await rows
+      .locator("th a")
+      .evaluate(
+        (e) =>
+          e.getBoundingClientRect().height <=
+          parseFloat(getComputedStyle(e).lineHeight),
+      ),
+  ).toBeTruthy();
+  await page
+    .getByRole("combobox", { name: "浏览方式", exact: true })
+    .selectOption("cards");
+  await expect(page.locator(".cards article")).toHaveCount(6);
+  await page
+    .getByRole("combobox", { name: "浏览方式", exact: true })
+    .selectOption("table");
+  await page.getByRole("searchbox", { name: "记录搜索" }).fill("2a");
+  await expect(rows).toHaveCount(1);
+  await expect(page.getByRole("navigation", { name: "分页" })).toHaveCount(0);
 });

@@ -22,24 +22,21 @@ watch(
       const drawing = await snapshotSvg(library, props.reference);
       if (!active) return;
       canvas.value.replaceChildren(drawing.svg);
-      // Table previews retain the published geometry and readable scale, cropping its outer whitespace.
+      // Fit the published drawing to its table column; the dialog shows the full figure.
       const box = drawing.svg.getBBox();
       const padding = parseFloat(
         getComputedStyle(canvas.value).getPropertyValue("--chemical-line"),
       );
       const width = box.width + 2 * padding;
       const height = box.height + 2 * padding;
-      const scale = Math.max(
-        drawing.minimumScale,
-        Math.min(0.75, canvas.value.clientWidth / width),
-      );
       drawing.svg.setAttribute(
         "viewBox",
         `${box.x - padding} ${box.y - padding} ${width} ${height}`,
       );
-      drawing.svg.style.width = `${width * scale}px`;
-      drawing.svg.style.height = `${height * scale}px`;
-      canvas.value.parentElement!.style.width = `${Math.max(canvas.value.clientWidth, width * scale)}px`;
+      drawing.svg.setAttribute("width", String(width));
+      drawing.svg.setAttribute("height", String(height));
+      drawing.svg.style.width = `${width * 0.75}px`;
+      drawing.svg.style.height = "auto";
       error.value = "";
     } catch (e) {
       if (active) error.value = e instanceof Error ? e.message : String(e);
@@ -67,12 +64,14 @@ watch(
 .table-structure {
   position: relative;
   width: 14rem;
+  max-width: 100%;
 }
 .structure-canvas {
   padding: var(--space-2) 0;
 }
 .structure-canvas :deep(svg) {
   display: block;
+  max-width: 100%;
   margin: auto;
 }
 .structure-open {

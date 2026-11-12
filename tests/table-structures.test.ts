@@ -10,6 +10,7 @@ import {
   prepareCompound,
   prepareInputVariant,
 } from "../shared/chemical-library/chemistry.ts";
+import { blockSearchText } from "../shared/topic-blocks.ts";
 import { validateTopicContent } from "../shared/topic-content.ts";
 import { recordsCsv, filterRecords } from "../src/ui/topic/patent-filter.ts";
 import type { Library } from "../shared/chemical-library/types.ts";
@@ -156,4 +157,20 @@ test("unresolved table structures and invalid compound variants reject compilati
       compileTableStructures(content, { [c.id]: c }, "sample"),
     );
   }
+});
+
+test("table group rows span the data columns and remain searchable", async () => {
+  const content = await fixture();
+  content.chapters[0].blocks = [
+    {
+      type: "table",
+      caption: "Samples",
+      columns: ["ID", "Readout"],
+      rows: ["Series **2**", ["**2a**", "81"]],
+    },
+  ];
+  assert.doesNotThrow(() => validateTopicContent(content));
+  assert.ok(
+    blockSearchText(content.chapters[0].blocks).includes("Series **2**"),
+  );
 });

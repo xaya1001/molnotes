@@ -145,9 +145,9 @@ git diff --word-diff=plain --word-diff-regex='[A-Za-z0-9_]+|[^[:space:]]' main..
 
 ## 专题表格
 
-`table` 块使用 `caption`、`columns`、`rows`（二维数组或 `data` 键），可选 `note` 和 `rowHeader`。单元格是文字、`{text,href}` 链接，或化合物结构：`{ref:"cmp_…",variant?:"命名版式"}`、`{smiles:"CCO"}`。结构引用使用图库的版式；SMILES 按完整化学身份复用已有化合物，缺少时在内容快照中生成化合物条目。自动生成的条目记录所属专题或集合的 `owner`，只在引用页面显示，不进入图库列表与搜索；已存在的图库化合物仍保留原有归属与展示。反向引用照常记录。单元格使用图库画法，点击放大结构。
+`table` 块使用 `caption`、`columns`、`rows`（行数组或 `data` 键），可选 `note` 和 `rowHeader`。单元格是文字、`{text,href}` 链接，或化合物结构：`{ref:"cmp_…",variant?:"命名版式"}`、`{smiles:"CCO"}`。结构引用使用图库的版式；SMILES 按完整化学身份复用已有化合物，缺少时在内容快照中生成化合物条目。自动生成的条目记录所属专题或集合的 `owner`，只在引用页面显示，不进入图库列表与搜索；已存在的图库化合物仍保留原有归属与展示。反向引用照常记录。单元格使用图库画法，点击放大结构。
 
-`spans:[{label:"产物",from:4,to:5}]` 在普通表头上方增加跨列标题。列号从 1 开始，包含两端；可声明多个不重叠的连续范围，未覆盖的列留空。表格在窄屏内横向滚动。越界、重叠、无效 SMILES、缺失化合物或命名版式均拒绝发布。
+`spans:[{label:"产物",from:4,to:5}]` 在普通表头上方增加跨列标题。列号从 1 开始，包含两端；可声明多个不重叠的连续范围，未覆盖的列留空。表头、单元格和脚注中的 `\n` 保留换行，`**编号**` 加粗；其余文字按原文显示。`rows` 中的字符串表示跨越全部列的分组标题，例如 `"using sample **2**"`。表头常规字重，数据列居中，跨列标题下各有短横线，数据行间不加横线。表格在窄屏内横向滚动。越界、重叠、无效 SMILES、缺失化合物或命名版式均拒绝发布。
 
 ## 专利专题单元
 
@@ -157,7 +157,7 @@ git diff --word-diff=plain --word-diff-regex='[A-Za-z0-9_]+|[^[:space:]]' main..
 
 发布时检查记录间引用、权利要求引用、页序和矩形范围、页图与片段资源、正文 JSON 的键以及 OCR 页数。SMILES 与 `markush` 的母核、片段及 SMARTS 由 RDKit 解析；空结构须在制作记录和该条 `notes` 中说明未确认原因。校验失败拒绝整组发布。
 
-专利数据集的 `smiles` 字段按完整化学身份解析为图库结构，列表、详情、SAR 配对和比较视图共用图库画法，点击放大结构。原始字段值保留，排序、筛选与 CSV 使用这些值；未确认的结构保留为空。
+专利数据集的 `smiles` 字段按完整化学身份解析为图库结构，列表、详情、SAR 配对和比较视图共用图库画法，点击放大结构。原始字段值保留，排序、筛选与 CSV 使用这些值；未确认的结构保留为空。表格每页 12 条，结构卡片每页 6 条。表格中的文字字段可声明 `placement: "identifier"`，将名称放在加粗编号下方，详情和导出仍保留该字段。多行读数保留换行。桌面表格按可用宽度分配列，结构预览随列宽缩放，点击打开完整结构。
 
 比较记录保存为 `pins: { <collectionId>: [id] }`，逐条笔记为 `recordNotes: { "<collectionId>/<id>": "正文" }`。浏览器和服务端共用由内容派生的校验：未知编号、重复比较编号、超出 `pins.max` 或超过 30000 字的笔记拒绝写入。
 
@@ -227,7 +227,7 @@ The geometry preparation toolkit represents native chemical paths, text runs, la
 
 `npm run figure:compare -- compare --before <observations.json> --after <observations.json> --out <report.json>` compares saved geometry observations. Each view retains element identities, boxes, paths, sampled traces, atom positions and diagnostics. The report lists changed and unmatched views sorted by displacement, with element additions/removals and diagnostic-set or measured-value differences. Identical observations pass directly; comparison does not alter publication thresholds.
 
-The reader mounts each published view's SVG and reads its saved diagnostics. Frame selection, local numbering and focus select the corresponding saved view; resizing scales that artwork with its published readability floor. Table cells crop outer whitespace from the same SVG and open its full view. Chemical geometry is prepared in Node during publication or authoring preview. `content:preview` prepares only the selected unit's referenced views and serves them with the preview, without publishing or making library thumbnails.
+The reader mounts each published view's SVG and reads its saved diagnostics. Frame selection, local numbering and focus select the corresponding saved view; resizing scales that artwork with its published readability floor. Table cells crop outer whitespace from the same SVG, fit the preview to the column width, and open its full view. Chemical geometry is prepared in Node during publication or authoring preview. `content:preview` prepares only the selected unit's referenced views and serves them with the preview, without publishing or making library thumbnails.
 
 The content root owns `library/compounds/`, `library/reactions/`, `library/routes/`, `library/mechanisms/`, `library/images/` and `library/processes/`. Each JSON or YAML (`.yaml` / `.yml`) file is named after its permanent ID (`cmp_…`, `rxn_…`, `rte_…`, `mec_…`, `img_…`, `prc_…`). Entries contain `kind`, `id`, `title` and `sources: [{source, locator, note?}]`. The source ID refers to `sources.json`. If external provenance is unverified, use the reserved `source: "unknown"`, a precise original content location and a required `note` explaining what remains unverified; do not invent a registered source. Image bytes live in `library/assets/<sha256>.<extension>`; the content build verifies their hashes. `/library/` shows the complete inventory, previews, layout checks and reverse references.
 

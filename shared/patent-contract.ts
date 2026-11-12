@@ -280,6 +280,11 @@ export function validatePatentData(
       );
       text(f.label, name);
       ok(fieldKinds.includes(f.kind), `${name}: invalid field kind`);
+      if (f.placement !== undefined)
+        ok(
+          f.placement === "identifier" && f.kind === "text",
+          `${name}: identifier placement requires text`,
+        );
       if (f.kind === "grade")
         ok(field(scales, String(f.scale)), `${name}: unknown scale`);
       if (f.ref) ref(f.ref, undefined, name);

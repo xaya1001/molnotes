@@ -9,6 +9,9 @@
   --font-mono:
     ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
 
+  --table-identifier-width: 8rem;
+  --table-structure-width: 26%;
+
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
   --text-base: 1.0625rem;

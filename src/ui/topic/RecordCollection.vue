@@ -5,6 +5,7 @@ import { useTopic } from "./context.ts";
 import { patentData, type RecordId, type Assignment } from "./patent.ts";
 import { filterRecords, queryText, recordsCsv } from "./patent-filter.ts";
 import { substructureMatches } from "./patent-chemistry.ts";
+import TableText from "./TableText.vue";
 import RecordValue from "./RecordValue.vue";
 import SourceRef from "./SourceRef.vue";
 import PageHeading from "../PageHeading.vue";
@@ -65,9 +66,10 @@ watch(
 const results = computed(() =>
   filterRecords(collection.value, route.query, matches.value),
 );
-const size = 6;
+const view = computed(() => (route.query.view === "cards" ? "cards" : "table"));
+const size = computed(() => (view.value === "table" ? 12 : 6));
 const pageCount = computed(() =>
-  Math.max(1, Math.ceil(results.value.length / size)),
+  Math.max(1, Math.ceil(results.value.length / size.value)),
 );
 const page = computed(() =>
   Math.min(
@@ -76,11 +78,16 @@ const page = computed(() =>
   ),
 );
 const visible = computed(() =>
-  results.value.slice((page.value - 1) * size, page.value * size),
+  results.value.slice((page.value - 1) * size.value, page.value * size.value),
 );
-const view = computed(() => (route.query.view === "cards" ? "cards" : "table"));
 const fields = computed(() =>
   collection.value.fields.filter((f) => f.kind !== "body"),
+);
+const tableFields = computed(() =>
+  fields.value.filter((f) => f.placement !== "identifier"),
+);
+const identifierFields = computed(() =>
+  fields.value.filter((f) => f.placement === "identifier"),
 );
 const selectedFields = ref(fields.value.map((f) => f.key));
 const sources = computed(() => [
@@ -609,23 +616,43 @@ const incoming = computed(() =>
         <h3 v-if="group.source">{{ data.sources![group.source].title }}</h3>
         <div v-if="view === 'table'" class="table-scroll">
           <table class="data-table">
+            <colgroup>
+              <col class="identifier-column" />
+              <col
+                v-for="field in tableFields"
+                :key="field.key"
+                :class="{ 'structure-column': field.kind === 'smiles' }"
+              />
+              <col v-if="collection.pins" />
+            </colgroup>
             <thead>
               <tr>
-                <th>编号</th>
-                <th v-for="field in fields" :key="field.key">
-                  {{ field.label }}
+                <th scope="col">编号</th>
+                <th v-for="field in tableFields" :key="field.key" scope="col">
+                  <TableText :text="field.label" />
                 </th>
                 <th v-if="collection.pins">比较</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="record in group.rows" :key="record.id">
-                <th>
-                  <RouterLink :to="`${path}/${record.id}`">{{
-                    record.id
-                  }}</RouterLink>
+                <th scope="row" class="record-identifier">
+                  <RouterLink :to="`${path}/${record.id}`"
+                    ><strong>{{ record.id }}</strong></RouterLink
+                  >
+                  <div
+                    v-for="field in identifierFields"
+                    :key="field.key"
+                    class="identifier-name"
+                  >
+                    <RecordValue
+                      :collection="collection"
+                      :field="field"
+                      :record="record"
+                    />
+                  </div>
                 </th>
-                <td v-for="field in fields" :key="field.key">
+                <td v-for="field in tableFields" :key="field.key">
                   <RecordValue
                     :collection="collection"
                     :field="field"
@@ -677,7 +704,7 @@ const incoming = computed(() =>
         </div>
       </section>
       <p v-if="!results.length">没有匹配项，请减少筛选条件。</p>
-      <nav class="controls" aria-label="分页">
+      <nav v-if="pageCount > 1" class="controls" aria-label="分页">
         <button
           class="button"
           :disabled="page === 1"
@@ -747,8 +774,32 @@ dt {
   max-width: 100%;
   overflow: auto;
 }
-.table-scroll td {
-  min-width: 8rem;
+.data-table {
+  overflow-wrap: normal;
+  font-size: var(--text-xs);
+}
+.identifier-column {
+  width: var(--table-identifier-width);
+}
+.structure-column {
+  width: var(--table-structure-width);
+}
+.data-table th,
+.data-table td {
+  padding-inline: var(--space-2);
+  text-align: center;
+  vertical-align: middle;
+  font-weight: 400;
+}
+.data-table tbody tr + tr td {
+  border-top: none;
+}
+.record-identifier a {
+  white-space: nowrap;
+}
+.identifier-name {
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
 }
 .note textarea {
   min-height: 8rem;

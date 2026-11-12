@@ -31,6 +31,7 @@ export interface RecordField {
     | "body"
     | "measurement"
     | "assignments";
+  placement?: "identifier";
   scale?: string;
   ref?: PageRef;
   filter?: boolean;
