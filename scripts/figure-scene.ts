@@ -170,7 +170,7 @@ export async function compileFigure(
   inputValue: unknown,
   existing: Library = {},
   sourceKey = "example",
-  options: { style?: FigureStyle } = {},
+  options: { style?: FigureStyle; numbers?: Record<string, string> } = {},
 ) {
   const { input, warnings } = validateFigureInput(inputValue);
   const rd = await moleculeToolkit(),
@@ -887,6 +887,13 @@ export async function compileFigure(
         input,
         step,
         options.style,
+        routeGraph
+          ? Object.fromEntries(
+              Object.entries(options.numbers ?? {})
+                .filter(([key]) => key.startsWith(sid + "/"))
+                .map(([key, value]) => [key.slice(sid.length + 1), value]),
+            )
+          : options.numbers,
       );
       generated.add(rid);
       reactions.push(reaction);
@@ -908,7 +915,14 @@ export async function compileFigure(
     if (!routeGraph) top = reactions[0];
     else {
       top = { ...base, kind: "route", id, steps, edges, width: 1, height: 1 };
-      await compileRouteLayout(entries, top, input, rawSteps, options.style);
+      await compileRouteLayout(
+        entries,
+        top,
+        input,
+        rawSteps,
+        options.style,
+        options.numbers,
+      );
     }
   }
   entries[id] = top;

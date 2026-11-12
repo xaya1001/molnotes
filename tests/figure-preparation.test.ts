@@ -400,3 +400,73 @@ test("atom numbers clear folded group labels after an authored turn", async () =
   });
   assert.deepEqual(figureGeometryDiagnostics(geometry, style), []);
 });
+
+test("scene arrow condition lines reserve their measured ink height", async () => {
+  const compiled = await compileFigure({
+    title: "Comparison",
+    kind: "mechanism",
+    frames: [{ id: "first", smiles: "CCO", arrow: "none" }],
+  });
+  const entry = compiled.entries[compiled.reference.ref];
+  assert.equal(entry.kind, "mechanism");
+  const scene = entry.frames[0].scene;
+  scene.width = 24;
+  scene.height = 12;
+  scene.reactionArrows = [
+    {
+      id: "equilibrium",
+      from: { x: 8, y: 4 },
+      to: { x: 16, y: 4 },
+      kind: "equilibrium",
+      below: ["条件甲", "条件乙"],
+    },
+  ];
+  const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit,
+    fonts,
+    style,
+  });
+  assert.ok(
+    !figureGeometryDiagnostics(geometry, style).some(
+      (d) =>
+        d.code === "LABEL_OVERLAP" &&
+        d.elements.every((e) => e.startsWith("equilibrium:")),
+    ),
+  );
+});
+
+test("compiled layouts include the actual page number labels", async () => {
+  const input = {
+    title: "Numbered reaction",
+    compounds: {
+      a: { smiles: "CC", label: "" },
+      b: { smiles: "CCC", label: "" },
+      c: { smiles: "CCCC", label: "" },
+    },
+    steps: [{ from: ["a", "b"], to: "c" }],
+  };
+  const first = await compileFigure(input);
+  const reaction = first.entries[first.reference.ref];
+  assert.equal(reaction.kind, "reaction");
+  const numbers = Object.fromEntries(
+    [...reaction.reactants, ...reaction.products].map((p, i) => [
+      p.id,
+      String(i + 1).repeat(16),
+    ]),
+  );
+  const compiled = await compileFigure(input, first.entries, "example", {
+    style,
+    numbers,
+  });
+  const geometry = await prepareFigure(
+    compiled.entries,
+    { ...compiled.reference, numbers },
+    { toolkit, fonts, style },
+  );
+  assert.deepEqual(
+    figureGeometryDiagnostics(geometry, style).filter((d) =>
+      ["LABEL_OVERLAP", "CLIPPED_LABEL"].includes(d.code),
+    ),
+    [],
+  );
+});

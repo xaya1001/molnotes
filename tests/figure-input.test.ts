@@ -962,3 +962,42 @@ test("authored atom maps render as native atom numbers", async () => {
     [7, 14, 21],
   );
 });
+
+test("new depictions place charge markers for their new bond directions", async () => {
+  const { prepareFigure } = await import("../src/ui/library/prepare.ts"),
+    { loadFigureFonts } = await import("../scripts/figure-fonts.ts"),
+    { figureStyle } = await import("./fixtures/figures/style.ts"),
+    { figureGeometryDiagnostics } =
+      await import("../src/ui/library/geometry-diagnostics.ts");
+  const input = {
+    title: "Charged transformation",
+    compounds: { a: "COC(=O)c1ccccc1", b: "COC(=O)c1ccccc1[N+](=O)[O-]" },
+    steps: [{ from: "a", to: "b" }],
+  };
+  const first = await compileFigure(input);
+  const rd = await moleculeToolkit();
+  for (const c of Object.values(first.entries)) {
+    if (c.kind !== "compound") continue;
+    const mol = rd.get_mol(c.smiles)!;
+    const data = JSON.parse(mol.get_json()).molecules[0];
+    mol.delete();
+    const index = data.atoms.findIndex((a: { chg?: number }) => a.chg === 1);
+    if (index < 0) continue;
+    for (const layout of [c.layout, ...Object.values(c.variants ?? {})]) {
+      layout.chargeAngles = { [c.atomIds[index]]: 0 };
+    }
+  }
+  const next = await compileFigure(input, first.entries);
+  const geometry = await prepareFigure(next.entries, next.reference, {
+    toolkit: rd,
+    fonts: await loadFigureFonts(),
+    style: figureStyle,
+  });
+  assert.ok(
+    !figureGeometryDiagnostics(geometry, figureStyle).some(
+      (d) =>
+        d.code === "BOND_LABEL_OVERLAP" &&
+        d.elements.some((e) => e.endsWith(":charge")),
+    ),
+  );
+});

@@ -252,5 +252,33 @@ export function relievedCoordinates(
       points[j] = chosen[1];
       changed ||= chosen[0] !== a || chosen[1] !== b;
     }
+  // Native ink can cover a nearby bond even when the approximate label box is clear.
+  if (measure)
+    for (const [i, term] of terms) {
+      let best = measure(points);
+      if (best < 0.3) continue;
+      const original = points[i],
+        q = points[term.parent],
+        vx = original[0] - q[0],
+        vy = original[1] - q[1];
+      let chosen = original;
+      for (const deg of [
+        10, -10, 20, -20, 30, -30, 40, -40, 50, -50, 60, -60, 70, -70, 80, -80,
+        90, -90,
+      ]) {
+        const angle = (deg * Math.PI) / 180;
+        points[i] = [
+          q[0] + vx * Math.cos(angle) - vy * Math.sin(angle),
+          q[1] + vx * Math.sin(angle) + vy * Math.cos(angle),
+        ];
+        const score = measure(points) + Math.abs(deg) * 0.004;
+        if (score < best - 0.05) {
+          best = score;
+          chosen = points[i];
+        }
+      }
+      points[i] = chosen;
+      changed ||= chosen !== original;
+    }
   return changed ? points : undefined;
 }

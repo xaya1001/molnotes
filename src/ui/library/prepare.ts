@@ -1285,20 +1285,35 @@ export async function prepareFigure(
       for (const [lines, sign] of [
         [a.above ?? [], -1],
         [a.below ?? [], 1],
-      ] as const)
+      ] as const) {
+        let previous: FigureRect | undefined;
         lines.forEach((text, i) => {
+          const y = (p.y + q.y) / 2 + sign * B * 0.65;
           const e = label(
             {
               x: (p.x + q.x) / 2,
-              y: (p.y + q.y) / 2 + sign * (B * 0.65 + i * B * 0.58),
+              y,
             },
             text,
             "var(--chemical-caption-font)",
           );
+          if (previous) {
+            const bounds = ctx.box(e);
+            ctx.set(
+              e,
+              "y",
+              y +
+                (sign < 0
+                  ? previous.y - B * 0.15 - bounds.y - bounds.height
+                  : previous.y + previous.height + B * 0.15 - bounds.y),
+            );
+          }
+          previous = ctx.box(e);
           ctx.setStyle(e, "fill", ink);
           ctx.setData(e, "label", prefix + a.id + ":" + sign + ":" + i);
           ctx.append(parent, e);
         });
+      }
     }
     for (const [i, c] of (s.captions ?? []).entries()) {
       const e = label(

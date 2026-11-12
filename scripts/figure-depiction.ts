@@ -913,6 +913,7 @@ export function depictRoute(
             ]),
           ),
         };
+        delete r.compound.variants[variant].chargeAngles;
         r.variant = variant;
         changed.add(r.compound.id);
         const angle = ((r.spec.rot ?? 0) * Math.PI) / 180,
