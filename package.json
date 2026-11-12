@@ -23,6 +23,7 @@
     "content": "node scripts/content.ts",
     "content:preview": "node scripts/preview.ts",
     "molecule:layout": "node scripts/layout.ts",
+    "figure:compile": "node scripts/figure-compile.ts",
     "figure:render": "node scripts/figure-render.ts"
   },
   "dependencies": {

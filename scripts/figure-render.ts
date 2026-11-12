@@ -1,7 +1,5 @@
 import { mkdir, writeFile, readFile } from "node:fs/promises";
-import { resolve, join, dirname } from "node:path";
-import { parse as parseYaml } from "yaml";
-import { compileFigureScene } from "./figure-scene.ts";
+import { resolve, join } from "node:path";
 import { readChemicalLibrary } from "./content/chemical-library.ts";
 import { libraryInventory } from "./content/library-inventory.ts";
 import {
@@ -21,13 +19,11 @@ const value = (flag: string) => {
   const i = args.indexOf(flag);
   return i < 0 ? undefined : args[i + 1];
 };
-const sceneFile = value("--scene");
-const root =
-    value("--library") ?? (sceneFile ? dirname(resolve(sceneFile)) : undefined),
+const root = value("--library"),
   out = value("--out");
 if (!root || !out)
   throw new Error(
-    "Usage: npm run figure:render -- --out <directory> (--scene <yaml> [--library <content-root>] | --library <content-root> [--entry <id>] [--prepare <compound-json> --molfile <file>])",
+    "Usage: npm run figure:render -- --library <content-root> --out <directory> [--entry <id>]",
   );
 await mkdir(out, { recursive: true });
 const input = value("--prepare");
@@ -78,29 +74,11 @@ if (input) {
   );
 } else {
   const started = performance.now();
-  let entries =
-    sceneFile && !value("--library")
-      ? {}
-      : (await readChemicalLibrary(resolve(root))).entries;
-  let selected = value("--entry");
+  const entries = (await readChemicalLibrary(resolve(root))).entries;
+  const selected = value("--entry");
   const refsFile = value("--references");
-  let authored: Awaited<ReturnType<typeof compileFigureScene>> | undefined;
-  if (sceneFile) {
-    const source = await readFile(sceneFile, "utf8");
-    authored = await compileFigureScene(
-      parseYaml(source),
-      entries,
-      dirname(resolve(sceneFile)),
-    );
-    entries = authored.entries;
-    selected = authored.reference.ref;
-    console.log(
-      `Input: ${source.trim().split("\n").length} lines; adjustments: ${authored.stats.adjustments.join(", ") || "none"}`,
-    );
-  }
   const references: import("../shared/chemical-library/types.ts").FigureReference[] =
     [];
-  if (authored) references.push(authored.reference);
   if (refsFile) {
     const values: unknown = JSON.parse(await readFile(refsFile, "utf8"));
     if (!Array.isArray(values)) throw new Error("References must be an array");
@@ -115,14 +93,13 @@ if (input) {
     for (const entry of Object.values(entries).filter(
       (e) =>
         (!selected || e.id === selected) &&
-        (!(refsFile || authored) || references.some((r) => r.ref === e.id)),
+        (!refsFile || references.some((r) => r.ref === e.id)),
     )) {
-      const refs =
-        refsFile || authored
-          ? references.filter((r) => r.ref === entry.id)
-          : entry.kind === "mechanism"
-            ? entry.frames.map((f) => ({ ref: entry.id, frame: f.id }))
-            : [{ ref: entry.id }];
+      const refs = refsFile
+        ? references.filter((r) => r.ref === entry.id)
+        : entry.kind === "mechanism"
+          ? entry.frames.map((f) => ({ ref: entry.id, frame: f.id }))
+          : [{ ref: entry.id }];
       for (const ref of refs)
         for (const width of value("--width")
           ? [Number(value("--width"))]

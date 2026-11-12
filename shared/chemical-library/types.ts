@@ -10,7 +10,13 @@ export type FocusGroup = {
   arrows?: string[];
 };
 export type Focus = { primary?: FocusGroup; supporting?: FocusGroup[] };
+export type ArrowKind =
+  "forward" | "equilibrium" | "resonance" | "retro" | "none";
 export interface EntryBase {
+  sourceFile?: string;
+  sourceKey?: string;
+  owner?: string;
+  overview?: string;
   id: string;
   title: string;
   sources: Evidence[];
@@ -110,7 +116,7 @@ export interface Scene {
     id: string;
     from: Point;
     to: Point;
-    kind?: "forward" | "equilibrium";
+    kind?: ArrowKind;
     above?: string[];
     below?: string[];
     controls?: [Point, Point];
@@ -125,11 +131,14 @@ export interface Scene {
   partialBonds?: { atoms: [AtomRef, AtomRef]; order: number }[];
 }
 export interface Participant {
-  position?: "inline" | "above-arrow" | "below-arrow";
+  position?: "inline" | "above-arrow" | "below-arrow" | "text" | "none";
   id: string;
   compound: string;
   equivalents?: number;
-  yield?: number;
+  number?: string;
+  name?: string;
+  yield?: string;
+  ratio?: string;
   fraction?: number;
 }
 export interface Reaction extends EntryBase {
@@ -144,7 +153,13 @@ export interface Reaction extends EntryBase {
   showPlus?: boolean;
   explanation: string;
   scene: Scene;
-  arrow: { from: Point; to: Point; textWidth: number };
+  arrow: {
+    from: Point;
+    to: Point;
+    textWidth: number;
+    kind?: ArrowKind;
+    side?: "left" | "right";
+  };
 }
 export interface Route extends EntryBase {
   kind: "route";
@@ -152,15 +167,19 @@ export interface Route extends EntryBase {
   edges: { from: string; to: string; product: string; reactant: string }[];
   width: number;
   height: number;
-  /** Explicit path used for the displayed cumulative yield. */
-  yieldPath: string[];
-  /** A jointly reported yield replaces individual yields for exactly these steps. */
-  combinedYields?: { steps: string[]; value: number }[];
 }
 export interface Mechanism extends EntryBase {
   kind: "mechanism";
   category: "reaction" | "resonance" | "comparison" | "examples";
-  frames: { id: string; title: string; scene: Scene; explanation: string }[];
+  frames: {
+    id: string;
+    title: string;
+    scene: Scene;
+    explanation: string;
+    arrow?: ArrowKind;
+    above?: string[];
+    below?: string[];
+  }[];
   maps?: { from: AtomRef; to: AtomRef; fromFrame: string; toFrame: string }[];
 }
 export interface LibraryImage extends EntryBase {

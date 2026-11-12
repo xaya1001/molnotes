@@ -1,8 +1,6 @@
 import { readFile, readdir, lstat } from "node:fs/promises";
-import { join, dirname, extname } from "node:path";
+import { join, extname } from "node:path";
 import { parse as parseYaml } from "yaml";
-import { isObject } from "../../shared/json.ts";
-import { compileFigureScene } from "../figure-scene.ts";
 import {
   validateLibrary,
   validateLibraryEntry,
@@ -25,90 +23,9 @@ import type {
 import type { UnitAsset } from "./content-files.ts";
 import { assetResource, type AssetStage } from "./asset-stage.ts";
 
-async function compileEntryScenes(
-  value: unknown,
-  entries: Library,
-  directory: string,
-) {
-  if (
-    !isObject(value) ||
-    !["reaction", "mechanism"].includes(String(value.kind))
-  )
-    return;
-  const { id, title, sources } = value;
-  if (
-    typeof id !== "string" ||
-    typeof title !== "string" ||
-    !Array.isArray(sources)
-  )
-    throw new Error("Authored library entry requires id, title and sources");
-  const evidence = sources.map((s) => {
-    if (
-      !isObject(s) ||
-      typeof s.source !== "string" ||
-      typeof s.locator !== "string" ||
-      (s.note !== undefined && typeof s.note !== "string")
-    )
-      throw new Error(`${id}: invalid source evidence`);
-    return { source: s.source, locator: s.locator, note: s.note };
-  });
-  const compile = async (
-    raw: unknown,
-    namespace: string,
-    frameTitle = title,
-  ) => {
-    if (!isObject(raw) || Array.isArray(raw.molecules)) return null;
-    const result = await compileFigureScene(
-      { ...raw, title: frameTitle },
-      entries,
-      directory,
-      { id: namespace, sources: evidence },
-    );
-    const generated = result.entries[namespace];
-    if (generated.kind !== "mechanism")
-      throw new Error(`${id}: expected compiled scene`);
-    const scene = generated.frames[0].scene;
-    delete result.entries[namespace];
-    Object.assign(entries, result.entries);
-    return scene;
-  };
-  if (value.kind === "reaction") {
-    const scene = await compile(value.scene, id);
-    if (scene) {
-      const main = scene.reactionArrows?.shift();
-      if (!main)
-        throw new Error(`${id}: reaction scene requires a reaction arrow`);
-      value.scene = scene;
-      value.arrow = {
-        from: main.from,
-        to: main.to,
-        textWidth: Math.hypot(main.to.x - main.from.x, main.to.y - main.from.y),
-      };
-      value.reagents ??= main.above ?? [];
-      value.conditions ??= main.below ?? [];
-    }
-  } else {
-    if (!Array.isArray(value.frames))
-      throw new Error(`${id}: frames must be an array`);
-    for (const frame of value.frames) {
-      if (
-        !isObject(frame) ||
-        typeof frame.id !== "string" ||
-        typeof frame.title !== "string"
-      )
-        throw new Error(`${id}: frame requires id and title`);
-      const scene = await compile(
-        frame.scene,
-        `${id}_${frame.id}`,
-        frame.title,
-      );
-      if (scene) frame.scene = scene;
-    }
-  }
-}
-
 export async function readChemicalLibrary(root: string, stage?: AssetStage) {
   const entries: Library = {},
+    files: Record<string, string> = {},
     assets: UnitAsset[] = [];
   const base = join(root, "library");
   for (const dir of [
@@ -133,8 +50,6 @@ export async function readChemicalLibrary(root: string, stage?: AssetStage) {
         text = await readFile(path, "utf8");
       const value: unknown =
         extension === ".json" ? JSON.parse(text) : parseYaml(text);
-      if (extension !== ".json")
-        await compileEntryScenes(value, entries, dirname(path));
       validateLibraryEntry(value, `library/${dir}/${f.name}`);
       if (f.name !== value.id + extension || entries[value.id])
         throw new Error(`library: duplicate or mismatched ID ${value.id}`);
@@ -150,6 +65,7 @@ export async function readChemicalLibrary(root: string, stage?: AssetStage) {
       )
         throw new Error(`${value.id}: wrong library directory`);
       entries[value.id] = value;
+      files[value.id] = path;
     }
   }
   validateLibrary(entries);
@@ -188,7 +104,7 @@ export async function readChemicalLibrary(root: string, stage?: AssetStage) {
       });
     }
   }
-  return { entries, assets };
+  return { entries, assets, files };
 }
 export function libraryUsage(
   entries: Library,

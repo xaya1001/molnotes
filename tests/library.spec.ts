@@ -23,7 +23,7 @@ async function fixture(): Promise<LibrarySnapshot> {
     title: "Example transformation",
     sources,
     reactants: [{ id: "input", compound: compound.id }],
-    products: [{ id: "output", compound: compound.id, yield: 0.8 }],
+    products: [{ id: "output", compound: compound.id, yield: "80%" }],
     reagents: ["Reagent"],
     conditions: ["Ambient temperature"],
     explanation: "The selected transformation uses the shared structure.",
@@ -509,7 +509,7 @@ test("wrapped route connections clear quantities and reaction heads at every row
     const steps = Array.from({ length: count }, (_, i) => {
       const reaction = structuredClone(base);
       reaction.id = `rxn_${id}_${i}`;
-      reaction.products[0].yield = i % 2 ? 1 : 0.677;
+      reaction.products[0].yield = i % 2 ? "100%" : "67.7%";
       library.entries[reaction.id] = reaction;
       return {
         id: `step${i}`,
@@ -531,7 +531,6 @@ test("wrapped route connections clear quantities and reaction heads at every row
       })),
       width: 24 + shift * (count - 1),
       height: 11 * count,
-      yieldPath: steps.map((s) => s.id),
     };
   }
   for (const id of Object.keys(library.entries)) library.uses[id] ??= [];
@@ -691,11 +690,17 @@ test("deuterium uses one full-size native D glyph without changing identity", as
 test("adjacent bond transfers use a readable arc when space is available", async ({
   page,
 }) => {
-  const { compileFigureScene } = await import("../scripts/figure-scene.ts");
-  const { entries, reference } = await compileFigureScene({
+  const { compileFigure } = await import("../scripts/figure-scene.ts");
+  const { entries, reference } = await compileFigure({
     title: "Bond transfer",
-    molecules: { molecule: { smiles: "[2H]CC(=O)C", orient: "keep" } },
-    arrows: ["molecule:bond(a1,a2) -> molecule:bond(a2,a3)"],
+    kind: "mechanism",
+    frames: [
+      {
+        id: "transfer",
+        smiles: "[2H:1][CH2:2][C:3](=[O:4])[CH3:5]",
+        arrows: [{ id: "electron-1", from: "bond(1,2)", to: "bond(2,3)" }],
+      },
+    ],
   });
   const library: LibrarySnapshot = { entries, uses: {} };
   await page.route("**/api/library", (route) =>

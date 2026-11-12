@@ -1,0 +1,18 @@
+title: Linear transformation
+kind: route
+explain: Three successive transformations.
+compounds:
+  1: CCO
+  2: CC=O
+  3: CC(=O)O
+  4: CC(=O)OC
+steps:
+  - {
+      id: a,
+      from: 1,
+      to: { id: 2, yield: "93%" },
+      above: "[O]",
+      explain: First transformation.,
+    }
+  - { id: b, from: 2, to: 3, above: "[O]", explain: Second transformation. }
+  - { id: c, from: 3, to: 4, above: "MeOH", explain: Third transformation. }
