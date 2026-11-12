@@ -94,3 +94,14 @@ export function rectangle(
     bottom: y + height,
   };
 }
+
+/** Native outlined scripts sit above or below the main glyph row. */
+export function mainRowBox(glyphs: FigureBox[]) {
+  const row = glyphs.reduce((a, b) => (a.height >= b.height ? a : b));
+  return unionBoxes(
+    glyphs.filter((glyph) => {
+      const middle = glyph.y + glyph.height / 2;
+      return middle >= row.y && middle <= row.y + row.height;
+    }),
+  )!;
+}

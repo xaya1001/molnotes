@@ -1,8 +1,12 @@
 import svgpath from "svgpath";
 import { svgPathProperties } from "svg-path-properties";
 import type { Point } from "../../../shared/chemical-library/types.ts";
-import type { FigureMatrix } from "../../../shared/chemical-library/geometry.ts";
+import type {
+  FigureBox,
+  FigureMatrix,
+} from "../../../shared/chemical-library/geometry.ts";
 import { identityMatrix, pointsBox, transformPoint } from "./geometry-math.ts";
+import { polygonHitsSegment, polygonsOverlap } from "./geometry-collision.ts";
 
 export function parsedPath(d: string) {
   const path = svgpath(d);
@@ -130,4 +134,65 @@ export function samplePath(d: string, step: number, matrix = identityMatrix()) {
   return Array.from({ length: count + 1 }, (_, i) =>
     transformPoint(pointAt((length * i) / count), matrix),
   );
+}
+
+export function pathContours(d: string, matrix = identityMatrix()) {
+  const subpaths: string[] = [];
+  parsedPath(d)
+    .abs()
+    .iterate((s) => {
+      if (s[0] === "M") subpaths.push(s.join(" "));
+      else subpaths[subpaths.length - 1] += " " + s.join(" ");
+    });
+  return subpaths.map((path) => {
+    const vertices: Point[] = [];
+    let curved = false;
+    parsedPath(path).iterate((s, _index, x, y) => {
+      if (s[0] === "M" || s[0] === "L") vertices.push({ x: s[1], y: s[2] });
+      else if (s[0] === "H") vertices.push({ x: s[1], y });
+      else if (s[0] === "V") vertices.push({ x, y: s[1] });
+      else if (s[0] === "Z" || s[0] === "z") vertices.push(vertices[0]);
+      else curved = true;
+    });
+    const points = curved
+      ? samplePath(path, 1.5, matrix)
+      : vertices.map((p) => transformPoint(p, matrix));
+    return { points, box: pointsBox(points) };
+  });
+}
+
+/** Test visible bond contours and stroke width against a complete label box. */
+export function inkIntersectsBox(
+  contours: ReturnType<typeof pathContours>,
+  box: FigureBox,
+  strokeWidth: number,
+  filled: boolean,
+) {
+  const polygon = [
+    { x: box.x, y: box.y },
+    { x: box.x + box.width, y: box.y },
+    { x: box.x + box.width, y: box.y + box.height },
+    { x: box.x, y: box.y + box.height },
+  ];
+  return contours.some(({ points, box: bounds }) => {
+    const pad = strokeWidth / 2;
+    if (
+      !bounds ||
+      bounds.x - pad > box.x + box.width ||
+      bounds.x + bounds.width + pad < box.x ||
+      bounds.y - pad > box.y + box.height ||
+      bounds.y + bounds.height + pad < box.y
+    )
+      return false;
+    if (filled && points.length >= 3 && polygonsOverlap(points, polygon))
+      return true;
+    return (
+      strokeWidth > 0 &&
+      points
+        .slice(1)
+        .some((p, i) =>
+          polygonHitsSegment(polygon, points[i], p, strokeWidth / 2),
+        )
+    );
+  });
 }

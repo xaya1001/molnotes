@@ -19,9 +19,18 @@ import {
 import type { Compound } from "../shared/chemical-library/types.ts";
 import type { FigureInput, StructureInput } from "./figure-input.ts";
 import type { FigureStyle } from "../src/ui/library/scene-geometry.ts";
-import { pathBox, samplePath } from "../src/ui/library/path-geometry.ts";
-import { unionBoxes, rectangle } from "../src/ui/library/geometry-math.ts";
+import {
+  pathBox,
+  pathContours,
+  inkIntersectsBox,
+} from "../src/ui/library/path-geometry.ts";
+import {
+  unionBoxes,
+  rectangle,
+  mainRowBox,
+} from "../src/ui/library/geometry-math.ts";
 import type { FigureRect } from "../shared/chemical-library/geometry.ts";
+import { insidePolygon } from "../src/ui/library/geometry-collision.ts";
 import { figureDimension } from "./figure-output.ts";
 
 // The installed MinimalLib exposes this documented overload; its declaration omits it.
@@ -593,7 +602,6 @@ function nativeLabelCost(
   style: FigureStyle,
 ) {
   const { original } = displayAtoms.get(mol)!;
-  if (!displayAtoms.get(mol)!.labels.size) return 0;
   const saved = savedCoordinates(fullPoints, original, points, spec.scale ?? 1);
   const angle = ((spec.rot ?? 0) * Math.PI) / 180,
     fx = spec.flip === true || spec.flip === "h" ? -1 : 1,
@@ -638,6 +646,12 @@ function nativeLabelCost(
           scalingFactor: bond / 1.5,
           fixedBondLength: bond / 1.5,
           fixedFontSize: parseFloat(style.values["--chemical-font"]),
+          bondLineWidth: parseFloat(style.values["--chemical-line"]),
+          scaleBondWidth: false,
+          atoms: graph.atoms.map((_, i) => i),
+          bonds: [],
+          highlightRadius: 0.1,
+          atomHighlightsAreCircles: true,
           fontFile: "BuiltinRobotoRegular",
           noFreetype: false,
           atomLabels,
@@ -646,7 +660,31 @@ function nativeLabelCost(
         }),
       ),
       boxes = new Map<number, FigureRect>(),
-      bonds: { atoms: number[]; d: string }[] = [];
+      glyphs = new Map<number, FigureRect[]>(),
+      bonds: {
+        contours: ReturnType<typeof pathContours>;
+        atoms: number[];
+        filled: boolean;
+        width: number;
+      }[] = [];
+    const positions = new Map<number, { x: number; y: number }>();
+    for (const match of svg.matchAll(/<ellipse\b[^>]*>/g)) {
+      const atom = /class=['"]atom-(\d+)/.exec(match[0]);
+      if (atom)
+        positions.set(Number(atom[1]), {
+          x: Number(/cx=['"]([^'"]+)/.exec(match[0])![1]),
+          y: Number(/cy=['"]([^'"]+)/.exec(match[0])![1]),
+        });
+    }
+    const rings: number[][] =
+      JSON.parse(full.get_json()).molecules[0].extensions?.find(
+        (extension: { name: string }) =>
+          extension.name === "rdkitRepresentation",
+      )?.atomRings ?? [];
+    const hidden = new Set(groups.flatMap((group) => group.atoms.slice(1)));
+    const visibleRings = rings.filter((ring) =>
+      ring.every((atom) => !hidden.has(atom)),
+    );
     for (const match of svg.matchAll(/<path\b[^>]*>/g)) {
       const cls = /class=['"]([^'"]*)/.exec(match[0])?.[1] ?? "",
         d = /\sd=['"]([^'"]*)/.exec(match[0])?.[1];
@@ -654,21 +692,38 @@ function nativeLabelCost(
       const atom = /^atom-(\d+)$/.exec(cls);
       if (atom) {
         const i = Number(atom[1]),
-          b = unionBoxes([boxes.get(i) ?? null, pathBox(d)])!;
+          glyph = pathBox(d)!,
+          b = unionBoxes([boxes.get(i) ?? null, glyph])!;
         boxes.set(i, rectangle(b.x, b.y, b.width, b.height));
+        glyphs.set(i, [
+          ...(glyphs.get(i) ?? []),
+          rectangle(glyph.x, glyph.y, glyph.width, glyph.height),
+        ]);
       } else if (cls.startsWith("bond-"))
         bonds.push({
+          contours: pathContours(d),
           atoms: [...cls.matchAll(/atom-(\d+)/g)].map((m) => Number(m[1])),
-          d,
+          filled: !/fill:none/.test(match[0]),
+          width: Number(/stroke-width:([\d.]+)/.exec(match[0])?.[1] ?? 0),
         });
     }
     // Keep the coarse terminal-label clearance (0.4 depiction units) when
     // measuring real ink, including adjacent unabridged atom labels.
     const clearance = (bond / 1.5) * 0.4;
-    let score = 0;
+    let score = 0,
+      collisions = 0,
+      maximumSpacingCost = 0;
     for (const [i, a] of boxes) {
       for (const [j, b] of boxes)
-        if (j > i && (names.has(i) || names.has(j)))
+        if (j > i && (names.has(i) || names.has(j))) {
+          if (
+            Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.8 &&
+            Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.8
+          )
+            collisions++;
+          maximumSpacingCost +=
+            (Math.min(a.width, b.width) + clearance) *
+            (Math.min(a.height, b.height) + clearance);
           score +=
             Math.max(
               0,
@@ -678,19 +733,34 @@ function nativeLabelCost(
               0,
               Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) + clearance,
             );
-      if (names.has(i))
-        for (const b of bonds)
-          if (!b.atoms.includes(i))
-            score +=
-              samplePath(b.d, 2).filter(
-                (p) =>
-                  p.x > a.left &&
-                  p.x < a.right &&
-                  p.y > a.top &&
-                  p.y < a.bottom,
-              ).length * 4;
+        }
+      // Crossing ink and occupying a ring take precedence over label spacing.
+      const main = mainRowBox(glyphs.get(i)!);
+      for (const b of bonds)
+        if (
+          inkIntersectsBox(
+            b.contours,
+            b.atoms.includes(i) ? main : a,
+            b.width,
+            b.filled,
+          )
+        )
+          collisions++;
+      const centre = { x: a.x + a.width / 2, y: a.y + a.height / 2 };
+      if (
+        names.has(i) &&
+        visibleRings.some(
+          (ring) =>
+            !ring.includes(i) &&
+            insidePolygon(
+              centre,
+              ring.map((atom) => positions.get(atom)!),
+            ),
+        )
+      )
+        collisions++;
     }
-    return score;
+    return collisions * (maximumSpacingCost + 1) + score;
   } finally {
     if (drawn.mol !== copy) drawn.mol.delete();
     copy.delete();

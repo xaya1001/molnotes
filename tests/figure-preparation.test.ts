@@ -18,6 +18,122 @@ import type { FigureBox } from "../shared/chemical-library/geometry.ts";
 const toolkit = await moleculeToolkit(),
   fonts = await loadFigureFonts();
 
+test("bond strokes touching the edge of a complete ester label are rejected", async () => {
+  const { createFigureScene } =
+    await import("../src/ui/library/scene-geometry.ts");
+  const { refreshGeometry } =
+    await import("../src/ui/library/geometry-tree.ts");
+  const ctx = createFigureScene(style, fonts),
+    root = ctx.element("g", { "data-figure": "cmp_example" }),
+    molecule = ctx.element("g", { "data-molecule": "example" });
+  for (const [x, width] of [
+    [50, 11],
+    [63, 12],
+    [77, 6],
+    [85, 9],
+    [96, 6],
+  ]) {
+    const glyph = ctx.element("path", {
+      d: x === 77 ? "M77 62h6v9.5h-6Z" : `M${x} 50h${width}v15h-${width}Z`,
+      "data-label": "example:a3",
+      "data-label-text": "CO2Et",
+    });
+    ctx.append(molecule, glyph);
+  }
+  const bond = ctx.element("path", {
+    d: "M30 80L50.4 60",
+    "data-bond": "example:b0",
+    "data-atoms": "example:a1 example:a2",
+  });
+  ctx.setStyle(bond, "fill", "none");
+  ctx.setStyle(bond, "strokeWidth", "1.6");
+  ctx.setStyle(bond, "stroke", "var(--chemical-ink)");
+  ctx.append(molecule, bond);
+  ctx.append(root, molecule);
+  refreshGeometry(root);
+  assert.ok(
+    figureGeometryDiagnostics(
+      {
+        format: 1,
+        root,
+        width: 150,
+        height: 100,
+        minimumScale: 1,
+        atomPoints: {},
+      },
+      style,
+    ).some(
+      (d) =>
+        d.code === "BOND_LABEL_OVERLAP" && d.elements.includes("example:a3"),
+    ),
+  );
+  // A self-connecting bond can cross the space between two outlined glyphs.
+  assert.equal(bond.kind, "path");
+  bond.d = "M62 40L62 70";
+  ctx.set(bond, "data-atoms", "example:a1 example:a3");
+  refreshGeometry(root);
+  assert.ok(
+    figureGeometryDiagnostics(
+      {
+        format: 1,
+        root,
+        width: 150,
+        height: 100,
+        minimumScale: 1,
+        atomPoints: {},
+      },
+      style,
+    ).some(
+      (d) =>
+        d.code === "BOND_LABEL_OVERLAP" && d.elements.includes("example:a3"),
+    ),
+  );
+  // Entering only the blank area below the main row is valid for its own bond.
+  bond.d = "M45 85L55 67.5";
+  refreshGeometry(root);
+  const diagnostics = () =>
+    figureGeometryDiagnostics(
+      {
+        format: 1,
+        root,
+        width: 150,
+        height: 100,
+        minimumScale: 1,
+        atomPoints: {},
+      },
+      style,
+    );
+  assert.ok(!diagnostics().some((d) => d.code === "BOND_LABEL_OVERLAP"));
+  ctx.set(bond, "data-atoms", "example:a1 example:a2");
+  assert.ok(diagnostics().some((d) => d.code === "BOND_LABEL_OVERLAP"));
+});
+
+test("a folded terminal group inside a separate ring is rejected", async () => {
+  const c = prepareCompound(toolkit, {
+    id: "cmp_example",
+    title: "Example",
+    smiles: "C1CCCCC1OS(=O)(=O)c1ccc(C)cc1",
+    sources: [{ source: "example", locator: "Structures" }],
+  });
+  c.layout.abbreviations = ["OTs"];
+  // A terminal O points into its attached ring while all ring atoms stay fixed.
+  const ring = c.atomIds.slice(0, 6).map((id) => c.layout.coords[id]);
+  c.layout.coords[c.atomIds[6]] = {
+    x: ring.reduce((n, p) => n + p.x, 0) / 6,
+    y: ring.reduce((n, p) => n + p.y, 0) / 6,
+  };
+  const geometry = await prepareFigure(
+    { [c.id]: c },
+    { ref: c.id },
+    { toolkit, fonts, style },
+  );
+  assert.ok(
+    figureGeometryDiagnostics(geometry, style).some(
+      (d) => d.code === "LABEL_IN_RING",
+    ),
+  );
+});
+
 test("folded neutral nitro groups do not display their internal charges", async () => {
   const c = prepareCompound(toolkit, {
     id: "cmp_example",
@@ -37,6 +153,35 @@ test("folded neutral nitro groups do not display their internal charges", async 
       charges.push(node.attributes["data-charge-owner"]);
   });
   assert.deepEqual(charges, []);
+});
+
+test("an automatic lone pair aimed at its own bond clears the drawn bond", async () => {
+  const compiled = await compileFigure({
+    kind: "mechanism",
+    frames: [
+      {
+        id: "first",
+        smiles: "[O-:1][C:2]([CH3:4])=[CH2:3]",
+        arrows: [{ from: "lp(1)", to: "bond(1,2)" }],
+      },
+    ],
+  });
+  const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit,
+    fonts,
+    style,
+  });
+  const pairs: string[] = [];
+  walkGeometry(geometry.root, (node) => {
+    if (node.attributes["data-label"]?.endsWith("-lp"))
+      pairs.push(node.attributes["data-label"]);
+  });
+  assert.equal(pairs.length, 1);
+  assert.ok(
+    !figureGeometryDiagnostics(geometry, style).some(
+      (d) => d.code === "BOND_LABEL_OVERLAP" && d.elements.includes(pairs[0]),
+    ),
+  );
 });
 
 test("bond diagnostics catch a stretched bond within an enlarged structure", async () => {

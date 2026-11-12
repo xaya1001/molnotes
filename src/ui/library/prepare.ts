@@ -13,7 +13,11 @@ import {
 import { routeGeometryArrow } from "./geometry-arrows.ts";
 import { nativeDepictionGeometry } from "./native-geometry.ts";
 import { transformPoint, rectangle } from "./geometry-math.ts";
-import { pathMetrics } from "./path-geometry.ts";
+import {
+  pathMetrics,
+  pathContours,
+  inkIntersectsBox,
+} from "./path-geometry.ts";
 import { refreshGeometry } from "./geometry-tree.ts";
 import { wrapFigureText, figureLabelLines } from "./text-runs.ts";
 import { solidArrow } from "./arrow-layout.ts";
@@ -433,6 +437,8 @@ export async function prepareFigure(
           ctx.set(e, "data-label", aid || `${id}:annotation`);
           if (atomLabels[ai[0]])
             ctx.set(e, "data-label-text", atomLabels[ai[0]]);
+          if (groups.some((group) => group.atoms[0] === ai[0]))
+            ctx.set(e, "data-abbreviation", aid);
           if (
             graph.atoms[ai[0]]?.chg &&
             /^[+−-]$/.test(e.kind === "text" ? e.text : "")
@@ -470,6 +476,22 @@ export async function prepareFigure(
         atomPoints[atom] = plus(p, shift);
       });
       ctx.setData(g, "atomPoints", JSON.stringify(localPoints));
+      const rings: number[][] =
+        JSON.parse(mol.get_json()).molecules[0].extensions?.find(
+          (extension: { name: string }) =>
+            extension.name === "rdkitRepresentation",
+        )?.atomRings ?? [];
+      ctx.setData(
+        g,
+        "atomRings",
+        JSON.stringify(
+          rings
+            .filter((ring) => ring.every((atom) => !folded.has(atom)))
+            .map((ring) =>
+              ring.map((atom) => key({ molecule: id, atom: c.atomIds[atom] })),
+            ),
+        ),
+      );
       if (layout.compact) {
         const compact = layout.compact;
         const idx = c.atomIds.indexOf(layout.compact.atom);
@@ -905,6 +927,61 @@ export async function prepareFigure(
           Math.PI;
         p = plus(origin, toward(angle, labelClearance(l.at, angle, B * 0.075)));
         dotAngle = angle + 90;
+        if (l.kind === "lonePair") {
+          const radius = Math.hypot(p.x - origin.x, p.y - origin.y),
+            labels = [...labelBoxes(parent, ctx).values()],
+            bonds = ctx
+              .nodes(parent)
+              .filter((node) => node.kind === "path")
+              .filter((node) => ctx.data(node, "bond") !== undefined)
+              .map((node) => {
+                const matrix = ctx.relativeMatrix(node, parent);
+                return {
+                  contours: pathContours(node.d, matrix),
+                  paint: node.paint,
+                  scale: Math.hypot(matrix[0], matrix[1]),
+                };
+              });
+          const clear = (degrees: number) => {
+            const centre = plus(origin, toward(degrees, radius)),
+              dx =
+                B * 0.053 * Math.abs(Math.cos(radians(degrees + 90))) +
+                B * 0.03,
+              dy =
+                B * 0.053 * Math.abs(Math.sin(radians(degrees + 90))) +
+                B * 0.03,
+              box = rectangle(centre.x - dx, centre.y - dy, 2 * dx, 2 * dy);
+            return (
+              !labels.some(
+                (other) =>
+                  box.left <= other.right &&
+                  box.right >= other.left &&
+                  box.top <= other.bottom &&
+                  box.bottom >= other.top,
+              ) &&
+              !bonds.some((bond) =>
+                inkIntersectsBox(
+                  bond.contours,
+                  box,
+                  bond.paint.stroke === "none"
+                    ? 0
+                    : bond.paint.strokeWidth * bond.scale,
+                  bond.paint.fill !== "none",
+                ),
+              )
+            );
+          };
+          if (!clear(angle)) {
+            search: for (let turn = 10; turn <= 180; turn += 10)
+              for (const sign of [1, -1]) {
+                const candidate = angle + sign * turn;
+                if (!clear(candidate)) continue;
+                p = plus(origin, toward(candidate, radius));
+                dotAngle = candidate + 90;
+                break search;
+              }
+          }
+        }
       }
       // Formal graph charges own their displayed circled signs. A scene
       // declaration names the existing anchor without redrawing it.
