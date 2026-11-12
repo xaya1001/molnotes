@@ -174,8 +174,8 @@ for (const viewport of [
     await open();
     await expect(shelf.locator(".shelf-book")).toHaveCount(1);
     await shelf.getByRole("button").click();
-    await expect(shelf.locator(".shelf-book")).toHaveCount(4);
-    await expect(shelf.getByRole("heading")).toHaveCount(3);
+    await expect(shelf.locator(".shelf-book")).toHaveCount(5);
+    await expect(shelf.getByRole("heading")).toHaveCount(4);
     await shelf.locator('a[href="/sites/instruments/"]').click();
     await expect(page).toHaveURL(/\/sites\/instruments\/$/);
     await open();

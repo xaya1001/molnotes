@@ -61,6 +61,7 @@ export interface RecordCollection {
   assays?: Record<string, Assay>;
   pins?: { max: number };
   export?: boolean;
+  structureFigures?: Record<string, Record<string, FigureReference>>;
   records: CollectionRecord[];
 }
 export interface Claim {

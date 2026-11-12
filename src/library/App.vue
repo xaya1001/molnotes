@@ -19,8 +19,13 @@ const names = {
   image: "图片",
   process: "过程图",
 };
-const entries = computed(() =>
+const catalogEntries = computed(() =>
   Object.values(props.library.entries).filter(
+    (e) => !e.owner?.startsWith("sites/"),
+  ),
+);
+const entries = computed(() =>
+  catalogEntries.value.filter(
     (e) =>
       (!kind.value || e.kind === kind.value) &&
       JSON.stringify(e)
@@ -48,9 +53,7 @@ onMounted(() => {
             {{ name }}
           </option>
         </select></label
-      ><span
-        >{{ entries.length }} / {{ Object.keys(library.entries).length }}</span
-      >
+      ><span>{{ entries.length }} / {{ catalogEntries.length }}</span>
     </div>
     <details
       v-if="

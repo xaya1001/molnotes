@@ -2,8 +2,8 @@
 import { measurementText } from "./patent-measurements.ts";
 import type { Measurement, Assignment } from "./patent.ts";
 import SourceText from "./SourceText.vue";
-import { ref, watch } from "vue";
-import MoleculeView from "../MoleculeView.vue";
+import { computed, ref, watch } from "vue";
+import TableStructure from "./TableStructure.vue";
 import SourceRef from "./SourceRef.vue";
 import {
   gradeText,
@@ -19,6 +19,12 @@ const props = defineProps<{
   record: CollectionRecord;
   detail?: boolean;
 }>();
+const drawing = computed(
+  () =>
+    props.collection.structureFigures?.[String(props.record.id)]?.[
+      props.field.key
+    ],
+);
 const body = ref(""),
   error = ref("");
 watch(
@@ -97,11 +103,9 @@ watch(
     gradeText(record[field.key], collection.scales[field.scale!])
   }}</span>
   <template v-else-if="field.kind === 'smiles'"
-    ><MoleculeView
-      v-if="record[field.key]"
-      :name="`${collection.title} ${record.id}`"
-      :smiles="String(record[field.key])"
-    /><span v-else>结构未确认</span></template
+    ><TableStructure v-if="drawing" :reference="drawing" /><span v-else
+      >结构未确认</span
+    ></template
   >
   <SourceRef
     v-else-if="field.kind === 'ref' && record[field.key]"

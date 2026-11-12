@@ -52,7 +52,7 @@ test("record details show molecules, ranges, source notes, lazy body and navigat
   await expect(
     page.getByText("另一来源的读数为 B，保留两个读数。"),
   ).toBeVisible();
-  await expect(page.locator(".molecule svg").first()).toBeVisible();
+  await expect(page.locator(".table-structure svg").first()).toBeVisible();
   const image = page.getByRole("img", { name: "原文 p.1" });
   await expect(image).toBeVisible();
   await image.click();

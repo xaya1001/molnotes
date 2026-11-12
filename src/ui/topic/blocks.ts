@@ -92,12 +92,22 @@ export interface MechanismBlock extends BlockBase {
   title?: string;
   frames: DataRef<MechanismFrame[]>;
 }
-/** A table cell: text, or a linked value. */
-export type TableCell = string | { text: string; href: string };
+export type TableCell =
+  | string
+  | { text: string; href: string }
+  | {
+      figure: import("../../../shared/chemical-library/types.ts").FigureReference;
+    };
+export interface TableSpan {
+  label: string;
+  from: number;
+  to: number;
+}
 export interface TableBlock extends BlockBase {
   type: "table";
   caption: string;
   columns: string[];
+  spans?: TableSpan[];
   rows: DataRef<TableCell[][]>;
   note?: string;
   /** The first cell of each row is a row header. */
