@@ -10,8 +10,6 @@ import { readFile, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { contentType } from "../shared/assets.ts";
-import { verifyFigureProofs } from "./content/figure-proofs.ts";
-import { figureRendererFingerprint } from "./content/figure-renderer-fingerprint.ts";
 import type { AssetStage } from "./content/asset-stage.ts";
 
 export async function figureBrowser(
@@ -40,7 +38,7 @@ export async function figureBrowser(
             if (req.url === "/__figure.html") {
               res.setHeader("Content-Type", "text/html; charset=utf-8");
               res.end(
-                `<!doctype html><html lang="zh"><head><link rel="stylesheet" href="/src/ui/styles/tokens.css"><link rel="stylesheet" href="/src/ui/styles/base.css"><style>body{margin:24px;background:#faf9f6;font:16px Arial,sans-serif}#canvas{overflow:auto}#canvas>svg{display:block;margin:auto;max-width:none}h1{font-size:20px}</style></head><body><h1 id="title"></h1><div id="canvas"></div><script type="module">import {createApp,nextTick} from '/node_modules/vue/dist/vue.runtime.esm-bundler.js';import ProcessViewer from '/src/ui/topic/ProcessViewer.vue';import {renderFigure} from '/src/ui/library/render.ts';import {figureDiagnostics} from '/src/ui/library/diagnostics.ts';let app;window.proof=async(library,ref)=>{app?.unmount();app=undefined;const canvas=document.getElementById('canvas');canvas.style.cssText='';canvas.replaceChildren();if(library[ref.ref].kind==='process'){document.getElementById('title').textContent=library[ref.ref].title;app=createApp(ProcessViewer,{data:library[ref.ref]});app.mount(canvas);await nextTick();await document.fonts.ready;await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);const box=canvas.getBoundingClientRect();return {svg:null,diagnostics:[],width:box.width,height:box.height,minimumScale:0,atoms:{}};}const r=await renderFigure(library,ref);document.getElementById('title').textContent=library[ref.ref].title;document.getElementById('canvas').replaceChildren(r.svg);const scale=Math.max(r.minimumScale,Math.min(1,(innerWidth-48)/r.width));r.svg.style.width=r.width*scale+'px';r.svg.style.height=r.height*scale+'px';await document.fonts.ready;const diagnostics=figureDiagnostics(r.svg);const style=getComputedStyle(r.svg);for(const key of ["--chemical-ink","--chemical-muted","--chemical-comparison","--chemical-support","--chemical-support-line","--chemical-focus","--chemical-line","--chemical-focus-line","--chemical-arrow-line","--chemical-font","--chemical-script-font","--chemical-caption-font"])r.svg.style.setProperty(key,style.getPropertyValue(key));const outer=r.svg.getBoundingClientRect();const geometry=[...r.svg.querySelectorAll('[data-label],[data-bond],[data-electron-arrow],[data-arrow-head]')].map(e=>{const b=e.getBoundingClientRect();return {ids:{...e.dataset},bounds:{x:(b.x-outer.x)/scale,y:(b.y-outer.y)/scale,width:b.width/scale,height:b.height/scale},path:e.getAttribute('d')};});return {svg:r.svg.outerHTML,diagnostics,width:r.width,height:r.height,minimumScale:r.minimumScale,atoms:r.atomPoints,geometry,viewport:{width:innerWidth,height:innerHeight},scale};};</script></body></html>`,
+                `<!doctype html><html lang="zh"><head><link rel="stylesheet" href="/src/ui/styles/tokens.css"><link rel="stylesheet" href="/src/ui/styles/base.css"><style>body{margin:24px;background:#faf9f6;font:16px Arial,sans-serif}#canvas{overflow:auto}#canvas>svg{display:block;margin:auto;max-width:none}h1{font-size:20px}</style></head><body><h1 id="title"></h1><div id="canvas"></div><script type="module">import {createApp,nextTick} from '/node_modules/vue/dist/vue.runtime.esm-bundler.js';import ProcessViewer from '/src/ui/topic/ProcessViewer.vue';import {renderFigure} from '/src/ui/library/render.ts';import {figureDiagnostics} from '/src/ui/library/diagnostics.ts';let app;window.frozen=(render)=>{app?.unmount();app=undefined;const canvas=document.getElementById('canvas');canvas.style.cssText='';canvas.innerHTML=render.svg;document.getElementById('title').textContent='';const svg=canvas.querySelector('svg');const scale=Math.max(render.minimumScale,Math.min(1,(innerWidth-48)/render.width));svg.style.width=render.width*scale+'px';svg.style.height=render.height*scale+'px';};window.proof=async(library,ref)=>{app?.unmount();app=undefined;const canvas=document.getElementById('canvas');canvas.style.cssText='';canvas.replaceChildren();if(library[ref.ref].kind==='process'){document.getElementById('title').textContent=library[ref.ref].title;app=createApp(ProcessViewer,{data:library[ref.ref]});app.mount(canvas);await nextTick();await document.fonts.ready;await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);const box=canvas.getBoundingClientRect();return {svg:null,diagnostics:[],width:box.width,height:box.height,minimumScale:0,atoms:{}};}const r=await renderFigure(library,ref);document.getElementById('title').textContent=library[ref.ref].title;document.getElementById('canvas').replaceChildren(r.svg);const scale=Math.max(r.minimumScale,Math.min(1,(innerWidth-48)/r.width));r.svg.style.width=r.width*scale+'px';r.svg.style.height=r.height*scale+'px';await document.fonts.ready;const diagnostics=figureDiagnostics(r.svg);const style=getComputedStyle(r.svg);for(const key of ["--chemical-ink","--chemical-muted","--chemical-comparison","--chemical-support","--chemical-support-line","--chemical-focus","--chemical-line","--chemical-focus-line","--chemical-arrow-line","--chemical-font","--chemical-script-font","--chemical-caption-font"])r.svg.style.setProperty(key,style.getPropertyValue(key));const outer=r.svg.getBoundingClientRect();const geometry=[...r.svg.querySelectorAll('[data-label],[data-bond],[data-electron-arrow],[data-arrow-head]')].map(e=>{const b=e.getBoundingClientRect();return {ids:{...e.dataset},bounds:{x:(b.x-outer.x)/scale,y:(b.y-outer.y)/scale,width:b.width/scale,height:b.height/scale},path:e.getAttribute('d')};});return {svg:r.svg.outerHTML,diagnostics,width:r.width,height:r.height,minimumScale:r.minimumScale,atoms:r.atomPoints,geometry,viewport:{width:innerWidth,height:innerHeight},scale};};</script></body></html>`,
               );
               return;
             }
@@ -112,6 +110,9 @@ export async function figureBrowser(
     throw error;
   }
   return {
+    get pages() {
+      return pages;
+    },
     get page() {
       return pages[0];
     },
@@ -172,6 +173,34 @@ export async function figureBrowser(
         );
       }, result);
     },
+    async mount(
+      render: {
+        svg: string;
+        width: number;
+        height: number;
+        minimumScale: number;
+      },
+      slot = 0,
+      width = 1366,
+    ) {
+      rendered++;
+      await pages[slot].setViewportSize({
+        width,
+        height: width === 1366 ? 900 : 844,
+      });
+      await pages[slot].evaluate((render) => {
+        (
+          window as unknown as {
+            frozen: (render: {
+              svg: string;
+              width: number;
+              height: number;
+              minimumScale: number;
+            }) => void;
+          }
+        ).frozen(render);
+      }, render);
+    },
     async thumbnail(slot = 0) {
       const page = pages[slot];
       if ((await page.locator("#canvas > svg").count()) === 0) {
@@ -213,33 +242,4 @@ export async function figureBrowser(
       }
     },
   };
-}
-export async function verifyLibraryFigures(
-  library: Library,
-  references: FigureReference[],
-  root: string,
-  cacheDirectory?: string,
-  stage?: AssetStage,
-) {
-  if (!Object.keys(library).length) return { assets: [], previews: {} };
-  const temporary = cacheDirectory
-    ? undefined
-    : await mkdtemp(join(tmpdir(), "figure-proofs-"));
-  try {
-    const proof = await verifyFigureProofs(library, references, {
-      directory: cacheDirectory ?? temporary!,
-      stage,
-      renderer: await figureRendererFingerprint(
-        join(import.meta.dirname, ".."),
-      ),
-      createRunner: () => figureBrowser(library, root, stage, 2),
-      onStats: (stats) =>
-        console.log(
-          `Figure proofs: ${stats.hits} cached, ${stats.rendered} rendered, ${stats.total} total`,
-        ),
-    });
-    return proof;
-  } finally {
-    if (temporary) await rm(temporary, { recursive: true, force: true });
-  }
 }

@@ -22,6 +22,8 @@ const notoSubsets = [
   "latin-ext",
   "cyrillic",
   "vietnamese",
+  "30",
+  "109",
 ];
 let pending: Promise<FigureFontResolver> | undefined;
 
@@ -53,6 +55,7 @@ export function loadFigureFonts() {
             (subset) =>
               `@fontsource/noto-sans-sc/files/noto-sans-sc-${subset}-${weight}-normal.woff2`,
           ),
+          `@fontsource/roboto/files/roboto-math-${weight}-${italic ? "italic" : "normal"}.woff2`,
         ];
         const fonts = await Promise.all(files.map(load));
         faces.set(`${weight}:${italic}`, fonts);
@@ -69,4 +72,24 @@ export function loadFigureFonts() {
       return face;
     };
   })());
+}
+
+export function figureFontFiles() {
+  return [
+    ...new Set(
+      [400, 700].flatMap((weight) =>
+        [false, true].flatMap((italic) => [
+          ...arimoSubsets.map(
+            (subset) =>
+              `@fontsource/arimo/files/arimo-${subset}-${weight}-${italic ? "italic" : "normal"}.woff2`,
+          ),
+          ...notoSubsets.map(
+            (subset) =>
+              `@fontsource/noto-sans-sc/files/noto-sans-sc-${subset}-${weight}-normal.woff2`,
+          ),
+          `@fontsource/roboto/files/roboto-math-${weight}-${italic ? "italic" : "normal"}.woff2`,
+        ]),
+      ),
+    ),
+  ];
 }

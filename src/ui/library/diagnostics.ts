@@ -2,7 +2,7 @@ import {
   angleBetween,
   polygonHitsSegment,
   polygonsOverlap,
-} from "./arrow-layout.ts";
+} from "./geometry-collision.ts";
 import type {
   Diagnostic,
   Anchor,

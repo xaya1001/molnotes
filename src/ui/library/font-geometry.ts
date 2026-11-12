@@ -45,6 +45,8 @@ export function shapeFigureText(
         2
       : 0;
   for (const run of runs) {
+    const lineFont = resolve(run, "A").font,
+      lineScale = run.size / lineFont.unitsPerEm;
     const chunks: { face: FigureFont; text: string }[] = [];
     for (const character of run.text) {
       const face = resolve(run, character);
@@ -89,9 +91,9 @@ export function shapeFigureText(
       });
       boxes.push({
         x: at.x + start,
-        y: y - face.font.ascent * scale,
+        y: y - lineFont.ascent * lineScale,
         width: cursor - start,
-        height: (face.font.ascent - face.font.descent) * scale,
+        height: (lineFont.ascent - lineFont.descent) * lineScale,
       });
     }
   }
@@ -104,6 +106,10 @@ export function shapeFigureText(
     transform: identityMatrix(),
     paint: plainPaint(),
     text: runs.map((run) => run.text).join(""),
+    position: { ...at },
+    fontSize: first?.size ?? 0,
+    anchor,
+    baseline,
     runs,
     advance: cursor,
     glyphs,

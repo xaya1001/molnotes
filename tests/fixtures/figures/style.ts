@@ -1,0 +1,20 @@
+export const figureStyle = {
+  values: {
+    "--chemical-bond": "32px",
+    "--chemical-min-bond": "20px",
+    "--chemical-min-text": "11px",
+    "--chemical-min-script": "11px",
+    "--chemical-ink": "#1b1b1b",
+    "--chemical-muted": "#626262",
+    "--chemical-focus": "#d32632",
+    "--chemical-comparison": "#167f87",
+    "--chemical-support": "#303030",
+    "--chemical-support-line": "1.8px",
+    "--chemical-line": "1.6px",
+    "--chemical-focus-line": "3.2px",
+    "--chemical-arrow-line": "1.8px",
+    "--chemical-font": "20px",
+    "--chemical-script-font": "12px",
+    "--chemical-caption-font": "17px",
+  },
+};

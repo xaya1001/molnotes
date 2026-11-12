@@ -1,6 +1,7 @@
 import type { Point } from "../../../shared/chemical-library/types.ts";
 import type {
   FigureBox,
+  FigureRect,
   FigureMatrix,
 } from "../../../shared/chemical-library/geometry.ts";
 
@@ -74,4 +75,22 @@ export function transformBox(box: FigureBox | null, matrix: FigureMatrix) {
       ].map((p) => transformPoint(p, matrix)),
     )
   );
+}
+
+export function rectangle(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): FigureRect {
+  return {
+    x,
+    y,
+    width,
+    height,
+    left: x,
+    top: y,
+    right: x + width,
+    bottom: y + height,
+  };
 }

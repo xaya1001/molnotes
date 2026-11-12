@@ -2,81 +2,49 @@ import type {
   Library,
   FigureReference,
   Diagnostic,
+  LibraryFigureRender,
 } from "../../shared/chemical-library/types.ts";
+import type { FigureGeometry } from "../../shared/chemical-library/geometry.ts";
 import type { UnitAsset } from "./content-files.ts";
 import { sha256 } from "../../shared/assets.ts";
 import { libraryDependencies } from "../../shared/chemical-library/contract.ts";
-import { isObject } from "../../shared/json.ts";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { randomUUID } from "node:crypto";
+import { figureViewKey } from "../../src/ui/library/geometry-compare.ts";
+import {
+  figureProofCache,
+  stableFigureValue,
+  type PreparedFigure,
+} from "./figure-proof-cache.ts";
 import type { AssetStage } from "./asset-stage.ts";
-
-const stable = (value: unknown) =>
-  JSON.stringify(value, (_key, item) =>
-    isObject(item)
-      ? Object.fromEntries(
-          Object.entries(item).sort(([a], [b]) => a.localeCompare(b)),
-        )
-      : item,
-  );
-
-async function atomic(file: string, bytes: string | Buffer) {
-  const temporary = `${file}.${randomUUID()}.tmp`;
-  try {
-    await writeFile(temporary, bytes);
-    await rename(temporary, file);
-  } finally {
-    await rm(temporary, { force: true });
-  }
-}
-
-async function cached(
-  directory: string,
-  key: string,
-  thumbnail: boolean,
-): Promise<{ bytes?: Buffer } | undefined> {
-  try {
-    const record: unknown = JSON.parse(
-      await readFile(join(directory, key + ".json"), "utf8"),
-    );
-    if (
-      !isObject(record) ||
-      record.format !== 1 ||
-      record.key !== key ||
-      record.passed !== true
-    )
-      return;
-    if (!thumbnail) return {};
-    if (
-      typeof record.thumbnail !== "string" ||
-      !/^[a-f0-9]{64}$/.test(record.thumbnail)
-    )
-      return;
-    const bytes = await readFile(join(directory, key + ".png"));
-    if (sha256(bytes) !== record.thumbnail) return;
-    return { bytes };
-  } catch {
-    return;
-  }
-}
 
 export interface ProofRunner {
   prepareBatch?(): Promise<void>;
-  render(
+  prepare(reference: FigureReference, slot: number): Promise<PreparedFigure>;
+  diagnose(geometry: FigureGeometry, slot: number): Promise<Diagnostic[]>;
+  thumbnail(
     reference: FigureReference,
-    width: number,
-    slot?: number,
-  ): Promise<{ diagnostics: Diagnostic[] }>;
-  thumbnail(slot?: number): Promise<Buffer>;
+    render:
+      | { svg: string; width: number; height: number; minimumScale: number }
+      | undefined,
+    slot: number,
+  ): Promise<Buffer>;
   close(): Promise<void>;
+}
+export interface ProofStats {
+  inputHits: number;
+  proofHits: number;
+  prepared: number;
+  diagnosed: number;
+  thumbnails: number;
+  total: number;
 }
 export interface ProofOptions {
   directory: string;
   renderer: string;
+  diagnostics: string;
+  processRenderer: string;
   stage?: AssetStage;
   createRunner(): Promise<ProofRunner>;
-  onStats?(stats: { hits: number; rendered: number; total: number }): void;
+  onStats?(stats: ProofStats): void;
 }
 export async function verifyFigureProofs(
   library: Library,
@@ -84,14 +52,16 @@ export async function verifyFigureProofs(
   options: ProofOptions,
 ) {
   const assets: UnitAsset[] = [],
-    previews: Record<string, string> = {};
-  const digests = new Map<string, string>();
+    previews: Record<string, string> = {},
+    renders: Record<string, LibraryFigureRender> = {};
+  const cache = figureProofCache(options.directory),
+    digests = new Map<string, string>();
   const digest = (id: string): string => {
     if (!digests.has(id))
       digests.set(
         id,
         sha256(
-          stable({
+          stableFigureValue({
             entry: library[id],
             dependencies: [...new Set(libraryDependencies(library[id]))]
               .sort()
@@ -101,130 +71,178 @@ export async function verifyFigureProofs(
       );
     return digests.get(id)!;
   };
-  const stats = { hits: 0, rendered: 0, total: 0 };
-  const unique = figureProofReferences(library, references);
-  let runner: Promise<ProofRunner> | undefined;
-  let store = true;
-  const failures: string[] = [];
-  const thumbnailRefs = new Set<string>();
+  const stats: ProofStats = {
+    inputHits: 0,
+    proofHits: 0,
+    prepared: 0,
+    diagnosed: 0,
+    thumbnails: 0,
+    total: 0,
+  };
+  const unique = figureProofReferences(library, references),
+    thumbnailRefs = new Set<string>(),
+    failures: string[] = [];
   const jobs = unique.map((reference) => {
     const thumbnail = !thumbnailRefs.has(reference.ref);
     thumbnailRefs.add(reference.ref);
+    const kind = library[reference.ref]?.kind;
     return {
       reference,
       thumbnail,
       key: sha256(
-        stable({
-          format: 1,
-          renderer: options.renderer,
+        stableFigureValue({
+          format: 2,
+          renderer:
+            kind === "image"
+              ? "image"
+              : kind === "process"
+                ? options.processRenderer
+                : options.renderer,
           entry: digest(reference.ref),
           reference,
-          viewport: { width: 1366, height: 900 },
         }),
       ),
     };
   });
   stats.total = jobs.length;
+  let runner: Promise<ProofRunner> | undefined;
+  const active = () => (runner ??= options.createRunner());
+  const savedAssets = new Set<string>();
+  const asset = async (bytes: Buffer, extension: "png" | "svg") => {
+    const hash = sha256(bytes),
+      path = `assets/${hash}.${extension}`;
+    if (savedAssets.has(path)) return `/library/${path}`;
+    savedAssets.add(path);
+    assets.push({
+      scope: "library",
+      path,
+      bytes: options.stage ? await options.stage.save(bytes, hash) : bytes,
+      sha256: hash,
+      size: bytes.length,
+      content_type: extension === "svg" ? "image/svg+xml" : "image/png",
+      prompt: null,
+    });
+    return `/library/${path}`;
+  };
   try {
     for (let offset = 0; offset < jobs.length; offset += 2) {
-      let batchRunner: Promise<ProofRunner> | undefined;
+      if (runner) await (await runner).prepareBatch?.();
       const results = await Promise.all(
         jobs.slice(offset, offset + 2).map(async (job, slot) => {
           try {
-            const prior = await cached(
-              options.directory,
-              job.key,
-              job.thumbnail,
-            );
-            if (prior) {
-              stats.hits++;
-              return { ...job, bytes: prior.bytes, cached: true };
-            }
-            batchRunner ??= (async () => {
-              runner ??= options.createRunner();
-              const active = await runner;
-              await active.prepareBatch?.();
-              return active;
-            })();
-            const active = await batchRunner;
-            stats.rendered++;
-            const result = await active.render(job.reference, 1366, slot);
-            const errors = result.diagnostics.filter(
-              (d) => d.severity === "error",
-            );
-            if (errors.length)
-              throw new Error(
-                errors
-                  .map((d) => `${d.code} ${d.elements.join(",")}`)
-                  .join("; "),
+            let prepared = await cache.preparation(job.key),
+              geometry: FigureGeometry | undefined;
+            const prepare = async () => {
+              stats.prepared++;
+              const result = await cache.savePreparation(
+                job.key,
+                await (await active()).prepare(job.reference, slot),
               );
-            const bytes = job.thumbnail
-              ? await active.thumbnail(slot)
-              : undefined;
-            return { ...job, bytes, cached: false };
+              geometry = result.geometry;
+              return result;
+            };
+            if (prepared) stats.inputHits++;
+            else prepared = await prepare();
+            let proofKey = sha256(
+              stableFigureValue({
+                geometry: prepared.meta.geometryKey,
+                diagnostics: options.diagnostics,
+                viewport: { width: 1366, height: 900 },
+              }),
+            );
+            let diagnostics = await cache.proof(proofKey);
+            if (diagnostics) stats.proofHits++;
+            else {
+              if (prepared.meta.kind === "chemical") {
+                geometry ??= await cache.geometry(prepared.meta);
+                if (!geometry) {
+                  prepared = await prepare();
+                  proofKey = sha256(
+                    stableFigureValue({
+                      geometry: prepared.meta.geometryKey,
+                      diagnostics: options.diagnostics,
+                      viewport: { width: 1366, height: 900 },
+                    }),
+                  );
+                }
+                if (!geometry)
+                  throw new Error(
+                    "Chemical preparation did not produce geometry",
+                  );
+                stats.diagnosed++;
+                diagnostics = await (await active()).diagnose(geometry, slot);
+              } else diagnostics = [];
+              const errors = diagnostics.filter((d) => d.severity === "error");
+              if (errors.length)
+                throw new Error(
+                  errors
+                    .map((d) => `${d.code} ${d.elements.join(",")}`)
+                    .join("; "),
+                );
+              await cache.saveProof(proofKey, diagnostics);
+            }
+            let bytes: Buffer | undefined;
+            if (job.thumbnail) {
+              bytes = await cache.thumbnail(prepared.meta.geometryKey);
+              if (!bytes) {
+                const { meta, svg } = prepared;
+                stats.thumbnails++;
+                bytes = await (
+                  await active()
+                ).thumbnail(
+                  job.reference,
+                  meta.kind === "chemical"
+                    ? {
+                        svg: svg!.toString(),
+                        width: meta.width,
+                        height: meta.height,
+                        minimumScale: meta.minimumScale,
+                      }
+                    : undefined,
+                  slot,
+                );
+                await cache.saveThumbnail(meta.geometryKey, bytes);
+              }
+            }
+            return { ...job, prepared, diagnostics, bytes };
           } catch (error) {
             return {
               ...job,
-              error: `${job.reference.ref}: ${error instanceof Error ? error.message : String(error)} (${stable(job.reference)})`,
+              error: `${job.reference.ref}: ${error instanceof Error ? error.message : String(error)} (${stableFigureValue(job.reference)})`,
             };
           }
         }),
       );
-      // Commit results in reference order, independently of page completion order.
+      // Preserve reference order regardless of worker completion order.
       for (const result of results) {
         if ("error" in result) {
           failures.push(result.error);
           continue;
         }
-        const { key, bytes, thumbnail, reference } = result;
-        if (!result.cached && store)
-          try {
-            await mkdir(options.directory, { recursive: true });
-            if (bytes)
-              await atomic(join(options.directory, key + ".png"), bytes);
-            await atomic(
-              join(options.directory, key + ".json"),
-              JSON.stringify({
-                format: 1,
-                key,
-                passed: true,
-                ...(bytes ? { thumbnail: sha256(bytes) } : {}),
-              }),
-            );
-          } catch {
-            store = false;
-            console.warn(
-              "Figure proof cache could not be stored; the rendered proof remains valid",
-            );
-          }
-        if (thumbnail) {
-          const png = bytes!,
-            hash = sha256(png),
-            path = `assets/${hash}.png`;
-          assets.push({
-            scope: "library",
-            path,
-            bytes: options.stage ? await options.stage.save(png, hash) : png,
-            sha256: hash,
-            size: png.length,
-            content_type: "image/png",
-            prompt: null,
-          });
-          previews[reference.ref] = `/library/${path}`;
-        }
+        if (result.thumbnail)
+          previews[result.reference.ref] = await asset(result.bytes!, "png");
+        const { meta, svg } = result.prepared;
+        if (meta.kind === "chemical")
+          renders[figureViewKey(result.reference)] = {
+            asset: await asset(svg!, "svg"),
+            width: meta.width,
+            height: meta.height,
+            minimumScale: meta.minimumScale,
+            diagnostics: result.diagnostics,
+          };
       }
     }
   } finally {
     options.onStats?.(stats);
     if (runner)
       await runner.then(
-        (active) => active.close(),
+        (r) => r.close(),
         () => {},
       );
   }
   if (failures.length)
     throw new Error(`Figure proofs failed:\n${failures.join("\n")}`);
-  return { assets, previews, stats };
+  return { assets, previews, renders, stats };
 }
 
 export function figureProofReferences(
@@ -260,7 +278,7 @@ export function figureProofReferences(
           instance.numbers = reference.numbers;
           instance.focus = reference.focus;
         }
-        return [stable(instance), instance];
+        return [stableFigureValue(instance), instance];
       }),
     ).values(),
   ];

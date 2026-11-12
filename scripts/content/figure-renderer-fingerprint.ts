@@ -1,9 +1,10 @@
+import { isObject } from "../../shared/json.ts";
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { dirname, extname, join, relative, resolve } from "node:path";
 
 /** Hash the rendering sources and their literal local imports, styles and fonts. */
-export async function figureRendererFingerprint(root: string) {
+export async function figureRendererFingerprint(root: string, roots: string[]) {
   const files = new Set<string>();
   const visit = async (file: string) => {
     if (files.has(file)) return;
@@ -48,15 +49,7 @@ export async function figureRendererFingerprint(root: string) {
       await visit(found);
     }
   };
-  for (const file of [
-    "scripts/figure-browser.ts",
-    "src/ui/library/render.ts",
-    "src/ui/library/diagnostics.ts",
-    "src/ui/topic/ProcessViewer.vue",
-    "src/ui/styles/index.css",
-    "package-lock.json",
-  ])
-    await visit(join(root, file));
+  for (const file of roots) await visit(join(root, file));
   const hash = createHash("sha256");
   for (const file of [...files].sort())
     hash
@@ -65,4 +58,48 @@ export async function figureRendererFingerprint(root: string) {
       .update(await readFile(file))
       .update("\0");
   return hash.digest("hex");
+}
+
+/** Include only the installed rendering packages and their locked dependency closure. */
+export async function figureDependencyFingerprint(
+  root: string,
+  names: string[],
+) {
+  const lock: unknown = JSON.parse(
+    await readFile(join(root, "package-lock.json"), "utf8"),
+  );
+  if (!isObject(lock) || !isObject(lock.packages))
+    throw new Error("Missing locked figure dependencies");
+  const packages = lock.packages,
+    selected = new Map<string, unknown>();
+  const visit = (name: string, parent = "") => {
+    let directory = parent,
+      path: string;
+    for (;;) {
+      path = (directory ? directory + "/" : "") + "node_modules/" + name;
+      if (path in packages) break;
+      if (!directory) throw new Error(`Missing locked dependency ${name}`);
+      const index = directory.lastIndexOf("node_modules/");
+      directory = index > 0 ? directory.slice(0, index - 1) : "";
+    }
+    if (selected.has(path)) return;
+    const entry = packages[path];
+    if (!isObject(entry)) throw new Error(`Invalid locked dependency ${name}`);
+    selected.set(path, {
+      version: entry.version,
+      integrity: entry.integrity,
+      resolved: entry.resolved,
+    });
+    for (const field of [entry.dependencies, entry.optionalDependencies])
+      if (isObject(field))
+        for (const child of Object.keys(field)) visit(child, path);
+  };
+  names.forEach((name) => visit(name));
+  return createHash("sha256")
+    .update(
+      JSON.stringify(
+        [...selected].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+      ),
+    )
+    .digest("hex");
 }

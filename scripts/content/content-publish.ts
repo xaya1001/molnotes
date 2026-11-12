@@ -1,5 +1,5 @@
 import { readChemicalLibrary, libraryUsage } from "./chemical-library.ts";
-import { verifyLibraryFigures } from "../figure-browser.ts";
+import { verifyLibraryFigures } from "./figure-build.ts";
 import { assetStage, type AssetStage, type AssetBytes } from "./asset-stage.ts";
 import {
   validateSchemeCompounds,
@@ -379,6 +379,7 @@ async function build(
   );
   data.assets.push(...proofs.assets);
   usage.snapshot.previews = proofs.previews;
+  usage.snapshot.renders = proofs.renders;
   const directories = new Map(compiled.directories.map((d) => [d.slug, d]));
   // Author identity belongs to the row key, not the reader-facing compiled body.
   const notes = new Map(

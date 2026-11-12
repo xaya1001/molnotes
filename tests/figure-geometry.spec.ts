@@ -31,7 +31,13 @@ test("Node and browser shape identical geometry and the outlined SVG matches its
     expect(baseline.elements.some((element) => element.ids.label)).toBe(true);
     const fonts = await loadFigureFonts();
     const runs: FigureTextRun[] = [
-      { text: "AV Δ 室温 ", size: 20, weight: 400, italic: false, shift: 0 },
+      {
+        text: "AV Δ 室温 → ⁺ ⁻ \u9393 ",
+        size: 20,
+        weight: 400,
+        italic: false,
+        shift: 0,
+      },
       { text: "tBuO", size: 20, weight: 700, italic: true, shift: 0 },
       { text: "2", size: 16, weight: 400, italic: false, shift: 4 },
     ];

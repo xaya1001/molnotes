@@ -8,7 +8,7 @@ import type {
   FigureObservation,
 } from "../../../shared/chemical-library/geometry.ts";
 import { transformBox } from "./geometry-math.ts";
-import { walkGeometry } from "./geometry-tree.ts";
+import { walkGeometry } from "./geometry-walk.ts";
 import { pathBox, samplePath, transformPath } from "./path-geometry.ts";
 
 const identities = [

@@ -1,6 +1,5 @@
 import type {
   FigureGeometry,
-  FigureMatrix,
   FigureNode,
   FigurePaint,
 } from "../../../shared/chemical-library/geometry.ts";
@@ -71,15 +70,12 @@ export function transformedNodeBox(
   return transformBox(node.bounds, matrix);
 }
 
-export function walkGeometry(
-  node: FigureNode,
-  visit: (node: FigureNode, matrix: FigureMatrix) => void,
-  parent = identityMatrix(),
-) {
-  const matrix = multiplyMatrix(parent, node.transform);
-  visit(node, matrix);
-  if (node.kind === "group")
-    for (const child of node.children) walkGeometry(child, visit, matrix);
+export function refreshGeometry(node: FigureNode): void {
+  if (node.kind !== "group") return;
+  for (const child of node.children) refreshGeometry(child);
+  node.bounds = unionBoxes(
+    node.children.map((child) => transformedNodeBox(child)),
+  );
 }
 
 const escapeXml = (value: string) =>

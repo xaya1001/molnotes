@@ -68,7 +68,9 @@ export function nativePaint(
 }
 
 /** Parse the outlined SVG produced by the native chemical drawing engine. */
-export function nativeDepictionGeometry(source: string): FigureNode {
+export function nativeDepictionGeometry(
+  source: string,
+): Extract<FigureNode, { kind: "group" }> {
   const convert = (
     input: Node | string,
     inherited: FigurePaint,
@@ -142,6 +144,7 @@ export function nativeDepictionGeometry(source: string): FigureNode {
     return node;
   };
   const node = convert(parse(source).children[0], plainPaint());
-  if (!node) throw new Error("Missing native drawing geometry");
+  if (!node || node.kind !== "group")
+    throw new Error("Missing native drawing geometry");
   return node;
 }

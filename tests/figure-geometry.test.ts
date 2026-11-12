@@ -1,3 +1,4 @@
+import { walkGeometry } from "../src/ui/library/geometry-walk.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parse } from "svg-parser";
@@ -13,7 +14,6 @@ import {
   figurePath,
   geometrySvg,
   transformedNodeBox,
-  walkGeometry,
   plainPaint,
 } from "../src/ui/library/geometry-tree.ts";
 import { geometryObservation } from "../src/ui/library/geometry-observation.ts";
@@ -183,6 +183,7 @@ test("Chinese, Greek, script shifts, weight and italic prefixes produce font-fre
   const runs = [
     { ...run("t"), italic: true },
     run("BuO"),
+    run("→ ⁺ ⁻ \u9393"),
     { ...run("2", 16), shift: 4 },
     { ...run("，室温 Δ"), weight: 700 as const },
   ];
@@ -332,4 +333,12 @@ test("browser computed paint and native SVG paint use the same color and dash se
   assert.equal(compareFigureGeometry(before, after).equal, true);
   after.elements[0].paint.strokeWidth = 2;
   assert.equal(compareFigureGeometry(before, after).changed[0].paint, true);
+});
+
+test("fallback glyphs retain the primary text line metrics", async () => {
+  const fonts = await loadFigureFonts();
+  const latin = shapeFigureText([run("AB", 17)], fonts, { x: 0, y: 0 });
+  const mixed = shapeFigureText([run("AB \u6c34", 17)], fonts, { x: 0, y: 0 });
+  close(mixed.bounds!.height, latin.bounds!.height);
+  close(mixed.bounds!.y, latin.bounds!.y);
 });
