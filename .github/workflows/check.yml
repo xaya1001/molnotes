@@ -17,6 +17,8 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-24.04-arm
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/playwright-browsers
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -50,6 +52,20 @@ jobs:
           node scripts/ci-plan.ts "${RUNNER_TEMP}/changed-files" >> "${GITHUB_OUTPUT}"
       - run: npm ci
       - run: npm run format:check
+      - name: Read the Playwright version
+        id: playwright
+        if: steps.plan.outputs.mode != 'docs'
+        run: echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "${GITHUB_OUTPUT}"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: browsers
+        if: steps.plan.outputs.mode != 'docs'
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
+      - run: npx playwright install --with-deps chromium
+        if: steps.plan.outputs.mode != 'docs' && steps.browsers.outputs.cache-hit != 'true'
+      - run: npx playwright install-deps chromium
+        if: steps.plan.outputs.mode != 'docs' && steps.browsers.outputs.cache-hit == 'true'
       - run: npm run check
         if: steps.plan.outputs.mode != 'docs'
       - run: node --test tests/ci-plan.test.ts tests/checked-workflow.test.ts
@@ -68,20 +84,6 @@ jobs:
               -t "ghcr.io/${GITHUB_REPOSITORY,,}:${GITHUB_SHA}" . || status=$?
             echo "${status}" > "${RUNNER_TEMP}/image-build.status"
           ) > "${RUNNER_TEMP}/image-build.log" 2>&1 &
-      - name: Read the Playwright version
-        id: playwright
-        if: steps.plan.outputs.mode != 'docs'
-        run: echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "${GITHUB_OUTPUT}"
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        id: browsers
-        if: steps.plan.outputs.mode != 'docs'
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
-      - run: npx playwright install --with-deps chromium
-        if: steps.plan.outputs.mode != 'docs' && steps.browsers.outputs.cache-hit != 'true'
-      - run: npx playwright install-deps chromium
-        if: steps.plan.outputs.mode != 'docs' && steps.browsers.outputs.cache-hit == 'true'
       - run: npm run test:e2e
         if: steps.plan.outputs.mode != 'docs'
       - name: Summarize browser timings
