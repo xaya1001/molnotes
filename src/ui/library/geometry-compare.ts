@@ -1,5 +1,4 @@
 import type { FigureObservation } from "../../../shared/chemical-library/geometry.ts";
-import type { FigureReference } from "../../../shared/chemical-library/types.ts";
 import { boxEdgeDelta, traceDelta } from "./geometry-observation.ts";
 import { parsedPath } from "./path-geometry.ts";
 
@@ -11,15 +10,6 @@ const stable = (value: unknown): string =>
         )
       : item,
   );
-
-export const figureViewKey = (reference: FigureReference) =>
-  stable({
-    ref: reference.ref,
-    variant: reference.variant,
-    frame: reference.frame,
-    numbers: reference.numbers,
-    focus: reference.focus,
-  });
 
 export function compareFigureGeometry(
   before: FigureObservation,

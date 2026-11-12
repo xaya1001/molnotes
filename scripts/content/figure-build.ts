@@ -5,7 +5,10 @@ import { createHash } from "node:crypto";
 import type {
   Library,
   FigureReference,
+  LibraryFigureRender,
 } from "../../shared/chemical-library/types.ts";
+import { figureViewKey } from "../../shared/chemical-library/views.ts";
+import type { UnitAsset } from "./content-files.ts";
 import { libraryDependencies } from "../../shared/chemical-library/contract.ts";
 import { sha256 } from "../../shared/assets.ts";
 import { geometrySvg } from "../../src/ui/library/geometry-tree.ts";
@@ -178,5 +181,51 @@ export async function verifyLibraryFigures(
     });
   } finally {
     if (temporary) await rm(temporary, { recursive: true, force: true });
+  }
+}
+
+/** Prepare only the requested authoring views, without thumbnails or publication. */
+export async function prepareFigureViews(
+  library: Library,
+  references: FigureReference[],
+  root: string,
+) {
+  const css = await readFile(
+    new URL("../../src/ui/styles/tokens.css", import.meta.url),
+    "utf8",
+  );
+  const runner = figureBuildRunner(library, root, css, "preview");
+  const renders: Record<string, LibraryFigureRender> = {};
+  const assets = new Map<string, UnitAsset & { bytes: Buffer }>();
+  try {
+    for (const reference of references) {
+      const key = figureViewKey(reference);
+      if (renders[key]) continue;
+      const prepared = await runner.prepare(reference, 0);
+      if (prepared.kind !== "chemical") continue;
+      const { geometry, svg } = prepared;
+      const bytes = Buffer.from(svg),
+        hash = sha256(bytes),
+        path = `assets/${hash}.svg`;
+      assets.set(path, {
+        scope: "library",
+        path,
+        bytes,
+        sha256: hash,
+        size: bytes.length,
+        content_type: "image/svg+xml",
+        prompt: null,
+      });
+      renders[key] = {
+        asset: `/library/${path}`,
+        width: geometry.width,
+        height: geometry.height,
+        minimumScale: geometry.minimumScale,
+        diagnostics: await runner.diagnose(geometry, 0),
+      };
+    }
+    return { renders, assets: [...assets.values()] };
+  } finally {
+    await runner.close();
   }
 }

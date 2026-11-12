@@ -19,6 +19,11 @@ import {
   topicFigures,
   type PreviewFigure as Figure,
 } from "../shared/content-preview.ts";
+import { prepareFigureViews } from "./content/figure-build.ts";
+import type {
+  FigureReference,
+  LibrarySnapshot,
+} from "../shared/chemical-library/types.ts";
 import { readChemicalLibrary } from "./content/chemical-library.ts";
 import { resolveCompoundSlots } from "./content/compound-slots.ts";
 import { validateTopicContent } from "../shared/topic-content.ts";
@@ -216,6 +221,19 @@ const out =
   join(cache, "preview", units.map((u) => u.split("/").at(-1)).join("+"));
 await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });
+const prepared = await prepareFigureViews(
+  library.entries,
+  figures
+    .filter((figure) => figure.kind === "library")
+    .map((figure) => figure.value as FigureReference),
+  content,
+);
+library.assets.push(...prepared.assets);
+const snapshot: LibrarySnapshot = {
+  entries: library.entries,
+  uses: {},
+  renders: prepared.renders,
+};
 const server = await serve(await build());
 const browser = await chromium.launch();
 const report = figures.map((figure) => ({
@@ -230,11 +248,11 @@ try {
       reducedMotion: "reduce",
     });
     await page.addInitScript(
-      ({ figures, entries }) => {
+      ({ figures, snapshot }) => {
         window.__previewFigures = figures;
-        window.__previewLibrary = entries;
+        window.__previewLibrary = snapshot;
       },
-      { figures, entries: library.entries },
+      { figures, snapshot },
     );
     await page.goto(
       `http://127.0.0.1:${(server.address() as AddressInfo).port}/showcase/preview`,

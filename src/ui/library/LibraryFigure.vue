@@ -2,15 +2,15 @@
 import { computed, ref, watch, onBeforeUnmount } from "vue";
 import type {
   FigureReference,
-  Library,
+  LibrarySnapshot,
 } from "../../../shared/chemical-library/types.ts";
 import UiFigure from "../UiFigure.vue";
 import ImageViewer from "../ImageViewer.vue";
 import ProcessViewer from "../topic/ProcessViewer.vue";
-import { figureDiagnostics } from "./diagnostics.ts";
-import { renderFigure } from "./render.ts";
+import { snapshotSvg } from "./snapshot-svg.ts";
+import { imageSvg } from "./image-svg.ts";
 const props = defineProps<{
-  library: Library;
+  library: LibrarySnapshot;
   reference: FigureReference;
 }>();
 const emit = defineEmits<{
@@ -18,7 +18,7 @@ const emit = defineEmits<{
     value: import("../../../shared/chemical-library/types.ts").Diagnostic[],
   ];
 }>();
-const entry = computed(() => props.library[props.reference.ref]);
+const entry = computed(() => props.library.entries[props.reference.ref]);
 const selectedFrame = ref("");
 const viewing = ref(false);
 const explanation = ref("");
@@ -50,7 +50,10 @@ watch(
     observer?.disconnect();
     if (!root.value) return;
     try {
-      const result = await renderFigure(props.library, displayed.value);
+      const result =
+        entry.value?.kind === "image"
+          ? { ...(await imageSvg(entry.value)), diagnostics: [] }
+          : await snapshotSvg(props.library, displayed.value);
       if (current !== generation) return;
       root.value.replaceChildren(result.svg);
       error.value = "";
@@ -73,7 +76,7 @@ watch(
         "[data-reaction-id]",
       )) {
         const show = () => {
-          const reaction = props.library[arrow.dataset.reactionId!];
+          const reaction = props.library.entries[arrow.dataset.reactionId!];
           if (reaction?.kind === "reaction")
             explanation.value = reaction.explanation;
         };
@@ -114,7 +117,7 @@ watch(
         );
         result.svg.style.width = `${result.width * scale}px`;
         result.svg.style.height = `${result.height * scale}px`;
-        emit("diagnostics", figureDiagnostics(result.svg));
+        emit("diagnostics", result.diagnostics);
       };
       observer = new ResizeObserver(resize);
       observer.observe(root.value);
@@ -197,7 +200,7 @@ onBeforeUnmount(() => {
       class="library-canvas"
       tabindex="0"
       role="group"
-      :aria-label="library[reference.ref]?.title"
+      :aria-label="library.entries[reference.ref]?.title"
     />
     <p v-if="entry?.overview">{{ entry.overview }}</p>
     <p v-if="frameExplanation">{{ frameExplanation }}</p>

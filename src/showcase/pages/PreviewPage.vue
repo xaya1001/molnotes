@@ -19,7 +19,7 @@ import { defineFlow, type Flow } from "../../ui/diagrams/flow.ts";
 import { defineTimeline, type Timeline } from "../../ui/diagrams/model.ts";
 import type { PreviewFigure as Injected } from "../../../shared/content-preview.ts";
 import type {
-  Library,
+  LibrarySnapshot,
   FigureReference,
   Diagnostic,
 } from "../../../shared/chemical-library/types.ts";
@@ -64,7 +64,7 @@ type Shown =
 declare global {
   interface Window {
     __previewFigures?: Injected[];
-    __previewLibrary?: Library;
+    __previewLibrary?: LibrarySnapshot;
     __previewResult?: {
       where: string;
       warnings: string[];
@@ -111,7 +111,7 @@ const shown: Shown[] = (window.__previewFigures ?? []).map((f) =>
               },
 );
 const figures = ref<HTMLElement[]>([]);
-const library = window.__previewLibrary ?? {};
+const library = window.__previewLibrary ?? { entries: {}, uses: {} };
 const diagnostics = ref<Record<number, Diagnostic[]>>({});
 
 const settle = () =>
