@@ -1,6 +1,7 @@
 import type {
   FigureGeometry,
   FigureNode,
+  FigureRect,
 } from "../../../shared/chemical-library/geometry.ts";
 import type { ChemistryToolkit } from "../chemistry/rdkit.ts";
 import type { FigureFontResolver } from "./font-geometry.ts";

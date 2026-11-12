@@ -13,6 +13,7 @@ const optionalLists = new Set([
   "bonds",
   "abbreviations",
 ]);
+export const figureDimension = (value: number) => Number(value.toFixed(3)) + 0;
 /** Keep persisted figure geometry readable and optional defaults implicit. */
 export function finishFigureEntry<T extends LibraryEntry>(entry: T): T {
   function visit(value: unknown) {
@@ -22,7 +23,7 @@ export function finishFigureEntry<T extends LibraryEntry>(entry: T): T {
         visit(child);
         if (child === undefined) delete value[key];
         if (typeof child === "number" && dimensions.has(key))
-          value[key] = Number(child.toFixed(3)) + 0;
+          value[key] = figureDimension(child);
         if (Array.isArray(child) && !child.length && optionalLists.has(key))
           delete value[key];
       }

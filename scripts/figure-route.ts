@@ -14,6 +14,7 @@ import { prepareFigure } from "../src/ui/library/prepare.ts";
 import { loadFigureFonts } from "./figure-fonts.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import { finishFigureEntry } from "./figure-output.ts";
+import type { FigureRect } from "../shared/chemical-library/geometry.ts";
 import {
   createFigureScene,
   parseFigureStyle,
@@ -50,7 +51,6 @@ export async function compileReactionLayout(
   input: FigureInput,
   raw: StepInput,
   style?: FigureStyle,
-  numbers?: Record<string, string>,
 ) {
   const route: Route = {
     kind: "route",
@@ -68,7 +68,6 @@ export async function compileReactionLayout(
     input,
     new Map([[stepId, raw]]),
     style,
-    numbers,
   );
   const step = route.steps[0],
     at = step.at;
@@ -101,7 +100,6 @@ export async function compileRouteLayout(
   input: FigureInput,
   rawSteps: Map<string, StepInput>,
   style?: FigureStyle,
-  numbers?: Record<string, string>,
 ) {
   style ??= await loadFigureStyle();
   const fonts = await loadFigureFonts(),
@@ -137,26 +135,52 @@ export async function compileRouteLayout(
       throw new Error(`Missing reaction ${step.reaction}`);
     const raw = rawSteps.get(step.id)!,
       byId = new Map<string, Measured>();
-    const localNumbers = Object.fromEntries(
-      [...reaction.reactants, ...reaction.products].flatMap((p) => {
-        const value =
-          numbers?.[route.id === reaction.id ? p.id : `${step.id}/${p.id}`];
-        return value === undefined ? [] : [[p.id, value]];
-      }),
-    );
-    // Measure the same coordinate precision and labels as the saved view.
+    // Measure saved precision; reserve a number row for later page references.
     for (const p of [...reaction.reactants, ...reaction.products])
       finishFigureEntry(library[p.compound]);
+    const reserved = await prepareFigure(
+      library,
+      {
+        ref: reaction.id,
+        numbers: Object.fromEntries(
+          [...reaction.reactants, ...reaction.products].map((p) => [
+            p.id,
+            "888",
+          ]),
+        ),
+      },
+      { toolkit, fonts, style },
+    );
+    const reservations = new Map<
+      string,
+      { box: FigureRect; number: FigureRect }
+    >();
+    walkGeometry(reserved.root, (node, matrix) => {
+      if (node.kind !== "group" || !node.attributes["data-compound"]) return;
+      const id = node.attributes["data-molecule"],
+        number = node.children.find(
+          (n) => n.attributes["data-number"] === `${id}:number`,
+        )!;
+      reservations.set(id, {
+        box: transformBox(node.bounds, matrix)!,
+        number: transformBox(transformedNodeBox(number), matrix)!,
+      });
+    });
     const geometry = await prepareFigure(
       library,
-      { ref: reaction.id, numbers: localNumbers },
-      { toolkit, fonts, style },
+      { ref: reaction.id },
+      {
+        toolkit,
+        fonts,
+        style,
+      },
     );
     walkGeometry(geometry.root, (node, matrix) => {
       if (node.kind !== "group" || !node.attributes["data-compound"]) return;
       const id = node.attributes["data-molecule"],
         placement = reaction.scene.molecules.find((m) => m.id === id)!;
-      const box = transformBox(node.bounds, matrix)!;
+      const reservation = reservations.get(id)!,
+        box = unionBoxes([transformBox(node.bounds, matrix), reservation.box])!;
       const number = node.children.find(
         (n) => n.attributes["data-number"] === `${id}:number`,
       );
@@ -171,16 +195,14 @@ export async function compileRouteLayout(
       );
       const ink = transformBox(body, matrix)!,
         baseline = ink.y + ink.height / 2;
-      const numberBox = number
-        ? transformBox(transformedNodeBox(number), matrix)
-        : null;
+      const numberBox = unionBoxes([
+        number ? transformBox(transformedNodeBox(number), matrix) : null,
+        reservation.number,
+      ])!;
       const participant = [...reaction.reactants, ...reaction.products].find(
         (p) => p.id === id,
       )!;
-      const label =
-        localNumbers[id] === undefined
-          ? figureLabelLines(participant.number, participant.name)
-          : figureLabelLines(localNumbers[id]);
+      const label = figureLabelLines(participant.number, participant.name);
       const measure: RouteMolecule = {
         width: box.width,
         top: baseline - box.y,
@@ -188,13 +210,12 @@ export async function compileRouteLayout(
         label,
         text: label,
         structure: true,
-      };
-      if (numberBox)
-        measure.reference = {
+        reference: {
           width: numberBox.width,
           top: numberBox.height / 2,
           bottom: numberBox.height / 2,
-        };
+        },
+      };
       byId.set(id, {
         measure,
         offset: {
@@ -202,10 +223,8 @@ export async function compileRouteLayout(
           y: baseline - placement.at.y * bond,
         },
         referenceOffset: {
-          x: (numberBox?.x ?? box.x) - placement.at.x * bond,
-          y:
-            (numberBox ? numberBox.y + numberBox.height / 2 : baseline) -
-            placement.at.y * bond,
+          x: numberBox.x - placement.at.x * bond,
+          y: numberBox.y + numberBox.height / 2 - placement.at.y * bond,
         },
       });
     });

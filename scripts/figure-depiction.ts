@@ -22,6 +22,7 @@ import type { FigureStyle } from "../src/ui/library/scene-geometry.ts";
 import { pathBox, samplePath } from "../src/ui/library/path-geometry.ts";
 import { unionBoxes, rectangle } from "../src/ui/library/geometry-math.ts";
 import type { FigureRect } from "../shared/chemical-library/geometry.ts";
+import { figureDimension } from "./figure-output.ts";
 
 // The installed MinimalLib exposes this documented overload; its declaration omits it.
 declare module "@rdkit/rdkit" {
@@ -561,6 +562,27 @@ function orient(rd: Toolkit, mol: Mol, reference: Mol) {
   }
 }
 
+/** Score and save the same centred, quantized coordinates, including folded atoms. */
+function savedCoordinates(
+  fullPoints: [number, number][],
+  original: number[],
+  points: [number, number][],
+  scale: number,
+) {
+  const expanded = fullPoints.map((p) => [...p] as [number, number]);
+  original.forEach((a, i) => {
+    expanded[a] = points[i];
+  });
+  const xs = expanded.map((p) => p[0]),
+    ys = expanded.map((p) => p[1]),
+    cx = (Math.min(...xs) + Math.max(...xs)) / 2,
+    cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  return expanded.map(([x, y]) => ({
+    x: figureDimension(((x - cx) / 1.5) * scale),
+    y: figureDimension((-(y - cy) / 1.5) * scale),
+  }));
+}
+
 function nativeLabelCost(
   rd: Toolkit,
   mol: Mol,
@@ -572,16 +594,13 @@ function nativeLabelCost(
 ) {
   const { original } = displayAtoms.get(mol)!;
   if (!displayAtoms.get(mol)!.labels.size) return 0;
-  const expanded = fullPoints.map((p) => [...p] as [number, number]);
-  original.forEach((a, i) => {
-    expanded[a] = points[i];
-  });
+  const saved = savedCoordinates(fullPoints, original, points, spec.scale ?? 1);
   const angle = ((spec.rot ?? 0) * Math.PI) / 180,
     fx = spec.flip === true || spec.flip === "h" ? -1 : 1,
     fy = spec.flip === "v" ? -1 : 1,
-    placed = expanded.map(([x, y]): [number, number] => [
-      x * fx * Math.cos(angle) - y * fy * Math.sin(angle),
-      x * fx * Math.sin(angle) + y * fy * Math.cos(angle),
+    placed = saved.map(({ x, y }): [number, number] => [
+      1.5 * (x * fx * Math.cos(angle) + y * fy * Math.sin(angle)),
+      1.5 * (x * fx * Math.sin(angle) - y * fy * Math.cos(angle)),
     ]),
     copy = withCoordinates(rd, full, placed),
     graph = graphOf(full),
@@ -600,11 +619,8 @@ function nativeLabelCost(
       new Set(groups.flatMap((g) => g.bonds)),
     ),
     atomLabels = Object.fromEntries(
-      [...names].map(([i, name]) => {
-        const parent = graph.bonds
-            .find((b) => b.atoms.includes(i))!
-            .atoms.find((a) => a !== i)!,
-          left = placed[parent][0] - placed[i][0] > 0.2 / (spec.scale ?? 1);
+      groups.map(({ atoms: [i], attachment: parent, name }) => {
+        const left = placed[parent][0] - placed[i][0] > 0.2;
         return [
           i,
           abbreviationLabel(name, left, (graph.atoms[parent].z ?? 6) === 6),
@@ -614,8 +630,7 @@ function nativeLabelCost(
   for (const group of groups)
     for (const a of group.atoms.slice(1)) atomLabels[a] = "";
   try {
-    const bond =
-        parseFloat(style.values["--chemical-bond"]) * (spec.scale ?? 1),
+    const bond = parseFloat(style.values["--chemical-bond"]),
       svg = drawn.mol.get_svg_with_highlights(
         JSON.stringify({
           width: 800,
@@ -886,16 +901,12 @@ export function depictRoute(
           ),
         );
         // Propagated references include the author's final rot/flip, while the saved placement owns that transform.
-        const coords = expandedCoordinates(
-            rd,
-            final,
-            fulls.get(key)!,
-            coordgen,
-          ),
-          xs = coords.map((p) => p[0]),
-          ys = coords.map((p) => p[1]),
-          cx = (Math.min(...xs) + Math.max(...xs)) / 2,
-          cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+        const coords = savedCoordinates(
+          fullPoints,
+          displayAtoms.get(final)!.original,
+          xy(final),
+          r.spec.scale ?? 1,
+        );
         const layout = r.variant
           ? r.compound.variants![r.variant]
           : r.compound.layout;
@@ -906,10 +917,7 @@ export function depictRoute(
           coords: Object.fromEntries(
             r.depiction.atoms.map((atom, i) => [
               r.compound.atomIds[atom],
-              {
-                x: ((coords[i][0] - cx) / 1.5) * (r.spec.scale ?? 1),
-                y: (-(coords[i][1] - cy) / 1.5) * (r.spec.scale ?? 1),
-              },
+              coords[i],
             ]),
           ),
         };

@@ -435,7 +435,25 @@ test("scene arrow condition lines reserve their measured ink height", async () =
   );
 });
 
-test("compiled layouts include the actual page number labels", async () => {
+test("compiled ester labels clear bonds after saving aligned coordinates", async () => {
+  const compiled = await compileFigure({
+    title: "Aligned ester",
+    anchor: "b",
+    compounds: {
+      a: "CCC(c1ccccc1)(C(=O)OCC)CCC(=O)N",
+      b: "CCC1(c2ccccc2)CCC(=O)NC1=O",
+    },
+    steps: [{ from: "a", to: "b" }],
+  });
+  const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit,
+    fonts,
+    style,
+  });
+  assert.deepEqual(figureGeometryDiagnostics(geometry, style), []);
+});
+
+test("compiled layouts reserve a three-digit number line for page references", async () => {
   const input = {
     title: "Numbered reaction",
     compounds: {
@@ -451,22 +469,15 @@ test("compiled layouts include the actual page number labels", async () => {
   const numbers = Object.fromEntries(
     [...reaction.reactants, ...reaction.products].map((p, i) => [
       p.id,
-      String(i + 1).repeat(16),
+      String(i + 1).repeat(3),
     ]),
   );
-  const compiled = await compileFigure(input, first.entries, "example", {
-    style,
-    numbers,
-  });
-  const geometry = await prepareFigure(
-    compiled.entries,
-    { ...compiled.reference, numbers },
-    { toolkit, fonts, style },
-  );
-  assert.deepEqual(
-    figureGeometryDiagnostics(geometry, style).filter((d) =>
-      ["LABEL_OVERLAP", "CLIPPED_LABEL"].includes(d.code),
-    ),
-    [],
-  );
+  for (const reference of [first.reference, { ...first.reference, numbers }]) {
+    const geometry = await prepareFigure(first.entries, reference, {
+      toolkit,
+      fonts,
+      style,
+    });
+    assert.deepEqual(figureGeometryDiagnostics(geometry, style), []);
+  }
 });
