@@ -149,7 +149,7 @@ git diff --word-diff=plain --word-diff-regex='[A-Za-z0-9_]+|[^[:space:]]' main..
 
 制备等长正文放按需 JSON（例如 `static/example-bodies.json`），对象的键映射到字符串正文；`body` 字段写 `{ "url": "/sites/<slug>/static/example-bodies.json", "key": "1" }`。页图与正文仅在打开时加载，资源仍随专题单元一起发布。
 
-发布时检查记录间引用、权利要求引用、页序和矩形范围、页图与片段资源、正文 JSON 的键以及 OCR 页数。SMILES 与范围定义 `scope.smarts` 由 RDKit 解析；空结构须在制作记录和该条 `notes` 中说明未确认原因。校验失败拒绝整组发布。
+发布时检查记录间引用、权利要求引用、页序和矩形范围、页图与片段资源、正文 JSON 的键以及 OCR 页数。SMILES 与 `markush` 的母核、片段及 SMARTS 由 RDKit 解析；空结构须在制作记录和该条 `notes` 中说明未确认原因。校验失败拒绝整组发布。
 
 比较记录保存为 `pins: { <collectionId>: [id] }`，逐条笔记为 `recordNotes: { "<collectionId>/<id>": "正文" }`。浏览器和服务端共用由内容派生的校验：未知编号、重复比较编号、超出 `pins.max` 或超过 30000 字的笔记拒绝写入。
 
@@ -169,7 +169,19 @@ collection 的内部 `id` 唯一且保持稳定。跨来源编号相同时使用
 
 ### 分组、权利要求与假设
 
-`kind:"assignments"` 字段的值是数组，每项为 `{group,basis,evidence,claims,limit,pattern?}`。basis 是 `author`（原文归类）、`agent`（Agent 归类）或 `chemical-pattern`（声明的化学模式）；后者必须填写 pattern。每项必须有原页证据、关联 claims 数组（无关联写空数组）和具体 limit。此字段可筛选；列表、详情、比较和 CSV 保留依据与局限。`claims` 是证据关联，不代表完整法律覆盖。权利要求页的模式匹配结果区分 matched、not-matched、unmodeled，只说明声明的 SMARTS 子结构匹配情况。
+`kind:"assignments"` 字段的值是数组，每项为 `{group,basis,evidence,claims,limit,pattern?}`。basis 是 `author`（原文归类）、`agent`（Agent 归类）或 `chemical-pattern`（声明的化学模式）；后者必须填写 pattern。每项必须有原页证据、关联 claims 数组（无关联写空数组）和具体 limit。此字段可筛选；列表、详情、比较和 CSV 保留依据与局限。`claims` 是证据关联，不代表完整法律覆盖。权利要求用 `markush` 声明化学结构模式；查询和实施例统计共用母核拆分与逐位判定，结果区分 matched、not-matched、unmodeled。化学匹配不等同于完整权利要求范围。
+
+`markush` 为 `{core, groups, exclusions?, note, unmodeled?}`。`core` 是 SMILES；每个 R 用唯一的终端单键 `[*:1]`、`[*:2]` 标记，`groups` 以对应正整数作键。无 R 的母核按子结构筛查。每组为 `{label, alternatives, positions?, unmodeled?}`，`positions` 用母核原始 SMILES 的零起始原子序号列出可变连接位置，省略时固定在连接点的相邻原子。每个备选必须有稳定 `id` 与 `label`，并为以下之一：
+
+- `{type:"fragment", smiles}`：恰有一个终端单键 `*` 的具体片段，`*[H]` 表示氢。
+- `{type:"class", smarts}`：匹配整个带连接点片段的 SMARTS，连接点用 `[#0]`。
+- `{type:"count", element, min, max, atomSmarts}`：元素用原子序数；片段的每个非连接点原子须匹配单原子 `atomSmarts`，所有键为单键，所选元素数在闭区间内。例如无环饱和烷基用 `element:6, atomSmarts:"[C;X4;!R]"`。
+- `{type:"substituted", core, group, min, max}`：带单个连接点的基础片段，外围有 min–max 个由 `group` 引用定义的取代片段；`min:0` 表示任选取代。定义引用不得成环。
+- `{type:"repeat", unit, end, min, max}`：`unit` 有 `[*:1]` 与 `[*:2]` 两个终端单键，按 1→2 串接 min–max 次，再接单连接点 `end`；零次直接为 end。
+
+`exclusions` 是 `{id,label,smarts}` 或 `{id,label,smiles}` 数组，分别排除子结构或完整相同结构。发布校验所有结构与定义引用，拒绝重复连接点、未定义 R、非法位置及区间。尚未录入的备选写在对应组的 `unmodeled`，命中已录入备选仍判为定义内；涉及整项的未表达条件写在模型的 `unmodeled`，整体保留未建模。未表达内容同时记录在该条 `notes` 中；只有已确认的定义外片段、母核不匹配或但书命中可以给出模式外。多种母核映射会逐一判定，优先采用全部满足的拆分。桥连多个 R 位的片段保留为未建模。
+
+查询返回整体 `status`、`reason`、逐位 `groups`（实际片段、状态、命中备选 id）与排除条件 id。覆盖统计按关联实施例逐一查询，每位保留每个备选的实施例编号、没有命中的备选、定义外片段以及未建模编号；统计表展示同一份数据。
 
 既有 `sarCases` 可加 `analysis:{kind,rationale,evidence}`，kind 为 `observation`、`design-around-hypothesis` 或 `unresolved`，配合 cases 的 finding、limit、ids 和 claims 展示原文观察、推论或待核实问题。设计绕开假设必须写明证据、推理和局限，不能将模式阴性解释为法律结论。
 
