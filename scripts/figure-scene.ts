@@ -1,5 +1,9 @@
 import { depictRoute, figureAbbreviations } from "./figure-depiction.ts";
-import { compileRouteLayout, compileReactionLayout } from "./figure-route.ts";
+import {
+  compileRouteLayout,
+  compileReactionLayout,
+  loadFigureStyle,
+} from "./figure-route.ts";
 import type { FigureStyle } from "../src/ui/library/scene-geometry.ts";
 import { createHash } from "node:crypto";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
@@ -107,6 +111,7 @@ interface Resolved {
   compound: Compound;
   atoms: Map<number, string>;
   spec: StructureInput;
+  depiction: { smiles: string; atoms: number[] };
 }
 function endpoints<T>(value: T | T[]): T[] {
   return Array.isArray(value) ? value : [value];
@@ -269,18 +274,6 @@ export async function compileFigure(
       }
       let variant: string | undefined;
       const abbreviations = figureAbbreviations(rd, m, spec, input.abbreviate);
-      if (
-        JSON.stringify(abbreviations) !==
-        JSON.stringify(compound.layout.abbreviations ?? [])
-      ) {
-        variant = `${id}_${figureKey(where)}`;
-        compound.variants ??= {};
-        compound.variants[variant] = {
-          ...structuredClone(compound.layout),
-          abbreviations,
-        };
-        generated.add(compound.id);
-      }
       const target = openMolecule(rd, compound.smiles),
         query = openMolecule(rd, unmapped);
       try {
@@ -292,6 +285,26 @@ export async function compileFigure(
         );
         if (match.atoms?.length !== maps.length)
           throw new Error(`${where}: cannot map compound atoms`);
+        const abbreviationAtoms = abbreviations.abbreviationAtoms?.map(
+          (i) => compound.atomIds[match.atoms![i]],
+        );
+        if (
+          JSON.stringify(abbreviations.abbreviations) !==
+            JSON.stringify(compound.layout.abbreviations ?? []) ||
+          JSON.stringify(abbreviationAtoms) !==
+            JSON.stringify(compound.layout.abbreviationAtoms)
+        ) {
+          variant = `${id}_${figureKey(where)}`;
+          compound.variants ??= {};
+          const layout = {
+            ...structuredClone(compound.layout),
+            abbreviations: abbreviations.abbreviations,
+          };
+          delete layout.abbreviationAtoms;
+          if (abbreviationAtoms) layout.abbreviationAtoms = abbreviationAtoms;
+          compound.variants[variant] = layout;
+          generated.add(compound.id);
+        }
         if (spec.arrows?.some((a) => a.from.startsWith("pi("))) {
           const raw = openMolecule(rd, expanded, false);
           try {
@@ -412,7 +425,13 @@ export async function compileFigure(
             if (!atoms.has(n))
               throw new Error(`${where}.enclose: unknown atom ${n}`);
         }
-        return { compound, atoms, spec, ...(variant ? { variant } : {}) };
+        return {
+          compound,
+          atoms,
+          spec,
+          depiction: { smiles: unmapped, atoms: match.atoms },
+          ...(variant ? { variant } : {}),
+        };
       } finally {
         target.delete();
         query.delete();
@@ -631,6 +650,7 @@ export async function compileFigure(
       compounds,
       input,
       (key) => `${id}_${figureKey(key)}`,
+      options.style ?? (await loadFigureStyle()),
     ))
       generated.add(cid);
     const resolve = (key: string) => {

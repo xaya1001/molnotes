@@ -8,6 +8,7 @@ import {
   graphOf,
   openMolecule,
   graphSignature,
+  abbreviatedDrawing,
 } from "../shared/chemical-library/chemistry.ts";
 import {
   abbreviatedGroups,
@@ -17,6 +18,10 @@ import {
 } from "../shared/molecule-abbreviations.ts";
 import type { Compound } from "../shared/chemical-library/types.ts";
 import type { FigureInput, StructureInput } from "./figure-input.ts";
+import type { FigureStyle } from "../src/ui/library/scene-geometry.ts";
+import { pathBox, samplePath } from "../src/ui/library/path-geometry.ts";
+import { unionBoxes, rectangle } from "../src/ui/library/geometry-math.ts";
+import type { FigureRect } from "../shared/chemical-library/geometry.ts";
 
 // The installed MinimalLib exposes this documented overload; its declaration omits it.
 declare module "@rdkit/rdkit" {
@@ -59,7 +64,7 @@ export function figureAbbreviations(
   spec: StructureInput,
   extra: FigureInput["abbreviate"],
 ) {
-  if (spec.abbreviate === false) return [];
+  if (spec.abbreviate === false) return { abbreviations: [] };
   const names = matchingAbbreviations(rd, mol, [...defaults, ...(extra ?? [])]);
   const targets = new Set(
     (spec.arrows ?? []).flatMap((arrow) =>
@@ -68,21 +73,23 @@ export function figureAbbreviations(
       ),
     ),
   );
-  if (targets.size) {
-    const maps = atomMaps(mol);
-    if (
-      abbreviatedGroups(rd, mol, names).some((g) =>
-        g.atoms.some((a) => targets.has(maps[a])),
-      )
-    )
-      return [];
-  }
-  return names;
+  const maps = atomMaps(mol),
+    groups = abbreviatedGroups(rd, mol, names),
+    retained = groups.filter(
+      (g) => !g.atoms.slice(1).some((a) => targets.has(maps[a])),
+    );
+  return {
+    abbreviations: names,
+    ...(retained.length === groups.length
+      ? {}
+      : { abbreviationAtoms: retained.map((g) => g.atoms[0]) }),
+  };
 }
 interface Structure {
   compound: Compound;
   spec: StructureInput;
   variant?: string;
+  depiction: { smiles: string; atoms: number[] };
 }
 function descriptionMolecule(
   rd: Toolkit,
@@ -133,8 +140,11 @@ function contracted(
   rd: Toolkit,
   full: Mol,
   names: readonly MoleculeAbbreviation[] = [],
+  allowed?: number[],
 ) {
-  const groups = abbreviatedGroups(rd, full, names),
+  const groups = abbreviatedGroups(rd, full, names).filter(
+      (g) => !allowed || allowed.includes(g.atoms[0]),
+    ),
     removed = new Set(groups.flatMap((g) => g.atoms.slice(1))),
     roots = new Map(groups.map((g) => [g.atoms[0], g.name]));
   const data = JSON.parse(full.get_json()),
@@ -210,14 +220,28 @@ function alignCore(
   smarts: string,
   coordgen: boolean,
 ) {
-  const current = matchingCopy(rd, mol),
-    target = matchingCopy(rd, reference);
+  const query = rd.get_qmol(smarts)!,
+    currentMatch = matched(rd, mol, query),
+    referenceMatch = matched(rd, reference, query);
+  query.delete();
+  // Stand-in elements distinguish labels during matching only. Depiction must
+  // use the real atoms and an explicit correspondence, as for the source core.
+  const currentData = JSON.parse(mol.get_json()),
+    targetData = JSON.parse(reference.get_json());
+  currentMatch.forEach((a, i) => {
+    currentData.molecules[0].atoms[a].isotope = 2000 + i;
+    targetData.molecules[0].atoms[referenceMatch[i]].isotope = 2000 + i;
+  });
+  let index = 0;
+  const pattern = smarts.replace(/\[[^\]]+\]/g, () => `[${2000 + index++}*]`),
+    current = descriptionMolecule(rd, currentData),
+    target = descriptionMolecule(rd, targetData);
   try {
     if (
       !current.generate_aligned_coords(
         target,
         JSON.stringify({
-          referenceSmarts: smarts,
+          referenceSmarts: pattern,
           acceptFailure: false,
           useCoordGen: coordgen,
         }),
@@ -265,7 +289,13 @@ function expandedCoordinates(
     )
       throw new Error("Cannot expand the contracted depiction");
     working.normalize_depiction(0);
-    return xy(working);
+    const expanded = xy(working);
+    // Expansion supplies coordinates for hidden atoms. The visible contracted
+    // depiction owns the skeleton and label attachment positions.
+    original.forEach((atom, i) => {
+      expanded[atom] = points[i];
+    });
+    return expanded;
   } finally {
     working.delete();
     template.delete();
@@ -531,12 +561,131 @@ function orient(rd: Toolkit, mol: Mol, reference: Mol) {
   }
 }
 
+function nativeLabelCost(
+  rd: Toolkit,
+  mol: Mol,
+  full: Mol,
+  fullPoints: [number, number][],
+  points: [number, number][],
+  spec: StructureInput,
+  style: FigureStyle,
+) {
+  const { original } = displayAtoms.get(mol)!;
+  if (!displayAtoms.get(mol)!.labels.size) return 0;
+  const expanded = fullPoints.map((p) => [...p] as [number, number]);
+  original.forEach((a, i) => {
+    expanded[a] = points[i];
+  });
+  const angle = ((spec.rot ?? 0) * Math.PI) / 180,
+    fx = spec.flip === true || spec.flip === "h" ? -1 : 1,
+    fy = spec.flip === "v" ? -1 : 1,
+    placed = expanded.map(([x, y]): [number, number] => [
+      x * fx * Math.cos(angle) - y * fy * Math.sin(angle),
+      x * fx * Math.sin(angle) + y * fy * Math.cos(angle),
+    ]),
+    copy = withCoordinates(rd, full, placed),
+    graph = graphOf(full),
+    names = new Map(
+      [...displayAtoms.get(mol)!.labels].map(([i, name]) => [
+        original[i],
+        name,
+      ]),
+    ),
+    groups = abbreviatedGroups(rd, full, [...new Set(names.values())]).filter(
+      (g) => names.has(g.atoms[0]),
+    ),
+    drawn = abbreviatedDrawing(
+      rd,
+      copy,
+      new Set(groups.flatMap((g) => g.bonds)),
+    ),
+    atomLabels = Object.fromEntries(
+      [...names].map(([i, name]) => {
+        const parent = graph.bonds
+            .find((b) => b.atoms.includes(i))!
+            .atoms.find((a) => a !== i)!,
+          left = placed[parent][0] - placed[i][0] > 0.2 / (spec.scale ?? 1);
+        return [
+          i,
+          abbreviationLabel(name, left, (graph.atoms[parent].z ?? 6) === 6),
+        ];
+      }),
+    );
+  for (const group of groups)
+    for (const a of group.atoms.slice(1)) atomLabels[a] = "";
+  try {
+    const bond =
+        parseFloat(style.values["--chemical-bond"]) * (spec.scale ?? 1),
+      svg = drawn.mol.get_svg_with_highlights(
+        JSON.stringify({
+          width: 800,
+          height: 800,
+          scalingFactor: bond / 1.5,
+          fixedBondLength: bond / 1.5,
+          fixedFontSize: parseFloat(style.values["--chemical-font"]),
+          fontFile: "BuiltinRobotoRegular",
+          noFreetype: false,
+          atomLabels,
+          addChiralHs: true,
+          additionalAtomLabelPadding: 0.066,
+        }),
+      ),
+      boxes = new Map<number, FigureRect>(),
+      bonds: { atoms: number[]; d: string }[] = [];
+    for (const match of svg.matchAll(/<path\b[^>]*>/g)) {
+      const cls = /class=['"]([^'"]*)/.exec(match[0])?.[1] ?? "",
+        d = /\sd=['"]([^'"]*)/.exec(match[0])?.[1];
+      if (!d) continue;
+      const atom = /^atom-(\d+)$/.exec(cls);
+      if (atom) {
+        const i = Number(atom[1]),
+          b = unionBoxes([boxes.get(i) ?? null, pathBox(d)])!;
+        boxes.set(i, rectangle(b.x, b.y, b.width, b.height));
+      } else if (cls.startsWith("bond-"))
+        bonds.push({
+          atoms: [...cls.matchAll(/atom-(\d+)/g)].map((m) => Number(m[1])),
+          d,
+        });
+    }
+    let score = 0;
+    for (const [i, a] of boxes) {
+      for (const [j, b] of boxes)
+        if (j > i && (names.has(i) || names.has(j)))
+          score +=
+            Math.max(
+              0,
+              Math.min(a.right, b.right) - Math.max(a.left, b.left) + 0.8,
+            ) *
+            Math.max(
+              0,
+              Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) + 0.8,
+            );
+      if (names.has(i))
+        for (const b of bonds)
+          if (!b.atoms.includes(i))
+            score +=
+              samplePath(b.d, 2).filter(
+                (p) =>
+                  p.x > a.left &&
+                  p.x < a.right &&
+                  p.y > a.top &&
+                  p.y < a.bottom,
+              ).length * 4;
+    }
+    return score;
+  } finally {
+    if (drawn.mol !== copy) drawn.mol.delete();
+    copy.delete();
+  }
+}
+
 /** Depict outward from the largest uncrowded anchor, preserving one core orientation. */
 export function depictRoute(
   rd: Toolkit,
   compounds: Map<string, Structure | StructureInput>,
   input: FigureInput,
   variantName: (key: string) => string,
+  style: FigureStyle,
 ) {
   const structures = new Map(
     [...compounds].filter(
@@ -569,15 +718,19 @@ export function depictRoute(
     changed = new Set<string>();
   try {
     for (const [key, r] of structures) {
-      const initial = openMolecule(
-        rd,
-        r.compound.smiles.replace(/:\d+(?=\])/g, ""),
-      );
+      const initial = openMolecule(rd, r.depiction.smiles);
       fulls.set(key, initial);
       const layout = r.variant
         ? r.compound.variants![r.variant]
         : r.compound.layout;
-      const shown = contracted(rd, initial, layout.abbreviations);
+      const shown = contracted(
+        rd,
+        initial,
+        layout.abbreviations,
+        layout.abbreviationAtoms?.map((a) =>
+          r.depiction.atoms.indexOf(r.compound.atomIds.indexOf(a)),
+        ),
+      );
       expected.set(key, graphSignature(rd, shown));
       const mol = free(rd, shown, r.spec.coordgen ?? input.coordgen ?? false);
       mols.set(key, mol);
@@ -647,6 +800,12 @@ export function depictRoute(
                   ? r.compound.variants![r.variant]
                   : r.compound.layout
                 ).abbreviations,
+                (r.variant
+                  ? r.compound.variants![r.variant]
+                  : r.compound.layout
+                ).abbreviationAtoms?.map((a) =>
+                  r.depiction.atoms.indexOf(r.compound.atomIds.indexOf(a)),
+                ),
               ),
               coordgen,
             );
@@ -666,6 +825,12 @@ export function depictRoute(
                   ? r.compound.variants![r.variant]
                   : r.compound.layout
                 ).abbreviations,
+                (r.variant
+                  ? r.compound.variants![r.variant]
+                  : r.compound.layout
+                ).abbreviationAtoms?.map((a) =>
+                  r.depiction.atoms.indexOf(r.compound.atomIds.indexOf(a)),
+                ),
               ),
               coordgen,
             );
@@ -693,6 +858,12 @@ export function depictRoute(
         };
         if (!(r.spec.arrows?.length && final.get_smiles().includes(".")))
           adopt(relaxedCoordinates(final));
+        const fullPoints = expandedCoordinates(
+          rd,
+          final,
+          fulls.get(key)!,
+          coordgen,
+        );
         adopt(
           relievedCoordinates(
             final,
@@ -702,6 +873,16 @@ export function depictRoute(
                 abbreviationLabel(name, false, true),
               ]),
             ),
+            (points) =>
+              nativeLabelCost(
+                rd,
+                final,
+                fulls.get(key)!,
+                fullPoints,
+                points,
+                r.spec,
+                style,
+              ),
           ),
         );
         // Propagated references include the author's final rot/flip, while the saved placement owns that transform.
@@ -723,8 +904,8 @@ export function depictRoute(
         r.compound.variants[variant] = {
           ...structuredClone(layout),
           coords: Object.fromEntries(
-            r.compound.atomIds.map((id, i) => [
-              id,
+            r.depiction.atoms.map((atom, i) => [
+              r.compound.atomIds[atom],
               {
                 x: ((coords[i][0] - cx) / 1.5) * (r.spec.scale ?? 1),
                 y: (-(coords[i][1] - cy) / 1.5) * (r.spec.scale ?? 1),

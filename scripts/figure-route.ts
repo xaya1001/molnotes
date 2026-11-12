@@ -27,7 +27,7 @@ import {
   type RouteLayoutStep,
 } from "../src/ui/library/route-layout.ts";
 
-const styles = () =>
+export const loadFigureStyle = () =>
   readFile(
     new URL("../src/ui/styles/tokens.css", import.meta.url),
     "utf8",
@@ -99,7 +99,7 @@ export async function compileRouteLayout(
   rawSteps: Map<string, StepInput>,
   style?: FigureStyle,
 ) {
-  style ??= await styles();
+  style ??= await loadFigureStyle();
   const fonts = await loadFigureFonts(),
     toolkit = await moleculeToolkit(),
     ctx = createFigureScene(style, fonts),

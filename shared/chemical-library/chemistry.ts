@@ -306,6 +306,24 @@ export function placedCoordinates(
     };
   });
 }
+
+/** Resolve groups against chemical identity, retaining explicit drawing bond orders. */
+export function compoundAbbreviations(
+  toolkit: Toolkit,
+  c: Compound,
+  layout: CompoundLayout,
+) {
+  const mol = openMolecule(toolkit, c.smiles);
+  try {
+    return abbreviatedGroups(toolkit, mol, layout.abbreviations).filter(
+      (g) =>
+        !layout.abbreviationAtoms ||
+        layout.abbreviationAtoms.includes(c.atomIds[g.atoms[0]]),
+    );
+  } finally {
+    mol.delete();
+  }
+}
 export function drawingMolecule(
   toolkit: Toolkit,
   c: Compound,
@@ -559,15 +577,9 @@ export function validateSceneChemistry(
             compound,
             graph: graphOf(mol),
             hidden: new Set(
-              abbreviatedGroups(toolkit, mol, layout.abbreviations)
-                .filter(
-                  (g) =>
-                    !layout.abbreviationAtoms ||
-                    layout.abbreviationAtoms.includes(
-                      compound.atomIds[g.atoms[0]],
-                    ),
-                )
-                .flatMap((g) => g.atoms.slice(1)),
+              compoundAbbreviations(toolkit, compound, layout).flatMap((g) =>
+                g.atoms.slice(1),
+              ),
             ),
           },
         ] as const;

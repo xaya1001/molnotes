@@ -102,6 +102,7 @@ export function relaxedCoordinates(mol: Mol): Point[] | undefined {
 export function relievedCoordinates(
   mol: Mol,
   labels: Map<number, string>,
+  measure?: (points: Point[]) => number,
 ): Point[] | undefined {
   const graph = graphOf(mol),
     points = graph.conformers![0].coords.map((p) => [...p] as Point),
@@ -146,17 +147,19 @@ export function relievedCoordinates(
         const [u0, v0, u1, v1] = box(j, points[j]);
         score +=
           3 *
-          Math.max(0, Math.min(x1, u1) - Math.max(x0, u0)) *
-          Math.max(0, Math.min(y1, v1) - Math.max(y0, v0));
+          Math.max(0, Math.min(x1, u1) - Math.max(x0, u0) + 0.4) *
+          Math.max(0, Math.min(y1, v1) - Math.max(y0, v0) + 0.4);
       }
     points.forEach(([x, y], j) => {
+      const margin =
+        labels.has(j) || (graph.atoms[j].z ?? 6) !== 6 ? 0.7 : 0.45;
       if (
         j !== i &&
         j !== parent &&
-        x0 - 0.45 < x &&
-        x < x1 + 0.45 &&
-        y0 - 0.45 < y &&
-        y < y1 + 0.45
+        x0 - margin < x &&
+        x < x1 + margin &&
+        y0 - margin < y &&
+        y < y1 + margin
       )
         score++;
     });
@@ -203,5 +206,51 @@ export function relievedCoordinates(
     }
     if (!moved) break;
   }
+  // Geminal wide labels can block each other's individual escape. Move the
+  // two terminal bonds together without changing the shared skeleton.
+  for (const [i, left] of terms)
+    for (const [j, right] of terms) {
+      if (j <= i || left.parent !== right.parent) continue;
+      let best = measure
+        ? measure(points)
+        : cost(i, points[i]) + cost(j, points[j]);
+      if (best < 0.3) continue;
+      const a = points[i],
+        b = points[j],
+        q = points[left.parent];
+      let chosen = [a, b];
+      const rotate = (p: Point, deg: number): Point => {
+        const r = (deg * Math.PI) / 180,
+          x = p[0] - q[0],
+          y = p[1] - q[1];
+        return [
+          q[0] + x * Math.cos(r) - y * Math.sin(r),
+          q[1] + x * Math.sin(r) + y * Math.cos(r),
+        ];
+      };
+      const angles = measure
+        ? [
+            0, 10, -10, 20, -20, 30, -30, 40, -40, 50, -50, 60, -60, 70, -70,
+            80, -80, 90, -90,
+          ]
+        : [0, 20, -20, 40, -40, 60, -60, 80, -80];
+      for (const u of angles)
+        for (const v of angles) {
+          points[i] = rotate(a, u);
+          points[j] = rotate(b, v);
+          const score =
+            (measure
+              ? measure(points)
+              : cost(i, points[i]) + cost(j, points[j])) +
+            (Math.abs(u) + Math.abs(v)) * 0.004;
+          if (score < best - 0.05) {
+            best = score;
+            chosen = [points[i], points[j]];
+          }
+        }
+      points[i] = chosen[0];
+      points[j] = chosen[1];
+      changed ||= chosen[0] !== a || chosen[1] !== b;
+    }
   return changed ? points : undefined;
 }

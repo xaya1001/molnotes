@@ -20,6 +20,7 @@ import {
   drawingMolecule,
   placedCoordinates,
   graphSignature,
+  compoundAbbreviations,
 } from "../shared/chemical-library/chemistry.ts";
 import { routeMetrics } from "../shared/chemical-library/routes.ts";
 import type {
@@ -519,6 +520,7 @@ test("route depiction propagates from its largest anchor independently of compou
 });
 
 test("figure abbreviations follow defaults, optional groups and arrow-visible atoms", async () => {
+  const toolkit = await moleculeToolkit();
   const input = {
     compounds: { a: "CCNC(=O)OC(C)(C)C", b: "CCC(=O)OC(C)(C)C" },
     steps: [{ from: "a", to: "b" }],
@@ -530,12 +532,10 @@ test("figure abbreviations follow defaults, optional groups and arrow-visible at
     placement: Reaction["scene"]["molecules"][number],
   ) => {
     const compound = result.entries[placement.compound] as Compound;
-    return (
-      (placement.variant
-        ? compound.variants![placement.variant]
-        : compound.layout
-      ).abbreviations ?? []
-    );
+    const layout = placement.variant
+      ? compound.variants![placement.variant]
+      : compound.layout;
+    return compoundAbbreviations(toolkit, compound, layout).map((g) => g.name);
   };
   assert.deepEqual(active(compiled, reaction.scene.molecules[0]), ["NHBoc"]);
   const off = await compileFigure({
@@ -767,6 +767,84 @@ test("contracted CoordGen layouts retain the shared bond length", async () => {
     assert.ok(Math.abs(lengths[Math.floor(lengths.length / 2)] - 1) < 0.05);
   } finally {
     mol.delete();
+  }
+});
+
+test("electron endpoints retain root abbreviations and expand only targeted interiors", async () => {
+  const { abbreviatedGroups } =
+    await import("../shared/molecule-abbreviations.ts");
+  const toolkit = await moleculeToolkit();
+  for (const [smiles, arrows, expected] of [
+    [
+      "C[CH:1]([O:2]S(=O)(=O)c1ccc(C)cc1)N(C(=O)C)[CH:3]=[CH:4]C(=O)OC",
+      [
+        { from: "bond(1,2)", to: "atom(2)" },
+        { from: "pi(3,4)", to: "bond(3,4)" },
+      ],
+      ["Ac", "CO₂Me", "OTs"],
+    ],
+    ["CC(=O)NCCNC(=[O:2])C", [{ from: "lp(2)", to: "atom(2)" }], ["Ac"]],
+  ] as const) {
+    const result = await compileFigure({
+      compounds: { a: { smiles, arrows: [...arrows] }, b: "CCO" },
+      steps: [{ from: "a", to: "b" }],
+    });
+    const reaction = result.entries[result.reference.ref] as Reaction,
+      p = reaction.scene.molecules[0],
+      c = result.entries[p.compound] as Compound,
+      layout = c.variants![p.variant!],
+      mol = toolkit.get_mol(c.smiles)!;
+    try {
+      const groups = abbreviatedGroups(
+        toolkit,
+        mol,
+        layout.abbreviations,
+      ).filter(
+        (g) =>
+          !layout.abbreviationAtoms ||
+          layout.abbreviationAtoms.includes(c.atomIds[g.atoms[0]]),
+      );
+      assert.deepEqual(groups.map((g) => g.name).sort(), [...expected].sort());
+    } finally {
+      mol.delete();
+    }
+  }
+});
+
+test("a shared substituent keeps its direction when a ring bond is reduced", async () => {
+  const result = await compileFigure({
+    coordgen: true,
+    anchor: "a",
+    compounds: {
+      a: "COC(=O)C1=CC[C@]2([H])CCN(C(C)=O)[C@@]12[H]",
+      b: "COC(=O)[C@]1([H])CC[C@]2([H])CCN(C(C)=O)[C@@]12[H]",
+    },
+    steps: [{ from: "a", to: "b" }],
+  });
+  const toolkit = await moleculeToolkit(),
+    reaction = result.entries[result.reference.ref] as Reaction,
+    query = toolkit.get_qmol("*C(=O)OC")!;
+  try {
+    const vectors = reaction.scene.molecules.map((p) => {
+      const c = result.entries[p.compound] as Compound,
+        layout = c.variants![p.variant!],
+        mol = toolkit.get_mol(c.smiles)!;
+      try {
+        const ids: number[] = JSON.parse(mol.get_substruct_match(query)).atoms,
+          a = layout.coords[c.atomIds[ids[0]]],
+          b = layout.coords[c.atomIds[ids[1]]];
+        return { x: b.x - a.x, y: b.y - a.y };
+      } finally {
+        mol.delete();
+      }
+    });
+    const [a, b] = vectors;
+    assert.ok(
+      (a.x * b.x + a.y * b.y) / Math.hypot(a.x, a.y) / Math.hypot(b.x, b.y) >
+        0.95,
+    );
+  } finally {
+    query.delete();
   }
 });
 

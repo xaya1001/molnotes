@@ -30,15 +30,13 @@ import {
   drawingMolecule,
   atomNumberDrawing,
   abbreviatedDrawing,
+  compoundAbbreviations,
   graphOf,
   placedCoordinates,
   validateCompound,
   validateSceneChemistry,
 } from "../../../shared/chemical-library/chemistry.ts";
-import {
-  abbreviatedGroups,
-  abbreviationLabel,
-} from "../../../shared/molecule-abbreviations.ts";
+import { abbreviationLabel } from "../../../shared/molecule-abbreviations.ts";
 import { routeMetrics } from "../../../shared/chemical-library/routes.ts";
 import type {
   Anchor,
@@ -172,11 +170,7 @@ export async function prepareFigure(
     let depiction = mol;
     try {
       const graph = graphOf(mol),
-        groups = abbreviatedGroups(toolkit, mol, layout.abbreviations).filter(
-          (g) =>
-            !layout.abbreviationAtoms ||
-            layout.abbreviationAtoms.includes(c.atomIds[g.atoms[0]]),
-        ),
+        groups = compoundAbbreviations(toolkit, c, layout),
         folded = new Set(groups.flatMap((g) => g.atoms)),
         hiddenBonds = new Set(groups.flatMap((g) => g.bonds));
       const drawn = abbreviatedDrawing(toolkit, mol, hiddenBonds);
@@ -188,7 +182,7 @@ export async function prepareFigure(
           outside = coords[g.attachment];
         atomLabels[g.atoms[0]] = abbreviationLabel(
           g.name,
-          outside.x > root.x,
+          outside.x - root.x > 0.2 / 1.5,
           (graph.atoms[g.attachment].z ?? 6) === 6,
         );
       }

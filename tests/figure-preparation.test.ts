@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { parse } from "yaml";
 import { compileFigure } from "../scripts/figure-scene.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
+import { prepareCompound } from "../shared/chemical-library/chemistry.ts";
 import { loadFigureFonts } from "../scripts/figure-fonts.ts";
 import { prepareFigure } from "../src/ui/library/prepare.ts";
 import { figureStyle as style } from "./fixtures/figures/style.ts";
@@ -13,6 +14,34 @@ import { geometrySvg } from "../src/ui/library/geometry-tree.ts";
 import { figureGeometryDiagnostics } from "../src/ui/library/geometry-diagnostics.ts";
 const toolkit = await moleculeToolkit(),
   fonts = await loadFigureFonts();
+
+test("bond diagnostics catch a stretched bond within an enlarged structure", async () => {
+  const c = prepareCompound(toolkit, {
+    id: "cmp_example",
+    title: "Example",
+    smiles: "CCCCCC",
+    sources: [{ source: "example", locator: "Structures" }],
+  });
+  for (const p of Object.values(c.layout.coords)) {
+    p.x *= 1.45;
+    p.y *= 1.45;
+  }
+  const diagnostics = async () =>
+    figureGeometryDiagnostics(
+      await prepareFigure(
+        { [c.id]: c },
+        { ref: c.id },
+        { toolkit, fonts, style },
+      ),
+      style,
+    );
+  assert.ok(!(await diagnostics()).some((d) => d.code === "BOND_TOO_LONG"));
+  const p = c.layout.coords[c.atomIds[0]],
+    q = c.layout.coords[c.atomIds[1]];
+  p.x = q.x + 2 * (p.x - q.x);
+  p.y = q.y + 2 * (p.y - q.y);
+  assert.ok((await diagnostics()).some((d) => d.code === "BOND_TOO_LONG"));
+});
 
 test("scene preparation handles reaction, route and mechanism fixtures without a browser", async () => {
   for (const name of [
