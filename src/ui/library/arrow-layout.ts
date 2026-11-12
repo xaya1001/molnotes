@@ -17,35 +17,6 @@ const point = (p: Point, angle: number, r: number) => ({
 });
 const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 
-export function routeConnection(
-  from: Rect,
-  to: Rect,
-  fromRow: Rect,
-  toRow: Rect,
-  wrapped: boolean,
-): Point[] {
-  const a = {
-      x: (from.left + from.right) / 2,
-      y: (from.top + from.bottom) / 2,
-    },
-    b = { x: (to.left + to.right) / 2, y: (to.top + to.bottom) / 2 };
-  const vertical = wrapped;
-  const p = vertical
-    ? { x: a.x, y: b.y > a.y ? from.bottom + 8 : from.top - 8 }
-    : { x: b.x > a.x ? from.right + 8 : from.left - 8, y: a.y };
-  const q = vertical
-    ? { x: b.x, y: b.y > a.y ? to.top - 8 : to.bottom + 8 }
-    : { x: b.x > a.x ? to.left - 8 : to.right + 8, y: b.y };
-  const middle = vertical
-    ? b.y > a.y
-      ? (fromRow.bottom + toRow.top) / 2
-      : (fromRow.top + toRow.bottom) / 2
-    : (p.x + q.x) / 2;
-  return vertical
-    ? [p, { x: p.x, y: middle }, { x: q.x, y: middle }, q]
-    : [p, { x: middle, y: p.y }, { x: middle, y: q.y }, q];
-}
-
 export function arrowHead(
   tip: Point,
   before: Point,

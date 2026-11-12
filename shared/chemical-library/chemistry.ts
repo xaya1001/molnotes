@@ -1,5 +1,4 @@
 import type { Mol } from "@rdkit/rdkit";
-import { coordinatesFrom } from "../molecule-layout.ts";
 import { ionPairCoordinates } from "./ion-layout.ts";
 import {
   validateAbbreviations,
@@ -104,19 +103,25 @@ export function prepareCompound(
     if (molfile) {
       const imported = openMolecule(toolkit, molfile);
       try {
-        imported.remove_hs_in_place();
+        if (!graphOf(mol).atoms.some((a) => a.z === 1))
+          imported.remove_hs_in_place();
         if (graphSignature(toolkit, imported) !== graph)
           throw new Error(
             `${input.id}: molfile graph or stereochemistry differs`,
           );
-        const matched = coordinatesFrom(
-          toolkit,
-          input.smiles,
-          imported.get_molblock(),
+        const match: { atoms?: number[] } = JSON.parse(
+          mol.get_substruct_match(
+            imported,
+            JSON.stringify({ useChirality: true }),
+          ),
         );
-        if (!matched)
+        if (match.atoms?.length !== mol.get_num_atoms())
           throw new Error(`${input.id}: cannot map molfile coordinates`);
-        coords = matched.map((p) => [p[0], p[1]]);
+        const positions = graphOf(imported).conformers![0].coords;
+        coords = [];
+        match.atoms.forEach((target, source) => {
+          coords[target] = positions[source];
+        });
       } finally {
         imported.delete();
       }
@@ -241,6 +246,8 @@ export function validateCompound(toolkit: Toolkit, c: Compound) {
       for (const id of [
         ...Object.keys(layout.pins ?? {}),
         ...Object.keys(layout.labels ?? {}),
+        ...(layout.repeatUnits ?? []).flatMap((unit) => unit.atoms),
+        ...Object.keys(layout.atomNumbers ?? {}),
       ])
         if (!c.atomIds.includes(id))
           throw new Error(`${c.id}: unknown layout atom ${id}`);
@@ -298,6 +305,24 @@ export function placedCoordinates(
       y: x * Math.sin(a) + p.y * Math.cos(a),
     };
   });
+}
+
+/** Resolve groups against chemical identity, retaining explicit drawing bond orders. */
+export function compoundAbbreviations(
+  toolkit: Toolkit,
+  c: Compound,
+  layout: CompoundLayout,
+) {
+  const mol = openMolecule(toolkit, c.smiles);
+  try {
+    return abbreviatedGroups(toolkit, mol, layout.abbreviations).filter(
+      (g) =>
+        !layout.abbreviationAtoms ||
+        layout.abbreviationAtoms.includes(c.atomIds[g.atoms[0]]),
+    );
+  } finally {
+    mol.delete();
+  }
 }
 export function drawingMolecule(
   toolkit: Toolkit,
@@ -425,6 +450,40 @@ export function drawingMolecule(
     mapped.delete();
   }
 }
+/** Add notes to an indexed drawing copy while retaining its folded topology. */
+export function atomNumberDrawing(
+  toolkit: Toolkit,
+  mol: Mol,
+  atom: number,
+  number: number,
+) {
+  const indexed = openMolecule(
+    toolkit,
+    mappedBlock(
+      mol,
+      Array.from({ length: mol.get_num_atoms() }, (_, i) => i + 1),
+    ),
+    false,
+  );
+  try {
+    const cx = indexed.get_cxsmiles(JSON.stringify({ canonical: false }));
+    const serialized = openMolecule(toolkit, cx, false);
+    let indices: number[];
+    try {
+      indices = atomMaps(serialized).map((n) => n - 1);
+    } finally {
+      serialized.delete();
+    }
+    const property = `${indices.indexOf(atom)}.atomNote.${number}`;
+    const clean = cx.replace(/:\d+(?=\])/g, "").trim();
+    const annotated = clean.endsWith("|")
+      ? clean.slice(0, -1) + `,atomProp:${property}|`
+      : clean + ` |atomProp:${property}|`;
+    return { mol: openMolecule(toolkit, annotated, false), indices };
+  } finally {
+    indexed.delete();
+  }
+}
 /** Hide folded internal bonds in the drawing copy, making its label root terminal.
  * RDKit then anchors the first/last glyph and clips its bond itself. The full
  * graph remains authoritative; atom indices and coordinates are unchanged.
@@ -518,15 +577,9 @@ export function validateSceneChemistry(
             compound,
             graph: graphOf(mol),
             hidden: new Set(
-              abbreviatedGroups(toolkit, mol, layout.abbreviations)
-                .filter(
-                  (g) =>
-                    !layout.abbreviationAtoms ||
-                    layout.abbreviationAtoms.includes(
-                      compound.atomIds[g.atoms[0]],
-                    ),
-                )
-                .flatMap((g) => g.atoms.slice(1)),
+              compoundAbbreviations(toolkit, compound, layout).flatMap((g) =>
+                g.atoms.slice(1),
+              ),
             ),
           },
         ] as const;

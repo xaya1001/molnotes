@@ -1,3 +1,10 @@
+import { depictRoute, figureAbbreviations } from "./figure-depiction.ts";
+import {
+  compileRouteLayout,
+  compileReactionLayout,
+  loadFigureStyle,
+} from "./figure-route.ts";
+import type { FigureStyle } from "../src/ui/library/scene-geometry.ts";
 import { createHash } from "node:crypto";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import {
@@ -12,7 +19,6 @@ import {
   openMolecule,
   graphSignature,
   molecularSmiles,
-  alignCoordinates,
   placedCoordinates,
   type Toolkit,
   validateSceneChemistry,
@@ -62,6 +68,9 @@ const expansions: Record<string, string> = {
   TMS: "[Si](C)(C)(C)",
   TBS: "[Si](C)(C)(C(C)(C)C)",
   TIPS: "[Si](C(C)C)(C(C)C)(C(C)C)",
+  TBDPS: "[Si](c1ccccc1)(c1ccccc1)C(C)(C)C",
+  TES: "[Si](CC)(CC)CC",
+  MOM: "C(OC)",
   Bn: "C(c1ccccc1)",
   PMB: "C(c1ccc(OC)cc1)",
   Ac: "C(=O)(C)",
@@ -102,6 +111,7 @@ interface Resolved {
   compound: Compound;
   atoms: Map<number, string>;
   spec: StructureInput;
+  depiction: { smiles: string; atoms: number[] };
 }
 function endpoints<T>(value: T | T[]): T[] {
   return Array.isArray(value) ? value : [value];
@@ -115,7 +125,7 @@ function bounds(rd: Toolkit, r: Resolved) {
     rd,
     r.compound,
     layoutOf(r),
-    (r.spec.rot ?? 0) + (r.spec.flip === "v" ? 180 : 0),
+    -(r.spec.rot ?? 0) + (r.spec.flip === "v" ? 180 : 0),
     !!r.spec.flip,
   );
   return {
@@ -160,6 +170,7 @@ export async function compileFigure(
   inputValue: unknown,
   existing: Library = {},
   sourceKey = "example",
+  options: { style?: FigureStyle } = {},
 ) {
   const { input, warnings } = validateFigureInput(inputValue);
   const rd = await moleculeToolkit(),
@@ -171,7 +182,9 @@ export async function compileFigure(
   );
   const kind = input.kind ?? "route",
     count = input.steps?.length ?? 0;
-  const prefix = kind === "mechanism" ? "mec_" : count === 1 ? "rxn_" : "rte_";
+  const routeGraph =
+    kind !== "mechanism" && (count > 1 || previous?.kind === "route");
+  const prefix = kind === "mechanism" ? "mec_" : routeGraph ? "rte_" : "rxn_";
   const id = previous?.id ?? prefix + sourceKey;
   if (!id.startsWith(prefix))
     throw new Error("Changing figure kind requires a new source file");
@@ -187,8 +200,26 @@ export async function compileFigure(
     sources,
     sourceFile,
     sourceKey,
+    ...(input.footnote === undefined
+      ? {}
+      : { footnote: words(input.footnote) }),
     ...(input.explain === undefined ? {} : { overview: words(input.explain) }),
   };
+  const previousReactions =
+    previous?.kind === "reaction"
+      ? [previous]
+      : previous?.kind === "route"
+        ? previous.steps
+            .map((step) => existing[step.reaction])
+            .filter((entry): entry is Reaction => entry?.kind === "reaction")
+        : [];
+  const compoundBindings = new Map<string, string>(
+    previousReactions.flatMap((reaction) =>
+      [...reaction.reactants, ...reaction.products].flatMap((p) =>
+        p.sourceKey ? [[`compounds.${p.sourceKey}`, p.compound] as const] : [],
+      ),
+    ),
+  );
   // Remove only entries owned by this route when a step is removed.
   for (const e of Object.values(entries))
     if (e.owner === id) delete entries[e.id];
@@ -205,9 +236,14 @@ export async function compileFigure(
       const labels = maps.filter((n) => n > 0);
       if (new Set(labels).size !== labels.length)
         throw new Error(`${where}: duplicate atom map`);
-      let compound = Object.values(entries).find(
-        (e): e is Compound => e.kind === "compound" && e.graph === signature,
-      );
+      const bound = entries[compoundBindings.get(where) ?? ""];
+      let compound =
+        bound?.kind === "compound" && bound.graph === signature
+          ? bound
+          : Object.values(entries).find(
+              (e): e is Compound =>
+                e.kind === "compound" && e.graph === signature,
+            );
       const unmapped = molecularSmiles(
         m,
         JSON.stringify({ canonical: false }),
@@ -237,33 +273,7 @@ export async function compileFigure(
         generated.add(cid);
       }
       let variant: string | undefined;
-      const requested = [
-        ...new Set(
-          [...spec.smiles.matchAll(/\[([A-Za-z][A-Za-z0-9]*)\]/g)].map(
-            (m) => m[1],
-          ),
-        ),
-      ].filter((name): name is MoleculeAbbreviation =>
-        Object.hasOwn(abbreviationSmarts, name),
-      );
-      const abbreviations =
-        spec.abbreviate === false
-          ? []
-          : requested.length
-            ? requested
-            : compound.layout.abbreviations;
-      if (
-        JSON.stringify(abbreviations) !==
-        JSON.stringify(compound.layout.abbreviations)
-      ) {
-        variant = `${id}_${figureKey(where)}`;
-        compound.variants ??= {};
-        compound.variants[variant] = {
-          ...structuredClone(compound.layout),
-          abbreviations,
-        };
-        generated.add(compound.id);
-      }
+      const abbreviations = figureAbbreviations(rd, m, spec, input.abbreviate);
       const target = openMolecule(rd, compound.smiles),
         query = openMolecule(rd, unmapped);
       try {
@@ -275,6 +285,26 @@ export async function compileFigure(
         );
         if (match.atoms?.length !== maps.length)
           throw new Error(`${where}: cannot map compound atoms`);
+        const abbreviationAtoms = abbreviations.abbreviationAtoms?.map(
+          (i) => compound.atomIds[match.atoms![i]],
+        );
+        if (
+          JSON.stringify(abbreviations.abbreviations) !==
+            JSON.stringify(compound.layout.abbreviations ?? []) ||
+          JSON.stringify(abbreviationAtoms) !==
+            JSON.stringify(compound.layout.abbreviationAtoms)
+        ) {
+          variant = `${id}_${figureKey(where)}`;
+          compound.variants ??= {};
+          const layout = {
+            ...structuredClone(compound.layout),
+            abbreviations: abbreviations.abbreviations,
+          };
+          delete layout.abbreviationAtoms;
+          if (abbreviationAtoms) layout.abbreviationAtoms = abbreviationAtoms;
+          compound.variants[variant] = layout;
+          generated.add(compound.id);
+        }
         if (spec.arrows?.some((a) => a.from.startsWith("pi("))) {
           const raw = openMolecule(rd, expanded, false);
           try {
@@ -329,6 +359,59 @@ export async function compileFigure(
               : [],
           ),
         );
+        if (spec.numbers && atoms.size) {
+          const layout = variant
+            ? compound.variants![variant]
+            : compound.layout;
+          variant ??= `${id}_${figureKey(where)}`;
+          compound.variants ??= {};
+          compound.variants[variant] = {
+            ...structuredClone(layout),
+            atomNumbers: Object.fromEntries(
+              [...atoms].map(([number, atom]) => [atom, number]),
+            ),
+          };
+          generated.add(compound.id);
+        }
+        const substanceGroups: {
+          properties: { TYPE: string; LABEL?: string };
+          atoms: number[];
+        }[] = JSON.parse(m.get_json()).molecules[0].substanceGroups ?? [];
+        const repeatUnits = substanceGroups
+          .filter((group) => group.properties.TYPE === "SRU")
+          .map((group) => ({
+            atoms: group.atoms.map((i) => compound.atomIds[match.atoms![i]]),
+            label: group.properties.LABEL ?? "n",
+          }));
+        if (repeatUnits.length) {
+          const layout = variant
+            ? compound.variants![variant]
+            : compound.layout;
+          variant ??= `${id}_${figureKey(where)}`;
+          compound.variants ??= {};
+          compound.variants[variant] = {
+            ...structuredClone(layout),
+            repeatUnits,
+          };
+          generated.add(compound.id);
+        }
+        if (spec.scale !== undefined && spec.scale !== 1) {
+          const layout = variant
+            ? compound.variants![variant]
+            : compound.layout;
+          variant ??= `${id}_${figureKey(where)}`;
+          compound.variants ??= {};
+          compound.variants[variant] = {
+            ...structuredClone(layout),
+            coords: Object.fromEntries(
+              Object.entries(layout.coords).map(([atom, p]) => [
+                atom,
+                { x: p.x * spec.scale!, y: p.y * spec.scale! },
+              ]),
+            ),
+          };
+          generated.add(compound.id);
+        }
         for (const n of Object.keys(spec.notes ?? {}))
           if (!atoms.has(Number(n)))
             throw new Error(`${where}.notes: unknown atom ${n}`);
@@ -342,7 +425,13 @@ export async function compileFigure(
             if (!atoms.has(n))
               throw new Error(`${where}.enclose: unknown atom ${n}`);
         }
-        return { compound, atoms, spec, ...(variant ? { variant } : {}) };
+        return {
+          compound,
+          atoms,
+          spec,
+          depiction: { smiles: unmapped, atoms: match.atoms },
+          ...(variant ? { variant } : {}),
+        };
       } finally {
         target.delete();
         query.delete();
@@ -357,10 +446,12 @@ export async function compileFigure(
       compound: resolved.compound.id,
       at,
       ...(resolved.variant ? { variant: resolved.variant } : {}),
+      ...(resolved.spec.bracket ? { bracket: resolved.spec.bracket } : {}),
       ...(resolved.spec.rot || resolved.spec.flip === "v"
         ? {
             rotate:
-              (resolved.spec.rot ?? 0) + (resolved.spec.flip === "v" ? 180 : 0),
+              -(resolved.spec.rot ?? 0) +
+              (resolved.spec.flip === "v" ? 180 : 0),
           }
         : {}),
       ...(resolved.spec.flip ? { mirror: true } : {}),
@@ -554,95 +645,14 @@ export async function compileFigure(
         spec.smiles ? await resolveStructure(spec, `compounds.${key}`) : spec,
       );
     }
-    let previousStructure: string | undefined;
-    for (const [key, r] of compounds) {
-      if (!("compound" in r)) continue;
-      const targetKey =
-        r.spec.align === false
-          ? undefined
-          : typeof r.spec.align === "string" || typeof r.spec.align === "number"
-            ? String(r.spec.align)
-            : input.anchor === undefined
-              ? previousStructure
-              : String(input.anchor);
-      const target =
-        targetKey === undefined ? undefined : compounds.get(targetKey);
-      if (targetKey !== undefined && !target)
-        throw new Error(`Unknown alignment compound ${targetKey}`);
-      if (
-        target &&
-        "compound" in target &&
-        target !== r &&
-        !r.spec.rot &&
-        !r.spec.flip
-      ) {
-        const pairs: [string, string][] = [...r.atoms].flatMap(([n, a]) => {
-          const b = target.atoms.get(n);
-          return b ? [[a, b] as [string, string]] : [];
-        });
-        if (pairs.length < 2) {
-          const reference = openMolecule(rd, target.compound.smiles),
-            current = openMolecule(rd, r.compound.smiles),
-            list = new rd.MolList();
-          try {
-            list.append(reference);
-            list.append(current);
-            const smarts = rd.get_mcs_as_smarts(
-              list,
-              JSON.stringify({
-                Timeout: 1,
-                RingMatchesRingOnly: true,
-                CompleteRingsOnly: true,
-              }),
-            );
-            const query = rd.get_qmol(smarts);
-            try {
-              if (query && query.get_num_atoms() >= 2) {
-                const before: { atoms: number[] } = JSON.parse(
-                    reference.get_substruct_match(query),
-                  ),
-                  after: { atoms: number[] } = JSON.parse(
-                    current.get_substruct_match(query),
-                  );
-                pairs.push(
-                  ...after.atoms.map((atom, i): [string, string] => [
-                    r.compound.atomIds[atom],
-                    target.compound.atomIds[before.atoms[i]],
-                  ]),
-                );
-              }
-            } finally {
-              query?.delete();
-            }
-          } finally {
-            list.delete();
-            reference.delete();
-            current.delete();
-          }
-        }
-        const coords =
-          pairs.length >= 2
-            ? alignCoordinates(
-                layoutOf(r).coords,
-                layoutOf(target).coords,
-                pairs,
-              )
-            : undefined;
-        if (coords) {
-          const variant = `${id}_${figureKey(key)}`;
-          r.compound.variants ??= {};
-          r.compound.variants[variant] = {
-            ...structuredClone(layoutOf(r)),
-            coords,
-          };
-          generated.add(r.compound.id);
-          r.variant = variant;
-        }
-      }
-      previousStructure = key;
-    }
-    if (input.anchor !== undefined && !compounds.has(String(input.anchor)))
-      throw new Error(`Unknown anchor ${input.anchor}`);
+    for (const cid of depictRoute(
+      rd,
+      compounds,
+      input,
+      (key) => `${id}_${figureKey(key)}`,
+      options.style ?? (await loadFigureStyle()),
+    ))
+      generated.add(cid);
     const resolve = (key: string) => {
       const r = compounds.get(key);
       if (!r) throw new Error(`Unknown compound ${key}`);
@@ -680,12 +690,28 @@ export async function compileFigure(
       steps: Route["steps"] = [],
       edges: Route["edges"] = [];
     for (const sid of ordered) {
+      const oldStep =
+        previous?.kind === "route"
+          ? previous.steps.find((s) => s.id === sid)
+          : undefined;
       const step = rawSteps.get(sid)!,
-        rid = count === 1 ? id : `rxn_${sourceKey}_${figureKey(sid)}`,
+        rid = !routeGraph
+          ? id
+          : oldStep && existing[oldStep.reaction]?.owner === id
+            ? oldStep.reaction
+            : `rxn_${sourceKey}_${figureKey(sid)}`,
         scene = blank();
+      const previousReaction = existing[oldStep?.reaction ?? rid];
+      const participantId = (role: "reactants" | "products", key: string) =>
+        previousReaction?.kind === "reaction"
+          ? (previousReaction[role].find((p) => p.sourceKey === key)?.id ??
+            (role === "products" ? `product-${key}` : key))
+          : role === "products"
+            ? `product-${key}`
+            : key;
       const reactants: Participant[] = [],
         products: Participant[] = [],
-        reagents = lines(step.above),
+        reagents: string[] = [],
         extra: Point[] = [];
       let cursor = 0,
         first = true;
@@ -709,6 +735,10 @@ export async function compileFigure(
       const localNumber = (key: string, spec: StructureInput) =>
         spec.label === undefined ? key : words(spec.label);
       for (const raw of endpoints(step.from)) {
+        const quantity =
+          typeof raw === "object" && "equivalents" in raw
+            ? { equivalents: raw.equivalents }
+            : {};
         const key = keyOf(raw),
           r = resolve(key),
           spec = "compound" in r ? r.spec : r;
@@ -728,7 +758,9 @@ export async function compileFigure(
             );
           if ("compound" in r)
             reactants.push({
-              id: key,
+              id: participantId("reactants", key),
+              sourceKey: key,
+              ...quantity,
               compound: r.compound.id,
               number: localNumber(key, spec),
               name: words(spec.name),
@@ -739,15 +771,18 @@ export async function compileFigure(
         if (!("compound" in r))
           throw new Error(`${key}: structure required for ${show}`);
         const participant: Participant = {
-          id: key,
+          id: participantId("reactants", key),
+          sourceKey: key,
+          ...quantity,
           compound: r.compound.id,
           number: localNumber(key, spec),
           name: words(spec.name),
           ...(show === "box" ? { position: "above-arrow" } : {}),
         };
         reactants.push(participant);
-        if (show !== "box") display(key, r);
+        if (show !== "box") display(participant.id, r);
       }
+      reagents.push(...lines(step.above));
       const from = { x: cursor - 0.7, y: 0 },
         to = { x: cursor + 4.3, y: 0 };
       cursor += 5.8;
@@ -771,7 +806,8 @@ export async function compileFigure(
             )
               throw new Error(`changes: unknown product atom ${n}`);
         products.push({
-          id: `product-${key}`,
+          id: participantId("products", key),
+          sourceKey: key,
           compound: r.compound.id,
           number: localNumber(key, r.spec),
           name: words(r.spec.name),
@@ -779,8 +815,9 @@ export async function compileFigure(
             ? {}
             : { yield: p.yield ?? r.spec.yield }),
           ...(p.ratio === undefined ? {} : { ratio: p.ratio }),
+          ...(p.fraction === undefined ? {} : { fraction: p.fraction }),
         });
-        const productBox = display(`product-${key}`, r);
+        const productBox = display(participantId("products", key), r);
         if (previousProduct)
           scene.captions!.push({
             at: {
@@ -797,7 +834,7 @@ export async function compileFigure(
         previousProduct = productBox;
       }
       for (const p of reactants.filter((p) => p.position === "above-arrow")) {
-        const r = resolve(p.id);
+        const r = resolve(p.sourceKey!);
         if (!("compound" in r)) throw new Error("Missing boxed structure");
         const b = bounds(rd, r),
           at = { x: (from.x + to.x) / 2, y: -2 - b.bottom };
@@ -816,87 +853,62 @@ export async function compileFigure(
       to.y += dy;
       const reaction: Reaction = {
         ...base,
+        ...(step.title === undefined ? {} : { title: words(step.title) }),
+        ...(step.sources === undefined
+          ? {}
+          : {
+              sources: step.sources.map((s) => ({
+                source: words(s.source),
+                locator: words(s.locator) || title,
+                ...(s.note === undefined ? {} : { note: words(s.note) }),
+              })),
+            }),
+        ...(routeGraph ? { footnote: undefined } : {}),
         kind: "reaction",
         id: rid,
-        ...(count === 1 ? {} : { owner: id }),
+        ...(routeGraph ? { owner: id } : {}),
         reactants,
         products,
         reagents,
         conditions: lines(step.below),
+        ...(step.tags === undefined ? {} : { tags: step.tags }),
+        ...(step.reagentPosition === undefined
+          ? {}
+          : { reagentPosition: step.reagentPosition }),
         explanation: words(step.explain) || words(input.explain) || title,
         scene,
         arrow: { from, to, textWidth: 5, kind: step.arrow ?? "forward" },
       };
-      // Downward steps reuse placement transforms, without changing compound identity.
-      if (step.turn === "down") {
-        const w = scene.width,
-          h = scene.height;
-        const rotate = (p: Point) => {
-          const x = p.x;
-          p.x = h - p.y;
-          p.y = x;
-        };
-        for (const p of [
-          ...scene.molecules.map((m) => m.at),
-          ...scene.captions!.map((c) => c.at),
-          from,
-          to,
-        ])
-          rotate(p);
-        for (const p of scene.molecules) p.rotate = (p.rotate ?? 0) + 90;
-        scene.width = h;
-        scene.height = w;
-        reaction.arrow.side = step.side;
-      }
       entries[rid] = reaction;
+      await compileReactionLayout(
+        entries,
+        reaction,
+        sid,
+        input,
+        step,
+        options.style,
+      );
       generated.add(rid);
       reactions.push(reaction);
       steps.push({ id: sid, reaction: rid, at: { x: 0, y: 0 } });
       for (const raw of endpoints(step.from)) {
         const key = keyOf(raw),
           p = producer.get(key);
-        if (p && reactants.some((r) => r.id === key))
+        if (p && reactants.some((r) => r.sourceKey === key))
           edges.push({
             from: p,
             to: sid,
-            product: `product-${key}`,
-            reactant: key,
+            product: (
+              entries[steps.find((s) => s.id === p)!.reaction] as Reaction
+            ).products.find((item) => item.sourceKey === key)!.id,
+            reactant: reactants.find((item) => item.sourceKey === key)!.id,
           });
       }
     }
-    if (count === 1) top = reactions[0];
+    if (!routeGraph) top = reactions[0];
     else {
-      const depths = new Map<string, number>();
-      for (const step of steps)
-        depths.set(
-          step.id,
-          Math.max(
-            0,
-            ...edges
-              .filter((e) => e.to === step.id)
-              .map((e) => depths.get(e.from)! + 1),
-          ),
-        );
-      const rowHeight = Math.max(...reactions.map((r) => r.scene.height)) + 4;
-      let width = 0;
-      for (let depth = 0; depth <= Math.max(...depths.values()); depth++) {
-        let x = 0;
-        for (const step of steps.filter((s) => depths.get(s.id) === depth)) {
-          step.at = { x, y: depth * rowHeight };
-          const reaction = entries[step.reaction] as Reaction;
-          x += reaction.scene.width + 4;
-        }
-        width = Math.max(width, x - 4);
-      }
-      top = {
-        ...base,
-        kind: "route",
-        id,
-        steps,
-        edges,
-        width,
-        height: Math.max(...depths.values()) * rowHeight + rowHeight - 4,
-      };
+      top = { ...base, kind: "route", id, steps, edges, width: 1, height: 1 };
+      await compileRouteLayout(entries, top, input, rawSteps, options.style);
     }
   }
   entries[id] = top;

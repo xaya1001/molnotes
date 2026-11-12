@@ -72,7 +72,7 @@ test("published outlined SVG matches Node ink bounds and pinned text metrics", a
         text.setAttribute("dominant-baseline", "central");
         const script = document.createElementNS(ns, "tspan");
         script.textContent = "2";
-        script.setAttribute("font-size", "0.8em");
+        script.setAttribute("font-size", "0.72em");
         script.setAttribute("baseline-shift", "sub");
         text.append("H", script, "O");
         svg.append(text);

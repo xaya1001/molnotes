@@ -20,6 +20,7 @@ import {
   drawingMolecule,
   placedCoordinates,
   graphSignature,
+  compoundAbbreviations,
 } from "../shared/chemical-library/chemistry.ts";
 import { routeMetrics } from "../shared/chemical-library/routes.ts";
 import type {
@@ -262,20 +263,50 @@ test("mechanism YAML preserves explanation, maps, arrow IDs and focus", async ()
   }
 });
 
+test("reaction sources preserve equivalents, mixture fractions, tags and reagent position", async () => {
+  const input = {
+    compounds: { a: "CCO", b: "CC=O", c: "CC(=O)O" },
+    steps: [
+      {
+        title: "First step",
+        sources: [
+          { source: "unknown", locator: "step source", note: "Fixture" },
+        ],
+        from: [{ id: "a", equivalents: 2 }],
+        to: [
+          { id: "b", fraction: 0.45 },
+          { id: "c", fraction: 0.55 },
+        ],
+        tags: ["Oxidation"],
+        reagentPosition: "below-arrow",
+        above: "[O]",
+      },
+    ],
+  };
+  const result = await compileFigure(input);
+  const reaction = result.entries[result.reference.ref] as Reaction;
+  assert.equal(reaction.reactants[0].equivalents, 2);
+  assert.deepEqual(
+    reaction.products.map((p) => p.fraction),
+    [0.45, 0.55],
+  );
+  assert.deepEqual(reaction.tags, ["Oxidation"]);
+  assert.equal(reaction.reagentPosition, "below-arrow");
+  assert.equal(reaction.title, "First step");
+  assert.deepEqual(reaction.sources, input.steps[0].sources);
+  assert.deepEqual(
+    (await compileFigure(input, result.entries)).entries,
+    result.entries,
+  );
+});
+
 test("YAML boundary rejects unsupported kinds and style fields, validates deferred references", async () => {
   const input = {
     kind: "route",
     compounds: { a: "CCO", b: "CC=O" },
     steps: [{ from: "a", to: "b" }],
   };
-  for (const field of [
-    "bond",
-    "width",
-    "charges",
-    "dots",
-    "ring_h",
-    "abbreviate",
-  ])
+  for (const field of ["bond", "width", "charges", "dots", "ring_h"])
     assert.throws(
       () => validateFigureInput({ ...input, [field]: 1 }),
       new RegExp(field),
@@ -407,5 +438,566 @@ test("compilation stores source and stable entries, and recompilation writes no 
       ])
     ).stdout.trim(),
     id,
+  );
+});
+
+test("compiled linear routes draw their connected intermediates once", async () => {
+  const { prepareFigure } = await import("../src/ui/library/prepare.ts");
+  const { loadFigureFonts } = await import("../scripts/figure-fonts.ts");
+  const { figureStyle } = await import("./fixtures/figures/style.ts");
+  const { walkGeometry } = await import("../src/ui/library/geometry-walk.ts");
+  const compiled = await compileFigure(await fixture("linear"));
+  const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit: await moleculeToolkit(),
+    fonts: await loadFigureFonts(),
+    style: figureStyle,
+  });
+  const instances: string[] = [];
+  walkGeometry(geometry.root, (node) => {
+    if (node.attributes["data-compound"])
+      instances.push(node.attributes["data-compound"]);
+  });
+  assert.equal(instances.length, 4);
+});
+
+test("shared intermediates draw their electron annotations once", async () => {
+  const { prepareFigure } = await import("../src/ui/library/prepare.ts"),
+    { loadFigureFonts } = await import("../scripts/figure-fonts.ts"),
+    { figureStyle } = await import("./fixtures/figures/style.ts"),
+    { walkGeometry } = await import("../src/ui/library/geometry-walk.ts");
+  const compiled = await compileFigure({
+    compounds: {
+      a: "CC(O)C",
+      b: {
+        smiles: "C[C:1](=[O:2])C",
+        arrows: [{ id: "push", from: "pi(1,2)", to: "atom(2)" }],
+      },
+      c: "CC(O)C",
+    },
+    steps: [
+      { from: "a", to: "b" },
+      { from: "b", to: "c" },
+    ],
+  });
+  const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit: await moleculeToolkit(),
+    fonts: await loadFigureFonts(),
+    style: figureStyle,
+  });
+  let count = 0;
+  walkGeometry(geometry.root, (n) => {
+    if (n.attributes["data-electron-arrow"]) count++;
+  });
+  assert.equal(count, 1);
+});
+
+test("route depiction propagates from its largest anchor independently of compound declaration order", async () => {
+  const compounds = {
+    a: "CCOc1ccc(CO)cc1",
+    b: "CCOc1ccc(C=O)cc1",
+    c: "CCOc1ccc(C(=O)OCCCCCCCC)cc1",
+  };
+  const steps = [
+    { from: "a", to: "b" },
+    { from: "b", to: "c" },
+  ];
+  const forward = await compileFigure({ compounds, steps });
+  const reverse = await compileFigure({
+    compounds: Object.fromEntries(Object.entries(compounds).reverse()),
+    steps,
+  });
+  const layouts = (result: typeof forward) => {
+    const route = result.entries[result.reference.ref] as Route;
+    return route.steps.flatMap((s) => {
+      const reaction = result.entries[s.reaction] as Reaction;
+      return reaction.scene.molecules.map((p) => {
+        const c = result.entries[p.compound] as Compound;
+        return p.variant ? c.variants![p.variant].coords : c.layout.coords;
+      });
+    });
+  };
+  assert.deepEqual(layouts(forward), layouts(reverse));
+});
+
+test("figure abbreviations follow defaults, optional groups and arrow-visible atoms", async () => {
+  const toolkit = await moleculeToolkit();
+  const input = {
+    compounds: { a: "CCNC(=O)OC(C)(C)C", b: "CCC(=O)OC(C)(C)C" },
+    steps: [{ from: "a", to: "b" }],
+  };
+  const compiled = await compileFigure(input);
+  const reaction = compiled.entries[compiled.reference.ref] as Reaction;
+  const active = (
+    result: typeof compiled,
+    placement: Reaction["scene"]["molecules"][number],
+  ) => {
+    const compound = result.entries[placement.compound] as Compound;
+    const layout = placement.variant
+      ? compound.variants![placement.variant]
+      : compound.layout;
+    return compoundAbbreviations(toolkit, compound, layout).map((g) => g.name);
+  };
+  assert.deepEqual(active(compiled, reaction.scene.molecules[0]), ["NHBoc"]);
+  const off = await compileFigure({
+    ...input,
+    compounds: {
+      ...input.compounds,
+      a: { smiles: input.compounds.a, abbreviate: false },
+    },
+  });
+  assert.deepEqual(
+    active(
+      off,
+      (off.entries[off.reference.ref] as Reaction).scene.molecules[0],
+    ),
+    [],
+  );
+  const optional = await compileFigure({
+    abbreviate: ["Ph"],
+    compounds: { a: "CCc1ccccc1", b: "CCOc1ccccc1" },
+    steps: input.steps,
+  });
+  assert.ok(
+    active(
+      optional,
+      (optional.entries[optional.reference.ref] as Reaction).scene.molecules[0],
+    )!.includes("Ph"),
+  );
+  const arrows = await compileFigure({
+    compounds: {
+      a: {
+        smiles: "[CH3:1][NH:2][C:3](=[O:4])OC(C)(C)C",
+        arrows: [{ from: "pi(3,4)", to: "atom(4)" }],
+      },
+      b: input.compounds.b,
+    },
+    steps: input.steps,
+  });
+  assert.deepEqual(
+    active(
+      arrows,
+      (arrows.entries[arrows.reference.ref] as Reaction).scene.molecules[0],
+    ),
+    [],
+  );
+});
+
+test("conditions retain reagent order and chemical digit typography", async () => {
+  const { figureTextRuns } = await import("../src/ui/library/text-runs.ts");
+  const { loadFigureFonts } = await import("../scripts/figure-fonts.ts");
+  const { prepareFigure } = await import("../src/ui/library/prepare.ts");
+  const { walkGeometry } = await import("../src/ui/library/geometry-walk.ts");
+  const { figureStyle } = await import("./fixtures/figures/style.ts");
+  const fonts = await loadFigureFonts();
+  const runs = figureTextRuns("NaClO2 Pd(PPh3)4 H2O 25 °C C\\11", 20, fonts);
+  assert.deepEqual(
+    runs.filter((r) => r.size < 20).map((r) => r.text),
+    ["2", "3", "4", "2"],
+  );
+  assert.equal(
+    runs.map((r) => r.text).join(""),
+    "NaClO2 Pd(PPh3)4 H2O 25 °C C11",
+  );
+  const compiled = await compileFigure({
+    compounds: { a: "CCO", b: "CC=O", reagent: { text: "PhB(OH)2" } },
+    steps: [{ from: ["a", "reagent"], to: "b", above: "Pd(PPh3)4, K2CO3" }],
+  });
+  assert.deepEqual(
+    (compiled.entries[compiled.reference.ref] as Reaction).reagents,
+    ["PhB(OH)2", "Pd(PPh3)4, K2CO3"],
+  );
+  const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit: await moleculeToolkit(),
+    fonts,
+    style: figureStyle,
+  });
+  const conditions: { text: string; y: number }[] = [];
+  walkGeometry(geometry.root, (n) => {
+    if (
+      n.kind === "text" &&
+      n.attributes["data-label"]?.includes(":condition:-1:")
+    )
+      conditions.push({ text: n.text, y: n.position.y });
+  });
+  conditions.sort((a, b) => a.y - b.y);
+  assert.deepEqual(
+    conditions.map((n) => n.text),
+    ["PhB(OH)2", "Pd(PPh3)4, K2CO3"],
+  );
+});
+
+test("recompilation preserves bound compound and participant identities", async () => {
+  const input = await fixture("linear");
+  const first = await compileFigure(input, {}, "saved");
+  const route = first.entries[first.reference.ref] as Route;
+  for (const step of route.steps) {
+    const reaction = first.entries[step.reaction] as Reaction;
+    for (const [role, participants] of [
+      ["input", reaction.reactants],
+      ["output", reaction.products],
+    ] as const) {
+      for (const [i, participant] of participants.entries()) {
+        reaction.scene.molecules.find((m) => m.id === participant.id)!.id =
+          `${role}${i + 1}`;
+        participant.id = `${role}${i + 1}`;
+      }
+    }
+  }
+  for (const edge of route.edges) {
+    edge.product = "output1";
+    edge.reactant = "input1";
+  }
+  const compound = Object.values(first.entries).find(
+    (entry): entry is Compound => entry.kind === "compound",
+  )!;
+  const duplicate = { ...structuredClone(compound), id: "cmp_duplicate" };
+  const entries = { [duplicate.id]: duplicate, ...first.entries };
+  const second = await compileFigure(input, entries, "saved");
+  const saved = second.entries[route.id] as Route;
+  assert.deepEqual(
+    saved.steps.map((s) => [s.id, s.reaction]),
+    route.steps.map((s) => [s.id, s.reaction]),
+  );
+  for (const step of saved.steps) {
+    const reaction = second.entries[step.reaction] as Reaction;
+    assert.equal(reaction.reactants[0].id, "input1");
+    assert.equal(reaction.products[0].id, "output1");
+    assert.equal(
+      reaction.reactants[0].compound,
+      (first.entries[step.reaction] as Reaction).reactants[0].compound,
+    );
+    assert.ok(reaction.reactants[0].compound !== duplicate.id);
+    assert.ok(step.display!.input1);
+  }
+  assert.deepEqual(
+    (await compileFigure(input, second.entries, "saved")).entries,
+    second.entries,
+  );
+  const singleInput = { ...input, steps: input.steps.slice(0, 1) };
+  const single = await compileFigure(singleInput, second.entries, "saved");
+  assert.equal(single.reference.ref, route.id);
+  assert.equal(single.entries[route.id].kind, "route");
+  assert.equal((single.entries[route.id] as Route).steps.length, 1);
+});
+
+test("compiled reactions include boxed structures, placement brackets and styled footnotes", async () => {
+  const { prepareFigure } = await import("../src/ui/library/prepare.ts");
+  const { loadFigureFonts } = await import("../scripts/figure-fonts.ts");
+  const { figureStyle } = await import("./fixtures/figures/style.ts");
+  const { walkGeometry } = await import("../src/ui/library/geometry-walk.ts");
+  const input = {
+    compounds: { a: { smiles: "CCO", bracket: "ts" }, b: "CC=O", c: "CBr" },
+    steps: [
+      {
+        from: ["a", "c"],
+        to: "b",
+        others: "box",
+        above: "n-BuLi",
+        below: "cis-isomer",
+      },
+    ],
+    footnote: "^{a} t-BuOH, n-Hexane, 20 °C",
+  };
+  const compiled = await compileFigure(input),
+    reaction = compiled.entries[compiled.reference.ref] as Reaction;
+  assert.equal(reaction.scene.molecules[0].bracket, "ts");
+  assert.equal(reaction.footnote, input.footnote);
+  const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit: await moleculeToolkit(),
+    fonts: await loadFigureFonts(),
+    style: figureStyle,
+  });
+  let brackets = 0,
+    boxes = 0;
+  const italic: string[] = [];
+  walkGeometry(geometry.root, (node) => {
+    brackets += Number(node.attributes["data-bracket"] !== undefined);
+    boxes += Number(node.attributes["data-overhead-box"] !== undefined);
+    if (node.kind === "text")
+      italic.push(...node.runs.filter((r) => r.italic).map((r) => r.text));
+  });
+  assert.equal(brackets, 1);
+  assert.equal(boxes, 1);
+  for (const prefix of ["n-", "t-", "cis-"])
+    assert.ok(italic.includes(prefix), prefix);
+  const vertical = await compileFigure({
+    ...input,
+    steps: [{ ...input.steps[0], turn: "down" }],
+  });
+  const verticalReaction = vertical.entries[vertical.reference.ref] as Reaction;
+  assert.equal(verticalReaction.arrow.from.x, verticalReaction.arrow.to.x);
+  const drawing = await prepareFigure(vertical.entries, vertical.reference, {
+    toolkit: await moleculeToolkit(),
+    fonts: await loadFigureFonts(),
+    style: figureStyle,
+  });
+  const shafts: string[] = [];
+  walkGeometry(drawing.root, (node) => {
+    if (node.kind === "path" && node.attributes["data-reaction-arrow"])
+      shafts.push(node.attributes["data-curve-points"]);
+  });
+  assert.equal(shafts.length, 1);
+  const points: { x: number; y: number }[] = JSON.parse(shafts[0]);
+  assert.ok(points.every((p) => Math.abs(p.x - points[0].x) < 0.01));
+});
+
+test("contracted CoordGen layouts retain the shared bond length", async () => {
+  const result = await compileFigure({
+    compounds: {
+      a: { smiles: "N#CC1CCCCCCCCCCC1", coordgen: true },
+      b: "N#CC1CCCCCCCCCCC1",
+    },
+    steps: [{ from: "a", to: "b" }],
+  });
+  const reaction = result.entries[result.reference.ref] as Reaction;
+  const placement = reaction.scene.molecules[0];
+  const c = result.entries[placement.compound] as Compound;
+  const layout = c.variants![placement.variant!];
+  const mol = (await moleculeToolkit()).get_mol(c.smiles)!;
+  try {
+    const bonds: { atoms: [number, number] }[] = JSON.parse(mol.get_json())
+      .molecules[0].bonds;
+    const lengths = bonds
+      .map(({ atoms: [a, b] }) => {
+        const p = layout.coords[c.atomIds[a]],
+          q = layout.coords[c.atomIds[b]];
+        return Math.hypot(p.x - q.x, p.y - q.y);
+      })
+      .sort((a, b) => a - b);
+    assert.ok(Math.abs(lengths[Math.floor(lengths.length / 2)] - 1) < 0.05);
+  } finally {
+    mol.delete();
+  }
+});
+
+test("electron endpoints retain root abbreviations and expand only targeted interiors", async () => {
+  const { abbreviatedGroups } =
+    await import("../shared/molecule-abbreviations.ts");
+  const toolkit = await moleculeToolkit();
+  for (const [smiles, arrows, expected] of [
+    [
+      "C[CH:1]([O:2]S(=O)(=O)c1ccc(C)cc1)N(C(=O)C)[CH:3]=[CH:4]C(=O)OC",
+      [
+        { from: "bond(1,2)", to: "atom(2)" },
+        { from: "pi(3,4)", to: "bond(3,4)" },
+      ],
+      ["Ac", "CO₂Me", "OTs"],
+    ],
+    ["CC(=O)NCCNC(=[O:2])C", [{ from: "lp(2)", to: "atom(2)" }], ["Ac"]],
+  ] as const) {
+    const result = await compileFigure({
+      compounds: { a: { smiles, arrows: [...arrows] }, b: "CCO" },
+      steps: [{ from: "a", to: "b" }],
+    });
+    const reaction = result.entries[result.reference.ref] as Reaction,
+      p = reaction.scene.molecules[0],
+      c = result.entries[p.compound] as Compound,
+      layout = c.variants![p.variant!],
+      mol = toolkit.get_mol(c.smiles)!;
+    try {
+      const groups = abbreviatedGroups(
+        toolkit,
+        mol,
+        layout.abbreviations,
+      ).filter(
+        (g) =>
+          !layout.abbreviationAtoms ||
+          layout.abbreviationAtoms.includes(c.atomIds[g.atoms[0]]),
+      );
+      assert.deepEqual(groups.map((g) => g.name).sort(), [...expected].sort());
+    } finally {
+      mol.delete();
+    }
+  }
+});
+
+test("a shared substituent keeps its direction when a ring bond is reduced", async () => {
+  const result = await compileFigure({
+    coordgen: true,
+    anchor: "a",
+    compounds: {
+      a: "COC(=O)C1=CC[C@]2([H])CCN(C(C)=O)[C@@]12[H]",
+      b: "COC(=O)[C@]1([H])CC[C@]2([H])CCN(C(C)=O)[C@@]12[H]",
+    },
+    steps: [{ from: "a", to: "b" }],
+  });
+  const toolkit = await moleculeToolkit(),
+    reaction = result.entries[result.reference.ref] as Reaction,
+    query = toolkit.get_qmol("*C(=O)OC")!;
+  try {
+    const vectors = reaction.scene.molecules.map((p) => {
+      const c = result.entries[p.compound] as Compound,
+        layout = c.variants![p.variant!],
+        mol = toolkit.get_mol(c.smiles)!;
+      try {
+        const ids: number[] = JSON.parse(mol.get_substruct_match(query)).atoms,
+          a = layout.coords[c.atomIds[ids[0]]],
+          b = layout.coords[c.atomIds[ids[1]]];
+        return { x: b.x - a.x, y: b.y - a.y };
+      } finally {
+        mol.delete();
+      }
+    });
+    const [a, b] = vectors;
+    assert.ok(
+      (a.x * b.x + a.y * b.y) / Math.hypot(a.x, a.y) / Math.hypot(b.x, b.y) >
+        0.95,
+    );
+  } finally {
+    query.delete();
+  }
+});
+
+test("CXSMILES repeat units retain their brackets and multiplier", async () => {
+  const { prepareFigure } = await import("../src/ui/library/prepare.ts"),
+    { loadFigureFonts } = await import("../scripts/figure-fonts.ts"),
+    { figureStyle } = await import("./fixtures/figures/style.ts"),
+    { walkGeometry } = await import("../src/ui/library/geometry-walk.ts");
+  const result = await compileFigure({
+    compounds: { a: "CCCOCC |Sg:n:2:n:ht|", b: "CCCOC=O |Sg:n:2:n:ht|" },
+    steps: [{ from: "a", to: "b" }],
+  });
+  const geometry = await prepareFigure(result.entries, result.reference, {
+    toolkit: await moleculeToolkit(),
+    fonts: await loadFigureFonts(),
+    style: figureStyle,
+  });
+  let brackets = 0,
+    multipliers = 0;
+  walkGeometry(geometry.root, (n) => {
+    if (n.attributes["data-repeat-bracket"]) brackets++;
+    if (
+      n.kind === "text" &&
+      n.attributes["data-label"]?.includes(":repeat:") &&
+      n.text === "n"
+    )
+      multipliers++;
+  });
+  assert.equal(brackets, 4);
+  assert.equal(multipliers, 2);
+});
+
+test("an authored structure scale enlarges saved bond geometry", async () => {
+  const result = await compileFigure({
+    compounds: { a: { smiles: "CCO", scale: 1.45 }, b: "CC=O" },
+    steps: [{ from: "a", to: "b" }],
+  });
+  const reaction = result.entries[result.reference.ref] as Reaction,
+    p = reaction.scene.molecules[0],
+    c = result.entries[p.compound] as Compound,
+    coords = c.variants![p.variant!].coords;
+  const a = coords[c.atomIds[0]],
+    b = coords[c.atomIds[1]];
+  assert.ok(Math.abs(Math.hypot(a.x - b.x, a.y - b.y) - 1.45) < 0.005);
+});
+
+test("positive authored rotation turns counterclockwise and propagates from the anchor", async () => {
+  const { prepareFigure } = await import("../src/ui/library/prepare.ts"),
+    { loadFigureFonts } = await import("../scripts/figure-fonts.ts"),
+    { figureStyle } = await import("./fixtures/figures/style.ts");
+  const input = {
+    anchor: "a",
+    compounds: { a: { smiles: "CC(O)C=O" }, b: "CC(O)C=O" },
+    steps: [{ from: "a", to: "b" }],
+  };
+  const fonts = await loadFigureFonts(),
+    toolkit = await moleculeToolkit();
+  const vector = async (
+    result: Awaited<ReturnType<typeof compileFigure>>,
+    role: "reactants" | "products",
+  ) => {
+    const r = result.entries[result.reference.ref] as Reaction,
+      p = r[role][0],
+      c = result.entries[p.compound] as Compound;
+    const g = await prepareFigure(result.entries, result.reference, {
+      toolkit,
+      fonts,
+      style: figureStyle,
+    });
+    const a = g.atomPoints[p.id + ":" + c.atomIds[0]],
+      b = g.atomPoints[p.id + ":" + c.atomIds[2]];
+    return { x: b.x - a.x, y: b.y - a.y };
+  };
+  const base = await compileFigure(input),
+    rotated = await compileFigure({
+      ...input,
+      compounds: { ...input.compounds, a: { ...input.compounds.a, rot: 90 } },
+    });
+  const original = await vector(base, "reactants"),
+    actual = await vector(rotated, "reactants"),
+    inherited = await vector(rotated, "products");
+  assert.ok(Math.abs(actual.x - original.y) < 0.2);
+  assert.ok(Math.abs(actual.y + original.x) < 0.2);
+  assert.ok(Math.abs(inherited.x - actual.x) < 0.2);
+  assert.ok(Math.abs(inherited.y - actual.y) < 0.2);
+});
+
+test("authored atom maps render as native atom numbers", async () => {
+  const { prepareFigure } = await import("../src/ui/library/prepare.ts"),
+    { loadFigureFonts } = await import("../scripts/figure-fonts.ts"),
+    { figureStyle } = await import("./fixtures/figures/style.ts"),
+    { walkGeometry } = await import("../src/ui/library/geometry-walk.ts");
+  const result = await compileFigure({
+    compounds: {
+      a: { smiles: "[CH3:7][CH:14]([OH:21])C=O", numbers: true },
+      b: "CC(O)C=O",
+    },
+    steps: [{ from: "a", to: "b" }],
+  });
+  const g = await prepareFigure(result.entries, result.reference, {
+    toolkit: await moleculeToolkit(),
+    fonts: await loadFigureFonts(),
+    style: figureStyle,
+  });
+  const numbers: number[] = [];
+  walkGeometry(g.root, (n) => {
+    if (n.attributes["data-atom-number"]) {
+      assert.ok(n.kind === "group" && n.children.length > 0);
+      assert.ok(n.bounds && n.bounds.width > 0 && n.bounds.height > 0);
+      numbers.push(Number(n.attributes["data-atom-number"]));
+    }
+  });
+  assert.deepEqual(
+    numbers.sort((a, b) => a - b),
+    [7, 14, 21],
+  );
+});
+
+test("new depictions place charge markers for their new bond directions", async () => {
+  const { prepareFigure } = await import("../src/ui/library/prepare.ts"),
+    { loadFigureFonts } = await import("../scripts/figure-fonts.ts"),
+    { figureStyle } = await import("./fixtures/figures/style.ts"),
+    { figureGeometryDiagnostics } =
+      await import("../src/ui/library/geometry-diagnostics.ts");
+  const input = {
+    title: "Charged transformation",
+    compounds: { a: "COC(=O)c1cccnc1", b: "COC(=O)c1ccc[n+](C)c1" },
+    steps: [{ from: "a", to: "b" }],
+  };
+  const first = await compileFigure(input);
+  const rd = await moleculeToolkit();
+  for (const c of Object.values(first.entries)) {
+    if (c.kind !== "compound") continue;
+    const mol = rd.get_mol(c.smiles)!;
+    const data = JSON.parse(mol.get_json()).molecules[0];
+    mol.delete();
+    const index = data.atoms.findIndex((a: { chg?: number }) => a.chg === 1);
+    if (index < 0) continue;
+    for (const layout of [c.layout, ...Object.values(c.variants ?? {})]) {
+      layout.chargeAngles = { [c.atomIds[index]]: 0 };
+    }
+  }
+  const next = await compileFigure(input, first.entries);
+  const geometry = await prepareFigure(next.entries, next.reference, {
+    toolkit: rd,
+    fonts: await loadFigureFonts(),
+    style: figureStyle,
+  });
+  assert.ok(
+    !figureGeometryDiagnostics(geometry, figureStyle).some(
+      (d) =>
+        d.code === "BOND_LABEL_OVERLAP" &&
+        d.elements.some((e) => e.endsWith(":charge")),
+    ),
   );
 });

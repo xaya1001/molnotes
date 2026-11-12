@@ -1,5 +1,6 @@
 import {
   angleBetween,
+  insidePolygon,
   polygonHitsSegment,
   polygonsOverlap,
 } from "./geometry-collision.ts";
@@ -15,6 +16,7 @@ import type {
 } from "../../../shared/chemical-library/geometry.ts";
 import {
   multiplyMatrix,
+  mainRowBox,
   transformBox,
   transformPoint,
 } from "./geometry-math.ts";
@@ -22,7 +24,12 @@ import type { FigureStyle } from "./scene-geometry.ts";
 import type { FigureRect } from "../../../shared/chemical-library/geometry.ts";
 import { rectangle } from "./geometry-math.ts";
 import { walkGeometry } from "./geometry-walk.ts";
-import { samplePath, pathMetrics } from "./path-geometry.ts";
+import {
+  samplePath,
+  pathMetrics,
+  inkIntersectsBox,
+  pathContours,
+} from "./path-geometry.ts";
 interface Measured {
   node: FigureNode;
   kind: string;
@@ -211,6 +218,18 @@ export function figureGeometryDiagnostics(
     (node) => node.data.bondLengths !== undefined,
   )) {
     const lengths: number[] = JSON.parse(molecule.data.bondLengths!);
+    const sorted = [...lengths].sort((a, b) => a - b),
+      median = sorted[Math.floor(sorted.length / 2)],
+      maximum = Math.max(...lengths);
+    if (maximum > median * 1.5 + 0.2)
+      add(
+        "BOND_TOO_LONG",
+        [molecule.data.molecule!],
+        "Restore the stretched bond to the molecule's shared bond length",
+        undefined,
+        maximum / median,
+        1.5,
+      );
     const matrix = molecule.matrix!;
     const minimum = Math.min(...lengths) * Math.hypot(matrix[0], matrix[1]);
     if (minimum < minBond - 0.2)
@@ -255,6 +274,7 @@ export function figureGeometryDiagnostics(
     el,
     id: el.data.bond!,
     points: samples(el),
+    contours: el.node.kind === "path" ? pathContours(el.node.d, el.matrix) : [],
     own: (el.data.atoms ?? "").split(" "),
   }));
   const atomPoints = new Map<string, Point>();
@@ -313,16 +333,74 @@ export function figureGeometryDiagnostics(
         );
     }
   }
+  const completeLabels = new Map<string, FigureRect>();
+  const labelGlyphs = new Map<string, FigureRect[]>();
+  for (const { id, r: layoutBox, el } of labels) {
+    const ink =
+      el.node.kind === "text"
+        ? transformBox(el.node.inkBounds, el.matrix)
+        : null;
+    const r = ink ? rectangle(ink.x, ink.y, ink.width, ink.height) : layoutBox;
+    labelGlyphs.set(id, [...(labelGlyphs.get(id) ?? []), r]);
+    const previous = completeLabels.get(id);
+    const x = Math.min(previous?.left ?? r.left, r.left),
+      y = Math.min(previous?.top ?? r.top, r.top);
+    completeLabels.set(
+      id,
+      rectangle(
+        x,
+        y,
+        Math.max(previous?.right ?? r.right, r.right) - x,
+        Math.max(previous?.bottom ?? r.bottom, r.bottom) - y,
+      ),
+    );
+  }
+  const mainLabels = new Map(
+    [...labelGlyphs].map(([id, glyphs]) => [id, mainRowBox(glyphs)]),
+  );
   for (const b of bonds)
-    for (const l of labels) {
-      const points = b.points;
-      if (points.some((p) => inside(p, l.r, 0.8)))
+    for (const [id, r] of completeLabels) {
+      const paint = b.el.node.paint;
+      if (
+        inkIntersectsBox(
+          b.contours,
+          b.own.includes(id) ? mainLabels.get(id)! : r,
+          paint.stroke === "none"
+            ? 0
+            : paint.strokeWidth * Math.hypot(b.el.matrix[0], b.el.matrix[1]),
+          paint.fill !== "none",
+        )
+      )
         add(
           "BOND_LABEL_OVERLAP",
-          [b.id, l.id],
+          [b.id, id],
           "Move the label or adjust atom coordinates",
         );
     }
+  const rings = elements.flatMap((node) =>
+    node.data.atomRings ? (JSON.parse(node.data.atomRings) as string[][]) : [],
+  );
+  for (const id of new Set(
+    labels.filter((l) => l.el.data.abbreviation).map((l) => l.id),
+  )) {
+    const r = completeLabels.get(id)!;
+    const centre = { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    if (
+      rings.some(
+        (ring) =>
+          !ring.includes(id) &&
+          insidePolygon(
+            centre,
+            ring.map((atom) => atomPoints.get(atom)!),
+          ),
+      )
+    )
+      add(
+        "LABEL_IN_RING",
+        [id],
+        "Move the terminal group label outside the ring",
+      );
+  }
   const arrows = [
     ...elements.filter((node) => node.data.electronArrow !== undefined),
   ].map((el) => ({ el, id: el.data.electronArrow!, points: samples(el) }));

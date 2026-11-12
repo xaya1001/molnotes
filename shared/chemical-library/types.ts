@@ -17,6 +17,7 @@ export interface EntryBase {
   sourceKey?: string;
   owner?: string;
   overview?: string;
+  footnote?: string;
   id: string;
   title: string;
   sources: Evidence[];
@@ -40,6 +41,8 @@ export interface CompoundLayout {
   compact?: { atom: string; text: string; anchor: "first" | "last" };
   abbreviationAtoms?: string[];
   abbreviations?: MoleculeAbbreviation[];
+  repeatUnits?: { atoms: string[]; label: string }[];
+  atomNumbers?: Record<string, number>;
 }
 export interface Compound extends EntryBase {
   kind: "compound";
@@ -68,6 +71,7 @@ export interface Placement {
   at: Point;
   rotate?: number;
   mirror?: boolean;
+  bracket?: boolean | "ts";
 }
 export type Anchor =
   | { kind: "atom"; at: AtomRef }
@@ -131,6 +135,8 @@ export interface Scene {
   partialBonds?: { atoms: [AtomRef, AtomRef]; order: number }[];
 }
 export interface Participant {
+  /** Compound key in the figure source; participant id remains stable across recompilation. */
+  sourceKey?: string;
   position?: "inline" | "above-arrow" | "below-arrow" | "text" | "none";
   id: string;
   compound: string;
@@ -157,13 +163,26 @@ export interface Reaction extends EntryBase {
     from: Point;
     to: Point;
     textWidth: number;
+    via?: Point[];
     kind?: ArrowKind;
     side?: "left" | "right";
   };
 }
 export interface Route extends EntryBase {
   kind: "route";
-  steps: { id: string; reaction: string; at: Point }[];
+  steps: {
+    id: string;
+    reaction: string;
+    at: Point;
+    display?: Record<string, "structure" | "reference" | "hidden">;
+    placements?: Record<string, Point>;
+    reagents?: string[];
+    conditions?: string[];
+    boxes?: string[];
+    arrow?: Reaction["arrow"];
+  }[];
+  connections?: { id: string; points: Point[] }[];
+  plusAt?: Point[];
   edges: { from: string; to: string; product: string; reactant: string }[];
   width: number;
   height: number;
