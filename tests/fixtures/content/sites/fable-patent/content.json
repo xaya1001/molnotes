@@ -969,9 +969,74 @@
               }
             ],
             "examples": [1, 2, 3],
-            "scope": {
-              "smarts": "[#8]",
-              "note": "以是否含对应元素原子作为教学简化范围。"
+            "markush": {
+              "core": "C([*:1])O",
+              "groups": {
+                "1": {
+                  "label": "R¹",
+                  "positions": [0, 2],
+                  "alternatives": [
+                    {
+                      "id": "alkyl",
+                      "label": "C1–2 烷基",
+                      "type": "count",
+                      "element": 6,
+                      "min": 1,
+                      "max": 2,
+                      "atomSmarts": "[C;X4;!R]"
+                    },
+                    {
+                      "id": "hydrogen",
+                      "label": "H",
+                      "type": "fragment",
+                      "smiles": "*[H]"
+                    },
+                    {
+                      "id": "halogen",
+                      "label": "卤素",
+                      "type": "class",
+                      "smarts": "[#0]-[F,Cl,Br,I]"
+                    },
+                    {
+                      "id": "aryl",
+                      "label": "任选卤代苯基",
+                      "type": "substituted",
+                      "core": "*c1ccccc1",
+                      "group": "2",
+                      "min": 0,
+                      "max": 2
+                    },
+                    {
+                      "id": "repeat",
+                      "label": "1–2 个双碳重复单元及末端羟基",
+                      "type": "repeat",
+                      "unit": "[*:1]CC[*:2]",
+                      "end": "*O",
+                      "min": 1,
+                      "max": 2
+                    }
+                  ]
+                },
+                "2": {
+                  "label": "芳基上的取代基",
+                  "alternatives": [
+                    {
+                      "id": "halogen",
+                      "label": "卤素",
+                      "type": "class",
+                      "smarts": "[#0]-[F,Cl,Br,I]"
+                    }
+                  ]
+                }
+              },
+              "note": "逐位核对虚构通式与实施例。",
+              "exclusions": [
+                {
+                  "id": "excluded",
+                  "label": "指定排除结构",
+                  "smiles": "CCCO"
+                }
+              ]
             }
           },
           {
@@ -990,9 +1055,10 @@
               }
             ],
             "examples": [4],
-            "scope": {
-              "smarts": "[#7]",
-              "note": "以是否含对应元素原子作为教学简化范围。"
+            "markush": {
+              "core": "N",
+              "groups": {},
+              "note": "按母核子结构核对教学模式。"
             }
           },
           {

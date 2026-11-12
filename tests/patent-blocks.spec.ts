@@ -558,3 +558,54 @@ test("connected routes compare branches and expose procedure and yield evidence"
   await picks.nth(0).check();
   await expect(page.locator(".route-columns > article")).toHaveCount(1);
 });
+test("Markush query shows six outcomes and per-alternative example coverage", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await page.goto(base + "/claims/1");
+  const coverage = page.getByRole("table", {
+    name: "Claim 1 实施例覆盖",
+    exact: true,
+  });
+  await expect(coverage.locator('[data-alternative="alkyl"]')).toContainText(
+    "1",
+  );
+  await expect(coverage.locator('[data-alternative="halogen"] a')).toHaveCount(
+    0,
+  );
+  await expect(coverage).toContainText("*CCC");
+  for (const [smiles, status] of [
+    ["CCO", "matched"],
+    ["NCO", "not-matched"],
+    ["N", "not-matched"],
+    ["CCCO", "not-matched"],
+    ["C1CO1", "unmodeled"],
+    ["COC", "matched"],
+  ]) {
+    await page.getByLabel("化学模式匹配 SMILES").fill(smiles!);
+    await page.getByRole("button", { name: "匹配子结构" }).click();
+    const result = page.locator(".verdicts article").first();
+    await expect(result).toHaveAttribute("data-match-status", status!);
+    if (smiles === "NCO")
+      await expect(
+        result.locator('[data-group-status="not-matched"]'),
+      ).toHaveCount(1);
+    if (smiles === "CCO") {
+      await expect(result.locator('[data-group-status="matched"]')).toHaveCount(
+        1,
+      );
+      await result.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: testInfo.outputPath("query-1366.png") });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await result.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: testInfo.outputPath("query-390.png") });
+      await page.setViewportSize({ width: 1366, height: 900 });
+      await coverage.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: testInfo.outputPath("coverage-1366.png") });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await coverage.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: testInfo.outputPath("coverage-390.png") });
+      await page.setViewportSize({ width: 1366, height: 900 });
+    }
+  }
+});

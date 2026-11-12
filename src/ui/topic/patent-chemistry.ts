@@ -1,4 +1,9 @@
 import {
+  matchMarkush,
+  markushCoverage,
+} from "../../../shared/patent-markush-chemistry.ts";
+import type { Markush } from "../../../shared/patent-markush.ts";
+import {
   loadChemistry,
   type ChemistryToolkit,
   type MoleculeHandle,
@@ -42,39 +47,23 @@ function matchRows(
 }
 export async function checkScopes(
   smiles: string,
-  scopes: { id: number; smarts?: string }[],
+  scopes: { id: number; markush?: Markush }[],
 ) {
   const toolkit = await loadChemistry();
-  let mol: MoleculeHandle | null;
   try {
-    mol = toolkit.get_mol(smiles);
+    return Object.fromEntries(
+      scopes.map((scope) => [
+        scope.id,
+        matchMarkush(toolkit, smiles, scope.markush),
+      ]),
+    );
   } catch {
     throw new Error("无法解析 SMILES，请检查原子、键和括号。");
   }
-  if (!mol) throw new Error("无法解析 SMILES，请检查原子、键和括号。");
-  try {
-    const result: Record<
-      number,
-      { status: "matched" | "not-matched" | "unmodeled" }
-    > = {};
-    for (const scope of scopes) {
-      if (!scope.smarts) {
-        result[scope.id] = { status: "unmodeled" };
-        continue;
-      }
-      const query = toolkit.get_qmol(scope.smarts);
-      if (!query) throw new Error("范围定义无法解析");
-      try {
-        result[scope.id] = {
-          status:
-            mol.get_substruct_match(query) === "{}" ? "not-matched" : "matched",
-        };
-      } finally {
-        query.delete();
-      }
-    }
-    return result;
-  } finally {
-    mol.delete();
-  }
+}
+export async function scopeCoverage(
+  model: Markush,
+  rows: { id: string | number; smiles: string }[],
+) {
+  return markushCoverage(await loadChemistry(), model, rows);
 }

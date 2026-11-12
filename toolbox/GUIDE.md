@@ -70,7 +70,7 @@
 
 每条记录为 `{ id, source, ...字段值, refs?, notes? }`。`refs` 的键是目标 collection id，值是该集合 id 数组；保留键 `claims` 指权利要求 id。`notes` 为 `{ field?, text, ref? }[]`，用来并列来源差异或解释未确认结构。`pins.max` 控制比较上限，超限提示并拒绝；逐条笔记与比较编号由网站记录 API 保存，写入失败显示重试入口。
 
-`data.claims.<id>` 为 `{ source, claims: [{ id, title, group, text, note?, refs, children, segments, scope?, examples }] }`。权利要求 id 在专题内唯一，`refs` 与 `children` 是权利要求 id，`segments` 是带 `asset` 的原页引用，`examples` 引用 `data.collections.examples`。详情 `/claims/<id>`，对比 `/claims/compare?ids=a,b`；`scope: { smarts, note }` 给出作者核对的结构范围与简化说明。输入 SMILES 后返回 matched、not-matched 或 unmodeled，界面分别显示匹配所声明子结构、未匹配所声明子结构或未建立化学模式，并保留作者整理的实施例关联。SMARTS 发布时解析；化学匹配不等同于完整权利要求范围。测量、证据归类、连接合成及程序引用的字段和保守比较语义见 [Agent 研究契约](../docs/content.md#agent-专利研究记录)。
+`data.claims.<id>` 为 `{ source, claims: [{ id, title, group, text, note?, notes?, refs, children, segments, markush?, examples }] }`。权利要求 id 在专题内唯一，`refs` 与 `children` 是权利要求 id，`segments` 是带 `asset` 的原页引用，`examples` 引用 `data.collections.examples`。详情 `/claims/<id>`，对比 `/claims/compare?ids=a,b`。`markush:{core,groups,note,exclusions?,unmodeled?}` 声明带编号连接点的 SMILES 母核及逐位备选，支持具体片段、SMARTS 类别、元素计数、嵌套取代、可变位置与重复单元。输入 SMILES 后显示母核拆分、实际 R 片段、逐位命中备选与模式内、模式外或部分未建模；关联实施例的覆盖表列出每位备选的命中编号、空白备选与定义外片段。结构在发布时解析，无法表达的条件记入 `notes` 和模型的 `unmodeled`。化学匹配不等同于完整权利要求范围。完整字段和拒绝条件见 [专利研究契约](../docs/content.md#分组权利要求与假设)。
 
 `data.sarCases.<id>` 是 `{ id, title, ids, area, change, finding, limit, claims }[]`，`ids` 引用块的 collection，`claims` 引用权利要求。案例 id 在专题内唯一，详情 `/sar/<id>`；结构、分档和原页并排，分档交叉计数可跳到对应记录集合。多个 SAR 块可分别引用不同案例集。
 

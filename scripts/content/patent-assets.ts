@@ -1,3 +1,4 @@
+import { validateMarkushChemistry } from "../../shared/patent-markush-chemistry.ts";
 import { isObject } from "../../shared/json.ts";
 import type { BodyRef, Assignment } from "../../src/ui/topic/patent.ts";
 import { moleculeToolkit } from "../../shared/molecule-toolkit.ts";
@@ -107,19 +108,15 @@ export async function validatePatentAssets(
     for (const claim of set.claims) {
       for (const segment of claim.segments)
         if (typeof segment.asset === "string") get(segment.asset);
-      if (claim.scope) {
-        const cache = `smarts:${claim.scope.smarts}`;
+      if (claim.markush) {
+        const cache = `markush:${JSON.stringify(claim.markush)}`;
         if (!checked.has(cache)) {
           toolkit ??= await moleculeToolkit();
-          let mol;
-          try {
-            mol = toolkit.get_qmol(claim.scope.smarts);
-            if (!mol?.is_valid()) throw new Error();
-          } catch {
-            throw new Error(`${where}: invalid SMARTS in claim ${claim.id}`);
-          } finally {
-            mol?.delete();
-          }
+          validateMarkushChemistry(
+            toolkit,
+            claim.markush,
+            `${where}: claim ${claim.id}`,
+          );
           checked.add(cache);
         }
       }

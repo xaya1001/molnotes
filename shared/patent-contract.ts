@@ -1,3 +1,4 @@
+import { validateMarkush } from "./patent-markush.ts";
 import { validateImageReference } from "./chemical-library/contract.ts";
 import type { PatentBlock, TopicBlock } from "../src/ui/topic/blocks.ts";
 import type { PageSource, PatentData } from "../src/ui/topic/patent.ts";
@@ -368,10 +369,9 @@ export function validatePatentData(
         ref(segment, set.source, at);
         imageAsset(field(segment, "asset"), at);
       }
-      if (c.scope) {
-        text(field(c.scope, "smarts"), at);
-        text(field(c.scope, "note"), at);
-      }
+      if (c.markush !== undefined) validateMarkush(c.markush, at);
+      if (c.notes !== undefined)
+        for (const note of list(c.notes, at)) text(note, at);
     }
   }
   const allCases: unknown[] = [];

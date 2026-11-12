@@ -178,7 +178,7 @@ test("publication checks molecules, scopes, assets and lazy JSON keys", async ()
     (c: typeof FixtureFixture) =>
       Reflect.set(c.data.collections.examples.records[0], "smiles", "C("),
     (c: typeof FixtureFixture) =>
-      Reflect.set(c.data.claims.main.claims[0].scope!, "smarts", "["),
+      Reflect.set(c.data.claims.main.claims[0].markush!, "core", "["),
     (c: typeof FixtureFixture) =>
       Reflect.set(c.data.collections.examples.records[0].body, "key", "absent"),
     (c: typeof FixtureFixture) =>

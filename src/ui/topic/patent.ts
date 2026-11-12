@@ -64,6 +64,7 @@ export interface RecordCollection {
   records: CollectionRecord[];
 }
 export interface Claim {
+  notes?: string[];
   id: number;
   title: string;
   group: string;
@@ -72,7 +73,7 @@ export interface Claim {
   refs: number[];
   children: number[];
   segments: PageRef[];
-  scope?: { smarts: string; note: string };
+  markush?: import("../../../shared/patent-markush.ts").Markush;
   examples: RecordId[];
 }
 export interface ClaimSet {

@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import SourceText from "./SourceText.vue";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useTopic } from "./context.ts";
 import { patentData } from "./patent.ts";
-import { checkScopes } from "./patent-chemistry.ts";
+import { checkScopes, scopeCoverage } from "./patent-chemistry.ts";
 import SourceRef from "./SourceRef.vue";
 import PageHeading from "../PageHeading.vue";
+import type { MarkushMatch } from "../../../shared/patent-markush.ts";
 const props = defineProps<{
   set?: string;
   mode?: "detail" | "compare" | "list";
@@ -27,9 +28,7 @@ const query = ref(""),
   smiles = ref(""),
   error = ref(""),
   busy = ref(false),
-  verdicts = ref<
-    Record<number, { status: "matched" | "not-matched" | "unmodeled" }>
-  >({});
+  verdicts = ref<Record<number, MarkushMatch>>({});
 const list = computed(() =>
   claims.value.filter(
     (c) =>
@@ -64,7 +63,7 @@ async function check() {
   try {
     verdicts.value = await checkScopes(
       smiles.value,
-      claims.value.map((c) => ({ id: c.id, smarts: c.scope?.smarts })),
+      claims.value.map((c) => ({ id: c.id, markush: c.markush })),
     );
   } catch (e) {
     error.value = e instanceof Error ? e.message : "核对失败";
@@ -73,6 +72,57 @@ async function check() {
   }
 }
 const examples = data.collections?.examples;
+const coverage = ref<Record<number, Awaited<ReturnType<typeof scopeCoverage>>>>(
+  {},
+);
+const coverageError = ref("");
+watch(
+  shown,
+  async (visible, _old, onCleanup) => {
+    let active = true;
+    onCleanup(() => {
+      active = false;
+    });
+    coverageError.value = "";
+    for (const claim of visible) {
+      if (!claim.markush || coverage.value[claim.id]) continue;
+      const field = examples?.fields.find((f) => f.kind === "smiles")?.key;
+      try {
+        const result = await scopeCoverage(
+          claim.markush,
+          (examples?.records ?? [])
+            .filter((r) =>
+              claim.examples.some((id) => String(id) === String(r.id)),
+            )
+            .map((r) => ({
+              id: r.id,
+              smiles: field ? String(r[field] ?? "") : "",
+            })),
+        );
+        if (active) coverage.value[claim.id] = result;
+      } catch (e) {
+        if (active)
+          coverageError.value = e instanceof Error ? e.message : "覆盖统计失败";
+      }
+    }
+  },
+  { immediate: true },
+);
+const statusText = {
+  matched: "定义内",
+  "not-matched": "定义外",
+  unmodeled: "未建模",
+};
+function alternativeLabel(
+  claim: (typeof claims.value)[number],
+  key: string,
+  id: string,
+) {
+  return (
+    claim.markush?.groups[key].alternatives.find((a) => a.id === id)?.label ??
+    id
+  );
+}
 </script>
 <template>
   <section class="claims" :class="{ 'page-wide': mode }">
@@ -140,14 +190,69 @@ const examples = data.collections?.examples;
         <h3>
           Claim {{ claim.id }}：{{
             {
-              matched: "匹配所声明子结构",
-              "not-matched": "未匹配所声明子结构",
-              unmodeled: "未建立化学模式",
+              matched: "在声明的化学模式内",
+              "not-matched": "在模式外",
+              unmodeled: "部分未建模",
             }[verdicts[claim.id].status]
           }}
         </h3>
-        <p>{{ claim.scope?.note ?? claim.note }}</p>
-        <p v-if="!claim.scope">
+        <p>{{ claim.markush?.note ?? claim.note }}</p>
+        <p v-if="verdicts[claim.id].reason === 'core'">母核不匹配</p>
+        <p v-if="verdicts[claim.id].reason === 'excluded'">
+          被但书排除：{{
+            claim.markush?.exclusions?.find(
+              (e) => e.id === verdicts[claim.id].exclusion,
+            )?.label
+          }}
+        </p>
+        <p v-if="verdicts[claim.id].outside?.length">
+          跳出定义的位置：{{
+            verdicts[claim.id].outside
+              ?.map((key) =>
+                key === "core"
+                  ? "母核其他位置"
+                  : claim.markush?.groups[key].label,
+              )
+              .join("、")
+          }}
+        </p>
+        <p v-if="claim.markush?.unmodeled">{{ claim.markush.unmodeled }}</p>
+        <div v-if="verdicts[claim.id].groups.length" class="table-scroll">
+          <table class="data-table" :aria-label="`Claim ${claim.id} 逐位判定`">
+            <thead>
+              <tr>
+                <th>位置</th>
+                <th>实际片段</th>
+                <th>判定</th>
+                <th>命中备选</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="g in verdicts[claim.id].groups"
+                :key="g.key"
+                :data-group-status="g.status"
+              >
+                <th>{{ g.label }}</th>
+                <td>
+                  <code>{{ g.fragment }}</code>
+                </td>
+                <td>
+                  {{ statusText[g.status] }}
+                  <p v-if="g.note">{{ g.note }}</p>
+                </td>
+                <td>
+                  {{
+                    g.alternatives
+                      .map((id) => alternativeLabel(claim, g.key, id))
+                      .join("、") || "—"
+                  }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p v-if="!claim.markush">
           作者整理的实施例归属：<RouterLink
             v-for="id in claim.examples"
             :key="id"
@@ -183,6 +288,60 @@ const examples = data.collections?.examples;
       <article v-for="claim in shown" :key="claim.id" class="claim-detail">
         <h2>{{ claim.title }}</h2>
         <p>{{ claim.note }}</p>
+        <p v-for="note in claim.notes" :key="note">{{ note }}</p>
+        <section v-if="claim.markush" class="coverage">
+          <h3>实施例覆盖</h3>
+          <p v-if="coverageError" role="alert">{{ coverageError }}</p>
+          <p v-else-if="!coverage[claim.id]" role="status">正在统计…</p>
+          <div v-else class="table-scroll">
+            <table
+              class="data-table"
+              :aria-label="`Claim ${claim.id} 实施例覆盖`"
+            >
+              <thead>
+                <tr>
+                  <th>位置</th>
+                  <th>备选或片段</th>
+                  <th>实施例</th>
+                </tr>
+              </thead>
+              <tbody v-for="g in coverage[claim.id].groups" :key="g.key">
+                <tr
+                  v-for="a in g.alternatives"
+                  :key="a.id"
+                  :data-alternative="a.id"
+                >
+                  <th>{{ g.label }}</th>
+                  <td>{{ a.label }}</td>
+                  <td>
+                    <RouterLink
+                      v-for="id in a.examples"
+                      :key="id"
+                      :to="`/${examples!.route}/${id}`"
+                      >{{ id }} </RouterLink
+                    ><span v-if="!a.examples.length">无实施例</span>
+                  </td>
+                </tr>
+                <tr v-for="r in g.outside" :key="r.id">
+                  <th>{{ g.label }} · 定义外</th>
+                  <td>
+                    <code>{{ r.fragment }}</code>
+                  </td>
+                  <td>
+                    <RouterLink :to="`/${examples!.route}/${r.id}`">{{
+                      r.id
+                    }}</RouterLink>
+                  </td>
+                </tr>
+                <tr v-if="g.unmodeled.length">
+                  <th>{{ g.label }} · 未建模</th>
+                  <td>—</td>
+                  <td>{{ g.unmodeled.join("、") }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
         <p class="original">
           <SourceText :text="claim.text" :source="claim.source" />
         </p>
@@ -222,6 +381,10 @@ const examples = data.collections?.examples;
   </section>
 </template>
 <style scoped>
+.coverage td a {
+  display: inline-block;
+  margin-inline-end: var(--space-1);
+}
 .claims {
   min-width: 0;
   overflow-wrap: anywhere;
