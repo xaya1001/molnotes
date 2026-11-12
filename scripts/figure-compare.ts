@@ -130,19 +130,18 @@ export function compareObservationSets(
       ...Object.keys(after.failures),
     ]),
   ];
-  const views = keys.map((key) => ({
-    key,
-    ...(before.views[key] && after.views[key]
-      ? {
-          comparison: compareFigureGeometry(
-            before.views[key],
-            after.views[key],
-          ),
-        }
-      : { unmatched: !before.views[key] ? "before" : "after" }),
-    ...(before.failures[key] ? { beforeError: before.failures[key] } : {}),
-    ...(after.failures[key] ? { afterError: after.failures[key] } : {}),
-  }));
+  const views = keys.map((key) => {
+    const prior = before.views[key],
+      current = after.views[key];
+    return {
+      key,
+      comparison:
+        prior && current ? compareFigureGeometry(prior, current) : undefined,
+      unmatched: prior && current ? undefined : !prior ? "before" : "after",
+      beforeError: before.failures[key],
+      afterError: after.failures[key],
+    };
+  });
   const magnitude = (row: (typeof views)[number]) =>
     row.comparison
       ? Math.max(
