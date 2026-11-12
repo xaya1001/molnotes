@@ -699,6 +699,12 @@ export async function compileFigure(
         );
         pushArrows(scene, resolved, pid, true);
         cursor = at.x + box.right + 2;
+        return {
+          left: at.x + box.left,
+          right: at.x + box.right,
+          top: box.top,
+          bottom: box.bottom,
+        };
       };
       const localNumber = (key: string, spec: StructureInput) =>
         spec.label === undefined ? key : words(spec.label);
@@ -745,6 +751,7 @@ export async function compileFigure(
       const from = { x: cursor - 0.7, y: 0 },
         to = { x: cursor + 4.3, y: 0 };
       cursor += 5.8;
+      let previousProduct: ReturnType<typeof display> | undefined;
       for (const raw of endpoints(step.to)) {
         const key = keyOf(raw),
           r = resolve(key);
@@ -773,7 +780,21 @@ export async function compileFigure(
             : { yield: p.yield ?? r.spec.yield }),
           ...(p.ratio === undefined ? {} : { ratio: p.ratio }),
         });
-        display(`product-${key}`, r);
+        const productBox = display(`product-${key}`, r);
+        if (previousProduct)
+          scene.captions!.push({
+            at: {
+              x: (previousProduct.right + productBox.left) / 2,
+              y:
+                (previousProduct.top +
+                  previousProduct.bottom +
+                  productBox.top +
+                  productBox.bottom) /
+                4,
+            },
+            text: "+",
+          });
+        previousProduct = productBox;
       }
       for (const p of reactants.filter((p) => p.position === "above-arrow")) {
         const r = resolve(p.id);
@@ -815,7 +836,12 @@ export async function compileFigure(
           p.x = h - p.y;
           p.y = x;
         };
-        for (const p of [...scene.molecules.map((m) => m.at), from, to])
+        for (const p of [
+          ...scene.molecules.map((m) => m.at),
+          ...scene.captions!.map((c) => c.at),
+          from,
+          to,
+        ])
           rotate(p);
         for (const p of scene.molecules) p.rotate = (p.rotate ?? 0) + 90;
         scene.width = h;

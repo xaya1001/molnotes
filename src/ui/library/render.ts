@@ -1335,30 +1335,6 @@ export async function renderFigure(
         mark.setAttribute("data-label", `${prefix}${id}:plus:${i}`);
         parent.append(mark);
       }
-      for (let i = 1; i < r.products.length; i++) {
-        const left = parent.querySelector<SVGGElement>(
-          `[data-molecule="${CSS.escape(prefix + r.products[i - 1].id)}"]`,
-        )!;
-        const right = parent.querySelector<SVGGElement>(
-          `[data-molecule="${CSS.escape(prefix + r.products[i].id)}"]`,
-        )!;
-        const lb = left.getBBox(),
-          rb = right.getBBox();
-        const lp = new DOMPoint(
-          lb.x + lb.width,
-          lb.y + lb.height / 2,
-        ).matrixTransform(left.getCTM()!);
-        const rp = new DOMPoint(rb.x, rb.y + rb.height / 2).matrixTransform(
-          right.getCTM()!,
-        );
-        const point = new DOMPoint(
-          (lp.x + rp.x) / 2,
-          (lp.y + rp.y) / 2,
-        ).matrixTransform(parent.getCTM()!.inverse());
-        const mark = label(point, "+");
-        mark.dataset.label = `${prefix}${id}:product-plus:${i}`;
-        parent.append(mark);
-      }
       const textWidth = r.arrow.textWidth * B;
       function wrap(lines: string[]) {
         const probe = label({ x: 0, y: 0 }, "", "var(--chemical-caption-font)");
