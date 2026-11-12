@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { tableTextAlign } from "./table-text.ts";
+import { tableTextAlign, tableTextStyle } from "./table-text.ts";
 import { provideTableStructureScales } from "./table-structure-scale.ts";
 import TableText from "./TableText.vue";
 import TableStructure from "./TableStructure.vue";
@@ -62,7 +62,12 @@ const pieces = (cell: string) =>
             </th>
           </tr>
           <tr>
-            <th v-for="column in columns" :key="column" scope="col">
+            <th
+              v-for="column in columns"
+              :key="column"
+              scope="col"
+              :class="{ 'short-heading': tableTextAlign(column) === 'center' }"
+            >
               <TableText :text="column" />
             </th>
           </tr>
@@ -86,15 +91,15 @@ const pieces = (cell: string) =>
                 v-for="(cell, i) in row"
                 :key="i"
                 :scope="rowHeader && i === 0 ? 'row' : undefined"
-                :style="{
-                  textAlign: tableTextAlign(
+                :style="
+                  tableTextStyle(
                     typeof cell === 'string'
                       ? cell
                       : 'text' in cell
                         ? cell.text
                         : '',
-                  ),
-                }"
+                  )
+                "
               >
                 <TableStructure
                   v-if="typeof cell !== 'string' && 'figure' in cell"
@@ -138,6 +143,9 @@ const pieces = (cell: string) =>
   text-align: center;
   vertical-align: middle;
   font-weight: 400;
+}
+.short-heading {
+  min-width: var(--table-heading-width);
 }
 .data-table tbody tr + tr td {
   border-top: none;

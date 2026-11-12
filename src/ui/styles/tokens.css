@@ -11,6 +11,8 @@
 
   --table-identifier-width: 8rem;
   --table-structure-width: 26%;
+  --table-prose-width: 14em;
+  --table-heading-width: calc(2em + 2 * var(--space-3));
 
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;

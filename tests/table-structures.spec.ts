@@ -207,6 +207,13 @@ test("record tables stack values and names and paginate twelve rows", async ({
   await expect(first.locator("td").nth(4).locator("br")).toHaveCount(1);
   await expect(first.locator("td").nth(4)).toHaveCSS("text-align", "center");
   await expect(first.locator("td").nth(5)).toHaveCSS("text-align", "start");
+  await expect(
+    first.locator("td").nth(5).locator(".quantity").first(),
+  ).toHaveCSS("white-space", "nowrap");
+  await expect(first.locator("td").last().getByRole("button")).toHaveCSS(
+    "white-space",
+    "nowrap",
+  );
   await expect(page.locator(".record-collection thead th").first()).toHaveCSS(
     "font-weight",
     "600",

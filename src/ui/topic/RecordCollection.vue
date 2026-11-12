@@ -5,7 +5,7 @@ import { useTopic } from "./context.ts";
 import { patentData, type RecordId, type Assignment } from "./patent.ts";
 import { filterRecords, queryText, recordsCsv } from "./patent-filter.ts";
 import { substructureMatches } from "./patent-chemistry.ts";
-import { tableTextAlign } from "./table-text.ts";
+import { tableTextAlign, tableTextStyle } from "./table-text.ts";
 import { provideTableStructureScales } from "./table-structure-scale.ts";
 import TableText from "./TableText.vue";
 import RecordValue from "./RecordValue.vue";
@@ -631,7 +631,14 @@ const incoming = computed(() =>
             <thead>
               <tr>
                 <th scope="col">编号</th>
-                <th v-for="field in tableFields" :key="field.key" scope="col">
+                <th
+                  v-for="field in tableFields"
+                  :key="field.key"
+                  scope="col"
+                  :class="{
+                    'short-heading': tableTextAlign(field.label) === 'center',
+                  }"
+                >
                   <TableText :text="field.label" />
                 </th>
                 <th v-if="collection.pins">比较</th>
@@ -658,9 +665,7 @@ const incoming = computed(() =>
                 <td
                   v-for="field in tableFields"
                   :key="field.key"
-                  :style="{
-                    textAlign: tableTextAlign(String(record[field.key] ?? '')),
-                  }"
+                  :style="tableTextStyle(String(record[field.key] ?? ''))"
                 >
                   <RecordValue
                     :collection="collection"
@@ -800,8 +805,14 @@ dt {
   vertical-align: middle;
   font-weight: 400;
 }
+.short-heading {
+  min-width: var(--table-heading-width);
+}
 .data-table tbody tr + tr td {
   border-top: none;
+}
+.data-table .button {
+  white-space: nowrap;
 }
 .data-table thead th {
   font-weight: 600;
