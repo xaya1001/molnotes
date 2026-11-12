@@ -1,4 +1,4 @@
-import type { Font } from "fontkit";
+import { create, type Font } from "fontkit";
 import type { Point } from "../../../shared/chemical-library/types.ts";
 import type {
   FigureBox,
@@ -18,6 +18,12 @@ export type FigureFontResolver = (
   run: FigureTextRun,
   character: string,
 ) => FigureFont;
+
+export function decodeFigureFont(bytes: Parameters<typeof create>[0]): Font {
+  const font = create(bytes);
+  if (!("layout" in font)) throw new Error("Expected a single figure font");
+  return font;
+}
 
 export function shapeFigureText(
   runs: FigureTextRun[],

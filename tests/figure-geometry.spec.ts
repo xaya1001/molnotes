@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { expect, test } from "./helpers/test.ts";
+import { expect, test } from "@playwright/test";
 import { figureBrowser } from "../scripts/figure-browser.ts";
 import { loadFigureFonts } from "../scripts/figure-fonts.ts";
 import { shapeFigureText } from "../src/ui/library/font-geometry.ts";
@@ -52,14 +52,14 @@ test("Node and browser shape identical geometry and the outlined SVG matches its
     const node = shapeFigureText(runs, fonts, { x: 160, y: 100 });
     const browserNode = await runner.page.evaluate(
       async ({ runs, lookup, fontBytes }) => {
-        const enginePath = "/node_modules/fontkit/dist/browser-module.mjs";
         const geometryPath = "/src/ui/library/font-geometry.ts";
-        const { create } = await import(enginePath);
-        const { shapeFigureText } = await import(geometryPath);
+        const { decodeFigureFont, shapeFigureText } = await import(
+          geometryPath
+        );
         const loaded = new Map(
           fontBytes.map(({ id, bytes }) => [
             id,
-            { id, font: create(Uint8Array.from(bytes)) },
+            { id, font: decodeFigureFont(Uint8Array.from(bytes)) },
           ]),
         );
         return shapeFigureText(

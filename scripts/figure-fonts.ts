@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { create } from "fontkit";
+import { decodeFigureFont } from "../src/ui/library/font-geometry.ts";
 import type {
   FigureFont,
   FigureFontResolver,
@@ -36,9 +36,7 @@ export function loadFigureFonts() {
           file,
           (async () => {
             const bytes = await readFile(new URL(import.meta.resolve(file)));
-            const font = create(bytes);
-            if (!("layout" in font))
-              throw new Error(`Expected a single font: ${file}`);
+            const font = decodeFigureFont(bytes);
             return { id: file, font };
           })(),
         );

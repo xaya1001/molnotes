@@ -23,7 +23,10 @@ export async function figureBrowser(
   const cache = await mkdtemp(join(tmpdir(), "figure-vite-"));
   const server = await createServer({
     cacheDir: cache,
-    optimizeDeps: { noDiscovery: true, include: ["svgpath", "svg-parser"] },
+    optimizeDeps: {
+      noDiscovery: true,
+      include: ["svgpath", "svg-parser", "fontkit"],
+    },
     configFile: false,
     root: join(import.meta.dirname, ".."),
     server: { host: "127.0.0.1", port: 0, hmr: false },
