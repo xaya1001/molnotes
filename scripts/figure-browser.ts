@@ -23,7 +23,7 @@ export async function figureBrowser(
   const cache = await mkdtemp(join(tmpdir(), "figure-vite-"));
   const server = await createServer({
     cacheDir: cache,
-    optimizeDeps: { noDiscovery: true, include: [] },
+    optimizeDeps: { noDiscovery: true, include: ["svgpath", "svg-parser"] },
     configFile: false,
     root: join(import.meta.dirname, ".."),
     server: { host: "127.0.0.1", port: 0, hmr: false },
@@ -37,7 +37,7 @@ export async function figureBrowser(
             if (req.url === "/__figure.html") {
               res.setHeader("Content-Type", "text/html; charset=utf-8");
               res.end(
-                `<!doctype html><html lang="zh"><head><link rel="stylesheet" href="/src/ui/styles/tokens.css"><link rel="stylesheet" href="/src/ui/styles/base.css"><style>body{margin:24px;background:#faf9f6;font:16px Arial,sans-serif}#canvas{overflow:auto}#canvas>svg{display:block;margin:auto;max-width:none}h1{font-size:20px}</style></head><body><h1 id="title"></h1><div id="canvas"></div><script type="module">import {createApp,nextTick} from '/node_modules/vue/dist/vue.runtime.esm-bundler.js';import ProcessViewer from '/src/ui/topic/ProcessViewer.vue';import {renderFigure} from '/src/ui/library/render.ts';import {figureDiagnostics} from '/src/ui/library/diagnostics.ts';let app;window.proof=async(library,ref)=>{app?.unmount();app=undefined;const canvas=document.getElementById('canvas');canvas.style.cssText='';canvas.replaceChildren();if(library[ref.ref].kind==='process'){document.getElementById('title').textContent=library[ref.ref].title;app=createApp(ProcessViewer,{data:library[ref.ref]});app.mount(canvas);await nextTick();await document.fonts.ready;await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);const box=canvas.getBoundingClientRect();return {svg:null,diagnostics:[],width:box.width,height:box.height,atoms:{}};}const r=await renderFigure(library,ref);document.getElementById('title').textContent=library[ref.ref].title;document.getElementById('canvas').replaceChildren(r.svg);const scale=Math.max(r.minimumScale,Math.min(1,(innerWidth-48)/r.width));r.svg.style.width=r.width*scale+'px';r.svg.style.height=r.height*scale+'px';await document.fonts.ready;const diagnostics=figureDiagnostics(r.svg);const style=getComputedStyle(r.svg);for(const key of ["--chemical-ink","--chemical-muted","--chemical-comparison","--chemical-support","--chemical-support-line","--chemical-focus","--chemical-line","--chemical-focus-line","--chemical-arrow-line","--chemical-font","--chemical-script-font","--chemical-caption-font"])r.svg.style.setProperty(key,style.getPropertyValue(key));const outer=r.svg.getBoundingClientRect();const geometry=[...r.svg.querySelectorAll('[data-label],[data-bond],[data-electron-arrow],[data-arrow-head]')].map(e=>{const b=e.getBoundingClientRect();return {ids:{...e.dataset},bounds:{x:(b.x-outer.x)/scale,y:(b.y-outer.y)/scale,width:b.width/scale,height:b.height/scale},path:e.getAttribute('d')};});return {svg:r.svg.outerHTML,diagnostics,width:r.width,height:r.height,atoms:r.atomPoints,geometry,viewport:{width:innerWidth,height:innerHeight},scale};};</script></body></html>`,
+                `<!doctype html><html lang="zh"><head><link rel="stylesheet" href="/src/ui/styles/tokens.css"><link rel="stylesheet" href="/src/ui/styles/base.css"><style>body{margin:24px;background:#faf9f6;font:16px Arial,sans-serif}#canvas{overflow:auto}#canvas>svg{display:block;margin:auto;max-width:none}h1{font-size:20px}</style></head><body><h1 id="title"></h1><div id="canvas"></div><script type="module">import {createApp,nextTick} from '/node_modules/vue/dist/vue.runtime.esm-bundler.js';import ProcessViewer from '/src/ui/topic/ProcessViewer.vue';import {renderFigure} from '/src/ui/library/render.ts';import {figureDiagnostics} from '/src/ui/library/diagnostics.ts';let app;window.proof=async(library,ref)=>{app?.unmount();app=undefined;const canvas=document.getElementById('canvas');canvas.style.cssText='';canvas.replaceChildren();if(library[ref.ref].kind==='process'){document.getElementById('title').textContent=library[ref.ref].title;app=createApp(ProcessViewer,{data:library[ref.ref]});app.mount(canvas);await nextTick();await document.fonts.ready;await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);const box=canvas.getBoundingClientRect();return {svg:null,diagnostics:[],width:box.width,height:box.height,minimumScale:0,atoms:{}};}const r=await renderFigure(library,ref);document.getElementById('title').textContent=library[ref.ref].title;document.getElementById('canvas').replaceChildren(r.svg);const scale=Math.max(r.minimumScale,Math.min(1,(innerWidth-48)/r.width));r.svg.style.width=r.width*scale+'px';r.svg.style.height=r.height*scale+'px';await document.fonts.ready;const diagnostics=figureDiagnostics(r.svg);const style=getComputedStyle(r.svg);for(const key of ["--chemical-ink","--chemical-muted","--chemical-comparison","--chemical-support","--chemical-support-line","--chemical-focus","--chemical-line","--chemical-focus-line","--chemical-arrow-line","--chemical-font","--chemical-script-font","--chemical-caption-font"])r.svg.style.setProperty(key,style.getPropertyValue(key));const outer=r.svg.getBoundingClientRect();const geometry=[...r.svg.querySelectorAll('[data-label],[data-bond],[data-electron-arrow],[data-arrow-head]')].map(e=>{const b=e.getBoundingClientRect();return {ids:{...e.dataset},bounds:{x:(b.x-outer.x)/scale,y:(b.y-outer.y)/scale,width:b.width/scale,height:b.height/scale},path:e.getAttribute('d')};});return {svg:r.svg.outerHTML,diagnostics,width:r.width,height:r.height,minimumScale:r.minimumScale,atoms:r.atomPoints,geometry,viewport:{width:innerWidth,height:innerHeight},scale};};</script></body></html>`,
               );
               return;
             }
@@ -134,6 +134,7 @@ export async function figureBrowser(
               diagnostics: Diagnostic[];
               width: number;
               height: number;
+              minimumScale: number;
               atoms: Record<string, { x: number; y: number }>;
             }>;
           }
@@ -143,6 +144,30 @@ export async function figureBrowser(
           reference,
         );
       }, reference);
+    },
+    async observation(
+      result: {
+        atoms: Record<string, { x: number; y: number }>;
+        minimumScale: number;
+        diagnostics: Diagnostic[];
+      },
+      slot = 0,
+    ): Promise<
+      import("../shared/chemical-library/geometry.ts").FigureObservation
+    > {
+      return pages[slot].evaluate(async (result) => {
+        const modulePath = "/scripts/figure-observation.ts";
+        const { browserFigureObservation } = await import(modulePath);
+        const svg = document.querySelector<SVGSVGElement>("#canvas > svg");
+        if (!svg)
+          throw new Error("Expected a static figure for geometry capture");
+        return browserFigureObservation(
+          svg,
+          result.atoms,
+          result.minimumScale,
+          result.diagnostics,
+        );
+      }, result);
     },
     async thumbnail(slot = 0) {
       const page = pages[slot];
