@@ -1,5 +1,8 @@
 import { validateMarkush } from "./patent-markush.ts";
-import { validateImageReference } from "./chemical-library/contract.ts";
+import {
+  validateFigureReference,
+  validateImageReference,
+} from "./chemical-library/contract.ts";
 import type { PatentBlock, TopicBlock } from "../src/ui/topic/blocks.ts";
 import type { PageSource, PatentData } from "../src/ui/topic/patent.ts";
 import {
@@ -290,6 +293,26 @@ export function validatePatentData(
       records.map((r) => field(r, "id")),
       name,
     );
+    if (c.structureFigures !== undefined)
+      for (const [recordId, drawings] of entries(c.structureFigures, name)) {
+        ok(
+          records.some((r) => String(field(r, "id")) === recordId),
+          `${name}: unknown structure record`,
+        );
+        for (const [fieldKey, drawing] of entries(drawings, name)) {
+          ok(
+            checkedFields.some(
+              (f) => f.key === fieldKey && f.kind === "smiles",
+            ),
+            `${name}: unknown structure field`,
+          );
+          validateFigureReference(drawing, name);
+          ok(
+            drawing.ref.startsWith("cmp_"),
+            `${name}: expected compound reference`,
+          );
+        }
+      }
     const checkedRecords: JsonObject[] = [];
     for (const r of records) {
       const at = `${where}: ${name}/${field(r, "id")}`;

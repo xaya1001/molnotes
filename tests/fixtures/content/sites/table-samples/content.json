@@ -1,0 +1,68 @@
+{
+  "parts": [
+    {
+      "title": "样本",
+      "chapters": ["start"]
+    }
+  ],
+  "chapters": [
+    {
+      "id": "start",
+      "number": 1,
+      "title": "表格样本",
+      "refs": [],
+      "layout": "wide",
+      "blocks": [
+        {
+          "type": "table",
+          "caption": "条件优化",
+          "columns": ["编号", "结构", "温度 / °C", "主产物 / %", "副产物 / %"],
+          "spans": [
+            {
+              "label": "反应条件",
+              "from": 3,
+              "to": 3
+            },
+            {
+              "label": "产物分布",
+              "from": 4,
+              "to": 5
+            }
+          ],
+          "rowHeader": true,
+          "rows": [
+            [
+              "1",
+              {
+                "ref": "cmp_table_sample",
+                "variant": "reverse"
+              },
+              "20",
+              "74",
+              "12"
+            ],
+            [
+              "2",
+              {
+                "smiles": "CC(N)C(=O)O"
+              },
+              "40",
+              "82",
+              "8"
+            ],
+            [
+              "3",
+              {
+                "smiles": "c1ccccc1O"
+              },
+              "60",
+              "65",
+              "22"
+            ]
+          ]
+        }
+      ]
+    }
+  ],
+  "sources": []
+}

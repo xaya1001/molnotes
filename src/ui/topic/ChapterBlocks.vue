@@ -237,6 +237,7 @@ const toneClass = (tone?: string) =>
       v-else-if="block.type === 'table'"
       :caption="block.caption"
       :columns="block.columns"
+      :spans="block.spans"
       :rows="content.dataOf(block.rows)"
       :note="block.note"
       :row-header="block.rowHeader"

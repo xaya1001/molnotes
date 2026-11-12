@@ -143,6 +143,12 @@ git diff --word-diff=plain --word-diff-regex='[A-Za-z0-9_]+|[^[:space:]]' main..
 
 专题学习记录与笔记最近打开、读过状态由网站保存；滚动位置留在当前浏览器。写入失败显示“未保存”，内存值保留，点击重试可继续保存。复习页导出全部学习记录。
 
+## 专题表格
+
+`table` 块使用 `caption`、`columns`、`rows`（二维数组或 `data` 键），可选 `note` 和 `rowHeader`。单元格是文字、`{text,href}` 链接，或化合物结构：`{ref:"cmp_…",variant?:"命名版式"}`、`{smiles:"CCO"}`。结构引用使用图库的版式；SMILES 按完整化学身份复用已有化合物，缺少时在内容快照中生成化合物条目。单元格使用图库画法，点击放大结构。
+
+`spans:[{label:"产物",from:4,to:5}]` 在普通表头上方增加跨列标题。列号从 1 开始，包含两端；可声明多个不重叠的连续范围，未覆盖的列留空。表格在窄屏内横向滚动。越界、重叠、无效 SMILES、缺失化合物或命名版式均拒绝发布。
+
 ## 专利专题单元
 
 专利共享块在 `content.json` 声明 `data.sources`、`data.collections`、`data.claims`、`data.sarCases` 与 `data.synthesis`；字段与路由见 [块目录](../toolbox/GUIDE.md)。每个 `data.sources.<id>` 为 `{ title, pages, size, image, text, paragraphs }`，必填 `size: [width, height]` 是 PDF points 单位的正数尺寸（例如 A4 `[595, 842]`）；矩形引用按该来源尺寸校验和定位。来源页图放 `static/pages/`，来源的 `image` 用 `{page}` 替换从 1 开始的 PDF 页序；OCR 放 `static/pages-text.json`，是与页数等长的字符串数组。多个来源各自指定页图路径与文本 JSON，引用用 `source` 区分。
@@ -150,6 +156,8 @@ git diff --word-diff=plain --word-diff-regex='[A-Za-z0-9_]+|[^[:space:]]' main..
 制备等长正文放按需 JSON（例如 `static/example-bodies.json`），对象的键映射到字符串正文；`body` 字段写 `{ "url": "/sites/<slug>/static/example-bodies.json", "key": "1" }`。页图与正文仅在打开时加载，资源仍随专题单元一起发布。
 
 发布时检查记录间引用、权利要求引用、页序和矩形范围、页图与片段资源、正文 JSON 的键以及 OCR 页数。SMILES 与 `markush` 的母核、片段及 SMARTS 由 RDKit 解析；空结构须在制作记录和该条 `notes` 中说明未确认原因。校验失败拒绝整组发布。
+
+专利数据集的 `smiles` 字段按完整化学身份解析为图库结构，列表、详情、SAR 配对和比较视图共用图库画法，点击放大结构。原始字段值保留，排序、筛选与 CSV 使用这些值；未确认的结构保留为空。
 
 比较记录保存为 `pins: { <collectionId>: [id] }`，逐条笔记为 `recordNotes: { "<collectionId>/<id>": "正文" }`。浏览器和服务端共用由内容派生的校验：未知编号、重复比较编号、超出 `pins.max` 或超过 30000 字的笔记拒绝写入。
 

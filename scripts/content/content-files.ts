@@ -12,6 +12,7 @@ import {
 import { validateGlossary } from "../../shared/glossary.ts";
 import { parseSiteManifest } from "../../shared/site-catalog.ts";
 import { validateTopicContent } from "../../shared/topic-content.ts";
+import { compileTableStructures } from "./table-structures.ts";
 import { resolveCompoundSlots } from "./compound-slots.ts";
 import type {
   Library,
@@ -150,8 +151,10 @@ export async function readUnit(
         site[key] = metadata[key];
       }
     }
+    const authored = await json(join(folder, "content.json"));
+    await compileTableStructures(authored, library, `${unit}/content.json`);
     const resolved = resolveCompoundSlots(
-      await json(join(folder, "content.json")),
+      authored,
       library,
       `${unit}/content.json`,
     );

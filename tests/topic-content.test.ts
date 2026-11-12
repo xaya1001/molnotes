@@ -264,7 +264,7 @@ test("blocks are checked against the catalogue and their references", () => {
     [[choice, { ...choice, id: undefined }], /repeats prediction id a/],
     [
       [{ type: "table", caption: "表", columns: ["x", "y"], rows: [["1"]] }],
-      /one text or \{ text, href \} cell per column/,
+      /one text, link or structure cell per column/,
     ],
     [
       [{ type: "table", caption: "表", columns: ["x"], rows: "missing" }],
@@ -562,7 +562,7 @@ test("number predictions, lab presets and reveal, linked cells and sources block
           rows: [[{ text: "x" }]],
         },
       ],
-      /text or \{ text, href \}/,
+      /text, link or structure/,
     ],
   ];
   for (const [blocks, message] of cases)

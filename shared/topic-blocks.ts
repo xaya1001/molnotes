@@ -160,12 +160,13 @@ export function validateMechanismFrames(
   });
 }
 
-/** A cell is text, or `{ text, href }` for a linked value such as a PubChem CID. */
+/** Published cells contain text, a link or a resolved compound drawing. */
 const tableCell = (cell: unknown): cell is TableCell =>
   typeof cell === "string" ||
   (isObject(cell) &&
     typeof cell.text === "string" &&
-    typeof cell.href === "string");
+    typeof cell.href === "string") ||
+  (isObject(cell) && "figure" in cell);
 
 function tableRows(
   rows: unknown,
@@ -176,8 +177,16 @@ function tableRows(
   rows.forEach((row, index) => {
     assert(
       isList(row) && row.length === columns.length && row.every(tableCell),
-      `${where} row ${index + 1} needs one text or { text, href } cell per column`,
+      `${where} row ${index + 1} needs one text, link or structure cell per column`,
     );
+    for (const cell of row)
+      if (isObject(cell) && "figure" in cell) {
+        validateFigureReference(cell.figure, where);
+        assert(
+          cell.figure.ref.startsWith("cmp_"),
+          `${where}: expected compound reference`,
+        );
+      }
   });
 }
 
@@ -524,7 +533,10 @@ export function blockSearchText(
           ...block.columns,
           ...resolveData(block.rows, data, "table rows")
             .flat()
-            .map((cell) => (typeof cell === "string" ? cell : cell.text)),
+            .map((cell) =>
+              typeof cell === "string" ? cell : "text" in cell ? cell.text : "",
+            ),
+          ...(block.spans ?? []).map((s) => s.label),
         ];
       case "tabs":
         return block.items.flatMap((item) => [
@@ -627,7 +639,7 @@ const blockFields: Record<string, string[]> = {
   route: "routes".split(" "),
   "substrate-scope": ["scope"],
   mechanism: "title frames".split(" "),
-  table: "caption columns rows note rowHeader".split(" "),
+  table: "caption columns spans rows note rowHeader".split(" "),
   spectrum: "molecule peaks caption assignAfter".split(" "),
   "data-table":
     "table title label noun idLabel missing defaultX defaultY".split(" "),
@@ -840,6 +852,26 @@ export function validateBlocks(
             columns.every((column) => typeof column === "string"),
           `${here} columns must be a list of text`,
         );
+        if (block.spans !== undefined) {
+          assert(isList(block.spans), `${here} spans must be an array`);
+          const used = new Set<number>();
+          for (const span of block.spans) {
+            assert(isObject(span), `${here}: expected column span`);
+            text(span.label, `${here} span label`);
+            assert(
+              isInteger(span.from) &&
+                isInteger(span.to) &&
+                span.from >= 1 &&
+                span.to >= span.from &&
+                span.to <= columns.length,
+              `${here}: span range outside columns`,
+            );
+            for (let col = span.from; col <= span.to; col++) {
+              assert(!used.has(col), `${here}: overlapping spans`);
+              used.add(col);
+            }
+          }
+        }
         field("rows", (rows, w) => tableRows(rows, columns, w));
         optionalText(block.note, `${here} note`);
         assert(
