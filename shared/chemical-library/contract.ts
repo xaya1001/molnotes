@@ -116,6 +116,12 @@ function scene(v: unknown, w: string): asserts v is Scene {
     if (ids.has(m.id)) fail(w, "duplicate placement");
     ids.add(m.id);
     text(m.compound, w);
+    if (
+      m.bracket !== undefined &&
+      typeof m.bracket !== "boolean" &&
+      m.bracket !== "ts"
+    )
+      fail(w, "invalid bracket");
     point(m.at, w);
     if (m.rotate !== undefined) number(m.rotate, w);
     if (m.mirror !== undefined && typeof m.mirror !== "boolean")
@@ -211,6 +217,25 @@ export function validateImageReference(
   if (!value.ref.startsWith("img_")) fail(where, "expected image reference");
 }
 
+function reactionArrow(value: unknown, w: string) {
+  object(value, w);
+  point(value.from, w);
+  point(value.to, w);
+  if (
+    value.kind !== undefined &&
+    !["forward", "equilibrium", "resonance", "retro", "none"].includes(
+      String(value.kind),
+    )
+  )
+    fail(w, "invalid arrow kind");
+  number(value.textWidth, w);
+  if (Number(value.textWidth) <= 0) fail(w, "positive text width required");
+  if (value.via !== undefined) {
+    list(value.via, w);
+    value.via.forEach((p) => point(p, w));
+  }
+}
+
 export function validateLibraryEntry(
   v: unknown,
   w = "library",
@@ -218,6 +243,7 @@ export function validateLibraryEntry(
   object(v, w);
   text(v.id, w);
   text(v.title, w);
+  if (v.footnote !== undefined) text(v.footnote, w);
   if (!/^(cmp|rxn|rte|mec|img|prc)_[a-z0-9_-]+$/.test(v.id))
     fail(w, "invalid stable ID");
   list(v.sources, w);
@@ -272,6 +298,7 @@ export function validateLibraryEntry(
         object(p, w);
         text(p.id, w);
         text(p.compound, w);
+        if (p.sourceKey !== undefined) text(p.sourceKey, w);
         if (
           p.position !== undefined &&
           !["inline", "above-arrow", "below-arrow", "text", "none"].includes(
@@ -316,18 +343,7 @@ export function validateLibraryEntry(
     if (v.tags !== undefined) strings(v.tags, w);
     text(v.explanation, w);
     scene(v.scene, w);
-    object(v.arrow, w);
-    point(v.arrow.from, w);
-    point(v.arrow.to, w);
-    if (
-      v.arrow.kind !== undefined &&
-      !["forward", "equilibrium", "resonance", "retro", "none"].includes(
-        String(v.arrow.kind),
-      )
-    )
-      fail(w, "invalid arrow kind");
-    number(v.arrow.textWidth, w);
-    if (Number(v.arrow.textWidth) <= 0) fail(w, "positive text width required");
+    reactionArrow(v.arrow, w);
   } else if (v.kind === "route") {
     list(v.steps, w);
     const ids = new Set();
@@ -336,6 +352,19 @@ export function validateLibraryEntry(
       text(s.id, w);
       text(s.reaction, w);
       point(s.at, w);
+      if (s.display !== undefined) {
+        object(s.display, w);
+        for (const value of Object.values(s.display))
+          if (!["structure", "reference", "hidden"].includes(String(value)))
+            fail(w, "invalid participant display");
+      }
+      if (s.placements !== undefined) {
+        object(s.placements, w);
+        Object.values(s.placements).forEach((p) => point(p, w));
+      }
+      for (const key of ["reagents", "conditions", "boxes"])
+        if (s[key] !== undefined) strings(s[key], w);
+      if (s.arrow !== undefined) reactionArrow(s.arrow, w);
       if (ids.has(s.id)) fail(w, "duplicate route step");
       ids.add(s.id);
     }
@@ -344,6 +373,20 @@ export function validateLibraryEntry(
       object(e, w);
       for (const k of ["from", "to", "product", "reactant"]) text(e[k], w);
       if (!ids.has(e.from) || !ids.has(e.to)) fail(w, "unknown route step");
+    }
+    if (v.plusAt !== undefined) {
+      list(v.plusAt, w);
+      v.plusAt.forEach((p) => point(p, w));
+    }
+    if (v.connections !== undefined) {
+      list(v.connections, w);
+      for (const c of v.connections) {
+        object(c, w);
+        text(c.id, w);
+        list(c.points, w);
+        if (c.points.length < 2) fail(w, "connection needs two points");
+        c.points.forEach((p) => point(p, w));
+      }
     }
     number(v.width, w);
     number(v.height, w);
@@ -576,6 +619,20 @@ export function validateLibrary(library: Library) {
             : "compound";
       if (other.kind !== kind) fail(entry.id, `expected ${kind}: ${id}`);
     }
+    if (entry.kind === "route")
+      for (const step of entry.steps) {
+        const reaction = library[step.reaction];
+        if (reaction.kind !== "reaction")
+          fail(entry.id, "route requires reaction");
+        const placements = new Set(reaction.scene.molecules.map((m) => m.id));
+        for (const id of new Set([
+          ...Object.keys(step.display ?? {}),
+          ...Object.keys(step.placements ?? {}),
+          ...(step.boxes ?? []),
+        ]))
+          if (!placements.has(id))
+            fail(entry.id, `unknown route placement ${step.id}/${id}`);
+      }
     const scenes =
       entry.kind === "reaction"
         ? [entry.scene]

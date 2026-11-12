@@ -3,13 +3,8 @@ import type {
   FigureRect,
   FigureMatrix,
   FigureNode,
-  FigureTextRun,
 } from "../../../shared/chemical-library/geometry.ts";
-import {
-  shapeFigureText,
-  figureTextMetrics,
-  type FigureFontResolver,
-} from "./font-geometry.ts";
+import { shapeFigureText, type FigureFontResolver } from "./font-geometry.ts";
 import {
   figureGroup,
   figurePath,
@@ -23,6 +18,7 @@ import {
   multiplyMatrix,
   transformBox,
 } from "./geometry-math.ts";
+import { figureTextRuns } from "./text-runs.ts";
 import { pathBox, svgTransform } from "./path-geometry.ts";
 
 export type FigureGroup = Extract<FigureNode, { kind: "group" }>;
@@ -211,28 +207,9 @@ export function createFigureScene(
     anchor: "start" | "middle" | "end" = "middle",
   ) => {
     const fontSize = parseFloat(value(font));
-    const runs: FigureTextRun[] = [];
-    for (const part of svgText(text).split(/([₀₁₂₃₄₅₆₇₈₉]+)/)) {
-      const script = /^[₀₁₂₃₄₅₆₇₈₉]+$/.test(part);
-      const run: FigureTextRun = {
-        text: script
-          ? [...part].map((ch) => String("₀₁₂₃₄₅₆₇₈₉".indexOf(ch))).join("")
-          : part,
-        size: fontSize * (script ? 0.8 : 1),
-        weight: 400,
-        italic: false,
-        shift: 0,
-      };
-      if (script) {
-        const face = fonts(run, "A").font;
-        run.shift =
-          figureTextMetrics(face, run.size).ascent -
-          figureTextMetrics(face, fontSize).central;
-      }
-      runs.push(run);
-    }
+    const runs = figureTextRuns(svgText(text), fontSize, fonts);
     const node = shapeFigureText(runs, fonts, at, anchor);
-    node.text = text;
+    node.text = text.replace(/\*+/g, "").replace(/\^\{([^}]+)\}/g, "$1");
     node.paint.fill = token("--chemical-ink");
     return node;
   };
@@ -256,15 +233,7 @@ export function createFigureScene(
   return {
     textWidth(text: string, font: string) {
       return shapeFigureText(
-        [
-          {
-            text: svgText(text),
-            size: parseFloat(value(font)),
-            weight: 400,
-            italic: false,
-            shift: 0,
-          },
-        ],
+        figureTextRuns(svgText(text), parseFloat(value(font)), fonts),
         fonts,
         { x: 0, y: 0 },
       ).advance;

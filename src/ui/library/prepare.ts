@@ -14,7 +14,8 @@ import { nativeDepictionGeometry } from "./native-geometry.ts";
 import { transformPoint, rectangle } from "./geometry-math.ts";
 import { pathMetrics } from "./path-geometry.ts";
 import { refreshGeometry } from "./geometry-tree.ts";
-import { solidArrow, routeConnection } from "./arrow-layout.ts";
+import { wrapFigureText } from "./text-runs.ts";
+import { solidArrow } from "./arrow-layout.ts";
 
 import {
   bondTraces,
@@ -43,6 +44,7 @@ import type {
   Focus,
   Library,
   Point,
+  Route,
   Scene,
 } from "../../../shared/chemical-library/types.ts";
 
@@ -159,6 +161,7 @@ export async function prepareFigure(
     mirror = false,
     focus?: Focus,
     parent: FigureGroup = svg,
+    bracket?: boolean | "ts",
   ) {
     validateCompound(toolkit, c);
     const coords = placedCoordinates(toolkit, c, layout, rotate, mirror);
@@ -599,6 +602,33 @@ export async function prepareFigure(
         );
         ctx.append(g, charge);
       }
+      if (bracket) {
+        const bounds = ctx.box(g),
+          pad = B * 0.3,
+          arm = B * 0.4,
+          left = bounds.x - pad * 2,
+          right = bounds.x + bounds.width + pad * 2,
+          top = bounds.y - pad,
+          bottom = bounds.y + bounds.height + pad;
+        ctx.append(
+          g,
+          stroke(
+            element("path", {
+              d: `M${left + arm} ${top}H${left}V${bottom}H${left + arm} M${right - arm} ${top}H${right}V${bottom}H${right - arm}`,
+              "data-bracket": id,
+            }),
+          ),
+        );
+        if (bracket === "ts") {
+          const mark = label(
+            { x: right + B * 0.3, y: top - B * 0.15 },
+            "‡",
+            "var(--chemical-script-font)",
+          );
+          ctx.setData(mark, "label", `${id}:transition-state`);
+          ctx.append(g, mark);
+        }
+      }
       const number = reference.numbers?.[id] ?? figureNumbers[id];
       if (number) {
         const bounds = ctx.box(g);
@@ -671,6 +701,7 @@ export async function prepareFigure(
         p.mirror,
         f,
         parent,
+        p.bracket,
       );
     }
     const atom = (a: AtomRef) => {
@@ -1184,11 +1215,39 @@ export async function prepareFigure(
       );
     }
   }
-  async function reaction(id: string, prefix = "", parent: FigureGroup = svg) {
-    const r = library[id];
-    if (r?.kind !== "reaction") throw new Error(`Missing reaction ${id}`);
+  async function reaction(
+    id: string,
+    prefix = "",
+    parent: FigureGroup = svg,
+    view?: Route["steps"][number],
+  ) {
+    const source = library[id];
+    if (source?.kind !== "reaction") throw new Error(`Missing reaction ${id}`);
+    const r = view?.placements
+      ? {
+          ...source,
+          reagents: view.reagents ?? source.reagents,
+          conditions: view.conditions ?? source.conditions,
+          reagentPosition: "above-arrow" as const,
+          reactants: source.reactants.map((p) =>
+            view.boxes?.includes(p.id)
+              ? { ...p, position: "above-arrow" as const }
+              : p,
+          ),
+          arrow: view.arrow ?? source.arrow,
+          scene: {
+            ...source.scene,
+            molecules: source.scene.molecules.map((m) => ({
+              ...m,
+              at: view.placements![m.id] ?? m.at,
+            })),
+            captions: source.scene.captions?.filter((c) => c.text !== "+"),
+          },
+        }
+      : source;
     await scene(r.scene, prefix, parent, reference.focus);
-    const a = mul(r.arrow.from, B),
+    const routePoints = [r.arrow.from, ...(r.arrow.via ?? []), r.arrow.to];
+    const a = mul(routePoints.at(-2)!, B),
       b = mul(r.arrow.to, B);
     const overhead = [...r.reactants, ...r.products]
       .filter(
@@ -1206,9 +1265,25 @@ export async function prepareFigure(
           width: box.width,
           height: box.height,
         };
-        a.x = Math.min(a.x, bounds.x - B * 0.4);
-        b.x = Math.max(b.x, bounds.x + bounds.width + B * 0.4);
-        return { position: p.position, bounds };
+        const pad = B * 0.35;
+        ctx.append(
+          parent,
+          stroke(
+            element("path", {
+              d: `M${bounds.x - pad} ${bounds.y - pad}H${bounds.x + bounds.width + pad}V${bounds.y + bounds.height + pad}H${bounds.x - pad}Z`,
+              "data-overhead-box": prefix + p.id,
+            }),
+          ),
+        );
+        return {
+          position: p.position,
+          bounds: {
+            x: bounds.x - pad,
+            y: bounds.y - pad,
+            width: bounds.width + 2 * pad,
+            height: bounds.height + 2 * pad,
+          },
+        };
       });
     const arrowShape = solidArrow(a, b, B);
     await scene(
@@ -1228,6 +1303,19 @@ export async function prepareFigure(
       prefix,
       parent,
     );
+    if (routePoints.length > 2 && r.arrow.kind !== "none")
+      ctx.append(
+        parent,
+        stroke(
+          element("path", {
+            d: routePoints
+              .slice(0, -1)
+              .map((p, i) => `${i ? "L" : "M"}${p.x * B} ${p.y * B}`)
+              .join(""),
+            "data-reaction-arrow": prefix + id,
+          }),
+        ),
+      );
     for (const path of ctx.nodes(
       parent,
       (node) => ctx.data(node, "reactionArrow") === prefix + id,
@@ -1242,7 +1330,11 @@ export async function prepareFigure(
     const reactants = r.reactants
       .filter((p) => !p.position || p.position === "inline")
       .map((p) => r.scene.molecules.find((m) => m.id === p.id)!);
-    for (let i = 1; r.showPlus !== false && i < reactants.length; i++) {
+    for (
+      let i = 1;
+      !view?.display && r.showPlus !== false && i < reactants.length;
+      i++
+    ) {
       const left = reactants[i - 1].at,
         right = reactants[i].at;
       const mark = label(
@@ -1259,39 +1351,14 @@ export async function prepareFigure(
       ctx.append(parent, mark);
     }
     const textWidth = r.arrow.textWidth * B;
-    function wrap(lines: string[]) {
-      const result: string[] = [];
-      for (const text of lines) {
-        const tokens: string[] = [];
-        for (const part of text.trim().match(/.*?(?:[；，、/;\s]+|$)/gu) ??
-          []) {
-          if (!part) continue;
-          const previous = tokens.at(-1);
-          // A quantity and its following unit share one line, including
-          // temperature ranges such as −20–25 °C.
-          if (
-            previous &&
-            /\d\s+$/u.test(previous) &&
-            /^(?:°|\p{L})/u.test(part)
-          )
-            tokens[tokens.length - 1] += part;
-          else tokens.push(part);
-        }
-        let line = "";
-        for (const token of tokens) {
-          if (
-            line &&
-            ctx.textWidth(line + token, "var(--chemical-caption-font)") >
-              textWidth
-          ) {
-            result.push(line.trim());
-            line = token;
-          } else line += token;
-        }
-        if (line) result.push(line.trim());
-      }
-      return result;
-    }
+    const wrap = (lines: string[]) =>
+      wrapFigureText(lines, textWidth, (text) =>
+        ctx.textWidth(text, "var(--chemical-caption-font)"),
+      );
+    let verticalCursor = Math.max(
+      Math.min(a.y, b.y) + B * 0.3,
+      ...overhead.map((p) => p.bounds.y + p.bounds.height + B * 0.3),
+    );
     const reagentsBelow = r.reagentPosition === "below-arrow";
     for (const [lines, sign] of [
       [reagentsBelow ? [] : wrap(r.reagents), -1],
@@ -1302,12 +1369,7 @@ export async function prepareFigure(
       );
       const edge =
         sign < 0
-          ? Math.min(
-              a.y,
-              b.y,
-              ...arrowShape.vertices.map((p) => p.y),
-              ...occupied.map((p) => p.bounds.y),
-            )
+          ? Math.min(a.y, b.y, ...arrowShape.vertices.map((p) => p.y))
           : Math.max(
               a.y,
               b.y,
@@ -1331,15 +1393,9 @@ export async function prepareFigure(
             : cursor + gap - bounds.y;
         if (Math.abs(a.y - b.y) > Math.abs(a.x - b.x)) {
           const side = r.arrow.side === "left" ? -1 : 1;
-          ctx.set(e, "x", String(center + side * (B + bounds.width / 2)));
-          ctx.set(
-            e,
-            "y",
-            String(
-              (a.y + b.y) / 2 +
-                (i + (sign > 0 ? r.reagents.length : 0)) * B * 0.6,
-            ),
-          );
+          ctx.set(e, "x", String(center + side * (B * 0.6 + bounds.width / 2)));
+          ctx.set(e, "y", String(verticalCursor - bounds.y));
+          verticalCursor += bounds.height + gap;
         } else ctx.set(e, "y", String(y));
         cursor = y + bounds.y + (sign > 0 ? bounds.height : 0);
       });
@@ -1375,6 +1431,16 @@ export async function prepareFigure(
         ctx.append(group, e);
       }
     }
+    if (view?.display)
+      for (const [pid, display] of Object.entries(view.display)) {
+        const group = ctx.groups(parent, "molecule", prefix + pid)[0];
+        if (!group) continue;
+        if (display === "hidden") ctx.remove(group);
+        else if (display === "reference")
+          for (const child of [...group.children])
+            if (ctx.data(child, "label") !== `${prefix}${pid}:number`)
+              ctx.remove(child);
+      }
   }
   if (entry.kind === "compound") {
     const l = reference.variant
@@ -1443,90 +1509,49 @@ export async function prepareFigure(
         "data-step": s.id,
       });
       ctx.append(svg, group);
-      await reaction(s.reaction, s.id + "/", group);
+      await reaction(s.reaction, s.id + "/", group, s);
       for (const [id, p] of Object.entries(atomPoints))
         if (id.startsWith(s.id + "/")) atomPoints[id] = plus(p, mul(s.at, B));
     }
-    for (const edge of entry.edges) {
-      const from = entry.steps.find((s) => s.id === edge.from)!,
-        to = entry.steps.find((s) => s.id === edge.to)!;
-      const targetReaction = library[to.reaction];
-      if (
-        targetReaction.kind === "reaction" &&
-        targetReaction.reactants.some(
-          (p) =>
-            p.id === edge.reactant &&
-            (p.position === "text" || p.position === "none"),
-        )
-      )
-        continue;
-      const a = ctx
-        .nodes(
-          svg,
-          (node) =>
-            ctx.data(node, "molecule") === edge.from + "/" + edge.product,
-        )
-        .filter((node) => node.kind === "group")[0]!;
-      const b = ctx
-        .nodes(
-          svg,
-          (node) =>
-            ctx.data(node, "molecule") === edge.to + "/" + edge.reactant,
-        )
-        .filter((node) => node.kind === "group")[0]!;
-      const bounds = (g: FigureGroup) => {
-        const box = ctx.box(g),
-          matrix = ctx.relativeMatrix(g, svg);
-        const p = transformPoint({ x: box.x, y: box.y }, matrix),
-          q = transformPoint(
-            { x: box.x + box.width, y: box.y + box.height },
-            matrix,
-          );
-        return {
-          left: p.x,
-          top: p.y,
-          right: q.x,
-          bottom: q.y,
-          x: (p.x + q.x) / 2,
-          y: (p.y + q.y) / 2,
-        };
-      };
-      const ra = bounds(a),
-        rb = bounds(b);
-      const source = library[from.reaction],
-        target = library[to.reaction];
-      if (source.kind !== "reaction" || target.kind !== "reaction")
-        throw new Error("Invalid route reaction");
-      const pa = source.scene.molecules.find((m) => m.id === edge.product)!,
-        pb = target.scene.molecules.find((m) => m.id === edge.reactant)!;
-      if (
-        Math.hypot(
-          from.at.x + pa.at.x - to.at.x - pb.at.x,
-          from.at.y + pa.at.y - to.at.y - pb.at.y,
-        ) < 0.001 &&
-        pa.variant === pb.variant &&
-        pa.rotate === pb.rotate &&
-        pa.mirror === pb.mirror
-      ) {
-        ctx.remove(b);
-        continue;
-      }
-      const rowY = (step: typeof from, reaction: typeof source) =>
-        step.at.y + (reaction.arrow.from.y + reaction.arrow.to.y) / 2;
-      const vertical = Math.abs(rowY(from, source) - rowY(to, target)) > 0.001;
-      const fromRow = bounds(ctx.groups(svg, "step", from.id)[0]),
-        toRow = bounds(ctx.groups(svg, "step", to.id)[0]);
-      const points = routeConnection(ra, rb, fromRow, toRow, vertical);
+    for (const [index, point] of (entry.plusAt ?? []).entries()) {
+      const mark = label(mul(point, B), "+");
+      ctx.setData(mark, "label", `${entry.id}:plus:${index}`);
+      ctx.append(svg, mark);
+    }
+    for (const connection of entry.connections ?? [])
       ctx.append(
         svg,
         stroke(
           element("path", {
-            d: points.map((p, i) => `${i ? "L" : "M"}${p.x} ${p.y}`).join(""),
-            "data-route-edge": `${edge.from}/${edge.product}->${edge.to}/${edge.reactant}`,
+            d: connection.points
+              .map((p, i) => `${i ? "L" : "M"}${p.x * B} ${p.y * B}`)
+              .join(""),
+            "data-route-edge": connection.id,
           }),
         ),
       );
+  }
+  if (entry.footnote) {
+    const lines = wrapFigureText(
+      entry.footnote.split("\n"),
+      width - 3 * B,
+      (text) => ctx.textWidth(text, "var(--chemical-caption-font)"),
+    );
+    let cursor = height + B * 0.4;
+    for (const [index, text] of lines.entries()) {
+      const note = label(
+          { x: B * 1.5, y: 0 },
+          text,
+          "var(--chemical-caption-font)",
+          "start",
+        ),
+        bounds = ctx.box(note);
+      ctx.set(note, "y", String(cursor - bounds.y));
+      ctx.setData(note, "label", `${entry.id}:footnote:${index}`);
+      ctx.append(svg, note);
+      cursor += bounds.height + B * 0.2;
     }
+    height = cursor + B * 0.4;
   }
   ctx.set(svg, "viewBox", `0 0 ${width} ${height}`);
   ctx.set(svg, "width", String(width));

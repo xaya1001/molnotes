@@ -39,7 +39,9 @@ export interface StructureInput {
 }
 export interface StepInput {
   id?: Key;
-  from: Key | (Key | { id: Key; show?: Show })[];
+  title?: Key;
+  sources?: FigureInput["sources"];
+  from: Key | (Key | { id: Key; show?: Show; equivalents?: number })[];
   to: Key | ProductInput | (Key | ProductInput)[];
   above?: Key;
   below?: Key;
@@ -50,9 +52,16 @@ export interface StepInput {
   changes?: boolean | "on" | "off" | { add?: number[]; remove?: number[] };
   explain?: Key;
   arrow?: ArrowKind;
+  tags?: string[];
+  reagentPosition?: "above-arrow" | "below-arrow";
 }
 export type Show = "box" | "text" | "plus" | "none";
-export type ProductInput = { id: Key; ratio?: string; yield?: string };
+export type ProductInput = {
+  id: Key;
+  ratio?: string;
+  yield?: string;
+  fraction?: number;
+};
 export interface FrameInput extends StructureInput {
   id: Key;
   title?: Key;
@@ -132,11 +141,7 @@ const deferred = new Set([
   "enclose",
   "forming",
   "scale",
-  "bracket",
   "mark",
-  "footnote",
-  "wrap",
-  "reverse",
   "numbers",
   "notes",
   "bend",
@@ -221,15 +226,32 @@ export function validateFigureInput(value: unknown): {
     yield: string,
     note: text,
   };
-  const product = object({ id: text, ratio: string, yield: string }, ["id"]);
+  const quantity =
+    (maximum = Infinity): Rule =>
+    (v, p) => {
+      number(v, p);
+      if (Number(v) < 0 || Number(v) > maximum)
+        fail(p, "quantity out of range");
+    };
+  const product = object(
+    { id: text, ratio: string, yield: string, fraction: quantity(1) },
+    ["id"],
+  );
   const from = either(
     text,
-    list(either(text, object({ id: text, show }, ["id"]))),
+    list(
+      either(text, object({ id: text, show, equivalents: quantity() }, ["id"])),
+    ),
   );
   const to = either(text, product, list(either(text, product)));
+  const sources = list(
+    object({ source: text, locator: text, note: text }, ["source"]),
+  );
   const step = object(
     {
       id: text,
+      title: text,
+      sources,
       from,
       to,
       above: text,
@@ -244,6 +266,8 @@ export function validateFigureInput(value: unknown): {
       ),
       explain: text,
       arrow: arrowKind,
+      tags: list(string),
+      reagentPosition: choice("above-arrow", "below-arrow"),
     },
     ["from", "to"],
   );
@@ -257,9 +281,7 @@ export function validateFigureInput(value: unknown): {
     kind: choice("route", "mechanism"),
     title: text,
     explain: text,
-    sources: list(
-      object({ source: text, locator: text, note: text }, ["source"]),
-    ),
+    sources,
     coordgen: bool,
     forming: bool,
     footnote: text,

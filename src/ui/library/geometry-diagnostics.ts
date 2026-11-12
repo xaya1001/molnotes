@@ -316,7 +316,16 @@ export function figureGeometryDiagnostics(
   for (const b of bonds)
     for (const l of labels) {
       const points = b.points;
-      if (points.some((p) => inside(p, l.r, 0.8)))
+      const filledCondition =
+        l.id.includes(":condition:") &&
+        b.el.node.paint.fill !== "none" &&
+        polygonsOverlap(points, [
+          { x: l.r.left + 0.8, y: l.r.top + 0.8 },
+          { x: l.r.right - 0.8, y: l.r.top + 0.8 },
+          { x: l.r.right - 0.8, y: l.r.bottom - 0.8 },
+          { x: l.r.left + 0.8, y: l.r.bottom - 0.8 },
+        ]);
+      if (points.some((p) => inside(p, l.r, 0.8)) || filledCondition)
         add(
           "BOND_LABEL_OVERLAP",
           [b.id, l.id],

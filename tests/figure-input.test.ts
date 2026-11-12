@@ -262,6 +262,43 @@ test("mechanism YAML preserves explanation, maps, arrow IDs and focus", async ()
   }
 });
 
+test("reaction sources preserve equivalents, mixture fractions, tags and reagent position", async () => {
+  const input = {
+    compounds: { a: "CCO", b: "CC=O", c: "CC(=O)O" },
+    steps: [
+      {
+        title: "First step",
+        sources: [
+          { source: "unknown", locator: "step source", note: "Fixture" },
+        ],
+        from: [{ id: "a", equivalents: 2 }],
+        to: [
+          { id: "b", fraction: 0.45 },
+          { id: "c", fraction: 0.55 },
+        ],
+        tags: ["Oxidation"],
+        reagentPosition: "below-arrow",
+        above: "[O]",
+      },
+    ],
+  };
+  const result = await compileFigure(input);
+  const reaction = result.entries[result.reference.ref] as Reaction;
+  assert.equal(reaction.reactants[0].equivalents, 2);
+  assert.deepEqual(
+    reaction.products.map((p) => p.fraction),
+    [0.45, 0.55],
+  );
+  assert.deepEqual(reaction.tags, ["Oxidation"]);
+  assert.equal(reaction.reagentPosition, "below-arrow");
+  assert.equal(reaction.title, "First step");
+  assert.deepEqual(reaction.sources, input.steps[0].sources);
+  assert.deepEqual(
+    (await compileFigure(input, result.entries)).entries,
+    result.entries,
+  );
+});
+
 test("YAML boundary rejects unsupported kinds and style fields, validates deferred references", async () => {
   const input = {
     kind: "route",
@@ -408,4 +445,138 @@ test("compilation stores source and stable entries, and recompilation writes no 
     ).stdout.trim(),
     id,
   );
+});
+
+test("compiled linear routes draw their connected intermediates once", async () => {
+  const { prepareFigure } = await import("../src/ui/library/prepare.ts");
+  const { loadFigureFonts } = await import("../scripts/figure-fonts.ts");
+  const { figureStyle } = await import("./fixtures/figures/style.ts");
+  const { walkGeometry } = await import("../src/ui/library/geometry-walk.ts");
+  const compiled = await compileFigure(await fixture("linear"));
+  const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit: await moleculeToolkit(),
+    fonts: await loadFigureFonts(),
+    style: figureStyle,
+  });
+  const instances: string[] = [];
+  walkGeometry(geometry.root, (node) => {
+    if (node.attributes["data-compound"])
+      instances.push(node.attributes["data-compound"]);
+  });
+  assert.equal(instances.length, 4);
+});
+
+test("recompilation preserves bound compound and participant identities", async () => {
+  const input = await fixture("linear");
+  const first = await compileFigure(input, {}, "saved");
+  const route = first.entries[first.reference.ref] as Route;
+  for (const step of route.steps) {
+    const reaction = first.entries[step.reaction] as Reaction;
+    for (const [role, participants] of [
+      ["input", reaction.reactants],
+      ["output", reaction.products],
+    ] as const) {
+      for (const [i, participant] of participants.entries()) {
+        reaction.scene.molecules.find((m) => m.id === participant.id)!.id =
+          `${role}${i + 1}`;
+        participant.id = `${role}${i + 1}`;
+      }
+    }
+  }
+  for (const edge of route.edges) {
+    edge.product = "output1";
+    edge.reactant = "input1";
+  }
+  const compound = Object.values(first.entries).find(
+    (entry): entry is Compound => entry.kind === "compound",
+  )!;
+  const duplicate = { ...structuredClone(compound), id: "cmp_duplicate" };
+  const entries = { [duplicate.id]: duplicate, ...first.entries };
+  const second = await compileFigure(input, entries, "saved");
+  const saved = second.entries[route.id] as Route;
+  assert.deepEqual(
+    saved.steps.map((s) => [s.id, s.reaction]),
+    route.steps.map((s) => [s.id, s.reaction]),
+  );
+  for (const step of saved.steps) {
+    const reaction = second.entries[step.reaction] as Reaction;
+    assert.equal(reaction.reactants[0].id, "input1");
+    assert.equal(reaction.products[0].id, "output1");
+    assert.equal(
+      reaction.reactants[0].compound,
+      (first.entries[step.reaction] as Reaction).reactants[0].compound,
+    );
+    assert.ok(reaction.reactants[0].compound !== duplicate.id);
+    assert.ok(step.display!.input1);
+  }
+  assert.deepEqual(
+    (await compileFigure(input, second.entries, "saved")).entries,
+    second.entries,
+  );
+  const singleInput = { ...input, steps: input.steps.slice(0, 1) };
+  const single = await compileFigure(singleInput, second.entries, "saved");
+  assert.equal(single.reference.ref, route.id);
+  assert.equal(single.entries[route.id].kind, "route");
+  assert.equal((single.entries[route.id] as Route).steps.length, 1);
+});
+
+test("compiled reactions include boxed structures, placement brackets and styled footnotes", async () => {
+  const { prepareFigure } = await import("../src/ui/library/prepare.ts");
+  const { loadFigureFonts } = await import("../scripts/figure-fonts.ts");
+  const { figureStyle } = await import("./fixtures/figures/style.ts");
+  const { walkGeometry } = await import("../src/ui/library/geometry-walk.ts");
+  const input = {
+    compounds: { a: { smiles: "CCO", bracket: "ts" }, b: "CC=O", c: "CBr" },
+    steps: [
+      {
+        from: ["a", "c"],
+        to: "b",
+        others: "box",
+        above: "n-BuLi",
+        below: "cis-isomer",
+      },
+    ],
+    footnote: "^{a} t-BuOH, n-Hexane, 20 °C",
+  };
+  const compiled = await compileFigure(input),
+    reaction = compiled.entries[compiled.reference.ref] as Reaction;
+  assert.equal(reaction.scene.molecules[0].bracket, "ts");
+  assert.equal(reaction.footnote, input.footnote);
+  const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit: await moleculeToolkit(),
+    fonts: await loadFigureFonts(),
+    style: figureStyle,
+  });
+  let brackets = 0,
+    boxes = 0;
+  const italic: string[] = [];
+  walkGeometry(geometry.root, (node) => {
+    brackets += Number(node.attributes["data-bracket"] !== undefined);
+    boxes += Number(node.attributes["data-overhead-box"] !== undefined);
+    if (node.kind === "text")
+      italic.push(...node.runs.filter((r) => r.italic).map((r) => r.text));
+  });
+  assert.equal(brackets, 1);
+  assert.equal(boxes, 1);
+  for (const prefix of ["n-", "t-", "cis-"])
+    assert.ok(italic.includes(prefix), prefix);
+  const vertical = await compileFigure({
+    ...input,
+    steps: [{ ...input.steps[0], turn: "down" }],
+  });
+  const verticalReaction = vertical.entries[vertical.reference.ref] as Reaction;
+  assert.equal(verticalReaction.arrow.from.x, verticalReaction.arrow.to.x);
+  const drawing = await prepareFigure(vertical.entries, vertical.reference, {
+    toolkit: await moleculeToolkit(),
+    fonts: await loadFigureFonts(),
+    style: figureStyle,
+  });
+  const shafts: string[] = [];
+  walkGeometry(drawing.root, (node) => {
+    if (node.kind === "path" && node.attributes["data-reaction-arrow"])
+      shafts.push(node.attributes["data-curve-points"]);
+  });
+  assert.equal(shafts.length, 1);
+  const points: { x: number; y: number }[] = JSON.parse(shafts[0]);
+  assert.ok(points.every((p) => Math.abs(p.x - points[0].x) < 0.01));
 });

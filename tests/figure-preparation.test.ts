@@ -258,14 +258,14 @@ test("Node diagnostics detect duplicated charges, detached bonds and route conne
       code,
     );
   }
-  const compiled = await compileFigure(
-    parse(
-      await readFile(
-        new URL("./fixtures/figures/linear.yaml", import.meta.url),
-        "utf8",
-      ),
+  const routeInput = parse(
+    await readFile(
+      new URL("./fixtures/figures/branched.yaml", import.meta.url),
+      "utf8",
     ),
   );
+  routeInput.steps[0].to = { id: 2, yield: "93%" };
+  const compiled = await compileFigure(routeInput);
   const geometry = await prepareFigure(compiled.entries, compiled.reference, {
     toolkit,
     fonts,
@@ -299,6 +299,48 @@ test("Node diagnostics detect duplicated charges, detached bonds and route conne
   assert.ok(
     figureGeometryDiagnostics(geometry, style).some(
       (d) => d.code === "ROUTE_EDGE_LABEL_OVERLAP",
+    ),
+  );
+});
+
+test("condition text inside a filled structure is rejected even without crossing its outline", async () => {
+  const { createFigureScene } =
+    await import("../src/ui/library/scene-geometry.ts");
+  const { refreshGeometry } =
+    await import("../src/ui/library/geometry-tree.ts");
+  const ctx = createFigureScene(style, fonts),
+    root = ctx.element("g", { "data-figure": "rxn_example" }),
+    molecule = ctx.element("g", { "data-molecule": "compound" });
+  const wedge = ctx.element("path", {
+    d: "M0 0L300 0L150 300Z",
+    "data-bond": "compound:b0",
+  });
+  ctx.setStyle(wedge, "fill", "var(--chemical-ink)");
+  const condition = ctx.label(
+    { x: 150, y: 100 },
+    "Heat",
+    "var(--chemical-caption-font)",
+  );
+  ctx.setData(condition, "label", "rxn_example:condition:-1:0");
+  ctx.append(molecule, wedge);
+  ctx.append(root, molecule, condition);
+  refreshGeometry(root);
+  const diagnostics = figureGeometryDiagnostics(
+    {
+      format: 1,
+      width: 400,
+      height: 400,
+      minimumScale: 1,
+      root,
+      atomPoints: {},
+    },
+    style,
+  );
+  assert.ok(
+    diagnostics.some(
+      (d) =>
+        d.code === "BOND_LABEL_OVERLAP" &&
+        d.elements.includes("rxn_example:condition:-1:0"),
     ),
   );
 });
