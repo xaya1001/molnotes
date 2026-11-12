@@ -14,7 +14,7 @@ import { prepareFigure } from "../src/ui/library/prepare.ts";
 import { loadFigureFonts } from "./figure-fonts.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import { finishFigureEntry } from "./figure-output.ts";
-import type { FigureRect } from "../shared/chemical-library/geometry.ts";
+import type { FigureBox } from "../shared/chemical-library/geometry.ts";
 import {
   createFigureScene,
   parseFigureStyle,
@@ -153,7 +153,7 @@ export async function compileRouteLayout(
     );
     const reservations = new Map<
       string,
-      { box: FigureRect; number: FigureRect }
+      { box: FigureBox; number: FigureBox }
     >();
     walkGeometry(reserved.root, (node, matrix) => {
       if (node.kind !== "group" || !node.attributes["data-compound"]) return;
