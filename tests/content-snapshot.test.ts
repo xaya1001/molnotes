@@ -68,6 +68,7 @@ test("a snapshot holds every unit's rows and its asset files", async (t) => {
     "instruments",
     "minimal",
     "sample",
+    "table-samples",
   ]);
   assert.deepEqual(
     snapshot.directories.map((directory) => directory.dir).sort(),
