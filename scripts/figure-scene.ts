@@ -1,3 +1,4 @@
+import { depictRoute, figureAbbreviations } from "./figure-depiction.ts";
 import { compileRouteLayout, compileReactionLayout } from "./figure-route.ts";
 import type { FigureStyle } from "../src/ui/library/scene-geometry.ts";
 import { createHash } from "node:crypto";
@@ -14,7 +15,6 @@ import {
   openMolecule,
   graphSignature,
   molecularSmiles,
-  alignCoordinates,
   placedCoordinates,
   type Toolkit,
   validateSceneChemistry,
@@ -64,6 +64,9 @@ const expansions: Record<string, string> = {
   TMS: "[Si](C)(C)(C)",
   TBS: "[Si](C)(C)(C(C)(C)C)",
   TIPS: "[Si](C(C)C)(C(C)C)(C(C)C)",
+  TBDPS: "[Si](c1ccccc1)(c1ccccc1)C(C)(C)C",
+  TES: "[Si](CC)(CC)CC",
+  MOM: "C(OC)",
   Bn: "C(c1ccccc1)",
   PMB: "C(c1ccc(OC)cc1)",
   Ac: "C(=O)(C)",
@@ -265,24 +268,10 @@ export async function compileFigure(
         generated.add(cid);
       }
       let variant: string | undefined;
-      const requested = [
-        ...new Set(
-          [...spec.smiles.matchAll(/\[([A-Za-z][A-Za-z0-9]*)\]/g)].map(
-            (m) => m[1],
-          ),
-        ),
-      ].filter((name): name is MoleculeAbbreviation =>
-        Object.hasOwn(abbreviationSmarts, name),
-      );
-      const abbreviations =
-        spec.abbreviate === false
-          ? []
-          : requested.length
-            ? requested
-            : compound.layout.abbreviations;
+      const abbreviations = figureAbbreviations(rd, m, spec, input.abbreviate);
       if (
         JSON.stringify(abbreviations) !==
-        JSON.stringify(compound.layout.abbreviations)
+        JSON.stringify(compound.layout.abbreviations ?? [])
       ) {
         variant = `${id}_${figureKey(where)}`;
         compound.variants ??= {};
@@ -583,95 +572,13 @@ export async function compileFigure(
         spec.smiles ? await resolveStructure(spec, `compounds.${key}`) : spec,
       );
     }
-    let previousStructure: string | undefined;
-    for (const [key, r] of compounds) {
-      if (!("compound" in r)) continue;
-      const targetKey =
-        r.spec.align === false
-          ? undefined
-          : typeof r.spec.align === "string" || typeof r.spec.align === "number"
-            ? String(r.spec.align)
-            : input.anchor === undefined
-              ? previousStructure
-              : String(input.anchor);
-      const target =
-        targetKey === undefined ? undefined : compounds.get(targetKey);
-      if (targetKey !== undefined && !target)
-        throw new Error(`Unknown alignment compound ${targetKey}`);
-      if (
-        target &&
-        "compound" in target &&
-        target !== r &&
-        !r.spec.rot &&
-        !r.spec.flip
-      ) {
-        const pairs: [string, string][] = [...r.atoms].flatMap(([n, a]) => {
-          const b = target.atoms.get(n);
-          return b ? [[a, b] as [string, string]] : [];
-        });
-        if (pairs.length < 2) {
-          const reference = openMolecule(rd, target.compound.smiles),
-            current = openMolecule(rd, r.compound.smiles),
-            list = new rd.MolList();
-          try {
-            list.append(reference);
-            list.append(current);
-            const smarts = rd.get_mcs_as_smarts(
-              list,
-              JSON.stringify({
-                Timeout: 1,
-                RingMatchesRingOnly: true,
-                CompleteRingsOnly: true,
-              }),
-            );
-            const query = rd.get_qmol(smarts);
-            try {
-              if (query && query.get_num_atoms() >= 2) {
-                const before: { atoms: number[] } = JSON.parse(
-                    reference.get_substruct_match(query),
-                  ),
-                  after: { atoms: number[] } = JSON.parse(
-                    current.get_substruct_match(query),
-                  );
-                pairs.push(
-                  ...after.atoms.map((atom, i): [string, string] => [
-                    r.compound.atomIds[atom],
-                    target.compound.atomIds[before.atoms[i]],
-                  ]),
-                );
-              }
-            } finally {
-              query?.delete();
-            }
-          } finally {
-            list.delete();
-            reference.delete();
-            current.delete();
-          }
-        }
-        const coords =
-          pairs.length >= 2
-            ? alignCoordinates(
-                layoutOf(r).coords,
-                layoutOf(target).coords,
-                pairs,
-              )
-            : undefined;
-        if (coords) {
-          const variant = `${id}_${figureKey(key)}`;
-          r.compound.variants ??= {};
-          r.compound.variants[variant] = {
-            ...structuredClone(layoutOf(r)),
-            coords,
-          };
-          generated.add(r.compound.id);
-          r.variant = variant;
-        }
-      }
-      previousStructure = key;
-    }
-    if (input.anchor !== undefined && !compounds.has(String(input.anchor)))
-      throw new Error(`Unknown anchor ${input.anchor}`);
+    for (const cid of depictRoute(
+      rd,
+      compounds,
+      input,
+      (key) => `${id}_${figureKey(key)}`,
+    ))
+      generated.add(cid);
     const resolve = (key: string) => {
       const r = compounds.get(key);
       if (!r) throw new Error(`Unknown compound ${key}`);
@@ -730,7 +637,7 @@ export async function compileFigure(
             : key;
       const reactants: Participant[] = [],
         products: Participant[] = [],
-        reagents = lines(step.above),
+        reagents: string[] = [],
         extra: Point[] = [];
       let cursor = 0,
         first = true;
@@ -801,6 +708,7 @@ export async function compileFigure(
         reactants.push(participant);
         if (show !== "box") display(participant.id, r);
       }
+      reagents.push(...lines(step.above));
       const from = { x: cursor - 0.7, y: 0 },
         to = { x: cursor + 4.3, y: 0 };
       cursor += 5.8;

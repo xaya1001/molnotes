@@ -828,7 +828,7 @@ export function layoutRoute(
         at: { x: p.textCenter, y: p.y },
         width:
           p.kind === "vertical"
-            ? Math.max(p.above?.width ?? 0, p.below?.width ?? 0) + bond * 1.2
+            ? Math.max(p.above?.width ?? 0, p.below?.width ?? 0) + bond * 1.4
             : p.length,
         top: 0,
         bottom: 0,

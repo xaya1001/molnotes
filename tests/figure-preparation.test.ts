@@ -171,7 +171,13 @@ test("wrapping measures SVG text without a trailing space", async () => {
   const scene = createFigureScene(style, fonts);
   entry.conditions = ["AAAA BBBB CCCC DDDD"];
   entry.arrow.textWidth =
-    (scene.label({ x: 0, y: 0 }, "AAAA BBBB CCCC", "17px").advance + 0.1) / 32;
+    (scene.label(
+      { x: 0, y: 0 },
+      "AAAA BBBB CCCC",
+      "var(--chemical-caption-font)",
+    ).advance +
+      0.1) /
+    32;
   const geometry = await prepareFigure(compiled.entries, compiled.reference, {
     toolkit,
     fonts,
@@ -194,8 +200,8 @@ test("SVG subscript line boxes follow the central baseline", async () => {
     await import("../src/ui/library/scene-geometry.ts");
   const scene = createFigureScene(style, fonts);
   for (const [size, y, height] of [
-    [17, -9.5, 24.5],
-    [20, -11, 28],
+    [17, -9.5, 23.5],
+    [20, -11, 27],
   ]) {
     const node = scene.label({ x: 0, y: 0 }, "H₂O", `${size}px`);
     assert.equal(node.bounds!.y, y);
@@ -279,7 +285,7 @@ test("Node diagnostics detect duplicated charges, detached bonds and route conne
   let label:
     import("../shared/chemical-library/geometry.ts").FigureBox | undefined;
   walkGeometry(geometry.root, (node, matrix) => {
-    if (node.attributes["data-label"]?.endsWith(":quantity"))
+    if (node.attributes["data-label"]?.includes(":quantity:"))
       label = transformBox(node.bounds!, matrix) ?? undefined;
   });
   assert.ok(label);

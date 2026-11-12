@@ -305,14 +305,7 @@ test("YAML boundary rejects unsupported kinds and style fields, validates deferr
     compounds: { a: "CCO", b: "CC=O" },
     steps: [{ from: "a", to: "b" }],
   };
-  for (const field of [
-    "bond",
-    "width",
-    "charges",
-    "dots",
-    "ring_h",
-    "abbreviate",
-  ])
+  for (const field of ["bond", "width", "charges", "dots", "ring_h"])
     assert.throws(
       () => validateFigureInput({ ...input, [field]: 1 }),
       new RegExp(field),
@@ -464,6 +457,173 @@ test("compiled linear routes draw their connected intermediates once", async () 
       instances.push(node.attributes["data-compound"]);
   });
   assert.equal(instances.length, 4);
+});
+
+test("shared intermediates draw their electron annotations once", async () => {
+  const { prepareFigure } = await import("../src/ui/library/prepare.ts"),
+    { loadFigureFonts } = await import("../scripts/figure-fonts.ts"),
+    { figureStyle } = await import("./fixtures/figures/style.ts"),
+    { walkGeometry } = await import("../src/ui/library/geometry-walk.ts");
+  const compiled = await compileFigure({
+    compounds: {
+      a: "CC(O)C",
+      b: {
+        smiles: "C[C:1](=[O:2])C",
+        arrows: [{ id: "push", from: "pi(1,2)", to: "atom(2)" }],
+      },
+      c: "CC(O)C",
+    },
+    steps: [
+      { from: "a", to: "b" },
+      { from: "b", to: "c" },
+    ],
+  });
+  const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit: await moleculeToolkit(),
+    fonts: await loadFigureFonts(),
+    style: figureStyle,
+  });
+  let count = 0;
+  walkGeometry(geometry.root, (n) => {
+    if (n.attributes["data-electron-arrow"]) count++;
+  });
+  assert.equal(count, 1);
+});
+
+test("route depiction propagates from its largest anchor independently of compound declaration order", async () => {
+  const compounds = {
+    a: "CCOc1ccc(CO)cc1",
+    b: "CCOc1ccc(C=O)cc1",
+    c: "CCOc1ccc(C(=O)OCCCCCCCC)cc1",
+  };
+  const steps = [
+    { from: "a", to: "b" },
+    { from: "b", to: "c" },
+  ];
+  const forward = await compileFigure({ compounds, steps });
+  const reverse = await compileFigure({
+    compounds: Object.fromEntries(Object.entries(compounds).reverse()),
+    steps,
+  });
+  const layouts = (result: typeof forward) => {
+    const route = result.entries[result.reference.ref] as Route;
+    return route.steps.flatMap((s) => {
+      const reaction = result.entries[s.reaction] as Reaction;
+      return reaction.scene.molecules.map((p) => {
+        const c = result.entries[p.compound] as Compound;
+        return p.variant ? c.variants![p.variant].coords : c.layout.coords;
+      });
+    });
+  };
+  assert.deepEqual(layouts(forward), layouts(reverse));
+});
+
+test("figure abbreviations follow defaults, optional groups and arrow-visible atoms", async () => {
+  const input = {
+    compounds: { a: "CCNC(=O)OC(C)(C)C", b: "CCC(=O)OC(C)(C)C" },
+    steps: [{ from: "a", to: "b" }],
+  };
+  const compiled = await compileFigure(input);
+  const reaction = compiled.entries[compiled.reference.ref] as Reaction;
+  const active = (
+    result: typeof compiled,
+    placement: Reaction["scene"]["molecules"][number],
+  ) => {
+    const compound = result.entries[placement.compound] as Compound;
+    return (
+      (placement.variant
+        ? compound.variants![placement.variant]
+        : compound.layout
+      ).abbreviations ?? []
+    );
+  };
+  assert.deepEqual(active(compiled, reaction.scene.molecules[0]), ["NHBoc"]);
+  const off = await compileFigure({
+    ...input,
+    compounds: {
+      ...input.compounds,
+      a: { smiles: input.compounds.a, abbreviate: false },
+    },
+  });
+  assert.deepEqual(
+    active(
+      off,
+      (off.entries[off.reference.ref] as Reaction).scene.molecules[0],
+    ),
+    [],
+  );
+  const optional = await compileFigure({
+    abbreviate: ["Ph"],
+    compounds: { a: "CCc1ccccc1", b: "CCOc1ccccc1" },
+    steps: input.steps,
+  });
+  assert.ok(
+    active(
+      optional,
+      (optional.entries[optional.reference.ref] as Reaction).scene.molecules[0],
+    )!.includes("Ph"),
+  );
+  const arrows = await compileFigure({
+    compounds: {
+      a: {
+        smiles: "[CH3:1][NH:2][C:3](=[O:4])OC(C)(C)C",
+        arrows: [{ from: "pi(3,4)", to: "atom(4)" }],
+      },
+      b: input.compounds.b,
+    },
+    steps: input.steps,
+  });
+  assert.deepEqual(
+    active(
+      arrows,
+      (arrows.entries[arrows.reference.ref] as Reaction).scene.molecules[0],
+    ),
+    [],
+  );
+});
+
+test("conditions retain reagent order and chemical digit typography", async () => {
+  const { figureTextRuns } = await import("../src/ui/library/text-runs.ts");
+  const { loadFigureFonts } = await import("../scripts/figure-fonts.ts");
+  const { prepareFigure } = await import("../src/ui/library/prepare.ts");
+  const { walkGeometry } = await import("../src/ui/library/geometry-walk.ts");
+  const { figureStyle } = await import("./fixtures/figures/style.ts");
+  const fonts = await loadFigureFonts();
+  const runs = figureTextRuns("NaClO2 Pd(PPh3)4 H2O 25 °C C\\11", 20, fonts);
+  assert.deepEqual(
+    runs.filter((r) => r.size < 20).map((r) => r.text),
+    ["2", "3", "4", "2"],
+  );
+  assert.equal(
+    runs.map((r) => r.text).join(""),
+    "NaClO2 Pd(PPh3)4 H2O 25 °C C11",
+  );
+  const compiled = await compileFigure({
+    compounds: { a: "CCO", b: "CC=O", reagent: { text: "PhB(OH)2" } },
+    steps: [{ from: ["a", "reagent"], to: "b", above: "Pd(PPh3)4, K2CO3" }],
+  });
+  assert.deepEqual(
+    (compiled.entries[compiled.reference.ref] as Reaction).reagents,
+    ["PhB(OH)2", "Pd(PPh3)4, K2CO3"],
+  );
+  const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit: await moleculeToolkit(),
+    fonts,
+    style: figureStyle,
+  });
+  const conditions: { text: string; y: number }[] = [];
+  walkGeometry(geometry.root, (n) => {
+    if (
+      n.kind === "text" &&
+      n.attributes["data-label"]?.includes(":condition:-1:")
+    )
+      conditions.push({ text: n.text, y: n.position.y });
+  });
+  conditions.sort((a, b) => a.y - b.y);
+  assert.deepEqual(
+    conditions.map((n) => n.text),
+    ["PhB(OH)2", "Pd(PPh3)4, K2CO3"],
+  );
 });
 
 test("recompilation preserves bound compound and participant identities", async () => {

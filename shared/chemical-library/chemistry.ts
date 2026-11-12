@@ -1,5 +1,4 @@
 import type { Mol } from "@rdkit/rdkit";
-import { coordinatesFrom } from "../molecule-layout.ts";
 import { ionPairCoordinates } from "./ion-layout.ts";
 import {
   validateAbbreviations,
@@ -104,19 +103,25 @@ export function prepareCompound(
     if (molfile) {
       const imported = openMolecule(toolkit, molfile);
       try {
-        imported.remove_hs_in_place();
+        if (!graphOf(mol).atoms.some((a) => a.z === 1))
+          imported.remove_hs_in_place();
         if (graphSignature(toolkit, imported) !== graph)
           throw new Error(
             `${input.id}: molfile graph or stereochemistry differs`,
           );
-        const matched = coordinatesFrom(
-          toolkit,
-          input.smiles,
-          imported.get_molblock(),
+        const match: { atoms?: number[] } = JSON.parse(
+          mol.get_substruct_match(
+            imported,
+            JSON.stringify({ useChirality: true }),
+          ),
         );
-        if (!matched)
+        if (match.atoms?.length !== mol.get_num_atoms())
           throw new Error(`${input.id}: cannot map molfile coordinates`);
-        coords = matched.map((p) => [p[0], p[1]]);
+        const positions = graphOf(imported).conformers![0].coords;
+        coords = [];
+        match.atoms.forEach((target, source) => {
+          coords[target] = positions[source];
+        });
       } finally {
         imported.delete();
       }

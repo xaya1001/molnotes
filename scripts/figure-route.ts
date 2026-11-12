@@ -1,4 +1,7 @@
-import { wrapFigureText } from "../src/ui/library/text-runs.ts";
+import {
+  wrapFigureText,
+  figureLabelLines,
+} from "../src/ui/library/text-runs.ts";
 import { readFile } from "node:fs/promises";
 import type {
   Library,
@@ -139,13 +142,14 @@ export async function compileRouteLayout(
         placement = reaction.scene.molecules.find((m) => m.id === id)!;
       const box = transformBox(node.bounds, matrix)!;
       const number = node.children.find(
-        (n) => n.attributes["data-label"] === `${id}:number`,
+        (n) => n.attributes["data-number"] === `${id}:number`,
       );
       const body = unionBoxes(
         node.children
           .filter(
             (n) =>
-              n !== number && n.attributes["data-label"] !== `${id}:quantity`,
+              n !== number &&
+              n.attributes["data-quantity"] !== `${id}:quantity`,
           )
           .map((n) => transformedNodeBox(n)),
       );
@@ -157,9 +161,7 @@ export async function compileRouteLayout(
       const participant = [...reaction.reactants, ...reaction.products].find(
         (p) => p.id === id,
       )!;
-      const label = [
-        [participant.number, participant.name].filter(Boolean).join(" · "),
-      ].filter(Boolean);
+      const label = figureLabelLines(participant.number, participant.name);
       const measure: RouteMolecule = {
         width: box.width,
         top: baseline - box.y,

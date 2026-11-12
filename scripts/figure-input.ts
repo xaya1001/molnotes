@@ -73,6 +73,7 @@ export interface FrameInput extends StructureInput {
   arrow?: ArrowKind;
 }
 export interface FigureInput {
+  abbreviate?: ("Ph" | "Trt" | "Bz")[];
   kind?: "route" | "mechanism";
   title?: Key;
   explain?: Key;
@@ -158,7 +159,7 @@ export function validateFigureInput(value: unknown): {
       else {
         if ("template" in v) fail(`${p}.template`, "尚未支持");
         for (const [k, x] of Object.entries(v)) {
-          if (styles.has(k) || (p === "figure" && k === "abbreviate"))
+          if (styles.has(k))
             fail(`${p}.${k}`, "website style field is not accepted");
           if (!fields[k]) fail(`${p}.${k}`, "unknown field");
           fields[k](x, `${p}.${k}`);
@@ -285,6 +286,7 @@ export function validateFigureInput(value: unknown): {
     coordgen: bool,
     forming: bool,
     footnote: text,
+    abbreviate: list(choice("Ph", "Trt", "Bz")),
     mark: string,
   };
   if (kind === "route")

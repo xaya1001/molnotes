@@ -14,7 +14,7 @@ import { nativeDepictionGeometry } from "./native-geometry.ts";
 import { transformPoint, rectangle } from "./geometry-math.ts";
 import { pathMetrics } from "./path-geometry.ts";
 import { refreshGeometry } from "./geometry-tree.ts";
-import { wrapFigureText } from "./text-runs.ts";
+import { wrapFigureText, figureLabelLines } from "./text-runs.ts";
 import { solidArrow } from "./arrow-layout.ts";
 
 import {
@@ -33,7 +33,10 @@ import {
   validateCompound,
   validateSceneChemistry,
 } from "../../../shared/chemical-library/chemistry.ts";
-import { abbreviatedGroups } from "../../../shared/molecule-abbreviations.ts";
+import {
+  abbreviatedGroups,
+  abbreviationLabel,
+} from "../../../shared/molecule-abbreviations.ts";
 import { routeMetrics } from "../../../shared/chemical-library/routes.ts";
 import type {
   Anchor,
@@ -123,16 +126,14 @@ export async function prepareFigure(
     routeGeometryArrow(from, to, B, parent, ctx, clearance, bend, directions);
   const entry = library[reference.ref];
   if (!entry) throw new Error(`Unknown figure ${reference.ref}`);
-  const figureNumbers: Record<string, string> = {};
+  const figureNumbers: Record<string, string[]> = {};
   const numbering = (
     reaction: import("../../../shared/chemical-library/types.ts").Reaction,
     prefix = "",
   ) => {
     for (const p of [...reaction.reactants, ...reaction.products])
       if (p.number !== undefined || p.name)
-        figureNumbers[prefix + p.id] = [p.number, p.name]
-          .filter(Boolean)
-          .join(" · ");
+        figureNumbers[prefix + p.id] = figureLabelLines(p.number, p.name);
   };
   if (entry.kind === "reaction") numbering(entry);
   if (entry.kind === "route")
@@ -183,14 +184,11 @@ export async function prepareFigure(
         for (const i of g.atoms) atomLabels[i] = "";
         const root = coords[g.atoms[0]],
           outside = coords[g.attachment];
-        atomLabels[g.atoms[0]] =
-          g.name === "PPh3"
-            ? outside.x > root.x
-              ? "Ph<sub>3</sub>P"
-              : "PPh<sub>3</sub>"
-            : g.name === "CCl3"
-              ? "CCl<sub>3</sub>"
-              : g.name;
+        atomLabels[g.atoms[0]] = abbreviationLabel(
+          g.name,
+          outside.x > root.x,
+          (graph.atoms[g.attachment].z ?? 6) === 6,
+        );
       }
       // Spell small, separate methyl fragments using the existing Me label.
       // Their atom positions and semantic arrow anchors remain unchanged.
@@ -629,20 +627,26 @@ export async function prepareFigure(
           ctx.append(g, mark);
         }
       }
-      const number = reference.numbers?.[id] ?? figureNumbers[id];
-      if (number) {
+      const local = reference.numbers?.[id];
+      const numbers = local ? figureLabelLines(local) : figureNumbers[id];
+      if (numbers?.length) {
         const bounds = ctx.box(g);
-        const e = label(
-          {
-            x: bounds.x + bounds.width / 2,
-            y: bounds.y + bounds.height + B * 0.55,
-          },
-          number,
-          "var(--chemical-caption-font)",
-        );
-        ctx.setStyle(e, "fontWeight", "600");
-        ctx.set(e, "data-label", `${id}:number`);
-        ctx.append(g, e);
+        const group = element("g", { "data-number": `${id}:number` });
+        ctx.append(g, group);
+        let bottom = bounds.y + bounds.height + B * 0.55;
+        for (const [index, number] of numbers.entries()) {
+          const e = label(
+            {
+              x: bounds.x + bounds.width / 2,
+              y: bottom,
+            },
+            number,
+            "var(--chemical-number-font)",
+          );
+          ctx.set(e, "data-label", `${id}:number:${index}`);
+          ctx.append(group, e);
+          bottom += ctx.box(e).height + B * 0.15;
+        }
       }
     } finally {
       if (depiction !== mol) depiction.delete();
@@ -654,6 +658,7 @@ export async function prepareFigure(
     prefix = "",
     parent: FigureGroup = svg,
     override?: Focus,
+    hidden = new Set<string>(),
   ) {
     const f = override ?? prefixedFocus(s.focus, prefix);
     validateSceneChemistry(toolkit, library, s, entry.id);
@@ -759,6 +764,7 @@ export async function prepareFigure(
       return { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
     };
     for (const l of s.labels ?? []) {
+      if (hidden.has(l.at.molecule)) continue;
       if (l.kind === "radical") {
         // Reuse RDKit's radical dot when it is already part of the native label.
         const dots = glyphBoxes(l.at).filter(
@@ -943,6 +949,18 @@ export async function prepareFigure(
     }
     const focused = focusKeys(f);
     for (const authored of s.arrows ?? []) {
+      const refs = (a: Anchor): AtomRef[] =>
+        a.kind === "lonePair"
+          ? [s.labels!.find((l) => l.id === a.label)!.at]
+          : "at" in a
+            ? [a.at]
+            : a.atoms;
+      if (
+        [...refs(authored.from), ...refs(authored.to)].every((a) =>
+          hidden.has(a.molecule),
+        )
+      )
+        continue;
       let from = authored.from;
       if (
         from.kind === "pi" &&
@@ -1245,7 +1263,12 @@ export async function prepareFigure(
           },
         }
       : source;
-    await scene(r.scene, prefix, parent, reference.focus);
+    const hidden = new Set(
+      Object.entries(view?.display ?? {})
+        .filter(([, display]) => display === "hidden")
+        .map(([id]) => id),
+    );
+    await scene(r.scene, prefix, parent, reference.focus, hidden);
     const routePoints = [r.arrow.from, ...(r.arrow.via ?? []), r.arrow.to];
     const a = mul(routePoints.at(-2)!, B),
       b = mul(r.arrow.to, B);
@@ -1378,7 +1401,10 @@ export async function prepareFigure(
             );
       const gap = token("--chemical-caption-font") / 4;
       let cursor = edge;
-      lines.forEach((text, i) => {
+      const vertical = Math.abs(a.y - b.y) > Math.abs(a.x - b.x);
+      const upward = sign < 0 && !vertical;
+      (upward ? [...lines].reverse() : lines).forEach((text, index) => {
+        const i = upward ? lines.length - 1 - index : index;
         const e = label(
           { x: center, y: 0 },
           text,
@@ -1391,7 +1417,7 @@ export async function prepareFigure(
           sign < 0
             ? cursor - gap - bounds.y - bounds.height
             : cursor + gap - bounds.y;
-        if (Math.abs(a.y - b.y) > Math.abs(a.x - b.x)) {
+        if (vertical) {
           const side = r.arrow.side === "left" ? -1 : 1;
           ctx.set(e, "x", String(center + side * (B * 0.6 + bounds.width / 2)));
           ctx.set(e, "y", String(verticalCursor - bounds.y));
@@ -1404,10 +1430,10 @@ export async function prepareFigure(
       if (p.position === "text" || p.position === "none") continue;
       const parts = [
         p.equivalents !== undefined ? `${p.equivalents} eq` : "",
-        p.yield ?? "",
-        p.ratio ?? "",
+        p.ratio === undefined ? "" : `(${p.ratio})`,
+        p.yield === undefined ? "" : `(${p.yield})`,
         p.fraction !== undefined
-          ? `${Number((p.fraction * 100).toFixed(2))}%`
+          ? `(${Number((p.fraction * 100).toFixed(2))}%)`
           : "",
       ].filter(Boolean);
       if (parts.length) {
@@ -1416,19 +1442,27 @@ export async function prepareFigure(
           .filter((node) => node.kind === "group")[0]!;
         const number = ctx.nodes(
           group,
-          (node) => ctx.data(node, "label") === prefix + p.id + ":number",
+          (node) => ctx.data(node, "number") === prefix + p.id + ":number",
         )[0];
         const box = ctx.box(number ?? group);
-        const e = label(
-          {
-            x: box.x + box.width / 2,
-            y: box.y + box.height + B * 0.42,
-          },
-          parts.join(" · "),
-          "var(--chemical-caption-font)",
-        );
-        ctx.set(e, "data-label", `${prefix}${p.id}:quantity`);
-        ctx.append(group, e);
+        const quantities = element("g", {
+          "data-quantity": `${prefix}${p.id}:quantity`,
+        });
+        ctx.append(group, quantities);
+        let y = box.y + box.height + B * 0.42;
+        for (const [index, text] of parts.entries()) {
+          const e = label(
+            {
+              x: box.x + box.width / 2,
+              y,
+            },
+            text,
+            "var(--chemical-number-font)",
+          );
+          ctx.set(e, "data-label", `${prefix}${p.id}:quantity:${index}`);
+          ctx.append(quantities, e);
+          y += ctx.box(e).height + B * 0.15;
+        }
       }
     }
     if (view?.display)
@@ -1438,7 +1472,7 @@ export async function prepareFigure(
         if (display === "hidden") ctx.remove(group);
         else if (display === "reference")
           for (const child of [...group.children])
-            if (ctx.data(child, "label") !== `${prefix}${pid}:number`)
+            if (ctx.data(child, "number") !== `${prefix}${pid}:number`)
               ctx.remove(child);
       }
   }

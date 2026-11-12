@@ -141,6 +141,43 @@ test("saved molecular identity survives 2D import and rejects a different stereo
     mol.delete();
   }
 });
+test("imported coordinates retain explicit stereochemical hydrogen atoms", async () => {
+  const rd = await moleculeToolkit(),
+    smiles = "C[C@]([H])(O)CO";
+  const mol = rd.get_mol(smiles, JSON.stringify({ removeHs: false }))!;
+  try {
+    mol.set_new_coords(true);
+    const compound = prepareCompound(
+      rd,
+      { id: "cmp_example", title: "Example", smiles, sources },
+      mol.get_molblock(),
+    );
+    validateCompound(rd, compound);
+    assert.equal(compound.atomIds.length, mol.get_num_atoms());
+    assert.equal(
+      Object.keys(compound.layout.coords).length,
+      mol.get_num_atoms(),
+    );
+    assert.ok(
+      Object.values(compound.layout.coords).every(
+        (p) => Number.isFinite(p.x) && Number.isFinite(p.y),
+      ),
+    );
+    const drawn = drawingMolecule(
+      rd,
+      compound,
+      placedCoordinates(rd, compound, compound.layout),
+    );
+    try {
+      assert.equal(graphOf(drawn).atoms.filter((a) => a.z === 1).length, 1);
+    } finally {
+      drawn.delete();
+    }
+  } finally {
+    mol.delete();
+  }
+});
+
 test("isotope labels remain part of saved molecular identity", async () => {
   const rd = await moleculeToolkit();
   const make = (smiles: string) =>

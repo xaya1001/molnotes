@@ -209,7 +209,7 @@ export function createFigureScene(
     const fontSize = parseFloat(value(font));
     const runs = figureTextRuns(svgText(text), fontSize, fonts);
     const node = shapeFigureText(runs, fonts, at, anchor);
-    node.text = text.replace(/\*+/g, "").replace(/\^\{([^}]+)\}/g, "$1");
+    node.text = runs.map((run) => run.text).join("");
     node.paint.fill = token("--chemical-ink");
     return node;
   };
