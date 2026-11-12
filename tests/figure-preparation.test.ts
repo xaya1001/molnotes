@@ -134,6 +134,44 @@ test("a folded terminal group inside a separate ring is rejected", async () => {
   );
 });
 
+test("every saved compiler variant has its final label placement", async () => {
+  const smiles = "CC(C)(C)OC(=O)N1CCCCC1";
+  const c = prepareCompound(toolkit, {
+    id: "cmp_example",
+    title: "Example",
+    smiles,
+    sources: [{ source: "example", locator: "Structures" }],
+  });
+  const root = c.layout.coords[c.atomIds[5]],
+    parent = c.layout.coords[c.atomIds[7]];
+  const angle =
+    (2 * Math.PI) / 3 - Math.atan2(root.y - parent.y, root.x - parent.x);
+  for (const point of Object.values(c.layout.coords)) {
+    const { x, y } = point;
+    point.x = x * Math.cos(angle) - y * Math.sin(angle);
+    point.y = x * Math.sin(angle) + y * Math.cos(angle);
+  }
+  const compiled = await compileFigure(
+    {
+      title: "Group transformation",
+      compounds: { a: smiles, b: "N1CCCCC1" },
+      steps: [{ from: "a", to: "b" }],
+    },
+    { [c.id]: c },
+  );
+  const saved = compiled.entries[c.id];
+  assert.equal(saved.kind, "compound");
+  assert.ok(Object.keys(saved.variants ?? {}).length > 0);
+  for (const variant of Object.keys(saved.variants ?? {})) {
+    const geometry = await prepareFigure(
+      compiled.entries,
+      { ref: c.id, variant },
+      { toolkit, fonts, style },
+    );
+    assert.deepEqual(figureGeometryDiagnostics(geometry, style), [], variant);
+  }
+});
+
 test("folded neutral nitro groups do not display their internal charges", async () => {
   const c = prepareCompound(toolkit, {
     id: "cmp_example",

@@ -995,6 +995,10 @@ export function depictRoute(
           ),
         };
         delete r.compound.variants[variant].chargeAngles;
+        // resolveStructure stages group/annotation settings before depiction.
+        // Only the completed layout is a saved view of this source structure.
+        if (r.variant && r.variant !== variant)
+          delete r.compound.variants[r.variant];
         r.variant = variant;
         changed.add(r.compound.id);
         const angle = ((r.spec.rot ?? 0) * Math.PI) / 180,
