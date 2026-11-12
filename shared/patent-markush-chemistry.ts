@@ -504,7 +504,8 @@ function evaluateMarkush(
   const target = parse(t, smiles);
   try {
     if (!model) return { status: "unmodeled", reason: "unmodeled", groups: [] };
-    for (const e of model.exclusions ?? []) {
+    const definition = model;
+    for (const e of definition.exclusions ?? []) {
       const q = parse(t, "smarts" in e ? e.smarts : e.smiles, "smarts" in e);
       try {
         const hit =
@@ -522,7 +523,7 @@ function evaluateMarkush(
         q.delete();
       }
     }
-    const core = parse(t, model.core);
+    const core = parse(t, definition.core);
     try {
       const cg = graph(core),
         tg = graph(target),
@@ -543,8 +544,8 @@ function evaluateMarkush(
           return { status: "not-matched", reason: "core", groups: [] };
         if (!dummies.length)
           return {
-            status: model.unmodeled ? "unmodeled" : "matched",
-            reason: model.unmodeled ? "unmodeled" : "within",
+            status: definition.unmodeled ? "unmodeled" : "matched",
+            reason: definition.unmodeled ? "unmodeled" : "within",
             groups: [],
           };
         let best: MarkushMatch | undefined;
@@ -553,7 +554,7 @@ function evaluateMarkush(
           const sites = dummies.map((d) => ({
             key: String(d.map),
             atoms: (
-              model.groups[String(d.map)].positions ?? [
+              definition.groups[String(d.map)].positions ?? [
                 neighbors(cg, d.atom)[0],
               ]
             ).map((i) => mapping[stripped.indices.indexOf(i)]),
@@ -569,7 +570,7 @@ function evaluateMarkush(
               const status = verdict([
                 ...groups.map((g) => g.status),
                 ...(extras.length ? ["not-matched" as const] : []),
-                ...(model.unmodeled ? ["unmodeled" as const] : []),
+                ...(definition.unmodeled ? ["unmodeled" as const] : []),
               ]);
               const result: MarkushMatch = {
                 status,
@@ -600,7 +601,7 @@ function evaluateMarkush(
               return;
             }
             const site = sites[index],
-              group = model.groups[site.key];
+              group = definition.groups[site.key];
             const candidates = sides.filter(
               (p) =>
                 (!used.has(p) || p.links.length > 1) &&
@@ -629,7 +630,7 @@ function evaluateMarkush(
                 const check =
                   p && p.links.length !== 1
                     ? { status: "unmodeled" as const, alternatives: [] }
-                    : checkGroup(t, model, site.key, fragment, cache);
+                    : checkGroup(t, definition, site.key, fragment, cache);
                 groups.push({
                   key: site.key,
                   label: group.label,
