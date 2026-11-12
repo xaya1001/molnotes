@@ -600,6 +600,57 @@ export async function prepareFigure(
         );
         ctx.append(g, charge);
       }
+      for (const [index, unit] of (layout.repeatUnits ?? []).entries()) {
+        const inside = new Set(
+          unit.atoms.map((atom) => c.atomIds.indexOf(atom)),
+        );
+        const center = [...inside].reduce(
+          (sum, i) => ({
+            x: sum.x + positions[i].x / inside.size,
+            y: sum.y + positions[i].y / inside.size,
+          }),
+          { x: 0, y: 0 },
+        );
+        let last: Point | undefined;
+        for (const {
+          atoms: [a, b],
+        } of graph.bonds) {
+          if (inside.has(a) === inside.has(b)) continue;
+          const p = positions[a],
+            q = positions[b],
+            mx = (p.x + q.x) / 2,
+            my = (p.y + q.y) / 2,
+            dx = q.x - p.x,
+            dy = q.y - p.y,
+            length = Math.hypot(dx, dy),
+            ox = (-dy / length) * B * 0.42,
+            oy = (dx / length) * B * 0.42,
+            sign = (center.x - mx) * dx + (center.y - my) * dy > 0 ? 1 : -1,
+            tx = ((sign * dx) / length) * B * 0.16,
+            ty = ((sign * dy) / length) * B * 0.16;
+          ctx.append(
+            g,
+            stroke(
+              element("path", {
+                d: `M${mx - ox + tx} ${my - oy + ty}L${mx - ox} ${my - oy}L${mx + ox} ${my + oy}L${mx + ox + tx} ${my + oy + ty}`,
+                "data-repeat-bracket": `${id}:${index}`,
+              }),
+            ),
+          );
+          const low =
+            oy > 0 ? { x: mx + ox, y: my + oy } : { x: mx - ox, y: my - oy };
+          if (!last || low.x > last.x) last = { x: low.x - tx * 2.2, y: low.y };
+        }
+        if (last) {
+          const mark = label(
+            { x: last.x, y: last.y + token("--chemical-font") * 0.85 * 0.75 },
+            unit.label,
+            `${token("--chemical-font") * 0.85}px`,
+          );
+          ctx.setData(mark, "label", `${id}:repeat:${index}`);
+          ctx.append(g, mark);
+        }
+      }
       if (bracket) {
         const bounds = ctx.box(g),
           pad = B * 0.3,
@@ -1199,7 +1250,9 @@ export async function prepareFigure(
       const e = label(
         mul(c.at, B),
         c.text,
-        "var(--chemical-caption-font)",
+        c.text === "+"
+          ? "var(--chemical-plus-font)"
+          : "var(--chemical-caption-font)",
         c.align ?? "middle",
       );
       ctx.setData(e, "label", prefix + "caption:" + i);
@@ -1369,6 +1422,7 @@ export async function prepareFigure(
           B,
         ),
         "+",
+        "var(--chemical-plus-font)",
       );
       ctx.set(mark, "data-label", `${prefix}${id}:plus:${i}`);
       ctx.append(parent, mark);
@@ -1548,7 +1602,7 @@ export async function prepareFigure(
         if (id.startsWith(s.id + "/")) atomPoints[id] = plus(p, mul(s.at, B));
     }
     for (const [index, point] of (entry.plusAt ?? []).entries()) {
-      const mark = label(mul(point, B), "+");
+      const mark = label(mul(point, B), "+", "var(--chemical-plus-font)");
       ctx.setData(mark, "label", `${entry.id}:plus:${index}`);
       ctx.append(svg, mark);
     }

@@ -107,12 +107,14 @@ export async function compileRouteLayout(
     width = ctx.token("--chemical-route-width"),
     gap = ctx.token("--chemical-route-gap");
   const text = (lines: string[]) => {
+    const font =
+      lines.length === 1 && lines[0] === "+"
+        ? "var(--chemical-plus-font)"
+        : "var(--chemical-caption-font)";
     const wrapped = wrapFigureText(lines, width * 0.45, (text) =>
-      ctx.textWidth(text, "var(--chemical-caption-font)"),
+      ctx.textWidth(text, font),
     );
-    const nodes = wrapped.map((line) =>
-      ctx.label({ x: 0, y: 0 }, line, "var(--chemical-caption-font)"),
-    );
+    const nodes = wrapped.map((line) => ctx.label({ x: 0, y: 0 }, line, font));
     return {
       lines: wrapped,
       width: Math.max(0, ...nodes.map((n) => n.advance)),

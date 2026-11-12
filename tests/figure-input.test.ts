@@ -740,3 +740,75 @@ test("compiled reactions include boxed structures, placement brackets and styled
   const points: { x: number; y: number }[] = JSON.parse(shafts[0]);
   assert.ok(points.every((p) => Math.abs(p.x - points[0].x) < 0.01));
 });
+
+test("contracted CoordGen layouts retain the shared bond length", async () => {
+  const result = await compileFigure({
+    compounds: {
+      a: { smiles: "N#CC1CCCCCCCCCCC1", coordgen: true },
+      b: "N#CC1CCCCCCCCCCC1",
+    },
+    steps: [{ from: "a", to: "b" }],
+  });
+  const reaction = result.entries[result.reference.ref] as Reaction;
+  const placement = reaction.scene.molecules[0];
+  const c = result.entries[placement.compound] as Compound;
+  const layout = c.variants![placement.variant!];
+  const mol = (await moleculeToolkit()).get_mol(c.smiles)!;
+  try {
+    const bonds: { atoms: [number, number] }[] = JSON.parse(mol.get_json())
+      .molecules[0].bonds;
+    const lengths = bonds
+      .map(({ atoms: [a, b] }) => {
+        const p = layout.coords[c.atomIds[a]],
+          q = layout.coords[c.atomIds[b]];
+        return Math.hypot(p.x - q.x, p.y - q.y);
+      })
+      .sort((a, b) => a - b);
+    assert.ok(Math.abs(lengths[Math.floor(lengths.length / 2)] - 1) < 0.05);
+  } finally {
+    mol.delete();
+  }
+});
+
+test("CXSMILES repeat units retain their brackets and multiplier", async () => {
+  const { prepareFigure } = await import("../src/ui/library/prepare.ts"),
+    { loadFigureFonts } = await import("../scripts/figure-fonts.ts"),
+    { figureStyle } = await import("./fixtures/figures/style.ts"),
+    { walkGeometry } = await import("../src/ui/library/geometry-walk.ts");
+  const result = await compileFigure({
+    compounds: { a: "CCCOCC |Sg:n:2:n:ht|", b: "CCCOC=O |Sg:n:2:n:ht|" },
+    steps: [{ from: "a", to: "b" }],
+  });
+  const geometry = await prepareFigure(result.entries, result.reference, {
+    toolkit: await moleculeToolkit(),
+    fonts: await loadFigureFonts(),
+    style: figureStyle,
+  });
+  let brackets = 0,
+    multipliers = 0;
+  walkGeometry(geometry.root, (n) => {
+    if (n.attributes["data-repeat-bracket"]) brackets++;
+    if (
+      n.kind === "text" &&
+      n.attributes["data-label"]?.includes(":repeat:") &&
+      n.text === "n"
+    )
+      multipliers++;
+  });
+  assert.equal(brackets, 4);
+  assert.equal(multipliers, 2);
+});
+
+test("an authored structure scale enlarges saved bond geometry", async () => {
+  const result = await compileFigure({
+    compounds: { a: { smiles: "CCO", scale: 1.45 }, b: "CC=O" },
+    steps: [{ from: "a", to: "b" }],
+  });
+  const reaction = result.entries[result.reference.ref] as Reaction,
+    p = reaction.scene.molecules[0],
+    c = result.entries[p.compound] as Compound,
+    coords = c.variants![p.variant!].coords;
+  const a = coords[c.atomIds[0]],
+    b = coords[c.atomIds[1]];
+  assert.ok(Math.abs(Math.hypot(a.x - b.x, a.y - b.y) - 1.45) < 0.005);
+});

@@ -346,6 +346,45 @@ export async function compileFigure(
               : [],
           ),
         );
+        const substanceGroups: {
+          properties: { TYPE: string; LABEL?: string };
+          atoms: number[];
+        }[] = JSON.parse(m.get_json()).molecules[0].substanceGroups ?? [];
+        const repeatUnits = substanceGroups
+          .filter((group) => group.properties.TYPE === "SRU")
+          .map((group) => ({
+            atoms: group.atoms.map((i) => compound.atomIds[match.atoms![i]]),
+            label: group.properties.LABEL ?? "n",
+          }));
+        if (repeatUnits.length) {
+          const layout = variant
+            ? compound.variants![variant]
+            : compound.layout;
+          variant ??= `${id}_${figureKey(where)}`;
+          compound.variants ??= {};
+          compound.variants[variant] = {
+            ...structuredClone(layout),
+            repeatUnits,
+          };
+          generated.add(compound.id);
+        }
+        if (spec.scale !== undefined && spec.scale !== 1) {
+          const layout = variant
+            ? compound.variants![variant]
+            : compound.layout;
+          variant ??= `${id}_${figureKey(where)}`;
+          compound.variants ??= {};
+          compound.variants[variant] = {
+            ...structuredClone(layout),
+            coords: Object.fromEntries(
+              Object.entries(layout.coords).map(([atom, p]) => [
+                atom,
+                { x: p.x * spec.scale!, y: p.y * spec.scale! },
+              ]),
+            ),
+          };
+          generated.add(compound.id);
+        }
         for (const n of Object.keys(spec.notes ?? {}))
           if (!atoms.has(Number(n)))
             throw new Error(`${where}.notes: unknown atom ${n}`);

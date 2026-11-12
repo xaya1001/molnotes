@@ -1,5 +1,9 @@
 import type { Mol, MainModule as Toolkit } from "@rdkit/rdkit";
 import {
+  relaxedCoordinates,
+  relievedCoordinates,
+} from "./figure-coordinate-relief.ts";
+import {
   atomMaps,
   graphOf,
   openMolecule,
@@ -8,6 +12,7 @@ import {
 import {
   abbreviatedGroups,
   matchingAbbreviations,
+  abbreviationLabel,
   type MoleculeAbbreviation,
 } from "../shared/molecule-abbreviations.ts";
 import type { Compound } from "../shared/chemical-library/types.ts";
@@ -121,7 +126,7 @@ function descriptionMolecule(
 }
 interface DisplayAtoms {
   original: number[];
-  labels: Map<number, string>;
+  labels: Map<number, MoleculeAbbreviation>;
 }
 const displayAtoms = new WeakMap<Mol, DisplayAtoms>();
 function contracted(
@@ -259,6 +264,7 @@ function expandedCoordinates(
       )
     )
       throw new Error("Cannot expand the contracted depiction");
+    working.normalize_depiction(0);
     return xy(working);
   } finally {
     working.delete();
@@ -672,8 +678,32 @@ export function depictRoute(
             }
           }
         }
-        const final = mols.get(key)!;
+        let final = mols.get(key)!;
         final.normalize_depiction(0);
+        const adopt = (coordinates: [number, number][] | undefined) => {
+          if (!coordinates) return;
+          const candidate = withCoordinates(rd, final, coordinates);
+          if (!retainsStereo(rd, candidate, expected.get(key)!)) {
+            candidate.delete();
+            return;
+          }
+          mols.set(key, candidate);
+          final.delete();
+          final = candidate;
+        };
+        if (!(r.spec.arrows?.length && final.get_smiles().includes(".")))
+          adopt(relaxedCoordinates(final));
+        adopt(
+          relievedCoordinates(
+            final,
+            new Map(
+              [...displayAtoms.get(final)!.labels].map(([i, name]) => [
+                i,
+                abbreviationLabel(name, false, true),
+              ]),
+            ),
+          ),
+        );
         // Propagated references include the author's final rot/flip, while the saved placement owns that transform.
         const coords = expandedCoordinates(
             rd,
@@ -695,7 +725,10 @@ export function depictRoute(
           coords: Object.fromEntries(
             r.compound.atomIds.map((id, i) => [
               id,
-              { x: (coords[i][0] - cx) / 1.5, y: -(coords[i][1] - cy) / 1.5 },
+              {
+                x: ((coords[i][0] - cx) / 1.5) * (r.spec.scale ?? 1),
+                y: (-(coords[i][1] - cy) / 1.5) * (r.spec.scale ?? 1),
+              },
             ]),
           ),
         };

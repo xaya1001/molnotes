@@ -43,6 +43,8 @@ For other reactants, `others: box|text|plus|none` sets the default; `{id,show}` 
 
 Common protecting groups and terminal functional groups fold by default, using attachment-facing label spelling. A compound's `abbreviate: false` keeps it expanded; figure-level `abbreviate: [Ph, Trt, Bz]` enables optional groups. Atoms targeted by electron arrows remain expanded. Write conditions as ordinary chemical text (`H2O`, `Pd(PPh3)4`); digits become subscripts, and a backslash keeps the next character literal. Reagents retain source order. Numbers and names use `number: name`, with a bold number; yields use parentheses.
 
+CXSMILES repeat units such as `CCCOCC |Sg:n:2:n:ht|` retain their crossing-bond brackets and multiplier in a figure-owned layout. Set a compound's `coordgen: true` to use CoordGen for its own depiction, including a macrocyclic anchor; expanded and folded structures share the same bond length. A compound's `scale` enlarges structure coordinates while retaining the atom font size.
+
 A reactant item can specify numeric `equivalents`. A product item can specify `fraction` in [0,1], separately from source-reported `ratio` and `yield` text. A step's `tags` retain its free-text classification. `reagentPosition: below-arrow` places reagents below the arrow with the conditions. Step `title` and `sources` override the figure defaults when each transformation has its own provenance.
 
 ## Endpoint vocabulary

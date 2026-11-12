@@ -246,6 +246,7 @@ export function validateCompound(toolkit: Toolkit, c: Compound) {
       for (const id of [
         ...Object.keys(layout.pins ?? {}),
         ...Object.keys(layout.labels ?? {}),
+        ...(layout.repeatUnits ?? []).flatMap((unit) => unit.atoms),
       ])
         if (!c.atomIds.includes(id))
           throw new Error(`${c.id}: unknown layout atom ${id}`);

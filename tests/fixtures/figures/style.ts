@@ -19,5 +19,6 @@ export const figureStyle = {
     "--chemical-script-font": "12px",
     "--chemical-caption-font": "21px",
     "--chemical-number-font": "23px",
+    "--chemical-plus-font": "25px",
   },
 };

@@ -141,7 +141,6 @@ const deferred = new Set([
   "changes",
   "enclose",
   "forming",
-  "scale",
   "mark",
   "numbers",
   "notes",

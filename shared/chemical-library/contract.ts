@@ -81,6 +81,16 @@ function layout(v: unknown, w: string) {
   )
     fail(w, "ionPairs must be near or keep");
   for (const p of Object.values(v.coords)) point(p, w);
+  if (v.repeatUnits !== undefined) {
+    list(v.repeatUnits, w);
+    for (const unit of v.repeatUnits) {
+      object(unit, w);
+      list(unit.atoms, w);
+      if (!unit.atoms.length) fail(w, "repeat unit requires atoms");
+      unit.atoms.forEach((atom) => text(atom, w));
+      text(unit.label, w);
+    }
+  }
   for (const k of ["pins", "labels"]) {
     if (v[k] !== undefined) {
       object(v[k], w);
