@@ -27,8 +27,8 @@ compounds:
   2: CC=O
   3: CC(=O)O
 steps:
-  - {id: oxidation, from: 1, to: 2, above: "[O]"}
-  - {id: second, from: 2, to: 3, above: "[O]", explain: Further oxidation.}
+  - { id: oxidation, from: 1, to: 2, above: "[O]" }
+  - { id: second, from: 2, to: 3, above: "[O]", explain: Further oxidation. }
 ```
 
 For process diagrams, save a `kind: process` entry in `library/processes/prc_<id>.yaml`, using the [ProcessData contract](../../../shared/process.ts) (`title`, `label`, `nodes`, optional `total`, and `scenarios`) plus `id` and `sources`. Pages use `figure-ref` with its `prc_` ID. The existing process player renders it, including scenario selection, trace and budget. Check it with `figure:render --library <content-root> --entry <id>` or `content:preview`; process output includes PNGs and diagnostics, while SVG export applies to static figures. Timeline and generic flow fields are in the [data-figure recipe](../../../toolbox/recipes/figures.md).
