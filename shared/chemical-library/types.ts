@@ -42,6 +42,7 @@ export interface CompoundLayout {
   abbreviationAtoms?: string[];
   abbreviations?: MoleculeAbbreviation[];
   repeatUnits?: { atoms: string[]; label: string }[];
+  atomNumbers?: Record<string, number>;
 }
 export interface Compound extends EntryBase {
   kind: "compound";

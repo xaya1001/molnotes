@@ -70,6 +70,68 @@ export function contains(b: FigureRect, p: Point) {
     p.y < b.bottom - 0.5
   );
 }
+/** Keep native atom-note placement when clear, then separate colliding outlined ink. */
+export function spaceAtomNumber(
+  note: FigureGroup,
+  parent: FigureGroup,
+  atom: Point,
+  ctx: FigureScene,
+) {
+  const original = ctx.inkBox(note, parent),
+    center = {
+      x: original.x + original.width / 2,
+      y: original.y + original.height / 2,
+    },
+    labels = [...labelBoxes(parent, ctx)]
+      .filter(([id]) => id !== ctx.data(note, "label"))
+      .map(([, b]) => b),
+    traces = bondTraces(parent, ctx);
+  const box = (p: Point) =>
+    rectangle(
+      p.x - original.width / 2,
+      p.y - original.height / 2,
+      original.width,
+      original.height,
+    );
+  const collision = (b: FigureRect) =>
+    labels.reduce((sum, other) => sum + 3 * overlap(b, other), 0) +
+    traces.reduce(
+      (sum, trace) => sum + trace.points.filter((p) => contains(b, p)).length,
+      0,
+    );
+  const initial = collision(original);
+  if (!initial) return;
+  const radius = Math.hypot(center.x - atom.x, center.y - atom.y),
+    angle = Math.atan2(center.y - atom.y, center.x - atom.x);
+  let chosen = center,
+    best = initial,
+    bestDistance = 0;
+  for (const extra of [0, original.height / 2, original.height])
+    for (const degrees of [
+      0, 30, -30, 60, -60, 90, -90, 120, -120, 150, -150, 180,
+    ]) {
+      const a = angle + (degrees * Math.PI) / 180,
+        p = {
+          x: atom.x + (radius + extra) * Math.cos(a),
+          y: atom.y + (radius + extra) * Math.sin(a),
+        },
+        score = collision(box(p)),
+        distance = (p.x - center.x) ** 2 + (p.y - center.y) ** 2;
+      if (
+        score < best - 1e-6 ||
+        (Math.abs(score - best) < 1e-6 && distance < bestDistance)
+      ) {
+        chosen = p;
+        best = score;
+        bestDistance = distance;
+      }
+    }
+  ctx.set(
+    note,
+    "transform",
+    `translate(${note.transform[4] + chosen.x - center.x} ${note.transform[5] + chosen.y - center.y})`,
+  );
+}
 function crosses(a: Point, b: Point, c: Point, d: Point) {
   const side = (p: Point, q: Point, r: Point) =>
     (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);

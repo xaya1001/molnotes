@@ -504,7 +504,7 @@ test("content reads compiled YAML figures with shared compound identity", async 
     mechanism.frames[0].scene.molecules[0].compound,
     mechanism.frames[1].scene.molecules[0].compound,
   );
-  assert.equal(mechanism.frames[1].scene.molecules[0].rotate, 90);
+  assert.equal(mechanism.frames[1].scene.molecules[0].rotate, -90);
 });
 
 test("process entries load once and accept reusable references while validating node boundaries", async () => {

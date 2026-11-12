@@ -812,3 +812,75 @@ test("an authored structure scale enlarges saved bond geometry", async () => {
     b = coords[c.atomIds[1]];
   assert.ok(Math.abs(Math.hypot(a.x - b.x, a.y - b.y) - 1.45) < 0.005);
 });
+
+test("positive authored rotation turns counterclockwise and propagates from the anchor", async () => {
+  const { prepareFigure } = await import("../src/ui/library/prepare.ts"),
+    { loadFigureFonts } = await import("../scripts/figure-fonts.ts"),
+    { figureStyle } = await import("./fixtures/figures/style.ts");
+  const input = {
+    anchor: "a",
+    compounds: { a: { smiles: "CC(O)C=O" }, b: "CC(O)C=O" },
+    steps: [{ from: "a", to: "b" }],
+  };
+  const fonts = await loadFigureFonts(),
+    toolkit = await moleculeToolkit();
+  const vector = async (
+    result: Awaited<ReturnType<typeof compileFigure>>,
+    role: "reactants" | "products",
+  ) => {
+    const r = result.entries[result.reference.ref] as Reaction,
+      p = r[role][0],
+      c = result.entries[p.compound] as Compound;
+    const g = await prepareFigure(result.entries, result.reference, {
+      toolkit,
+      fonts,
+      style: figureStyle,
+    });
+    const a = g.atomPoints[p.id + ":" + c.atomIds[0]],
+      b = g.atomPoints[p.id + ":" + c.atomIds[2]];
+    return { x: b.x - a.x, y: b.y - a.y };
+  };
+  const base = await compileFigure(input),
+    rotated = await compileFigure({
+      ...input,
+      compounds: { ...input.compounds, a: { ...input.compounds.a, rot: 90 } },
+    });
+  const original = await vector(base, "reactants"),
+    actual = await vector(rotated, "reactants"),
+    inherited = await vector(rotated, "products");
+  assert.ok(Math.abs(actual.x - original.y) < 0.2);
+  assert.ok(Math.abs(actual.y + original.x) < 0.2);
+  assert.ok(Math.abs(inherited.x - actual.x) < 0.2);
+  assert.ok(Math.abs(inherited.y - actual.y) < 0.2);
+});
+
+test("authored atom maps render as native atom numbers", async () => {
+  const { prepareFigure } = await import("../src/ui/library/prepare.ts"),
+    { loadFigureFonts } = await import("../scripts/figure-fonts.ts"),
+    { figureStyle } = await import("./fixtures/figures/style.ts"),
+    { walkGeometry } = await import("../src/ui/library/geometry-walk.ts");
+  const result = await compileFigure({
+    compounds: {
+      a: { smiles: "[CH3:7][CH:14]([OH:21])C=O", numbers: true },
+      b: "CC(O)C=O",
+    },
+    steps: [{ from: "a", to: "b" }],
+  });
+  const g = await prepareFigure(result.entries, result.reference, {
+    toolkit: await moleculeToolkit(),
+    fonts: await loadFigureFonts(),
+    style: figureStyle,
+  });
+  const numbers: number[] = [];
+  walkGeometry(g.root, (n) => {
+    if (n.attributes["data-atom-number"]) {
+      assert.ok(n.kind === "group" && n.children.length > 0);
+      assert.ok(n.bounds && n.bounds.width > 0 && n.bounds.height > 0);
+      numbers.push(Number(n.attributes["data-atom-number"]));
+    }
+  });
+  assert.deepEqual(
+    numbers.sort((a, b) => a - b),
+    [7, 14, 21],
+  );
+});

@@ -81,6 +81,14 @@ function layout(v: unknown, w: string) {
   )
     fail(w, "ionPairs must be near or keep");
   for (const p of Object.values(v.coords)) point(p, w);
+  if (v.atomNumbers !== undefined) {
+    object(v.atomNumbers, w);
+    for (const value of Object.values(v.atomNumbers)) {
+      number(value, w);
+      if (!Number.isInteger(value) || Number(value) <= 0)
+        fail(w, "positive atom number required");
+    }
+  }
   if (v.repeatUnits !== undefined) {
     list(v.repeatUnits, w);
     for (const unit of v.repeatUnits) {

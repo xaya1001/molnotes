@@ -120,7 +120,7 @@ function bounds(rd: Toolkit, r: Resolved) {
     rd,
     r.compound,
     layoutOf(r),
-    (r.spec.rot ?? 0) + (r.spec.flip === "v" ? 180 : 0),
+    -(r.spec.rot ?? 0) + (r.spec.flip === "v" ? 180 : 0),
     !!r.spec.flip,
   );
   return {
@@ -346,6 +346,20 @@ export async function compileFigure(
               : [],
           ),
         );
+        if (spec.numbers && atoms.size) {
+          const layout = variant
+            ? compound.variants![variant]
+            : compound.layout;
+          variant ??= `${id}_${figureKey(where)}`;
+          compound.variants ??= {};
+          compound.variants[variant] = {
+            ...structuredClone(layout),
+            atomNumbers: Object.fromEntries(
+              [...atoms].map(([number, atom]) => [atom, number]),
+            ),
+          };
+          generated.add(compound.id);
+        }
         const substanceGroups: {
           properties: { TYPE: string; LABEL?: string };
           atoms: number[];
@@ -417,7 +431,8 @@ export async function compileFigure(
       ...(resolved.spec.rot || resolved.spec.flip === "v"
         ? {
             rotate:
-              (resolved.spec.rot ?? 0) + (resolved.spec.flip === "v" ? 180 : 0),
+              -(resolved.spec.rot ?? 0) +
+              (resolved.spec.flip === "v" ? 180 : 0),
           }
         : {}),
       ...(resolved.spec.flip ? { mirror: true } : {}),

@@ -350,3 +350,19 @@ test("condition text inside a filled structure is rejected even without crossing
     ),
   );
 });
+
+test("atom numbers clear folded group labels after an authored turn", async () => {
+  const result = await compileFigure({
+    compounds: {
+      a: { smiles: "C[C@H]([C:21](=O)OC)O", numbers: true, rot: 90 },
+      b: "C[C@H]([C:21](=O)OC)O",
+    },
+    steps: [{ from: "a", to: "b" }],
+  });
+  const geometry = await prepareFigure(result.entries, result.reference, {
+    toolkit,
+    fonts,
+    style,
+  });
+  assert.deepEqual(figureGeometryDiagnostics(geometry, style), []);
+});

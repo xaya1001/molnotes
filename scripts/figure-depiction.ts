@@ -742,8 +742,8 @@ export function depictRoute(
             rd,
             final,
             xy(final).map(([x, y]): [number, number] => [
-              x * flipX * Math.cos(angle) + y * flipY * Math.sin(angle),
-              -x * flipX * Math.sin(angle) + y * flipY * Math.cos(angle),
+              x * flipX * Math.cos(angle) - y * flipY * Math.sin(angle),
+              x * flipX * Math.sin(angle) + y * flipY * Math.cos(angle),
             ]),
           );
           mols.set(key, rotated);

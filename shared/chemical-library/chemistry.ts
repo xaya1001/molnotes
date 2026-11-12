@@ -247,6 +247,7 @@ export function validateCompound(toolkit: Toolkit, c: Compound) {
         ...Object.keys(layout.pins ?? {}),
         ...Object.keys(layout.labels ?? {}),
         ...(layout.repeatUnits ?? []).flatMap((unit) => unit.atoms),
+        ...Object.keys(layout.atomNumbers ?? {}),
       ])
         if (!c.atomIds.includes(id))
           throw new Error(`${c.id}: unknown layout atom ${id}`);
@@ -429,6 +430,40 @@ export function drawingMolecule(
     return drawing;
   } finally {
     mapped.delete();
+  }
+}
+/** Add notes to an indexed drawing copy while retaining its folded topology. */
+export function atomNumberDrawing(
+  toolkit: Toolkit,
+  mol: Mol,
+  atom: number,
+  number: number,
+) {
+  const indexed = openMolecule(
+    toolkit,
+    mappedBlock(
+      mol,
+      Array.from({ length: mol.get_num_atoms() }, (_, i) => i + 1),
+    ),
+    false,
+  );
+  try {
+    const cx = indexed.get_cxsmiles(JSON.stringify({ canonical: false }));
+    const serialized = openMolecule(toolkit, cx, false);
+    let indices: number[];
+    try {
+      indices = atomMaps(serialized).map((n) => n - 1);
+    } finally {
+      serialized.delete();
+    }
+    const property = `${indices.indexOf(atom)}.atomNote.${number}`;
+    const clean = cx.replace(/:\d+(?=\])/g, "").trim();
+    const annotated = clean.endsWith("|")
+      ? clean.slice(0, -1) + `,atomProp:${property}|`
+      : clean + ` |atomProp:${property}|`;
+    return { mol: openMolecule(toolkit, annotated, false), indices };
+  } finally {
+    indexed.delete();
   }
 }
 /** Hide folded internal bonds in the drawing copy, making its label root terminal.

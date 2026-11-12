@@ -20,5 +20,6 @@ export const figureStyle = {
     "--chemical-caption-font": "21px",
     "--chemical-number-font": "23px",
     "--chemical-plus-font": "25px",
+    "--chemical-atom-note-scale": "0.62",
   },
 };

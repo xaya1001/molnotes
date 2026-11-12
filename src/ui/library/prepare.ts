@@ -24,9 +24,11 @@ import {
   labelBoxes,
   overlap,
   spaceChiralHydrogens,
+  spaceAtomNumber,
 } from "./geometry-spacing.ts";
 import {
   drawingMolecule,
+  atomNumberDrawing,
   abbreviatedDrawing,
   graphOf,
   placedCoordinates,
@@ -244,9 +246,14 @@ export async function prepareFigure(
         atomLabels[c.atomIds.indexOf(t.atom)] = t.label;
       const xs = coords.map((p) => p.x),
         ys = coords.map((p) => p.y);
-      const draw = (count: number) =>
+      const draw = (
+        count: number,
+        handle = depiction,
+        atomNotes = false,
+        indices?: number[],
+      ) =>
         nativeDepictionGeometry(
-          depiction.get_svg_with_highlights(
+          handle.get_svg_with_highlights(
             JSON.stringify({
               width: Math.ceil((Math.max(...xs) - Math.min(...xs)) * B + 100),
               height: Math.ceil((Math.max(...ys) - Math.min(...ys)) * B + 100),
@@ -260,9 +267,21 @@ export async function prepareFigure(
               fontFile: "BuiltinRobotoRegular",
               atomColourPalette: "bw",
               atomLabelDeuteriumTritium: true,
-              addStereoAnnotation: layout.stereoAnnotations ?? false,
-              annotationFontScale: 0.65,
-              atomLabels,
+              addStereoAnnotation: atomNotes
+                ? false
+                : (layout.stereoAnnotations ?? false),
+              annotationFontScale: atomNotes
+                ? token("--chemical-atom-note-scale")
+                : 0.65,
+              atomLabels: indices
+                ? Object.fromEntries(
+                    indices.flatMap((original, i) =>
+                      atomLabels[original] === undefined
+                        ? []
+                        : [[i, atomLabels[original]]],
+                    ),
+                  )
+                : atomLabels,
               atoms: Array.from({ length: count }, (_, i) => i),
               bonds: [],
               highlightRadius: 0.1,
@@ -599,6 +618,47 @@ export async function prepareFigure(
           ),
         );
         ctx.append(g, charge);
+      }
+      for (const [atom, number] of Object.entries(layout.atomNumbers ?? {})) {
+        const index = c.atomIds.indexOf(atom);
+        if (groups.some((group) => group.atoms.slice(1).includes(index)))
+          continue;
+        const { mol: annotated, indices } = atomNumberDrawing(
+          toolkit,
+          depiction,
+          index,
+          number,
+        );
+        try {
+          const notes = draw(
+            annotated.get_num_atoms(),
+            annotated,
+            true,
+            indices,
+          );
+          const origin = ctx.nodes(
+            notes,
+            (node) =>
+              node.kind === "ellipse" &&
+              (node.attributes.class ?? "").split(" ").includes("atom-0"),
+          )[0];
+          const mark = element("g", {
+            transform: `translate(${positions[indices[0]].x - Number(ctx.get(origin, "cx"))} ${positions[indices[0]].y - Number(ctx.get(origin, "cy"))})`,
+            "data-label": `${id}:atom-number:${atom}`,
+            "data-atom-number": number,
+          });
+          for (const path of ctx.nodes(
+            notes,
+            (node) =>
+              node.kind === "path" &&
+              (node.attributes.class ?? "").split(" ").includes("note"),
+          ))
+            ctx.append(mark, path);
+          ctx.append(g, mark);
+          spaceAtomNumber(mark, g, positions[index], ctx);
+        } finally {
+          annotated.delete();
+        }
       }
       for (const [index, unit] of (layout.repeatUnits ?? []).entries()) {
         const inside = new Set(
