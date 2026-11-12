@@ -172,7 +172,7 @@ export async function verifyFigureProofs(
       );
       // Commit results in reference order, independently of page completion order.
       for (const result of results) {
-        if (result.error !== undefined) {
+        if ("error" in result) {
           failures.push(result.error);
           continue;
         }
@@ -231,7 +231,7 @@ export function figureProofReferences(
   library: Library,
   references: FigureReference[],
 ): FigureReference[] {
-  const refs = [
+  const refs: FigureReference[] = [
     ...Object.values(library).flatMap((entry) =>
       entry.kind === "mechanism"
         ? entry.frames.map((frame) => ({ ref: entry.id, frame: frame.id }))
