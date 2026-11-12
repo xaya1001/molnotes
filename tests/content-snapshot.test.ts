@@ -534,7 +534,7 @@ test("a build rejects patent data whose resources, structures or references do n
     (c: typeof PatentFixture & TopicContent) =>
       Reflect.set(c.data.collections.examples.records[0].body, "key", "absent"),
     (c: typeof PatentFixture & TopicContent) =>
-      Reflect.set(c.data.claims.main.claims[0].scope!, "smarts", "["),
+      Reflect.set(c.data.claims.main.claims[0].markush!, "core", "["),
     (c: typeof PatentFixture & TopicContent) =>
       Reflect.set(c.data.collections.examples.records[0], "structure", {
         source: "beta",

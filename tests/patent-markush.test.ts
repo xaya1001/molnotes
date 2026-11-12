@@ -124,6 +124,20 @@ test("an outside substituent is retained when hydrogen is also an alternative", 
   assert.equal(result.groups[0].fragment, "*CCCC");
   assert.deepEqual(result.outside, ["1"]);
 });
+test("specific fragments preserve the complete bond graph and formal charge", () => {
+  const m = model();
+  m.groups[1].alternatives = [
+    { id: "propyl", label: "Propyl", type: "fragment", smiles: "*CCC" },
+  ];
+  assert.equal(
+    matchMarkush(toolkit, "c1ccc(C2CC2)cc1", m).status,
+    "not-matched",
+  );
+  m.groups[1].alternatives = [
+    { id: "hydroxy", label: "Hydroxy", type: "fragment", smiles: "*O" },
+  ];
+  assert.equal(matchMarkush(toolkit, "[O-]c1ccccc1", m).status, "not-matched");
+});
 test("fixed and variable positions test every core mapping", () => {
   const m: Markush = {
     core: "n1c([*:1])cccc1",

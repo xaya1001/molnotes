@@ -13,6 +13,8 @@ type Toolkit = Pick<MainModule, "get_mol" | "get_qmol">;
 interface Atom {
   z?: number;
   impHs?: number;
+  chg?: number;
+  isotope?: number;
   stereo?: string;
   [key: string]: unknown;
 }
@@ -145,21 +147,31 @@ function single(t: Toolkit, smiles: string) {
   return mol;
 }
 function same(t: Toolkit, a: Mol, b: Mol) {
-  const q = parse(t, b.get_smarts(), true);
+  const ag = graph(a),
+    bg = graph(b),
+    q = parse(t, b.get_smarts(), true);
   try {
     return (
-      a.get_num_atoms() === b.get_num_atoms() &&
-      matches(a, q).some((m) =>
-        m.every(
-          (target, i) =>
-            (graph(a).atoms[target].z === 0) === (graph(b).atoms[i].z === 0),
-        ),
+      ag.atoms.length === bg.atoms.length &&
+      ag.bonds.length === bg.bonds.length &&
+      matches(a, q).some((mapping) =>
+        mapping.every((target, i) => {
+          const actual = ag.atoms[target],
+            expected = bg.atoms[i];
+          return (
+            (actual.z ?? 6) === (expected.z ?? 6) &&
+            (actual.chg ?? 0) === (expected.chg ?? 0) &&
+            (actual.isotope ?? 0) === (expected.isotope ?? 0) &&
+            (actual.impHs ?? 0) === (expected.impHs ?? 0)
+          );
+        }),
       )
     );
   } finally {
     q.delete();
   }
 }
+
 /** Join labeled termini through graph substitution, retaining RDKit's stereo serialization. */
 function join(t: Toolkit, left: string, right: string) {
   const a = parse(t, left),
