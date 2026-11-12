@@ -155,6 +155,15 @@ test("reaction participants preserve product text and text-only reagents", async
   assert.equal(reaction.products[1].yield, "82% combined");
   assert.ok(reaction.reagents.includes("NH2OH"));
   assert.equal(reaction.reactants.length, 1);
+  assert.equal(
+    reaction.scene.captions?.filter((c) => c.text === "+").length,
+    1,
+  );
+  assert.deepEqual(
+    (await compileFigure(await fixture("products"), r.entries)).entries,
+    r.entries,
+  );
+
   const rd = await moleculeToolkit();
   for (const placement of reaction.scene.molecules) {
     const compound = r.entries[placement.compound] as Compound;

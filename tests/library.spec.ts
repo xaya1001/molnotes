@@ -811,3 +811,34 @@ test("a saved process reuses scenario controls and keyboard steps at both widths
   }
   expect(errors).toEqual([]);
 });
+
+test("saved product separators are rendered once", async () => {
+  const library = await fixture();
+  const reaction = library.entries.rxn_example as Reaction;
+  reaction.products.push({
+    id: "second",
+    compound: "cmp_example",
+    yield: "20%",
+  });
+  reaction.scene.width = 40;
+  reaction.scene.molecules.push({
+    id: "second",
+    compound: "cmp_example",
+    at: { x: 31, y: 4 },
+  });
+  reaction.scene.captions = [{ at: { x: 25.5, y: 4 }, text: "+" }];
+  const { figureBrowser } = await import("../scripts/figure-browser.ts");
+  const browser = await figureBrowser(library.entries, ".");
+  try {
+    const result = await browser.render({ ref: reaction.id }, 1366);
+    const separators = await browser.page
+      .locator("#canvas svg [data-label]")
+      .evaluateAll(
+        (nodes) => nodes.filter((node) => node.textContent === "+").length,
+      );
+    expect(separators).toBe(1);
+    expect(result.diagnostics).toEqual([]);
+  } finally {
+    await browser.close();
+  }
+});
