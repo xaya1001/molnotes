@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { parse } from "yaml";
 import { compileFigure } from "../scripts/figure-scene.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
+import { prepareCompound } from "../shared/chemical-library/chemistry.ts";
 import { loadFigureFonts } from "../scripts/figure-fonts.ts";
 import { prepareFigure } from "../src/ui/library/prepare.ts";
 import { figureStyle as style } from "./fixtures/figures/style.ts";
@@ -13,6 +14,39 @@ import { geometrySvg } from "../src/ui/library/geometry-tree.ts";
 import { figureGeometryDiagnostics } from "../src/ui/library/geometry-diagnostics.ts";
 const toolkit = await moleculeToolkit(),
   fonts = await loadFigureFonts();
+
+test("bond diagnostics catch a stretched bond within an enlarged structure", async () => {
+  const c = prepareCompound(toolkit, {
+    id: "cmp_example",
+    title: "Example",
+    smiles: "CCCCCC",
+    sources: [{ source: "example", locator: "Structures" }],
+  });
+  for (const p of Object.values(c.layout.coords)) {
+    p.x *= 1.45;
+    p.y *= 1.45;
+  }
+  const diagnostics = async () =>
+    figureGeometryDiagnostics(
+      await prepareFigure(
+        { [c.id]: c },
+        { ref: c.id },
+        { toolkit, fonts, style },
+      ),
+      style,
+    );
+  assert.ok(!(await diagnostics()).some((d) => d.code === "BOND_TOO_LONG"));
+  const p = c.layout.coords[c.atomIds[0]],
+    q = c.layout.coords[c.atomIds[1]],
+    dx = p.x - q.x,
+    dy = p.y - q.y;
+  p.x = q.x + Math.SQRT2 * dx;
+  p.y = q.y + Math.SQRT2 * dy;
+  assert.ok(!(await diagnostics()).some((d) => d.code === "BOND_TOO_LONG"));
+  p.x = q.x + 2 * dx;
+  p.y = q.y + 2 * dy;
+  assert.ok((await diagnostics()).some((d) => d.code === "BOND_TOO_LONG"));
+});
 
 test("scene preparation handles reaction, route and mechanism fixtures without a browser", async () => {
   for (const name of [
@@ -171,7 +205,13 @@ test("wrapping measures SVG text without a trailing space", async () => {
   const scene = createFigureScene(style, fonts);
   entry.conditions = ["AAAA BBBB CCCC DDDD"];
   entry.arrow.textWidth =
-    (scene.label({ x: 0, y: 0 }, "AAAA BBBB CCCC", "17px").advance + 0.1) / 32;
+    (scene.label(
+      { x: 0, y: 0 },
+      "AAAA BBBB CCCC",
+      "var(--chemical-caption-font)",
+    ).advance +
+      0.1) /
+    32;
   const geometry = await prepareFigure(compiled.entries, compiled.reference, {
     toolkit,
     fonts,
@@ -194,8 +234,8 @@ test("SVG subscript line boxes follow the central baseline", async () => {
     await import("../src/ui/library/scene-geometry.ts");
   const scene = createFigureScene(style, fonts);
   for (const [size, y, height] of [
-    [17, -9.5, 24.5],
-    [20, -11, 28],
+    [17, -9.5, 23.5],
+    [20, -11, 27],
   ]) {
     const node = scene.label({ x: 0, y: 0 }, "H₂O", `${size}px`);
     assert.equal(node.bounds!.y, y);
@@ -258,14 +298,14 @@ test("Node diagnostics detect duplicated charges, detached bonds and route conne
       code,
     );
   }
-  const compiled = await compileFigure(
-    parse(
-      await readFile(
-        new URL("./fixtures/figures/linear.yaml", import.meta.url),
-        "utf8",
-      ),
+  const routeInput = parse(
+    await readFile(
+      new URL("./fixtures/figures/branched.yaml", import.meta.url),
+      "utf8",
     ),
   );
+  routeInput.steps[0].to = { id: 2, yield: "93%" };
+  const compiled = await compileFigure(routeInput);
   const geometry = await prepareFigure(compiled.entries, compiled.reference, {
     toolkit,
     fonts,
@@ -279,7 +319,7 @@ test("Node diagnostics detect duplicated charges, detached bonds and route conne
   let label:
     import("../shared/chemical-library/geometry.ts").FigureBox | undefined;
   walkGeometry(geometry.root, (node, matrix) => {
-    if (node.attributes["data-label"]?.endsWith(":quantity"))
+    if (node.attributes["data-label"]?.includes(":quantity:"))
       label = transformBox(node.bounds!, matrix) ?? undefined;
   });
   assert.ok(label);
@@ -300,5 +340,133 @@ test("Node diagnostics detect duplicated charges, detached bonds and route conne
     figureGeometryDiagnostics(geometry, style).some(
       (d) => d.code === "ROUTE_EDGE_LABEL_OVERLAP",
     ),
+  );
+});
+
+test("condition text inside a filled structure is rejected even without crossing its outline", async () => {
+  const { createFigureScene } =
+    await import("../src/ui/library/scene-geometry.ts");
+  const { refreshGeometry } =
+    await import("../src/ui/library/geometry-tree.ts");
+  const ctx = createFigureScene(style, fonts),
+    root = ctx.element("g", { "data-figure": "rxn_example" }),
+    molecule = ctx.element("g", { "data-molecule": "compound" });
+  const wedge = ctx.element("path", {
+    d: "M0 0L300 0L150 300Z",
+    "data-bond": "compound:b0",
+  });
+  ctx.setStyle(wedge, "fill", "var(--chemical-ink)");
+  const condition = ctx.label(
+    { x: 150, y: 100 },
+    "Heat",
+    "var(--chemical-caption-font)",
+  );
+  ctx.setData(condition, "label", "rxn_example:condition:-1:0");
+  ctx.append(molecule, wedge);
+  ctx.append(root, molecule, condition);
+  refreshGeometry(root);
+  const diagnostics = figureGeometryDiagnostics(
+    {
+      format: 1,
+      width: 400,
+      height: 400,
+      minimumScale: 1,
+      root,
+      atomPoints: {},
+    },
+    style,
+  );
+  assert.ok(
+    diagnostics.some(
+      (d) =>
+        d.code === "BOND_LABEL_OVERLAP" &&
+        d.elements.includes("rxn_example:condition:-1:0"),
+    ),
+  );
+});
+
+test("atom numbers clear folded group labels after an authored turn", async () => {
+  const result = await compileFigure({
+    compounds: {
+      a: { smiles: "C[C@H]([C:21](=O)OC)O", numbers: true, rot: 90 },
+      b: "C[C@H]([C:21](=O)OC)O",
+    },
+    steps: [{ from: "a", to: "b" }],
+  });
+  const geometry = await prepareFigure(result.entries, result.reference, {
+    toolkit,
+    fonts,
+    style,
+  });
+  assert.deepEqual(figureGeometryDiagnostics(geometry, style), []);
+});
+
+test("scene arrow condition lines reserve their measured ink height", async () => {
+  const compiled = await compileFigure({
+    title: "Comparison",
+    kind: "mechanism",
+    frames: [{ id: "first", smiles: "CCO", arrow: "none" }],
+  });
+  const entry = compiled.entries[compiled.reference.ref];
+  assert.equal(entry.kind, "mechanism");
+  const scene = entry.frames[0].scene;
+  scene.width = 24;
+  scene.height = 12;
+  scene.reactionArrows = [
+    {
+      id: "equilibrium",
+      from: { x: 8, y: 4 },
+      to: { x: 16, y: 4 },
+      kind: "equilibrium",
+      below: ["条件甲", "条件乙"],
+    },
+  ];
+  const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit,
+    fonts,
+    style,
+  });
+  assert.ok(
+    !figureGeometryDiagnostics(geometry, style).some(
+      (d) =>
+        d.code === "LABEL_OVERLAP" &&
+        d.elements.every((e) => e.startsWith("equilibrium:")),
+    ),
+  );
+});
+
+test("compiled layouts include the actual page number labels", async () => {
+  const input = {
+    title: "Numbered reaction",
+    compounds: {
+      a: { smiles: "CC", label: "" },
+      b: { smiles: "CCC", label: "" },
+      c: { smiles: "CCCC", label: "" },
+    },
+    steps: [{ from: ["a", "b"], to: "c" }],
+  };
+  const first = await compileFigure(input);
+  const reaction = first.entries[first.reference.ref];
+  assert.equal(reaction.kind, "reaction");
+  const numbers = Object.fromEntries(
+    [...reaction.reactants, ...reaction.products].map((p, i) => [
+      p.id,
+      String(i + 1).repeat(16),
+    ]),
+  );
+  const compiled = await compileFigure(input, first.entries, "example", {
+    style,
+    numbers,
+  });
+  const geometry = await prepareFigure(
+    compiled.entries,
+    { ...compiled.reference, numbers },
+    { toolkit, fonts, style },
+  );
+  assert.deepEqual(
+    figureGeometryDiagnostics(geometry, style).filter((d) =>
+      ["LABEL_OVERLAP", "CLIPPED_LABEL"].includes(d.code),
+    ),
+    [],
   );
 });

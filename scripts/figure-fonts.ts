@@ -24,6 +24,7 @@ const notoSubsets = [
   "vietnamese",
   "30",
   "109",
+  "91",
 ];
 let pending: Promise<FigureFontResolver> | undefined;
 

@@ -1,6 +1,8 @@
 export const figureStyle = {
   values: {
     "--chemical-bond": "32px",
+    "--chemical-route-width": "1882px",
+    "--chemical-route-gap": "19.2px",
     "--chemical-min-bond": "20px",
     "--chemical-min-text": "11px",
     "--chemical-min-script": "11px",
@@ -15,6 +17,9 @@ export const figureStyle = {
     "--chemical-arrow-line": "1.8px",
     "--chemical-font": "20px",
     "--chemical-script-font": "12px",
-    "--chemical-caption-font": "17px",
+    "--chemical-caption-font": "21px",
+    "--chemical-number-font": "23px",
+    "--chemical-plus-font": "25px",
+    "--chemical-atom-note-scale": "0.62",
   },
 };

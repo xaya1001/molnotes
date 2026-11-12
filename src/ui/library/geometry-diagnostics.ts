@@ -211,6 +211,18 @@ export function figureGeometryDiagnostics(
     (node) => node.data.bondLengths !== undefined,
   )) {
     const lengths: number[] = JSON.parse(molecule.data.bondLengths!);
+    const sorted = [...lengths].sort((a, b) => a - b),
+      median = sorted[Math.floor(sorted.length / 2)],
+      maximum = Math.max(...lengths);
+    if (maximum > median * 1.5 + 0.2)
+      add(
+        "BOND_TOO_LONG",
+        [molecule.data.molecule!],
+        "Restore the stretched bond to the molecule's shared bond length",
+        undefined,
+        maximum / median,
+        1.5,
+      );
     const matrix = molecule.matrix!;
     const minimum = Math.min(...lengths) * Math.hypot(matrix[0], matrix[1]);
     if (minimum < minBond - 0.2)
@@ -316,7 +328,16 @@ export function figureGeometryDiagnostics(
   for (const b of bonds)
     for (const l of labels) {
       const points = b.points;
-      if (points.some((p) => inside(p, l.r, 0.8)))
+      const filledCondition =
+        l.id.includes(":condition:") &&
+        b.el.node.paint.fill !== "none" &&
+        polygonsOverlap(points, [
+          { x: l.r.left + 0.8, y: l.r.top + 0.8 },
+          { x: l.r.right - 0.8, y: l.r.top + 0.8 },
+          { x: l.r.right - 0.8, y: l.r.bottom - 0.8 },
+          { x: l.r.left + 0.8, y: l.r.bottom - 0.8 },
+        ]);
+      if (points.some((p) => inside(p, l.r, 0.8)) || filledCondition)
         add(
           "BOND_LABEL_OVERLAP",
           [b.id, l.id],

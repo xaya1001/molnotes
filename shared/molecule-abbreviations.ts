@@ -30,6 +30,25 @@ export const abbreviationSmarts = {
   OMe: "*OC",
   OEt: "*OCC",
   "CF₃": "*C(F)(F)F",
+  OTBS: "*O[Si](C)(C)C(C)(C)C",
+  OTBDPS: "*O[Si](c1ccccc1)(c1ccccc1)C(C)(C)C",
+  OTES: "*O[Si](CC)(CC)CC",
+  OTIPS: "*O[Si](C(C)C)(C(C)C)C(C)C",
+  OPMB: "*OCc1ccc(OC)cc1",
+  OBn: "*OCc1ccccc1",
+  OPiv: "*OC(=O)C(C)(C)C",
+  OAc: "*OC(C)=O",
+  OBz: "*OC(=O)c1ccccc1",
+  OMOM: "*OCOC",
+  OTs: "*OS(=O)(=O)c1ccc(C)cc1",
+  OMs: "*OS(C)(=O)=O",
+  OTf: "*OS(=O)(=O)C(F)(F)F",
+  NHBoc: "*NC(=O)OC(C)(C)C",
+  CN: "*C#N",
+  SCH2Ph: "*SCc1ccccc1",
+  "CO₂H": "*C(=O)[OH]",
+  NO2: "*[N+](=O)[O-]",
+  Trt: "*C(c1ccccc1)(c1ccccc1)c1ccccc1",
 } as const;
 export type MoleculeAbbreviation = keyof typeof abbreviationSmarts;
 
@@ -59,7 +78,7 @@ export interface AbbreviatedGroup {
 }
 
 /** Resolve once against the original graph; drawing and publication use the same matches. */
-export function abbreviatedGroups(
+function findGroups(
   toolkit: ChemistryToolkit,
   mol: MoleculeHandle,
   names: readonly MoleculeAbbreviation[] = [],
@@ -112,12 +131,65 @@ export function abbreviatedGroups(
     group.atoms.forEach((i) => folded.add(i));
     groups.push(group);
   }
+  return groups;
+}
+
+export function matchingAbbreviations(
+  toolkit: ChemistryToolkit,
+  mol: MoleculeHandle,
+  names: readonly MoleculeAbbreviation[],
+) {
+  return [...new Set(findGroups(toolkit, mol, names).map((g) => g.name))];
+}
+
+export function abbreviatedGroups(
+  toolkit: ChemistryToolkit,
+  mol: MoleculeHandle,
+  names: readonly MoleculeAbbreviation[] = [],
+  where = "molecule",
+) {
+  const groups = findGroups(toolkit, mol, names, where);
   for (const name of new Set(names))
     if (!groups.some((group) => group.name === name))
       throw new Error(
         `${where}: abbreviation ${name} has no non-overlapping terminal group in SMILES`,
       );
   return groups;
+}
+
+/** The renderer selects the attachment-facing spelling after applying placement transforms. */
+export function abbreviationLabel(
+  name: MoleculeAbbreviation,
+  left: boolean,
+  attachmentIsCarbon: boolean,
+) {
+  if (name === "Boc" && attachmentIsCarbon) name = "CO₂tBu";
+  const labels: Partial<Record<MoleculeAbbreviation, [string, string]>> = {
+    OTBS: ["OTBS", "TBSO"],
+    OTBDPS: ["OTBDPS", "TBDPSO"],
+    OTES: ["OTES", "TESO"],
+    OTIPS: ["OTIPS", "TIPSO"],
+    OPMB: ["OPMB", "PMBO"],
+    OBn: ["OBn", "BnO"],
+    OPiv: ["OPiv", "PivO"],
+    OAc: ["OAc", "AcO"],
+    OBz: ["OBz", "BzO"],
+    OMOM: ["OMOM", "MOMO"],
+    OTs: ["OTs", "TsO"],
+    OMs: ["OMs", "MsO"],
+    OTf: ["OTf", "TfO"],
+    NHBoc: ["NHBoc", "BocHN"],
+    "CO₂Me": ["CO<sub>2</sub>Me", "MeO<sub>2</sub>C"],
+    "CO₂Et": ["CO<sub>2</sub>Et", "EtO<sub>2</sub>C"],
+    "CO₂tBu": ["CO<sub>2</sub>t-Bu", "t-BuO<sub>2</sub>C"],
+    "CO₂H": ["CO<sub>2</sub>H", "HO<sub>2</sub>C"],
+    CN: ["CN", "NC"],
+    SCH2Ph: ["SCH<sub>2</sub>Ph", "PhCH<sub>2</sub>S"],
+    NO2: ["NO<sub>2</sub>", "O<sub>2</sub>N"],
+    PPh3: ["PPh<sub>3</sub>", "Ph<sub>3</sub>P"],
+    CCl3: ["CCl<sub>3</sub>", "Cl<sub>3</sub>C"],
+  };
+  return labels[name]?.[left ? 1 : 0] ?? name;
 }
 
 /** Reject references to collapsed atoms, and to bonds with a collapsed endpoint. */

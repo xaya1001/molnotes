@@ -14,7 +14,8 @@ import { nativeDepictionGeometry } from "./native-geometry.ts";
 import { transformPoint, rectangle } from "./geometry-math.ts";
 import { pathMetrics } from "./path-geometry.ts";
 import { refreshGeometry } from "./geometry-tree.ts";
-import { solidArrow, routeConnection } from "./arrow-layout.ts";
+import { wrapFigureText, figureLabelLines } from "./text-runs.ts";
+import { solidArrow } from "./arrow-layout.ts";
 
 import {
   bondTraces,
@@ -23,16 +24,19 @@ import {
   labelBoxes,
   overlap,
   spaceChiralHydrogens,
+  spaceAtomNumber,
 } from "./geometry-spacing.ts";
 import {
   drawingMolecule,
+  atomNumberDrawing,
   abbreviatedDrawing,
+  compoundAbbreviations,
   graphOf,
   placedCoordinates,
   validateCompound,
   validateSceneChemistry,
 } from "../../../shared/chemical-library/chemistry.ts";
-import { abbreviatedGroups } from "../../../shared/molecule-abbreviations.ts";
+import { abbreviationLabel } from "../../../shared/molecule-abbreviations.ts";
 import { routeMetrics } from "../../../shared/chemical-library/routes.ts";
 import type {
   Anchor,
@@ -43,6 +47,7 @@ import type {
   Focus,
   Library,
   Point,
+  Route,
   Scene,
 } from "../../../shared/chemical-library/types.ts";
 
@@ -121,16 +126,14 @@ export async function prepareFigure(
     routeGeometryArrow(from, to, B, parent, ctx, clearance, bend, directions);
   const entry = library[reference.ref];
   if (!entry) throw new Error(`Unknown figure ${reference.ref}`);
-  const figureNumbers: Record<string, string> = {};
+  const figureNumbers: Record<string, string[]> = {};
   const numbering = (
     reaction: import("../../../shared/chemical-library/types.ts").Reaction,
     prefix = "",
   ) => {
     for (const p of [...reaction.reactants, ...reaction.products])
       if (p.number !== undefined || p.name)
-        figureNumbers[prefix + p.id] = [p.number, p.name]
-          .filter(Boolean)
-          .join(" · ");
+        figureNumbers[prefix + p.id] = figureLabelLines(p.number, p.name);
   };
   if (entry.kind === "reaction") numbering(entry);
   if (entry.kind === "route")
@@ -159,6 +162,7 @@ export async function prepareFigure(
     mirror = false,
     focus?: Focus,
     parent: FigureGroup = svg,
+    bracket?: boolean | "ts",
   ) {
     validateCompound(toolkit, c);
     const coords = placedCoordinates(toolkit, c, layout, rotate, mirror);
@@ -166,11 +170,7 @@ export async function prepareFigure(
     let depiction = mol;
     try {
       const graph = graphOf(mol),
-        groups = abbreviatedGroups(toolkit, mol, layout.abbreviations).filter(
-          (g) =>
-            !layout.abbreviationAtoms ||
-            layout.abbreviationAtoms.includes(c.atomIds[g.atoms[0]]),
-        ),
+        groups = compoundAbbreviations(toolkit, c, layout),
         folded = new Set(groups.flatMap((g) => g.atoms)),
         hiddenBonds = new Set(groups.flatMap((g) => g.bonds));
       const drawn = abbreviatedDrawing(toolkit, mol, hiddenBonds);
@@ -180,14 +180,11 @@ export async function prepareFigure(
         for (const i of g.atoms) atomLabels[i] = "";
         const root = coords[g.atoms[0]],
           outside = coords[g.attachment];
-        atomLabels[g.atoms[0]] =
-          g.name === "PPh3"
-            ? outside.x > root.x
-              ? "Ph<sub>3</sub>P"
-              : "PPh<sub>3</sub>"
-            : g.name === "CCl3"
-              ? "CCl<sub>3</sub>"
-              : g.name;
+        atomLabels[g.atoms[0]] = abbreviationLabel(
+          g.name,
+          outside.x - root.x > 0.2 / 1.5,
+          (graph.atoms[g.attachment].z ?? 6) === 6,
+        );
       }
       // Spell small, separate methyl fragments using the existing Me label.
       // Their atom positions and semantic arrow anchors remain unchanged.
@@ -243,9 +240,14 @@ export async function prepareFigure(
         atomLabels[c.atomIds.indexOf(t.atom)] = t.label;
       const xs = coords.map((p) => p.x),
         ys = coords.map((p) => p.y);
-      const draw = (count: number) =>
+      const draw = (
+        count: number,
+        handle = depiction,
+        atomNotes = false,
+        indices?: number[],
+      ) =>
         nativeDepictionGeometry(
-          depiction.get_svg_with_highlights(
+          handle.get_svg_with_highlights(
             JSON.stringify({
               width: Math.ceil((Math.max(...xs) - Math.min(...xs)) * B + 100),
               height: Math.ceil((Math.max(...ys) - Math.min(...ys)) * B + 100),
@@ -259,9 +261,21 @@ export async function prepareFigure(
               fontFile: "BuiltinRobotoRegular",
               atomColourPalette: "bw",
               atomLabelDeuteriumTritium: true,
-              addStereoAnnotation: layout.stereoAnnotations ?? false,
-              annotationFontScale: 0.65,
-              atomLabels,
+              addStereoAnnotation: atomNotes
+                ? false
+                : (layout.stereoAnnotations ?? false),
+              annotationFontScale: atomNotes
+                ? token("--chemical-atom-note-scale")
+                : 0.65,
+              atomLabels: indices
+                ? Object.fromEntries(
+                    indices.flatMap((original, i) =>
+                      atomLabels[original] === undefined
+                        ? []
+                        : [[i, atomLabels[original]]],
+                    ),
+                  )
+                : atomLabels,
               atoms: Array.from({ length: count }, (_, i) => i),
               bonds: [],
               highlightRadius: 0.1,
@@ -599,20 +613,145 @@ export async function prepareFigure(
         );
         ctx.append(g, charge);
       }
-      const number = reference.numbers?.[id] ?? figureNumbers[id];
-      if (number) {
-        const bounds = ctx.box(g);
-        const e = label(
-          {
-            x: bounds.x + bounds.width / 2,
-            y: bounds.y + bounds.height + B * 0.55,
-          },
+      for (const [atom, number] of Object.entries(layout.atomNumbers ?? {})) {
+        const index = c.atomIds.indexOf(atom);
+        if (groups.some((group) => group.atoms.slice(1).includes(index)))
+          continue;
+        const { mol: annotated, indices } = atomNumberDrawing(
+          toolkit,
+          depiction,
+          index,
           number,
-          "var(--chemical-caption-font)",
         );
-        ctx.setStyle(e, "fontWeight", "600");
-        ctx.set(e, "data-label", `${id}:number`);
-        ctx.append(g, e);
+        try {
+          const notes = draw(
+            annotated.get_num_atoms(),
+            annotated,
+            true,
+            indices,
+          );
+          const origin = ctx.nodes(
+            notes,
+            (node) =>
+              node.kind === "ellipse" &&
+              (node.attributes.class ?? "").split(" ").includes("atom-0"),
+          )[0];
+          const mark = element("g", {
+            transform: `translate(${positions[indices[0]].x - Number(ctx.get(origin, "cx"))} ${positions[indices[0]].y - Number(ctx.get(origin, "cy"))})`,
+            "data-label": `${id}:atom-number:${atom}`,
+            "data-atom-number": number,
+          });
+          for (const path of ctx.nodes(
+            notes,
+            (node) =>
+              node.kind === "path" &&
+              (node.attributes.class ?? "").split(" ").includes("note"),
+          ))
+            ctx.append(mark, path);
+          ctx.append(g, mark);
+          spaceAtomNumber(mark, g, positions[index], ctx);
+        } finally {
+          annotated.delete();
+        }
+      }
+      for (const [index, unit] of (layout.repeatUnits ?? []).entries()) {
+        const inside = new Set(
+          unit.atoms.map((atom) => c.atomIds.indexOf(atom)),
+        );
+        const center = [...inside].reduce(
+          (sum, i) => ({
+            x: sum.x + positions[i].x / inside.size,
+            y: sum.y + positions[i].y / inside.size,
+          }),
+          { x: 0, y: 0 },
+        );
+        let last: Point | undefined;
+        for (const {
+          atoms: [a, b],
+        } of graph.bonds) {
+          if (inside.has(a) === inside.has(b)) continue;
+          const p = positions[a],
+            q = positions[b],
+            mx = (p.x + q.x) / 2,
+            my = (p.y + q.y) / 2,
+            dx = q.x - p.x,
+            dy = q.y - p.y,
+            length = Math.hypot(dx, dy),
+            ox = (-dy / length) * B * 0.42,
+            oy = (dx / length) * B * 0.42,
+            sign = (center.x - mx) * dx + (center.y - my) * dy > 0 ? 1 : -1,
+            tx = ((sign * dx) / length) * B * 0.16,
+            ty = ((sign * dy) / length) * B * 0.16;
+          ctx.append(
+            g,
+            stroke(
+              element("path", {
+                d: `M${mx - ox + tx} ${my - oy + ty}L${mx - ox} ${my - oy}L${mx + ox} ${my + oy}L${mx + ox + tx} ${my + oy + ty}`,
+                "data-repeat-bracket": `${id}:${index}`,
+              }),
+            ),
+          );
+          const low =
+            oy > 0 ? { x: mx + ox, y: my + oy } : { x: mx - ox, y: my - oy };
+          if (!last || low.x > last.x) last = { x: low.x - tx * 2.2, y: low.y };
+        }
+        if (last) {
+          const mark = label(
+            { x: last.x, y: last.y + token("--chemical-font") * 0.85 * 0.75 },
+            unit.label,
+            `${token("--chemical-font") * 0.85}px`,
+          );
+          ctx.setData(mark, "label", `${id}:repeat:${index}`);
+          ctx.append(g, mark);
+        }
+      }
+      if (bracket) {
+        const bounds = ctx.box(g),
+          pad = B * 0.3,
+          arm = B * 0.4,
+          left = bounds.x - pad * 2,
+          right = bounds.x + bounds.width + pad * 2,
+          top = bounds.y - pad,
+          bottom = bounds.y + bounds.height + pad;
+        ctx.append(
+          g,
+          stroke(
+            element("path", {
+              d: `M${left + arm} ${top}H${left}V${bottom}H${left + arm} M${right - arm} ${top}H${right}V${bottom}H${right - arm}`,
+              "data-bracket": id,
+            }),
+          ),
+        );
+        if (bracket === "ts") {
+          const mark = label(
+            { x: right + B * 0.3, y: top - B * 0.15 },
+            "‡",
+            "var(--chemical-script-font)",
+          );
+          ctx.setData(mark, "label", `${id}:transition-state`);
+          ctx.append(g, mark);
+        }
+      }
+      const local = reference.numbers?.[id];
+      const numbers = local ? figureLabelLines(local) : figureNumbers[id];
+      if (numbers?.length) {
+        const bounds = ctx.box(g);
+        const group = element("g", { "data-number": `${id}:number` });
+        ctx.append(g, group);
+        let bottom = bounds.y + bounds.height + B * 0.55;
+        for (const [index, number] of numbers.entries()) {
+          const e = label(
+            {
+              x: bounds.x + bounds.width / 2,
+              y: bottom,
+            },
+            number,
+            "var(--chemical-number-font)",
+          );
+          ctx.set(e, "data-label", `${id}:number:${index}`);
+          ctx.append(group, e);
+          bottom += ctx.box(e).height + B * 0.15;
+        }
       }
     } finally {
       if (depiction !== mol) depiction.delete();
@@ -624,6 +763,7 @@ export async function prepareFigure(
     prefix = "",
     parent: FigureGroup = svg,
     override?: Focus,
+    hidden = new Set<string>(),
   ) {
     const f = override ?? prefixedFocus(s.focus, prefix);
     validateSceneChemistry(toolkit, library, s, entry.id);
@@ -671,6 +811,7 @@ export async function prepareFigure(
         p.mirror,
         f,
         parent,
+        p.bracket,
       );
     }
     const atom = (a: AtomRef) => {
@@ -728,6 +869,7 @@ export async function prepareFigure(
       return { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
     };
     for (const l of s.labels ?? []) {
+      if (hidden.has(l.at.molecule)) continue;
       if (l.kind === "radical") {
         // Reuse RDKit's radical dot when it is already part of the native label.
         const dots = glyphBoxes(l.at).filter(
@@ -912,6 +1054,18 @@ export async function prepareFigure(
     }
     const focused = focusKeys(f);
     for (const authored of s.arrows ?? []) {
+      const refs = (a: Anchor): AtomRef[] =>
+        a.kind === "lonePair"
+          ? [s.labels!.find((l) => l.id === a.label)!.at]
+          : "at" in a
+            ? [a.at]
+            : a.atoms;
+      if (
+        [...refs(authored.from), ...refs(authored.to)].every((a) =>
+          hidden.has(a.molecule),
+        )
+      )
+        continue;
       let from = authored.from;
       if (
         from.kind === "pi" &&
@@ -1131,26 +1285,43 @@ export async function prepareFigure(
       for (const [lines, sign] of [
         [a.above ?? [], -1],
         [a.below ?? [], 1],
-      ] as const)
+      ] as const) {
+        let previous: FigureRect | undefined;
         lines.forEach((text, i) => {
+          const y = (p.y + q.y) / 2 + sign * B * 0.65;
           const e = label(
             {
               x: (p.x + q.x) / 2,
-              y: (p.y + q.y) / 2 + sign * (B * 0.65 + i * B * 0.58),
+              y,
             },
             text,
             "var(--chemical-caption-font)",
           );
+          if (previous) {
+            const bounds = ctx.box(e);
+            ctx.set(
+              e,
+              "y",
+              y +
+                (sign < 0
+                  ? previous.y - B * 0.15 - bounds.y - bounds.height
+                  : previous.y + previous.height + B * 0.15 - bounds.y),
+            );
+          }
+          previous = ctx.box(e);
           ctx.setStyle(e, "fill", ink);
           ctx.setData(e, "label", prefix + a.id + ":" + sign + ":" + i);
           ctx.append(parent, e);
         });
+      }
     }
     for (const [i, c] of (s.captions ?? []).entries()) {
       const e = label(
         mul(c.at, B),
         c.text,
-        "var(--chemical-caption-font)",
+        c.text === "+"
+          ? "var(--chemical-plus-font)"
+          : "var(--chemical-caption-font)",
         c.align ?? "middle",
       );
       ctx.setData(e, "label", prefix + "caption:" + i);
@@ -1184,11 +1355,44 @@ export async function prepareFigure(
       );
     }
   }
-  async function reaction(id: string, prefix = "", parent: FigureGroup = svg) {
-    const r = library[id];
-    if (r?.kind !== "reaction") throw new Error(`Missing reaction ${id}`);
-    await scene(r.scene, prefix, parent, reference.focus);
-    const a = mul(r.arrow.from, B),
+  async function reaction(
+    id: string,
+    prefix = "",
+    parent: FigureGroup = svg,
+    view?: Route["steps"][number],
+  ) {
+    const source = library[id];
+    if (source?.kind !== "reaction") throw new Error(`Missing reaction ${id}`);
+    const r = view?.placements
+      ? {
+          ...source,
+          reagents: view.reagents ?? source.reagents,
+          conditions: view.conditions ?? source.conditions,
+          reagentPosition: "above-arrow" as const,
+          reactants: source.reactants.map((p) =>
+            view.boxes?.includes(p.id)
+              ? { ...p, position: "above-arrow" as const }
+              : p,
+          ),
+          arrow: view.arrow ?? source.arrow,
+          scene: {
+            ...source.scene,
+            molecules: source.scene.molecules.map((m) => ({
+              ...m,
+              at: view.placements![m.id] ?? m.at,
+            })),
+            captions: source.scene.captions?.filter((c) => c.text !== "+"),
+          },
+        }
+      : source;
+    const hidden = new Set(
+      Object.entries(view?.display ?? {})
+        .filter(([, display]) => display === "hidden")
+        .map(([id]) => id),
+    );
+    await scene(r.scene, prefix, parent, reference.focus, hidden);
+    const routePoints = [r.arrow.from, ...(r.arrow.via ?? []), r.arrow.to];
+    const a = mul(routePoints.at(-2)!, B),
       b = mul(r.arrow.to, B);
     const overhead = [...r.reactants, ...r.products]
       .filter(
@@ -1206,9 +1410,25 @@ export async function prepareFigure(
           width: box.width,
           height: box.height,
         };
-        a.x = Math.min(a.x, bounds.x - B * 0.4);
-        b.x = Math.max(b.x, bounds.x + bounds.width + B * 0.4);
-        return { position: p.position, bounds };
+        const pad = B * 0.35;
+        ctx.append(
+          parent,
+          stroke(
+            element("path", {
+              d: `M${bounds.x - pad} ${bounds.y - pad}H${bounds.x + bounds.width + pad}V${bounds.y + bounds.height + pad}H${bounds.x - pad}Z`,
+              "data-overhead-box": prefix + p.id,
+            }),
+          ),
+        );
+        return {
+          position: p.position,
+          bounds: {
+            x: bounds.x - pad,
+            y: bounds.y - pad,
+            width: bounds.width + 2 * pad,
+            height: bounds.height + 2 * pad,
+          },
+        };
       });
     const arrowShape = solidArrow(a, b, B);
     await scene(
@@ -1228,6 +1448,19 @@ export async function prepareFigure(
       prefix,
       parent,
     );
+    if (routePoints.length > 2 && r.arrow.kind !== "none")
+      ctx.append(
+        parent,
+        stroke(
+          element("path", {
+            d: routePoints
+              .slice(0, -1)
+              .map((p, i) => `${i ? "L" : "M"}${p.x * B} ${p.y * B}`)
+              .join(""),
+            "data-reaction-arrow": prefix + id,
+          }),
+        ),
+      );
     for (const path of ctx.nodes(
       parent,
       (node) => ctx.data(node, "reactionArrow") === prefix + id,
@@ -1242,7 +1475,11 @@ export async function prepareFigure(
     const reactants = r.reactants
       .filter((p) => !p.position || p.position === "inline")
       .map((p) => r.scene.molecules.find((m) => m.id === p.id)!);
-    for (let i = 1; r.showPlus !== false && i < reactants.length; i++) {
+    for (
+      let i = 1;
+      !view?.display && r.showPlus !== false && i < reactants.length;
+      i++
+    ) {
       const left = reactants[i - 1].at,
         right = reactants[i].at;
       const mark = label(
@@ -1254,44 +1491,20 @@ export async function prepareFigure(
           B,
         ),
         "+",
+        "var(--chemical-plus-font)",
       );
       ctx.set(mark, "data-label", `${prefix}${id}:plus:${i}`);
       ctx.append(parent, mark);
     }
     const textWidth = r.arrow.textWidth * B;
-    function wrap(lines: string[]) {
-      const result: string[] = [];
-      for (const text of lines) {
-        const tokens: string[] = [];
-        for (const part of text.trim().match(/.*?(?:[；，、/;\s]+|$)/gu) ??
-          []) {
-          if (!part) continue;
-          const previous = tokens.at(-1);
-          // A quantity and its following unit share one line, including
-          // temperature ranges such as −20–25 °C.
-          if (
-            previous &&
-            /\d\s+$/u.test(previous) &&
-            /^(?:°|\p{L})/u.test(part)
-          )
-            tokens[tokens.length - 1] += part;
-          else tokens.push(part);
-        }
-        let line = "";
-        for (const token of tokens) {
-          if (
-            line &&
-            ctx.textWidth(line + token, "var(--chemical-caption-font)") >
-              textWidth
-          ) {
-            result.push(line.trim());
-            line = token;
-          } else line += token;
-        }
-        if (line) result.push(line.trim());
-      }
-      return result;
-    }
+    const wrap = (lines: string[]) =>
+      wrapFigureText(lines, textWidth, (text) =>
+        ctx.textWidth(text, "var(--chemical-caption-font)"),
+      );
+    let verticalCursor = Math.max(
+      Math.min(a.y, b.y) + B * 0.3,
+      ...overhead.map((p) => p.bounds.y + p.bounds.height + B * 0.3),
+    );
     const reagentsBelow = r.reagentPosition === "below-arrow";
     for (const [lines, sign] of [
       [reagentsBelow ? [] : wrap(r.reagents), -1],
@@ -1302,12 +1515,7 @@ export async function prepareFigure(
       );
       const edge =
         sign < 0
-          ? Math.min(
-              a.y,
-              b.y,
-              ...arrowShape.vertices.map((p) => p.y),
-              ...occupied.map((p) => p.bounds.y),
-            )
+          ? Math.min(a.y, b.y, ...arrowShape.vertices.map((p) => p.y))
           : Math.max(
               a.y,
               b.y,
@@ -1316,7 +1524,10 @@ export async function prepareFigure(
             );
       const gap = token("--chemical-caption-font") / 4;
       let cursor = edge;
-      lines.forEach((text, i) => {
+      const vertical = Math.abs(a.y - b.y) > Math.abs(a.x - b.x);
+      const upward = sign < 0 && !vertical;
+      (upward ? [...lines].reverse() : lines).forEach((text, index) => {
+        const i = upward ? lines.length - 1 - index : index;
         const e = label(
           { x: center, y: 0 },
           text,
@@ -1329,17 +1540,11 @@ export async function prepareFigure(
           sign < 0
             ? cursor - gap - bounds.y - bounds.height
             : cursor + gap - bounds.y;
-        if (Math.abs(a.y - b.y) > Math.abs(a.x - b.x)) {
+        if (vertical) {
           const side = r.arrow.side === "left" ? -1 : 1;
-          ctx.set(e, "x", String(center + side * (B + bounds.width / 2)));
-          ctx.set(
-            e,
-            "y",
-            String(
-              (a.y + b.y) / 2 +
-                (i + (sign > 0 ? r.reagents.length : 0)) * B * 0.6,
-            ),
-          );
+          ctx.set(e, "x", String(center + side * (B * 0.6 + bounds.width / 2)));
+          ctx.set(e, "y", String(verticalCursor - bounds.y));
+          verticalCursor += bounds.height + gap;
         } else ctx.set(e, "y", String(y));
         cursor = y + bounds.y + (sign > 0 ? bounds.height : 0);
       });
@@ -1348,10 +1553,10 @@ export async function prepareFigure(
       if (p.position === "text" || p.position === "none") continue;
       const parts = [
         p.equivalents !== undefined ? `${p.equivalents} eq` : "",
-        p.yield ?? "",
-        p.ratio ?? "",
+        p.ratio === undefined ? "" : `(${p.ratio})`,
+        p.yield === undefined ? "" : `(${p.yield})`,
         p.fraction !== undefined
-          ? `${Number((p.fraction * 100).toFixed(2))}%`
+          ? `(${Number((p.fraction * 100).toFixed(2))}%)`
           : "",
       ].filter(Boolean);
       if (parts.length) {
@@ -1360,21 +1565,39 @@ export async function prepareFigure(
           .filter((node) => node.kind === "group")[0]!;
         const number = ctx.nodes(
           group,
-          (node) => ctx.data(node, "label") === prefix + p.id + ":number",
+          (node) => ctx.data(node, "number") === prefix + p.id + ":number",
         )[0];
         const box = ctx.box(number ?? group);
-        const e = label(
-          {
-            x: box.x + box.width / 2,
-            y: box.y + box.height + B * 0.42,
-          },
-          parts.join(" · "),
-          "var(--chemical-caption-font)",
-        );
-        ctx.set(e, "data-label", `${prefix}${p.id}:quantity`);
-        ctx.append(group, e);
+        const quantities = element("g", {
+          "data-quantity": `${prefix}${p.id}:quantity`,
+        });
+        ctx.append(group, quantities);
+        let y = box.y + box.height + B * 0.42;
+        for (const [index, text] of parts.entries()) {
+          const e = label(
+            {
+              x: box.x + box.width / 2,
+              y,
+            },
+            text,
+            "var(--chemical-number-font)",
+          );
+          ctx.set(e, "data-label", `${prefix}${p.id}:quantity:${index}`);
+          ctx.append(quantities, e);
+          y += ctx.box(e).height + B * 0.15;
+        }
       }
     }
+    if (view?.display)
+      for (const [pid, display] of Object.entries(view.display)) {
+        const group = ctx.groups(parent, "molecule", prefix + pid)[0];
+        if (!group) continue;
+        if (display === "hidden") ctx.remove(group);
+        else if (display === "reference")
+          for (const child of [...group.children])
+            if (ctx.data(child, "number") !== `${prefix}${pid}:number`)
+              ctx.remove(child);
+      }
   }
   if (entry.kind === "compound") {
     const l = reference.variant
@@ -1443,90 +1666,49 @@ export async function prepareFigure(
         "data-step": s.id,
       });
       ctx.append(svg, group);
-      await reaction(s.reaction, s.id + "/", group);
+      await reaction(s.reaction, s.id + "/", group, s);
       for (const [id, p] of Object.entries(atomPoints))
         if (id.startsWith(s.id + "/")) atomPoints[id] = plus(p, mul(s.at, B));
     }
-    for (const edge of entry.edges) {
-      const from = entry.steps.find((s) => s.id === edge.from)!,
-        to = entry.steps.find((s) => s.id === edge.to)!;
-      const targetReaction = library[to.reaction];
-      if (
-        targetReaction.kind === "reaction" &&
-        targetReaction.reactants.some(
-          (p) =>
-            p.id === edge.reactant &&
-            (p.position === "text" || p.position === "none"),
-        )
-      )
-        continue;
-      const a = ctx
-        .nodes(
-          svg,
-          (node) =>
-            ctx.data(node, "molecule") === edge.from + "/" + edge.product,
-        )
-        .filter((node) => node.kind === "group")[0]!;
-      const b = ctx
-        .nodes(
-          svg,
-          (node) =>
-            ctx.data(node, "molecule") === edge.to + "/" + edge.reactant,
-        )
-        .filter((node) => node.kind === "group")[0]!;
-      const bounds = (g: FigureGroup) => {
-        const box = ctx.box(g),
-          matrix = ctx.relativeMatrix(g, svg);
-        const p = transformPoint({ x: box.x, y: box.y }, matrix),
-          q = transformPoint(
-            { x: box.x + box.width, y: box.y + box.height },
-            matrix,
-          );
-        return {
-          left: p.x,
-          top: p.y,
-          right: q.x,
-          bottom: q.y,
-          x: (p.x + q.x) / 2,
-          y: (p.y + q.y) / 2,
-        };
-      };
-      const ra = bounds(a),
-        rb = bounds(b);
-      const source = library[from.reaction],
-        target = library[to.reaction];
-      if (source.kind !== "reaction" || target.kind !== "reaction")
-        throw new Error("Invalid route reaction");
-      const pa = source.scene.molecules.find((m) => m.id === edge.product)!,
-        pb = target.scene.molecules.find((m) => m.id === edge.reactant)!;
-      if (
-        Math.hypot(
-          from.at.x + pa.at.x - to.at.x - pb.at.x,
-          from.at.y + pa.at.y - to.at.y - pb.at.y,
-        ) < 0.001 &&
-        pa.variant === pb.variant &&
-        pa.rotate === pb.rotate &&
-        pa.mirror === pb.mirror
-      ) {
-        ctx.remove(b);
-        continue;
-      }
-      const rowY = (step: typeof from, reaction: typeof source) =>
-        step.at.y + (reaction.arrow.from.y + reaction.arrow.to.y) / 2;
-      const vertical = Math.abs(rowY(from, source) - rowY(to, target)) > 0.001;
-      const fromRow = bounds(ctx.groups(svg, "step", from.id)[0]),
-        toRow = bounds(ctx.groups(svg, "step", to.id)[0]);
-      const points = routeConnection(ra, rb, fromRow, toRow, vertical);
+    for (const [index, point] of (entry.plusAt ?? []).entries()) {
+      const mark = label(mul(point, B), "+", "var(--chemical-plus-font)");
+      ctx.setData(mark, "label", `${entry.id}:plus:${index}`);
+      ctx.append(svg, mark);
+    }
+    for (const connection of entry.connections ?? [])
       ctx.append(
         svg,
         stroke(
           element("path", {
-            d: points.map((p, i) => `${i ? "L" : "M"}${p.x} ${p.y}`).join(""),
-            "data-route-edge": `${edge.from}/${edge.product}->${edge.to}/${edge.reactant}`,
+            d: connection.points
+              .map((p, i) => `${i ? "L" : "M"}${p.x * B} ${p.y * B}`)
+              .join(""),
+            "data-route-edge": connection.id,
           }),
         ),
       );
+  }
+  if (entry.footnote) {
+    const lines = wrapFigureText(
+      entry.footnote.split("\n"),
+      width - 3 * B,
+      (text) => ctx.textWidth(text, "var(--chemical-caption-font)"),
+    );
+    let cursor = height + B * 0.4;
+    for (const [index, text] of lines.entries()) {
+      const note = label(
+          { x: B * 1.5, y: 0 },
+          text,
+          "var(--chemical-caption-font)",
+          "start",
+        ),
+        bounds = ctx.box(note);
+      ctx.set(note, "y", String(cursor - bounds.y));
+      ctx.setData(note, "label", `${entry.id}:footnote:${index}`);
+      ctx.append(svg, note);
+      cursor += bounds.height + B * 0.2;
     }
+    height = cursor + B * 0.4;
   }
   ctx.set(svg, "viewBox", `0 0 ${width} ${height}`);
   ctx.set(svg, "width", String(width));

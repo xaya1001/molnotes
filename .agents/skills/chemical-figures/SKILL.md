@@ -10,34 +10,50 @@ Use this as the authoring entrypoint. Read the current [content contract](../../
 ## Render and review
 
 1. Check the source, graph, stereochemistry and electron direction. Reuse saved compound IDs and atom IDs.
-2. Write a library YAML scene. Start with relative placement and semantic endpoints; save molecular coordinates in compound layouts, not page blocks.
+2. Write figure YAML and run `npm run figure:compile -- --source figure.yaml --library <content-root>`. Edit and recompile the saved `library/sources/<id>.yaml` to retain the figure ID. Read the [compilation contract](../../../docs/content.md#figure-yaml-compilation) for route and mechanism fields.
 3. Run the website renderer, following the workspace heavy-command policy:
    ```sh
    npm run figure:render -- --library <content-root> --entry <id> --out <output>
-   npm run figure:render -- --scene figure.yaml --out <output>
    ```
-   The default renders desktop and phone widths. Inspect the PNG and JSON diagnostics; a clean diagnostic report does not establish chemical correctness.
+   The default renders width 1366; add `--width 390` for a phone proof. Inspect the PNG and JSON diagnostics; a clean diagnostic report does not establish chemical correctness.
    `content:preview` collects topic `figure-ref` blocks and every mechanism frame, including tabs, and reports the website renderer's diagnostics. Resolve every diagnostic before accepting the preview; the command fails when a library figure has diagnostics or cannot render.
-4. Adjust orientation, `gap`, a small `offset`, saved coordinates or arrow `bend`; render and inspect again. Check normal-size labels, visible gaps, arrow origins and heads, and mobile scrolling.
+4. Adjust `rot`, `flip` or common-core `align` in source and recompile; routes compute their arrow geometry. For a saved scene, adjust coordinates and semantic endpoint placement, then render and inspect again. Check normal-size labels, visible gaps, arrow origins and heads, and mobile scrolling.
 5. Make the requested comparison HTML, publish it with `artifact publish --task <task> --name <name> <directory>`, run `artifact shot <published-index>`, and inspect that screenshot before returning `artifact url <published-index>`. Artifact review and product/content publication follow the task's separate permissions.
 
 ```yaml
-title: Carbonyl addition
-molecules:
-  substrate: { smiles: "CC(=O)C" }
-  donor: { smiles: "[OH-]", leftOf: substrate }
-arrows:
-  - donor:charge(a1) -> between(donor:a1,substrate:a2)
-  - substrate:pi(a2,a3) -> substrate:atom(a3)
+title: Sequential transformations
+compounds:
+  1: CCO
+  2: CC=O
+  3: CC(=O)O
+steps:
+  - { id: oxidation, from: 1, to: 2, above: "[O]" }
+  - { id: second, from: 2, to: 3, above: "[O]", explain: Further oxidation. }
 ```
 
 For process diagrams, save a `kind: process` entry in `library/processes/prc_<id>.yaml`, using the [ProcessData contract](../../../shared/process.ts) (`title`, `label`, `nodes`, optional `total`, and `scenarios`) plus `id` and `sources`. Pages use `figure-ref` with its `prc_` ID. The existing process player renders it, including scenario selection, trace and budget. Check it with `figure:render --library <content-root> --entry <id>` or `content:preview`; process output includes PNGs and diagnostics, while SVG export applies to static figures. Timeline and generic flow fields are in the [data-figure recipe](../../../toolbox/recipes/figures.md).
+
+## Route authoring
+
+Dependencies come from shared compound keys. Write multiple `from`/`to` keys for convergence or multiple products; each product has one producer. Each step creates an owned reaction with a complete standalone view. Connected intermediates appear once; wrapped rows start at their arrow. Two branches of a fork align before joining. If the product will not fit at the right, a short branch can reverse into a downward join. More complex joins use the compound number.
+
+Orientation propagates outward from the largest uncrowded compound, or the figure's `anchor` key. Shared cores inherit coordinates; `align: false` keeps a free depiction, and `align: <key>` chooses another completed reference. `flip` and then `rot` apply after alignment; positive `rot` turns counterclockwise. `wrap: serpentine` reverses the next row after a downward turn. A step can request `turn: down|elbow|wrap`, `side: left|right` for vertical condition text, and `reverse: false` to retain direction. Website tokens own width and spacing; YAML rejects style fields such as `width` and `bond`.
+
+For other reactants, `others: box|text|plus|none` sets the default; `{id,show}` overrides one. `box` draws a bordered structure above the arrow. `text` uses the compound's `text` or its label/name. `none` omits drawing while retaining the structural participant. Compound `bracket: true` adds brackets; `bracket: ts` adds the transition-state sign. Figure `footnote` sits below the whole diagram. Conditions, labels and footnotes support chemical italic prefixes (`n-`, `t-`, `cis-`), `*italic*`/`**bold**`, Unicode subscripts and `^{superscript}`.
+
+Common protecting groups and terminal functional groups fold by default, using attachment-facing label spelling. A compound's `abbreviate: false` keeps it expanded; figure-level `abbreviate: [Ph, Trt, Bz]` enables optional groups. A group stays expanded when its hidden interior contains an electron-arrow endpoint; its root can remain a label and receive an arrow. Other groups keep their abbreviations. Write conditions as ordinary chemical text (`H2O`, `Pd(PPh3)4`); digits become subscripts, and a backslash keeps the next character literal. Reagents retain source order. Numbers and names use `number: name`, with a bold number; yields use parentheses.
+
+CXSMILES repeat units such as `CCCOCC |Sg:n:2:n:ht|` retain their crossing-bond brackets and multiplier in a figure-owned layout. Set a compound's `coordgen: true` to use CoordGen for its own depiction, including a macrocyclic anchor; expanded and folded structures share the same bond length. A compound's `scale` enlarges structure coordinates while retaining the atom font size.
+
+Set `numbers: true` to draw the explicit map numbers from that compound's input SMILES. Only mapped atoms receive a number; native atom notes place the small labels around the visible structure.
+
+A reactant item can specify numeric `equivalents`. A product item can specify `fraction` in [0,1], separately from source-reported `ratio` and `yield` text. A step's `tags` retain its free-text classification. `reagentPosition: below-arrow` places reagents below the arrow with the conditions. Step `title` and `sources` override the figure defaults when each transformation has its own provenance.
 
 ## Endpoint vocabulary
 
 - Sources: `lp(a1)` is a lone pair, `charge(a1)` a displayed negative charge, `bond(a1,a2)` sigma electrons, `pi(a1,a2)` a multiple-bond line, and `radical(a1)` a single electron.
 - Destinations: `atom(a1)`, `bond(a1,a2)`, or `between(donor:a1,acceptor:a2)` for a new bond; the second atom is the acceptor. Radical endpoints use a half head; `electrons: 1` explicitly selects one for bond electrons.
-- Write `molecule:selector -> molecule:selector`. Prefer persistent atom IDs in finished entries. Keep bond tails at their semantic midpoints. Use `bend: left/right` only when placement and the default arc need a different side.
+- Input arrows use SMILES maps, for example `{from: "pi(2,3)", to: "atom(3)"}`; compiled entries use permanent atom IDs. Keep bond tails at their semantic midpoints. `side: left|right` selects the arc side. Cross-participant arrows belong to saved scenes; the input grammar places arrows within one compound or frame.
 
 ## Identity, references and style
 
