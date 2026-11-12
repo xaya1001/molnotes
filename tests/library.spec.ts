@@ -445,13 +445,11 @@ test("local numbers sit below the visible ink of folded groups", async ({
   await expect(molecule).toBeVisible();
   const geometry = await molecule.evaluate((node) => {
     const number = node
-      .querySelector('[data-label="compound:number"]')!
+      .querySelector('[data-number="compound:number"]')!
       .getBoundingClientRect();
-    const ink = [
-      ...node.querySelectorAll(
-        '[data-label]:not([data-label="compound:number"]), [data-bond]',
-      ),
-    ].map((e) => e.getBoundingClientRect());
+    const ink = [...node.querySelectorAll("[data-label], [data-bond]")]
+      .filter((e) => !e.closest("[data-number]"))
+      .map((e) => e.getBoundingClientRect());
     return {
       numberTop: number.top,
       numberCenter: (number.left + number.right) / 2,
@@ -608,7 +606,7 @@ test("mechanism step selection keeps the explanation with its drawing", async ({
   ).toBeVisible();
   const first = await figure.locator("svg").innerHTML();
   await expect(
-    figure.locator('[data-label="structure:number"]'),
+    figure.locator('[data-label="structure:number:0"]'),
   ).toHaveAttribute("data-text", "7");
   await figure.getByRole("button", { name: "second", exact: true }).click();
   await expect(
@@ -618,7 +616,7 @@ test("mechanism step selection keeps the explanation with its drawing", async ({
     figure.getByText("Explanation for first", { exact: true }),
   ).toHaveCount(0);
   await expect(
-    figure.locator('[data-label="structure:number"]'),
+    figure.locator('[data-label="structure:number:0"]'),
   ).toHaveAttribute("data-text", "7");
   await expect.poll(() => figure.locator("svg").innerHTML()).not.toBe(first);
   if (process.env.MOLNOTES_FIGURE_SCREENS)
