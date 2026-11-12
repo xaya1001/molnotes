@@ -103,7 +103,8 @@ if (input) {
       for (const ref of refs)
         for (const width of value("--width")
           ? [Number(value("--width"))]
-          : [1366, 390]) {
+          : [1366]) {
+          await runner.prepareBatch();
           const result = await runner.render(ref, width);
           const name = `${ref.ref}${"frame" in ref ? "-" + ref.frame : ""}-${width}`;
           if (!args.includes("--check") && result.svg !== null)
