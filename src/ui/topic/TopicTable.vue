@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { tableTextAlign, tableTextStyle } from "./table-text.ts";
+import { tableTextAlign, tableColumnStyle } from "./table-text.ts";
 import { provideTableStructureScales } from "./table-structure-scale.ts";
 import TableText from "./TableText.vue";
 import TableStructure from "./TableStructure.vue";
@@ -33,6 +33,19 @@ const groups = computed(() => {
   }
   return result;
 });
+const columnStyles = computed(() =>
+  props.columns.map((_, column) =>
+    tableColumnStyle(
+      props.rows.flatMap((row) => {
+        if (typeof row === "string") return [];
+        const cell = row[column];
+        return [
+          typeof cell === "string" ? cell : "text" in cell ? cell.text : "",
+        ];
+      }),
+    ),
+  ),
+);
 const { content } = useTopic();
 const sourceIds = sourceIdsOf(content.sources);
 const pieces = (cell: string) =>
@@ -63,10 +76,11 @@ const pieces = (cell: string) =>
           </tr>
           <tr>
             <th
-              v-for="column in columns"
+              v-for="(column, i) in columns"
               :key="column"
               scope="col"
               :class="{ 'short-heading': tableTextAlign(column) === 'center' }"
+              :style="{ textAlign: columnStyles[i].textAlign }"
             >
               <TableText :text="column" />
             </th>
@@ -91,15 +105,7 @@ const pieces = (cell: string) =>
                 v-for="(cell, i) in row"
                 :key="i"
                 :scope="rowHeader && i === 0 ? 'row' : undefined"
-                :style="
-                  tableTextStyle(
-                    typeof cell === 'string'
-                      ? cell
-                      : 'text' in cell
-                        ? cell.text
-                        : '',
-                  )
-                "
+                :style="columnStyles[i]"
               >
                 <TableStructure
                   v-if="typeof cell !== 'string' && 'figure' in cell"

@@ -248,3 +248,62 @@ test("record tables stack values and names and paginate twelve rows", async ({
   await expect(rows).toHaveCount(1);
   await expect(page.getByRole("navigation", { name: "分页" })).toHaveCount(0);
 });
+
+test("columns keep shared alignment and readable short text while comparisons stay together", async ({
+  page,
+}) => {
+  await page.route("**/api/topics/table-samples", async (route) => {
+    const response = await route.fetch();
+    const topic = await response.json();
+    topic.content.chapters[0].blocks = [
+      {
+        type: "table",
+        caption: "Samples",
+        columns: ["ID", "Description", "Series", "Readout"],
+        rowHeader: true,
+        rows: [
+          [
+            "1",
+            "A long experimental annotation under several conditions",
+            "甲基取代",
+            "≥ 95%",
+          ],
+          ["2", "Short", "n", "≤ 20%"],
+          ["3", "Brief", "含氟·甲基", "<0.1"],
+          ["4", "Text", "甲基取代", "> 5 nM"],
+          ["5", "Word", "n", "~ 3"],
+        ],
+      },
+    ];
+    await route.fulfill({ response, json: topic });
+  });
+  await page.goto("/sites/table-samples/start");
+  const table = page.getByRole("table");
+  await table.evaluate((table) => {
+    table.parentElement!.style.width = "360px";
+  });
+  const rows = table.locator("tbody tr");
+  await expect
+    .soft(rows.nth(1).locator("td").first())
+    .toHaveCSS("text-align", "start");
+  const series = rows.first().locator("td").nth(1);
+  const width = await series.evaluate((cell) => {
+    const style = getComputedStyle(cell);
+    return {
+      actual: cell.getBoundingClientRect().width,
+      minimum:
+        4 * parseFloat(style.fontSize) +
+        parseFloat(style.paddingLeft) +
+        parseFloat(style.paddingRight),
+    };
+  });
+  expect.soft(width.actual).toBeGreaterThanOrEqual(width.minimum);
+  await expect.soft(table.locator(".quantity")).toHaveCount(5);
+  for (const quantity of await table.locator(".quantity").all())
+    await expect(quantity).toHaveCSS("white-space", "nowrap");
+  expect(
+    await table.evaluate(
+      (e) => e.parentElement!.scrollWidth > e.parentElement!.clientWidth,
+    ),
+  ).toBeTruthy();
+});

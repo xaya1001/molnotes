@@ -10,19 +10,27 @@ export function tableTextAlign(text: string) {
     : "center";
 }
 
-export function tableTextStyle(text: string): CSSProperties {
-  const textAlign = tableTextAlign(text);
+/** Resolve layout once for the entire column, including rows on other pages. */
+export function tableColumnStyle(values: readonly string[]): CSSProperties {
+  const prose = values.some((text) => tableTextAlign(text) === "start");
+  const words = values.some((text) => /\p{L}/u.test(text));
   return {
-    textAlign,
-    minWidth: textAlign === "start" ? "var(--table-prose-width)" : undefined,
-    overflowWrap: textAlign === "start" ? "anywhere" : "normal",
+    textAlign: prose ? "start" : "center",
+    minWidth: prose
+      ? "var(--table-prose-width)"
+      : words
+        ? "var(--table-value-width)"
+        : undefined,
+    overflowWrap: prose ? "anywhere" : "normal",
   };
 }
 
 /** Keep a number with its following unit without changing the stored content. */
 export function tableDisplayText(text: string) {
-  return text.replace(
-    /(\d(?:[\d.,]*\d)?)[ \t]+(°C|°F|%|h|min|s|nM|µM|μM|mM|M|mg|µg|μg|g|mL|µL|μL|L)(?=$|[^\p{L}])/gu,
-    "$1\u00a0$2",
-  );
+  return text
+    .replace(
+      /(\d(?:[\d.,]*\d)?)[ \t]+(°C|°F|%|h|min|s|nM|µM|μM|mM|M|mg|µg|μg|g|mL|µL|μL|L)(?=$|[^\p{L}])/gu,
+      "$1\u00a0$2",
+    )
+    .replace(/([≥≤<>~])[ \t]+(?=[+−-]?\d)/g, "$1\u00a0");
 }

@@ -5,7 +5,7 @@ import { useTopic } from "./context.ts";
 import { patentData, type RecordId, type Assignment } from "./patent.ts";
 import { filterRecords, queryText, recordsCsv } from "./patent-filter.ts";
 import { substructureMatches } from "./patent-chemistry.ts";
-import { tableTextAlign, tableTextStyle } from "./table-text.ts";
+import { tableTextAlign, tableColumnStyle } from "./table-text.ts";
 import { provideTableStructureScales } from "./table-structure-scale.ts";
 import TableText from "./TableText.vue";
 import RecordValue from "./RecordValue.vue";
@@ -88,6 +88,15 @@ const fields = computed(() =>
 );
 const tableFields = computed(() =>
   fields.value.filter((f) => f.placement !== "identifier"),
+);
+const columnStyles = computed(() =>
+  tableFields.value.map((field) =>
+    tableColumnStyle(
+      collection.value.records.map((record) =>
+        field.kind === "smiles" ? "" : String(record[field.key] ?? "未列"),
+      ),
+    ),
+  ),
 );
 const identifierFields = computed(() =>
   fields.value.filter((f) => f.placement === "identifier"),
@@ -632,9 +641,10 @@ const incoming = computed(() =>
               <tr>
                 <th scope="col">编号</th>
                 <th
-                  v-for="field in tableFields"
+                  v-for="(field, column) in tableFields"
                   :key="field.key"
                   scope="col"
+                  :style="{ textAlign: columnStyles[column].textAlign }"
                   :class="{
                     'short-heading': tableTextAlign(field.label) === 'center',
                   }"
@@ -663,9 +673,9 @@ const incoming = computed(() =>
                   </div>
                 </th>
                 <td
-                  v-for="field in tableFields"
+                  v-for="(field, column) in tableFields"
                   :key="field.key"
-                  :style="tableTextStyle(String(record[field.key] ?? ''))"
+                  :style="columnStyles[column]"
                 >
                   <RecordValue
                     :collection="collection"

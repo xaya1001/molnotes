@@ -188,6 +188,10 @@ test("table text keeps quantities together and aligns prose separately from shor
     tableTextAlign("A long experimental annotation with several conditions"),
     "start",
   );
+  assert.equal(
+    tableDisplayText("≥ 95%; ≤ 2 h; <0.1; > 5 nM; ~ 3"),
+    "≥\u00a095%; ≤\u00a02\u00a0h; <0.1; >\u00a05\u00a0nM; ~\u00a03",
+  );
   assert.equal(tableTextAlign("0.74\n8.2"), "center");
   assert.equal(tableTextAlign("假定 25 °C"), "center");
 });
