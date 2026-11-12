@@ -154,12 +154,6 @@ onMounted(() => {
         <p v-if="entry.kind === 'route'">
           最长线性步骤：{{
             routeMetrics(entry, library.entries).longestLinearSteps
-          }}；总收率：{{
-            routeMetrics(entry, library.entries).totalYield === null
-              ? "缺少数据"
-              : (
-                  100 * routeMetrics(entry, library.entries).totalYield!
-                ).toFixed(1) + "%"
           }}
         </p>
         <ul>

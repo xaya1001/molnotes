@@ -1,0 +1,18 @@
+title: Electron transfer
+kind: mechanism
+explain: Follow the mapped atoms.
+frames:
+  - id: first
+    title: Donor
+    smiles: "[O-:1][C:2]([CH3:4])=[CH2:3]"
+    explain: Two arrows in one event.
+    arrows:
+      - { id: main, from: "charge(1)", to: "bond(1,2)" }
+      - { id: support, from: "pi(2,3)", to: "atom(3)", electrons: 1 }
+    focus: { primary: [main], supporting: [support] }
+    above: rearrangement
+  - id: second
+    title: Acceptor
+    smiles: "[O:11]=[C:12]([CH3:14])[CH2-:13]"
+    map: { 1: 11, 2: 12, 3: 13, 4: 14 }
+    explain: Atom correspondences persist.

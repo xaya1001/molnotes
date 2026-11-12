@@ -37,40 +37,5 @@ export function routeMetrics(route: Route, library: Library) {
     return n;
   }
   const longest = Math.max(0, ...route.steps.map((s) => length(s.id)));
-  const path = route.yieldPath;
-  if (new Set(path).size !== path.length)
-    throw new Error(`${route.id}: repeated yield path step`);
-  for (let i = 1; i < path.length; i++)
-    if (!route.edges.some((e) => e.from === path[i - 1] && e.to === path[i]))
-      throw new Error(`${route.id}: disconnected yield path`);
-  const groups = route.combinedYields ?? [];
-  const covered = new Set<string>();
-  for (const g of groups) {
-    if (!g.steps.length) throw new Error(`${route.id}: empty yield group`);
-    const start = path.indexOf(g.steps[0]);
-    if (
-      start < 0 ||
-      g.steps.some((id, i) => path[start + i] !== id || covered.has(id))
-    )
-      throw new Error(`${route.id}: invalid combined yield path`);
-    g.steps.forEach((id) => covered.add(id));
-  }
-  let total: number | null = path.length ? 1 : null;
-  const factors: { steps: string[]; value: number | null }[] = [];
-  for (let i = 0; i < path.length; i++) {
-    const id = path[i];
-    const group = groups.find((g) => g.steps[0] === id);
-    if (covered.has(id) && !group) continue;
-    const products = reaction(id).products;
-    const edge = route.edges.find((e) => e.from === id && e.to === path[i + 1]);
-    const product = edge
-      ? products.find((p) => p.id === edge.product)
-      : products.length === 1
-        ? products[0]
-        : undefined;
-    const value = group?.value ?? product?.yield ?? null;
-    factors.push({ steps: group?.steps ?? [id], value });
-    total = total === null || value === null ? null : total * value;
-  }
-  return { longestLinearSteps: longest, totalYield: total, path, factors };
+  return { longestLinearSteps: longest };
 }

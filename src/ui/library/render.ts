@@ -138,6 +138,23 @@ export async function renderFigure(
 ): Promise<RenderedFigure> {
   const entry = library[reference.ref];
   if (!entry) throw new Error(`Unknown figure ${reference.ref}`);
+  const figureNumbers: Record<string, string> = {};
+  const numbering = (
+    reaction: import("../../../shared/chemical-library/types.ts").Reaction,
+    prefix = "",
+  ) => {
+    for (const p of [...reaction.reactants, ...reaction.products])
+      if (p.number !== undefined || p.name)
+        figureNumbers[prefix + p.id] = [p.number, p.name]
+          .filter(Boolean)
+          .join(" · ");
+  };
+  if (entry.kind === "reaction") numbering(entry);
+  if (entry.kind === "route")
+    for (const step of entry.steps) {
+      const reaction = library[step.reaction];
+      if (reaction?.kind === "reaction") numbering(reaction, step.id + "/");
+    }
   const svg = element("svg", {
     xmlns: NS,
     role: entry.kind === "reaction" || entry.kind === "route" ? "group" : "img",
@@ -655,7 +672,7 @@ export async function renderFigure(
           );
           g.append(charge);
         }
-        const number = reference.numbers?.[id];
+        const number = reference.numbers?.[id] ?? figureNumbers[id];
         if (number) {
           const bounds = g.getBBox();
           const e = label(
@@ -1115,6 +1132,7 @@ export async function renderFigure(
         );
       }
       for (const a of s.reactionArrows ?? []) {
+        if (a.kind === "none") continue;
         const p = mul(a.from, B),
           q = mul(a.to, B);
         const ink =
@@ -1160,12 +1178,31 @@ export async function renderFigure(
               p1 = plus(end, mul(off, direction));
             draw(p0, p1, undefined, true);
           }
+        } else if (a.kind === "retro") {
+          const n = {
+            x: -Math.sin(theta) * B * 0.1,
+            y: Math.cos(theta) * B * 0.1,
+          };
+          const base = {
+            x: q.x - Math.cos(theta) * B * 0.3,
+            y: q.y - Math.sin(theta) * B * 0.3,
+          };
+          parent.append(
+            stroke(
+              element("path", {
+                d: `M${p.x + n.x} ${p.y + n.y}L${base.x + n.x} ${base.y + n.y} M${p.x - n.x} ${p.y - n.y}L${base.x - n.x} ${base.y - n.y} M${base.x + 2 * n.x} ${base.y + 2 * n.y}L${q.x} ${q.y}L${base.x - 2 * n.x} ${base.y - 2 * n.y}`,
+                "data-reaction-arrow": prefix + a.id,
+              }),
+              ink,
+            ),
+          );
         } else {
           draw(
             p,
             q,
             a.controls?.map((v) => mul(v, B)),
           );
+          if (a.kind === "resonance") draw(q, p);
         }
         for (const [lines, sign] of [
           [a.above ?? [], -1],
@@ -1232,7 +1269,9 @@ export async function renderFigure(
       const a = mul(r.arrow.from, B),
         b = mul(r.arrow.to, B);
       const overhead = [...r.reactants, ...r.products]
-        .filter((p) => p.position && p.position !== "inline")
+        .filter(
+          (p) => p.position === "above-arrow" || p.position === "below-arrow",
+        )
         .map((p) => {
           const group = parent.querySelector<SVGGElement>(
             `[data-molecule="${CSS.escape(prefix + p.id)}"]`,
@@ -1250,30 +1289,32 @@ export async function renderFigure(
           return { position: p.position, bounds };
         });
       const arrowShape = solidArrow(a, b, B);
-      parent.append(
-        stroke(
-          element("path", {
-            d: arrowShape.shaft,
-            "data-curve-points": JSON.stringify(arrowShape.points),
-            "stroke-linecap": "butt",
-            "data-reaction-arrow": prefix + id,
-            "data-reaction-id": id,
-            role: "button",
-            tabindex: 0,
-            "aria-label": r.title,
-            "pointer-events": "bounding-box",
-          }),
-        ),
+      await scene(
+        {
+          width: r.scene.width,
+          height: r.scene.height,
+          molecules: [],
+          reactionArrows: [
+            {
+              id,
+              from: { x: a.x / B, y: a.y / B },
+              to: { x: b.x / B, y: b.y / B },
+              kind: r.arrow.kind,
+            },
+          ],
+        },
+        prefix,
+        parent,
       );
-      parent.append(
-        element("path", {
-          d: arrowShape.head,
-          "data-head-points": JSON.stringify(arrowShape.vertices),
-          "data-reaction-head": prefix + id,
-          fill: "var(--chemical-ink)",
-          stroke: "none",
-        }),
-      );
+      for (const path of parent.querySelectorAll<SVGElement>(
+        `[data-reaction-arrow="${CSS.escape(prefix + id)}"]`,
+      )) {
+        path.dataset.reactionId = id;
+        path.setAttribute("role", "button");
+        path.setAttribute("tabindex", "0");
+        path.setAttribute("aria-label", r.title);
+        path.setAttribute("pointer-events", "bounding-box");
+      }
       const center = (a.x + b.x) / 2;
       const reactants = r.reactants
         .filter((p) => !p.position || p.position === "inline")
@@ -1292,6 +1333,30 @@ export async function renderFigure(
           "+",
         );
         mark.setAttribute("data-label", `${prefix}${id}:plus:${i}`);
+        parent.append(mark);
+      }
+      for (let i = 1; i < r.products.length; i++) {
+        const left = parent.querySelector<SVGGElement>(
+          `[data-molecule="${CSS.escape(prefix + r.products[i - 1].id)}"]`,
+        )!;
+        const right = parent.querySelector<SVGGElement>(
+          `[data-molecule="${CSS.escape(prefix + r.products[i].id)}"]`,
+        )!;
+        const lb = left.getBBox(),
+          rb = right.getBBox();
+        const lp = new DOMPoint(
+          lb.x + lb.width,
+          lb.y + lb.height / 2,
+        ).matrixTransform(left.getCTM()!);
+        const rp = new DOMPoint(rb.x, rb.y + rb.height / 2).matrixTransform(
+          right.getCTM()!,
+        );
+        const point = new DOMPoint(
+          (lp.x + rp.x) / 2,
+          (lp.y + rp.y) / 2,
+        ).matrixTransform(parent.getCTM()!.inverse());
+        const mark = label(point, "+");
+        mark.dataset.label = `${prefix}${id}:product-plus:${i}`;
         parent.append(mark);
       }
       const textWidth = r.arrow.textWidth * B;
@@ -1368,14 +1433,26 @@ export async function renderFigure(
             sign < 0
               ? cursor - gap - bounds.y - bounds.height
               : cursor + gap - bounds.y;
-          e.setAttribute("y", String(y));
+          if (Math.abs(a.y - b.y) > Math.abs(a.x - b.x)) {
+            const side = r.arrow.side === "left" ? -1 : 1;
+            e.setAttribute("x", String(center + side * (B + bounds.width / 2)));
+            e.setAttribute(
+              "y",
+              String(
+                (a.y + b.y) / 2 +
+                  (i + (sign > 0 ? r.reagents.length : 0)) * B * 0.6,
+              ),
+            );
+          } else e.setAttribute("y", String(y));
           cursor = y + bounds.y + (sign > 0 ? bounds.height : 0);
         });
       }
       for (const p of [...r.reactants, ...r.products]) {
+        if (p.position === "text" || p.position === "none") continue;
         const parts = [
           p.equivalents !== undefined ? `${p.equivalents} eq` : "",
-          p.yield !== undefined ? `${Number((p.yield * 100).toFixed(2))}%` : "",
+          p.yield ?? "",
+          p.ratio ?? "",
           p.fraction !== undefined
             ? `${Number((p.fraction * 100).toFixed(2))}%`
             : "",
@@ -1475,6 +1552,16 @@ export async function renderFigure(
       for (const edge of entry.edges) {
         const from = entry.steps.find((s) => s.id === edge.from)!,
           to = entry.steps.find((s) => s.id === edge.to)!;
+        const targetReaction = library[to.reaction];
+        if (
+          targetReaction.kind === "reaction" &&
+          targetReaction.reactants.some(
+            (p) =>
+              p.id === edge.reactant &&
+              (p.position === "text" || p.position === "none"),
+          )
+        )
+          continue;
         const a = svg.querySelector<SVGGElement>(
           `[data-molecule="${CSS.escape(edge.from + "/" + edge.product)}"]`,
         )!;

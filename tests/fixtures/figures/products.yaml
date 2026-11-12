@@ -1,0 +1,12 @@
+title: Product mixture
+compounds:
+  1: CCC=O
+  2: { smiles: "CC/C=N/O", name: A }
+  3: { smiles: "CC/C=N\\O", name: B }
+  4: { text: NH2OH }
+steps:
+  - from: [1, { id: 4, show: text }]
+    to:
+      [{ id: 2, ratio: "45%" }, { id: 3, ratio: "55%", yield: "82% combined" }]
+    below: "25 °C"
+    arrow: equilibrium

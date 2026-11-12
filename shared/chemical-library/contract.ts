@@ -274,12 +274,17 @@ export function validateLibraryEntry(
         text(p.compound, w);
         if (
           p.position !== undefined &&
-          !["inline", "above-arrow", "below-arrow"].includes(String(p.position))
+          !["inline", "above-arrow", "below-arrow", "text", "none"].includes(
+            String(p.position),
+          )
         )
           fail(w, "invalid participant position");
         if (ids.has(p.id)) fail(w, "duplicate participant");
         ids.add(p.id);
-        for (const n of ["equivalents", "yield", "fraction"]) {
+        for (const k of ["yield", "ratio", "number", "name"])
+          if (p[k] !== undefined && typeof p[k] !== "string")
+            fail(w, `${k} must be text`);
+        for (const n of ["equivalents", "fraction"]) {
           if (p[n] === undefined) continue;
           number(p[n], w);
           if (Number(p[n]) < 0 || (n !== "equivalents" && Number(p[n]) > 1))
@@ -314,6 +319,13 @@ export function validateLibraryEntry(
     object(v.arrow, w);
     point(v.arrow.from, w);
     point(v.arrow.to, w);
+    if (
+      v.arrow.kind !== undefined &&
+      !["forward", "equilibrium", "resonance", "retro", "none"].includes(
+        String(v.arrow.kind),
+      )
+    )
+      fail(w, "invalid arrow kind");
     number(v.arrow.textWidth, w);
     if (Number(v.arrow.textWidth) <= 0) fail(w, "positive text width required");
   } else if (v.kind === "route") {
@@ -333,23 +345,10 @@ export function validateLibraryEntry(
       for (const k of ["from", "to", "product", "reactant"]) text(e[k], w);
       if (!ids.has(e.from) || !ids.has(e.to)) fail(w, "unknown route step");
     }
-    strings(v.yieldPath, w);
-    for (const id of v.yieldPath as string[])
-      if (!ids.has(id)) fail(w, "unknown yield path step");
     number(v.width, w);
     number(v.height, w);
     if (Number(v.width) <= 0 || Number(v.height) <= 0)
       fail(w, "positive canvas required");
-    if (v.combinedYields !== undefined) {
-      list(v.combinedYields, w);
-      for (const c of v.combinedYields) {
-        object(c, w);
-        strings(c.steps, w);
-        number(c.value, w);
-        if (Number(c.value) < 0 || Number(c.value) > 1)
-          fail(w, "yield out of range");
-      }
-    }
   } else if (v.kind === "mechanism") {
     if (
       !["reaction", "resonance", "comparison", "examples"].includes(
@@ -594,6 +593,7 @@ export function validateLibrary(library: Library) {
       }
       if (entry.kind === "reaction")
         for (const p of [...entry.reactants, ...entry.products]) {
+          if (p.position === "text" || p.position === "none") continue;
           const m = s.molecules.find((m) => m.id === p.id);
           if (!m || m.compound !== p.compound)
             fail(entry.id, `participant not placed: ${p.id}`);

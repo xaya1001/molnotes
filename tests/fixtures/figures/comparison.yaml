@@ -1,0 +1,5 @@
+title: Structure comparison
+kind: mechanism
+frames:
+  - { id: first, title: Alcohol, smiles: "[CH3:1][OH:2]", arrow: none }
+  - { id: second, title: Alkoxide, smiles: "[CH3:1][O-:2]", arrow: none }

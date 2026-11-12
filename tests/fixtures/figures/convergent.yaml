@@ -1,0 +1,11 @@
+title: Convergent transformation
+compounds:
+  1: CCO
+  2: CC(=O)O
+  3: CBr
+  4: CO
+  5: CC(=O)OC
+steps:
+  - { id: join, from: [2, 4], to: 5, above: "H+" }
+  - { id: left, from: 1, to: 2, above: "[O]" }
+  - { id: right, from: 3, to: 4, above: "NaOH" }

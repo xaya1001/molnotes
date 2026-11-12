@@ -1,0 +1,10 @@
+title: Branched transformation
+compounds:
+  1: CCO
+  2: CC=O
+  3: CC(=O)O
+  4: CC(=O)OC
+steps:
+  - { id: start, from: 1, to: 2, above: "[O]" }
+  - { id: a, from: 2, to: 3, above: "[O]" }
+  - { id: b, from: 2, to: 4, above: "MeOH, [O]" }

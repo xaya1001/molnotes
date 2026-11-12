@@ -199,6 +199,7 @@ onBeforeUnmount(() => {
       role="group"
       :aria-label="library[reference.ref]?.title"
     />
+    <p v-if="entry?.overview">{{ entry.overview }}</p>
     <p v-if="frameExplanation">{{ frameExplanation }}</p>
     <p v-if="explanation">{{ explanation }}</p>
     <ImageViewer
