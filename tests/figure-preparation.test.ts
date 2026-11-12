@@ -18,6 +18,117 @@ import type { FigureBox } from "../shared/chemical-library/geometry.ts";
 const toolkit = await moleculeToolkit(),
   fonts = await loadFigureFonts();
 
+test("native bond ends clear complete labels at their final stroke width", async () => {
+  for (const smiles of ["C[Mg]Br", "C[S+]C", "CC=O"]) {
+    const c = prepareCompound(toolkit, {
+      id: "cmp_example",
+      title: "Example",
+      smiles,
+      sources: [{ source: "example" }],
+    });
+    const geometry = await prepareFigure(
+      { [c.id]: c },
+      {
+        ref: c.id,
+        ...(smiles === "CC=O"
+          ? {
+              focus: {
+                primary: {
+                  atoms: [{ molecule: "compound", atom: "a3" }],
+                  bonds: [
+                    [
+                      { molecule: "compound", atom: "a2" },
+                      { molecule: "compound", atom: "a3" },
+                    ],
+                  ],
+                },
+              },
+            }
+          : {}),
+      },
+      { toolkit, fonts, style },
+    );
+    assert.deepEqual(figureGeometryDiagnostics(geometry, style), [], smiles);
+  }
+});
+
+test("automatic charge placement clears bond stroke edges", async () => {
+  const c = prepareCompound(toolkit, {
+    id: "cmp_example",
+    title: "Example",
+    smiles: "C[OH+]C",
+    sources: [{ source: "example" }],
+  });
+  const angle = (4 * Math.PI) / 3;
+  for (const p of Object.values(c.layout.coords)) {
+    const { x, y } = p;
+    p.x = x * Math.cos(angle) - y * Math.sin(angle);
+    p.y = x * Math.sin(angle) + y * Math.cos(angle);
+  }
+  const geometry = await prepareFigure(
+    { [c.id]: c },
+    { ref: c.id },
+    { toolkit, fonts, style },
+  );
+  assert.deepEqual(figureGeometryDiagnostics(geometry, style), []);
+});
+
+test("drawing hydrogens rotate clear of neighbouring stroke edges without stretching", async () => {
+  const { createFigureScene } =
+    await import("../src/ui/library/scene-geometry.ts");
+  const { spaceChiralHydrogens } =
+    await import("../src/ui/library/geometry-spacing.ts");
+  const { inkIntersectsBox, pathContours } =
+    await import("../src/ui/library/path-geometry.ts");
+  const ctx = createFigureScene(style, fonts),
+    g = ctx.element("g");
+  const h = ctx.element("path", {
+    d: "M28 -5h8v10h-8Z",
+    class: "atom-3",
+    "data-label": "m:hydrogen-0",
+  });
+  const wedge = ctx.element("path", {
+    d: "M0 0L25 -2L25 2Z",
+    class: "bond-2",
+    "data-bond": "m:b2",
+  });
+  const neighbour = ctx.element("path", {
+    d: "M25 5.6L40 5.6",
+    "data-bond": "m:b0",
+  });
+  ctx.setStyle(neighbour, "fill", "none");
+  ctx.setStyle(neighbour, "stroke", "var(--chemical-ink)");
+  ctx.setStyle(neighbour, "strokeWidth", "1.6");
+  ctx.append(g, h);
+  ctx.append(g, wedge);
+  ctx.append(g, neighbour);
+  const positions = [
+    { x: 0, y: 0 },
+    { x: -16, y: 28 },
+    { x: -16, y: -28 },
+    { x: 32, y: 0 },
+  ];
+  spaceChiralHydrogens(
+    g,
+    positions,
+    3,
+    new Map([[2, [0, 3]]]),
+    [{ atoms: [0, 1] }, { atoms: [0, 2] }],
+    ctx,
+  );
+  assert.notEqual(positions[3].y, 0);
+  assert.equal(
+    inkIntersectsBox(pathContours(neighbour.d), ctx.inkBox(h, g), 1.6, false),
+    false,
+  );
+  assert.ok(Math.abs(Math.hypot(positions[3].x, positions[3].y) - 32) < 1e-9);
+  assert.deepEqual(positions.slice(0, 3), [
+    { x: 0, y: 0 },
+    { x: -16, y: 28 },
+    { x: -16, y: -28 },
+  ]);
+});
+
 test("bond strokes touching the edge of a complete ester label are rejected", async () => {
   const { createFigureScene } =
     await import("../src/ui/library/scene-geometry.ts");

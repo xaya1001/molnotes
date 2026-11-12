@@ -24,10 +24,10 @@ import { solidArrow } from "./arrow-layout.ts";
 
 import {
   bondTraces,
-  contains,
   inkBox,
   labelBoxes,
   overlap,
+  spaceBondEndpoints,
   spaceChiralHydrogens,
   spaceAtomNumber,
 } from "./geometry-spacing.ts";
@@ -458,6 +458,7 @@ export async function prepareFigure(
         }
         ctx.append(g, e);
       }
+      spaceBondEndpoints(g, ctx);
       spaceChiralHydrogens(
         g,
         positions,
@@ -597,7 +598,13 @@ export async function prepareFigure(
           traces = bondTraces(g, ctx);
         const candidates = angles.map((angle) => {
           const center = centerAt(angle);
-          const marker = rectangle(center.x - r, center.y - r, 2 * r, 2 * r);
+          const outer = r + token("--chemical-line") / 2;
+          const marker = rectangle(
+            center.x - outer,
+            center.y - outer,
+            2 * outer,
+            2 * outer,
+          );
           const combined = rectangle(
             Math.min(left, marker.left),
             Math.min(top, marker.top),
@@ -607,11 +614,14 @@ export async function prepareFigure(
           let cost = 0;
           for (const [other, box] of otherLabels)
             if (other !== aid) cost += overlap(combined, box);
-          for (const trace of traces)
-            cost += trace.points.filter((p) => contains(marker, p)).length;
-          return { center, cost };
+          const collisions = traces.filter((trace) =>
+            inkIntersectsBox(trace.contours, marker, trace.width, trace.filled),
+          ).length;
+          return { center, cost, collisions };
         });
-        candidates.sort((a, b) => a.cost - b.cost);
+        candidates.sort(
+          (a, b) => a.collisions - b.collisions || a.cost - b.cost,
+        );
         const { center } = candidates[0];
         const charge = element("g", {
           "data-label": `${aid}:charge`,
