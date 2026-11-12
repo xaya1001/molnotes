@@ -24,7 +24,7 @@ test("native bond ends clear complete labels at their final stroke width", async
       id: "cmp_example",
       title: "Example",
       smiles,
-      sources: [{ source: "example" }],
+      sources: [{ source: "example", locator: "Structures" }],
     });
     const geometry = await prepareFigure(
       { [c.id]: c },
@@ -57,7 +57,7 @@ test("automatic charge placement clears bond stroke edges", async () => {
     id: "cmp_example",
     title: "Example",
     smiles: "C[OH+]C",
-    sources: [{ source: "example" }],
+    sources: [{ source: "example", locator: "Structures" }],
   });
   const angle = (4 * Math.PI) / 3;
   for (const p of Object.values(c.layout.coords)) {
