@@ -8,7 +8,7 @@ import type { FigureGeometry } from "../../shared/chemical-library/geometry.ts";
 import type { UnitAsset } from "./content-files.ts";
 import { sha256 } from "../../shared/assets.ts";
 import { libraryDependencies } from "../../shared/chemical-library/contract.ts";
-import { figureViewKey } from "../../src/ui/library/geometry-compare.ts";
+import { figureViewKey } from "../../shared/chemical-library/views.ts";
 import {
   figureProofCache,
   stableFigureValue,
@@ -263,7 +263,12 @@ export function figureProofReferences(
             ]
           : [{ ref: entry.id }],
     ),
-    ...references,
+    ...references.flatMap((reference) => {
+      const entry = library[reference.ref];
+      return entry?.kind === "mechanism" && !reference.frame
+        ? entry.frames.map((frame) => ({ ...reference, frame: frame.id }))
+        : [reference];
+    }),
   ];
   return [
     ...new Map(

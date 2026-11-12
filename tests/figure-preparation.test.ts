@@ -202,3 +202,103 @@ test("SVG subscript line boxes follow the central baseline", async () => {
     assert.equal(node.bounds!.height, height);
   }
 });
+
+test("Node diagnostics detect duplicated charges, detached bonds and route connections crossing labels", async () => {
+  const { prepareCompound } =
+    await import("../shared/chemical-library/chemistry.ts");
+  const { walkGeometry } = await import("../src/ui/library/geometry-walk.ts");
+  const { transformBox, inverseMatrix, transformPoint } =
+    await import("../src/ui/library/geometry-math.ts");
+  for (const [smiles, code] of [
+    ["[Na+]", "DUPLICATE_CHARGE"],
+    ["CCC", "BOND_ENDPOINT_DETACHED"],
+    ["CN[C@@H](F)Cl", "BOND_ENDPOINT_DETACHED"],
+  ]) {
+    const compound = prepareCompound(toolkit, {
+      id: "cmp_example",
+      title: "Example",
+      smiles,
+      sources: [{ source: "example", locator: "Structures" }],
+    });
+    if (smiles.includes("@"))
+      compound.layout = {
+        coords: {
+          a1: { x: -2, y: 1 },
+          a2: { x: -1, y: 1 },
+          a3: { x: 0, y: 0 },
+          a4: { x: 0, y: -1 },
+          a5: { x: 1, y: 0 },
+        },
+        wedgeBonds: [{ from: "a3", to: "a2", style: "hashed" }],
+      };
+    const geometry = await prepareFigure(
+      { [compound.id]: compound },
+      { ref: compound.id },
+      { toolkit, fonts, style },
+    );
+    assert.ok(
+      !figureGeometryDiagnostics(geometry, style).some((d) => d.code === code),
+    );
+    walkGeometry(geometry.root, (node) => {
+      if (code === "DUPLICATE_CHARGE" && node.kind === "group") {
+        const marker = node.children.find(
+          (child) => child.attributes["data-charge-owner"],
+        );
+        if (marker) node.children.push(structuredClone(marker));
+      }
+      if (
+        code === "BOND_ENDPOINT_DETACHED" &&
+        node.attributes["data-bond"] ===
+          (smiles.includes("@") ? "compound:b1" : "compound:b0")
+      )
+        node.transform[5] -= 20;
+    });
+    assert.ok(
+      figureGeometryDiagnostics(geometry, style).some((d) => d.code === code),
+      code,
+    );
+  }
+  const compiled = await compileFigure(
+    parse(
+      await readFile(
+        new URL("./fixtures/figures/linear.yaml", import.meta.url),
+        "utf8",
+      ),
+    ),
+  );
+  const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit,
+    fonts,
+    style,
+  });
+  assert.ok(
+    !figureGeometryDiagnostics(geometry, style).some(
+      (d) => d.code === "ROUTE_EDGE_LABEL_OVERLAP",
+    ),
+  );
+  let label:
+    import("../shared/chemical-library/geometry.ts").FigureBox | undefined;
+  walkGeometry(geometry.root, (node, matrix) => {
+    if (node.attributes["data-label"]?.endsWith(":quantity"))
+      label = transformBox(node.bounds!, matrix) ?? undefined;
+  });
+  assert.ok(label);
+  walkGeometry(geometry.root, (node, matrix) => {
+    if (node.kind !== "path" || !node.attributes["data-route-edge"]) return;
+    const inverse = inverseMatrix(matrix),
+      from = transformPoint(
+        { x: label!.x, y: label!.y + label!.height / 2 },
+        inverse,
+      ),
+      to = transformPoint(
+        { x: label!.x + label!.width, y: label!.y + label!.height / 2 },
+        inverse,
+      );
+    node.d = `M${from.x} ${from.y}L${to.x} ${to.y}`;
+  });
+  assert.ok(
+    figureGeometryDiagnostics(geometry, style).some(
+      (d) => d.code === "ROUTE_EDGE_LABEL_OVERLAP",
+    ),
+  );
+});

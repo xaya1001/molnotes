@@ -1,3 +1,4 @@
+import { serveFigureViews } from "./helpers/figure-views.ts";
 import { expect, test } from "./helpers/test.ts";
 import { createHash } from "node:crypto";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
@@ -126,12 +127,16 @@ for (const width of [1366, 390]) {
         ),
       });
     });
+    const snapshot = await serveFigureViews(page, {
+      entries: library,
+      uses: {},
+    });
     await page.addInitScript(
       ({ figures, library }) => {
         window.__previewFigures = figures;
         window.__previewLibrary = library;
       },
-      { figures, library },
+      { figures, library: snapshot },
     );
     await page.goto("/showcase/preview");
     await page.waitForFunction(() => window.__previewResult);

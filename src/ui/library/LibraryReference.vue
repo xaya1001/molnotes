@@ -18,10 +18,6 @@ onMounted(async () => {
 });
 </script>
 <template>
-  <LibraryFigure
-    v-if="library"
-    :library="library.entries"
-    :reference="reference"
-  />
+  <LibraryFigure v-if="library" :library="library" :reference="reference" />
   <p v-else-if="error" role="alert">{{ error }}</p>
 </template>

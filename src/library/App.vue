@@ -101,7 +101,7 @@ onMounted(() => {
       </button>
       <LibraryFigure
         v-if="!library.previews?.[entry.id] || opened[entry.id]"
-        :library="library.entries"
+        :library="library"
         :reference="{ ref: entry.id }"
         @diagnostics="statuses[entry.id] = $event"
       />

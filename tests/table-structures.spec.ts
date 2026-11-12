@@ -32,7 +32,11 @@ test("table groups and compound cells share library identity and keep local phon
   page,
 }, info) => {
   await page.goto("/sites/table-samples/start");
-  const table = page.getByRole("table", { name: "条件优化", exact: true });
+  const table = page.getByRole("table", {
+    name: "条件优化",
+    exact: true,
+    includeHidden: true,
+  });
   await expect(table.locator('th[scope="colgroup"]')).toHaveCount(2);
   await expect(table.locator('th[scope="colgroup"]').last()).toHaveAttribute(
     "colspan",
@@ -55,10 +59,18 @@ test("table groups and compound cells share library identity and keep local phon
       (e) => e.parentElement!.scrollWidth > e.parentElement!.clientWidth,
     ),
   ).toBeTruthy();
+  const artwork = await table
+    .locator(".table-structure svg")
+    .first()
+    .innerHTML();
   await table.getByRole("button", { name: "放大结构" }).first().click();
   await expect(
     page.getByRole("dialog").locator(".library-canvas svg"),
   ).toBeVisible();
+  expect(
+    await page.getByRole("dialog").locator(".library-canvas svg").innerHTML(),
+  ).toBe(artwork);
+  await expect(table.locator(".table-structure svg")).toHaveCount(3);
   await screenshot(page, info, "structure-dialog", '[role="dialog"]');
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);

@@ -152,3 +152,28 @@ test("library mechanism previews collect all frames or the explicitly selected f
   assert.deepEqual(topicFigures(topic, "example", invalid, library), []);
   assert.match(invalid[0], /frame/);
 });
+
+test("authoring preview prepares only requested views and returns SVG assets without thumbnails", async () => {
+  const { prepareFigureViews } =
+    await import("../scripts/content/figure-build.ts");
+  const compound = await compoundFixture();
+  const invalid = {
+    ...compound,
+    id: "cmp_unused",
+    smiles: "invalid",
+    layout: { coords: {} },
+  };
+  const result = await prepareFigureViews(
+    { [compound.id]: compound, [invalid.id]: invalid },
+    [
+      { ref: compound.id, caption: "First" },
+      { ref: compound.id, caption: "Second" },
+    ],
+    ".",
+  );
+  assert.equal(Object.keys(result.renders).length, 1);
+  assert.equal(result.assets.length, 1);
+  assert.equal(result.assets[0].content_type, "image/svg+xml");
+  assert.match(result.assets[0].bytes.toString(), /<svg/);
+  assert.deepEqual(Object.values(result.renders)[0].diagnostics, []);
+});

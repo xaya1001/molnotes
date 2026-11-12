@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   verifyFigureProofs,
+  figureProofReferences,
   type ProofOptions,
 } from "../scripts/content/figure-proofs.ts";
 import {
@@ -293,5 +294,46 @@ test("diagnostic code changes reuse geometry and thumbnails but recompute proofs
     result.assets
       .filter((asset) => asset.content_type === "image/svg+xml")
       .every((asset) => asset.size > 0),
+  );
+});
+
+test("unselected mechanism frames retain local numbering and focus in every published view", async (t) => {
+  const f = await fixture(t);
+  f.library.mec_example = {
+    kind: "mechanism",
+    id: "mec_example",
+    title: "Example mechanism",
+    category: "comparison",
+    sources: f.library.cmp_a.sources,
+    frames: ["first", "second"].map((id) => ({
+      id,
+      title: id,
+      explanation: id,
+      scene: {
+        width: 8,
+        height: 6,
+        molecules: [{ id: "input", compound: "cmp_a", at: { x: 4, y: 3 } }],
+      },
+    })),
+  };
+  const local = {
+    ref: "mec_example",
+    numbers: { input: "7" },
+    focus: { primary: { atoms: [{ molecule: "input", atom: "a1" }] } },
+  };
+  const views = figureProofReferences(f.library, [local]);
+  assert.deepEqual(
+    views.filter((view) => view.ref === local.ref && view.numbers),
+    [
+      { ...local, frame: "first" },
+      { ...local, frame: "second" },
+    ],
+  );
+  const pinned = figureProofReferences(f.library, [
+    { ...local, frame: "second" },
+  ]);
+  assert.deepEqual(
+    pinned.filter((view) => view.ref === local.ref && view.numbers),
+    [{ ...local, frame: "second" }],
   );
 });

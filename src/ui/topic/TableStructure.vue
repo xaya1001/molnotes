@@ -4,7 +4,7 @@ import UiDialog from "../UiDialog.vue";
 import type { FigureReference } from "../../../shared/chemical-library/types.ts";
 import LibraryReference from "../library/LibraryReference.vue";
 import { loadLibrary } from "../library/client.ts";
-import { renderFigure } from "../library/render.ts";
+import { snapshotSvg } from "../library/snapshot-svg.ts";
 const props = defineProps<{ reference: FigureReference }>();
 const viewing = ref(false);
 const canvas = ref<HTMLElement>();
@@ -19,10 +19,10 @@ watch(
     if (!canvas.value) return;
     try {
       const library = await loadLibrary();
-      const drawing = await renderFigure(library.entries, props.reference);
+      const drawing = await snapshotSvg(library, props.reference);
       if (!active) return;
       canvas.value.replaceChildren(drawing.svg);
-      // Table previews retain the renderer's geometry and readable scale, cropping its outer whitespace.
+      // Table previews retain the published geometry and readable scale, cropping its outer whitespace.
       const box = drawing.svg.getBBox();
       const padding = parseFloat(
         getComputedStyle(canvas.value).getPropertyValue("--chemical-line"),

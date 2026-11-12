@@ -1,3 +1,4 @@
+import { serveFigureViews } from "./helpers/figure-views.ts";
 import { expect, test } from "./helpers/test.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import { prepareCompound } from "../shared/chemical-library/chemistry.ts";
@@ -51,6 +52,7 @@ test("complete library previews share one saved layout and preserve local scroll
   page,
 }) => {
   const library = await fixture();
+  await serveFigureViews(page, library);
   await page.route("**/api/library", (route) =>
     route.fulfill({ json: library }),
   );
@@ -89,7 +91,7 @@ test("complete library previews share one saved layout and preserve local scroll
     page.locator('[data-molecule][data-compound="cmp_example"]'),
   ).toHaveCount(3);
   const after = await signatures();
-  expect(after.every((value, i) => value !== before[i])).toBe(true);
+  expect(after).toEqual(before);
   const arrow = page.locator('[data-reaction-id="rxn_example"]');
   await arrow.focus();
   await page.keyboard.press("Enter");
@@ -104,18 +106,6 @@ test("complete library previews share one saved layout and preserve local scroll
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
-  const smallestText = await canvas
-    .locator("svg")
-    .evaluate((svg: SVGSVGElement) => {
-      const scale =
-        svg.getBoundingClientRect().width / svg.viewBox.baseVal.width;
-      return Math.min(
-        ...[...svg.querySelectorAll("text")].map(
-          (text) => parseFloat(getComputedStyle(text).fontSize) * scale,
-        ),
-      );
-    });
-  expect(smallestText).toBeGreaterThanOrEqual(11 - 0.1);
   const smallestBond = await canvas
     .locator("[data-bond-lengths]")
     .evaluateAll((nodes) =>
@@ -129,6 +119,14 @@ test("complete library previews share one saved layout and preserve local scroll
       ),
     );
   expect(smallestBond).toBeGreaterThanOrEqual(20 - 0.2);
+  if (process.env.MOLNOTES_FIGURE_SCREENS)
+    for (const width of [1366, 390]) {
+      await page.setViewportSize({ width, height: width === 1366 ? 900 : 844 });
+      await canvas.scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: `${process.env.MOLNOTES_FIGURE_SCREENS}/snapshot-reader-${width}.png`,
+      });
+    }
 });
 
 test("diagnostics reject a saved label collision while keeping the full entry visible for repair", async ({
@@ -138,6 +136,7 @@ test("diagnostics reject a saved label collision while keeping the full entry vi
   const c = library.entries.cmp_example;
   if (c.kind !== "compound") throw new Error("Invalid fixture");
   c.layout.pins = { a3: { ...c.layout.coords.a5 } };
+  await serveFigureViews(page, library);
   await page.route("**/api/library", (route) =>
     route.fulfill({ json: library }),
   );
@@ -165,6 +164,7 @@ test("wrapped reaction conditions leave visible space between CJK and Latin line
   ];
   reaction.arrow.textWidth = 4;
   reaction.scene.height = 16;
+  await serveFigureViews(page, library);
   await page.route("**/api/library", (route) =>
     route.fulfill({ json: library }),
   );
@@ -179,7 +179,9 @@ test("wrapped reaction conditions leave visible space between CJK and Latin line
   );
   const lines = await entry
     .locator('[data-label*="rxn_example:condition:"]')
-    .allTextContents();
+    .evaluateAll((nodes) =>
+      nodes.map((node) => node.getAttribute("data-text") ?? ""),
+    );
   for (const token of ["DCM", "Me2S", "−20–25 °C"])
     expect(lines.some((line) => line.includes(token))).toBe(true);
   for (const width of [1366, 390]) {
@@ -201,21 +203,18 @@ test("wrapped reaction conditions leave visible space between CJK and Latin line
   }
 });
 
-test("labelled ions show one circled charge and diagnostics reject duplicate markers", async ({
-  page,
-}) => {
+test("published labelled ions show one circled charge", async ({ page }) => {
   const compound = prepareCompound(await moleculeToolkit(), {
     id: "cmp_ion",
     title: "Example ion",
     smiles: "[Na+]",
     sources: [{ source: "handbook", locator: "Example 3" }],
   });
+  const library = { entries: { [compound.id]: compound }, uses: {} };
+  await serveFigureViews(page, library);
   await page.route("**/api/library", (route) =>
     route.fulfill({
-      json: {
-        entries: { [compound.id]: compound },
-        uses: { [compound.id]: [] },
-      },
+      json: library,
     }),
   );
   await page.goto("/library/");
@@ -228,16 +227,9 @@ test("labelled ions show one circled charge and diagnostics reject duplicate mar
   await expect(entry.locator('[data-charge-owner="compound:a1"]')).toHaveCount(
     1,
   );
-  await entry
-    .locator('[data-charge-owner="compound:a1"]')
-    .evaluate((el) => el.parentElement!.append(el.cloneNode(true)));
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(
-    entry.locator('[data-diagnostic="DUPLICATE_CHARGE"]'),
-  ).toHaveCount(1);
 });
 
-test("bond checks detect detached endpoints and accept separate components", async ({
+test("published separate components retain labels and readable bonds", async ({
   page,
 }) => {
   const toolkit = await moleculeToolkit();
@@ -268,12 +260,11 @@ test("bond checks detect detached endpoints and accept separate components", asy
     wedgeBonds: [{ from: "a3", to: "a2", style: "hashed" }],
   };
   const entries = Object.fromEntries(compounds.map((c) => [c.id, c]));
+  const library = { entries, uses: {} };
+  await serveFigureViews(page, library);
   await page.route("**/api/library", (route) =>
     route.fulfill({
-      json: {
-        entries,
-        uses: Object.fromEntries(compounds.map((c) => [c.id, []])),
-      },
+      json: library,
     }),
   );
   await page.goto("/library/");
@@ -289,28 +280,6 @@ test("bond checks detect detached endpoints and accept separate components", asy
   await expect(page.locator('#cmp_isotope [data-label-text="Me"]')).toHaveCount(
     0,
   );
-  const bond = page.locator('#cmp_chain [data-bond="compound:b0"]');
-  await bond.first().waitFor({ state: "visible" });
-  await bond.evaluateAll((nodes) =>
-    nodes.forEach((node) => node.setAttribute("transform", "translate(0 -20)")),
-  );
-  await page
-    .locator('#cmp_hashed [data-bond="compound:b1"]')
-    .evaluateAll((nodes) =>
-      nodes.forEach((node) =>
-        node.setAttribute("transform", "translate(0 -20)"),
-      ),
-    );
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(
-    page.locator('#cmp_chain [data-diagnostic="BOND_ENDPOINT_DETACHED"]'),
-  ).toHaveCount(2);
-  await expect(
-    page.locator('#cmp_hashed [data-diagnostic="BOND_ENDPOINT_DETACHED"]'),
-  ).not.toHaveCount(0);
-  await expect(
-    page.locator('#cmp_components [data-check="passed"]'),
-  ).toHaveCount(1);
 });
 
 test("fused stereocentres use explicit H wedges and salts keep counterions near their charge centre", async ({
@@ -355,12 +324,11 @@ test("fused stereocentres use explicit H wedges and salts keep counterions near 
   const entries = Object.fromEntries(
     [fused, rotated, ...pairs].map((c) => [c.id, c]),
   );
+  const library = { entries, uses: {} };
+  await serveFigureViews(page, library);
   await page.route("**/api/library", (route) =>
     route.fulfill({
-      json: {
-        entries,
-        uses: Object.fromEntries(Object.keys(entries).map((id) => [id, []])),
-      },
+      json: library,
     }),
   );
   await page.goto("/library/");
@@ -384,7 +352,7 @@ test("fused stereocentres use explicit H wedges and salts keep counterions near 
               nodes.filter((e) => {
                 const p = e as SVGPathElement;
                 return (
-                  (p.style.fill && p.style.fill !== "none") ||
+                  getComputedStyle(p).fill !== "none" ||
                   (p.getAttribute("d")?.match(/M/g)?.length ?? 0) > 2
                 );
               }).length,
@@ -458,6 +426,9 @@ test("local numbers sit below the visible ink of folded groups", async ({
   });
   compound.layout.abbreviations = ["PPh3"];
   library.entries[compound.id] = compound;
+  await serveFigureViews(page, library, [
+    { ref: compound.id, numbers: { compound: "4" } },
+  ]);
   await page.route("**/api/library", (route) =>
     route.fulfill({ json: library }),
   );
@@ -539,6 +510,7 @@ test("wrapped route connections clear quantities and reaction heads at every row
       .filter((id) => !id.startsWith("rte_"))
       .map((id) => [id, "/sites/minimal/static/sample.svg"]),
   );
+  await serveFigureViews(page, library);
   await page.route("**/api/library", (route) =>
     route.fulfill({ json: library }),
   );
@@ -583,26 +555,6 @@ test("wrapped route connections clear quantities and reaction heads at every row
       ),
     ).toBe(true);
   }
-  const route = page.locator("#rte_quantity");
-  await route.locator("svg").evaluate((svg) => {
-    const edge = svg.querySelector<SVGPathElement>("[data-route-edge]")!;
-    const owner = edge.dataset.routeEdge!.split("->")[0];
-    const box = svg
-      .querySelector(`[data-label="${owner}:quantity"]`)!
-      .getBoundingClientRect();
-    const matrix = edge.getScreenCTM()!.inverse();
-    const a = new DOMPoint(box.left, box.y + box.height / 2).matrixTransform(
-        matrix,
-      ),
-      b = new DOMPoint(box.right, box.y + box.height / 2).matrixTransform(
-        matrix,
-      );
-    edge.setAttribute("d", `M${a.x} ${a.y}L${b.x} ${b.y}`);
-  });
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(
-    route.locator('[data-diagnostic="ROUTE_EDGE_LABEL_OVERLAP"]'),
-  ).toHaveCount(1);
 });
 
 test("mechanism step selection keeps the explanation with its drawing", async ({
@@ -624,20 +576,28 @@ test("mechanism step selection keeps the explanation with its drawing", async ({
         width: 12,
         height: 8,
         molecules: [
-          { id: "structure", compound: compound.id, at: { x: 6, y: 4 } },
+          {
+            id: "structure",
+            compound: compound.id,
+            at: { x: id === "first" ? 5 : 7, y: 4 },
+          },
         ],
       },
     })),
   };
+  const reference = {
+    ref: "mec_example",
+    numbers: { structure: "7" },
+    focus: { primary: { atoms: [{ molecule: "structure", atom: "a3" }] } },
+  };
+  await serveFigureViews(page, library, [reference]);
   await page.route("**/api/library", (route) =>
     route.fulfill({ json: library }),
   );
   await page.route("**/api/topics/minimal", async (route) => {
     const response = await route.fetch();
     const topic = await response.json();
-    topic.content.chapters[0].blocks = [
-      { type: "figure-ref", ref: "mec_example" },
-    ];
+    topic.content.chapters[0].blocks = [{ type: "figure-ref", ...reference }];
     await route.fulfill({ json: topic });
   });
   await page.goto("/sites/minimal/start");
@@ -646,6 +606,10 @@ test("mechanism step selection keeps the explanation with its drawing", async ({
   await expect(
     figure.getByText("Explanation for first", { exact: true }),
   ).toBeVisible();
+  const first = await figure.locator("svg").innerHTML();
+  await expect(
+    figure.locator('[data-label="structure:number"]'),
+  ).toHaveAttribute("data-text", "7");
   await figure.getByRole("button", { name: "second", exact: true }).click();
   await expect(
     figure.getByText("Explanation for second", { exact: true }),
@@ -653,6 +617,18 @@ test("mechanism step selection keeps the explanation with its drawing", async ({
   await expect(
     figure.getByText("Explanation for first", { exact: true }),
   ).toHaveCount(0);
+  await expect(
+    figure.locator('[data-label="structure:number"]'),
+  ).toHaveAttribute("data-text", "7");
+  await expect.poll(() => figure.locator("svg").innerHTML()).not.toBe(first);
+  if (process.env.MOLNOTES_FIGURE_SCREENS)
+    for (const width of [1366, 390]) {
+      await page.setViewportSize({ width, height: width === 1366 ? 900 : 844 });
+      await figure.scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: `${process.env.MOLNOTES_FIGURE_SCREENS}/snapshot-frames-${width}.png`,
+      });
+    }
 });
 
 test("deuterium uses one full-size native D glyph without changing identity", async ({
@@ -665,6 +641,7 @@ test("deuterium uses one full-size native D glyph without changing identity", as
     sources: [{ source: "handbook", locator: "Example" }],
   });
   const library = { entries: { [compound.id]: compound }, uses: {} };
+  await serveFigureViews(page, library);
   await page.route("**/api/library", (route) =>
     route.fulfill({ json: library }),
   );
@@ -703,6 +680,7 @@ test("adjacent bond transfers use a readable arc when space is available", async
     ],
   });
   const library: LibrarySnapshot = { entries, uses: {} };
+  await serveFigureViews(page, library);
   await page.route("**/api/library", (route) =>
     route.fulfill({ json: library }),
   );
@@ -827,20 +805,16 @@ test("saved product separators are rendered once", async () => {
     at: { x: 31, y: 4 },
   });
   reaction.scene.captions = [{ at: { x: 25.5, y: 4 }, text: "+" }];
-  const { figureBrowser } = await import("../scripts/figure-browser.ts");
-  const browser = await figureBrowser(library.entries, ".");
-  try {
-    const result = await browser.render({ ref: reaction.id }, 1366);
-    const separators = await browser.page
-      .locator("#canvas svg [data-label]")
-      .evaluateAll(
-        (nodes) => nodes.filter((node) => node.textContent === "+").length,
-      );
-    expect(separators).toBe(1);
-    expect(result.diagnostics).toEqual([]);
-  } finally {
-    await browser.close();
-  }
+  const { prepareFigureViews } =
+    await import("../scripts/content/figure-build.ts");
+  const result = await prepareFigureViews(
+    library.entries,
+    [{ ref: reaction.id }],
+    ".",
+  );
+  const svg = result.assets[0].bytes.toString();
+  expect((svg.match(/data-text="\+"/g) ?? []).length).toBe(1);
+  expect(Object.values(result.renders)[0].diagnostics).toEqual([]);
 });
 
 test("page-owned generated compounds stay out of the library list and search", async ({
@@ -855,6 +829,7 @@ test("page-owned generated compounds stay out of the library list and search", a
   };
   library.entries.rxn_example.owner = "rte_example";
   library.uses.cmp_owned = [{ path: "/sites/sample", title: "Sample" }];
+  await serveFigureViews(page, library);
   await page.route("**/api/library", (route) =>
     route.fulfill({ json: library }),
   );

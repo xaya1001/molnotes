@@ -10,13 +10,7 @@ import {
   isFigurePaint,
   isFigureDiagnostic,
 } from "../src/ui/library/geometry-contract.ts";
-import { validateFigureReference } from "../shared/chemical-library/contract.ts";
-import {
-  compareFigureGeometry,
-  figureViewKey,
-} from "../src/ui/library/geometry-compare.ts";
-import { figureBrowser } from "./figure-browser.ts";
-import { readChemicalLibrary } from "./content/chemical-library.ts";
+import { compareFigureGeometry } from "../src/ui/library/geometry-compare.ts";
 
 const finite = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
@@ -136,7 +130,6 @@ async function main(args: string[]) {
   const out = option("--out");
   if (!out) throw new Error("figure:compare requires --out <file.json>");
   let result: unknown;
-  let failed = false;
   if (command === "compare") {
     const before = option("--before"),
       after = option("--after");
@@ -148,69 +141,12 @@ async function main(args: string[]) {
       await readObservationSet(before),
       await readObservationSet(after),
     );
-  } else if (command === "capture" || command === "verify") {
-    const root = option("--library"),
-      refsFile = option("--references");
-    if (!root || !refsFile)
-      throw new Error("capture requires --library and --references");
-    const values: unknown = JSON.parse(await readFile(refsFile, "utf8"));
-    if (!Array.isArray(values)) throw new Error("References must be an array");
-    const references = values.map((value: unknown) => {
-      validateFigureReference(value);
-      return value;
-    });
-    const library = (await readChemicalLibrary(resolve(root))).entries;
-    if (command === "verify") {
-      const sampleFile = option("--samples");
-      const values: unknown = sampleFile
-        ? JSON.parse(await readFile(sampleFile, "utf8"))
-        : [];
-      if (!Array.isArray(values)) throw new Error("Samples must be an array");
-      const samples = values.map((value: unknown) => {
-        validateFigureReference(value);
-        return value;
-      });
-      const { comparePreparedFigures } = await import("./figure-migration.ts");
-      const report = await comparePreparedFigures(
-        library,
-        references,
-        resolve(root),
-        samples,
-        option("--screens"),
-        !args.includes("--references-only"),
-      );
-      await mkdir(dirname(resolve(out)), { recursive: true });
-      await writeFile(out, JSON.stringify(report, null, 2) + "\n");
-      if (report.failures.length) process.exitCode = 1;
-      return;
-    }
-    const observations: FigureObservationSet = { views: {}, failures: {} };
-    const runner = await figureBrowser(library, resolve(root));
-    try {
-      for (const reference of references) {
-        const key = figureViewKey(reference);
-        if (key in observations.views || key in observations.failures) continue;
-        try {
-          await runner.prepareBatch();
-          const rendered = await runner.render(reference, 1366);
-          observations.views[key] = await runner.observation(rendered);
-        } catch (error) {
-          observations.failures[key] =
-            error instanceof Error ? error.message : String(error);
-        }
-      }
-    } finally {
-      await runner.close();
-    }
-    failed = Object.keys(observations.failures).length > 0;
-    result = observations;
   } else
     throw new Error(
-      "Usage: figure:compare capture|compare|verify --out <file.json> [options]",
+      "Usage: figure:compare compare --before <file> --after <file> --out <file>",
     );
   await mkdir(dirname(resolve(out)), { recursive: true });
   await writeFile(out, JSON.stringify(result, null, 2) + "\n");
-  if (failed) process.exitCode = 1;
 }
 
 if (
