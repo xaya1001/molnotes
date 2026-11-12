@@ -491,11 +491,11 @@ export async function prepareFigure(
           ctx.set(e, "transform", `translate(${dx} ${dy})`);
       }
       for (const [i, atom] of graph.atoms.entries()) {
-        if (
-          !atom.chg ||
-          (folded.has(i) && !groups.some((g) => g.atoms[0] === i))
-        )
-          continue;
+        const group = groups.find((g) => g.atoms[0] === i);
+        const chargeValue = group
+          ? group.atoms.reduce((sum, a) => sum + (graph.atoms[a].chg ?? 0), 0)
+          : atom.chg;
+        if (!chargeValue || (folded.has(i) && !group)) continue;
         const aid = key({ molecule: id, atom: c.atomIds[i] });
         const labels = [
           ...ctx.nodes(g, (node) => ctx.data(node, "label") === aid),
@@ -607,7 +607,7 @@ export async function prepareFigure(
           charge,
           stroke(
             element("path", {
-              d: `M${center.x - arm} ${center.y}H${center.x + arm}${atom.chg > 0 ? `M${center.x} ${center.y - arm}V${center.y + arm}` : ""}`,
+              d: `M${center.x - arm} ${center.y}H${center.x + arm}${chargeValue > 0 ? `M${center.x} ${center.y - arm}V${center.y + arm}` : ""}`,
             }),
             color,
           ),

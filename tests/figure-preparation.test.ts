@@ -12,8 +12,32 @@ import { figureWorkerPool } from "../scripts/content/figure-worker-pool.ts";
 import { isFigureGeometry } from "../src/ui/library/geometry-contract.ts";
 import { geometrySvg } from "../src/ui/library/geometry-tree.ts";
 import { figureGeometryDiagnostics } from "../src/ui/library/geometry-diagnostics.ts";
+import { walkGeometry } from "../src/ui/library/geometry-walk.ts";
+import { transformBox, unionBoxes } from "../src/ui/library/geometry-math.ts";
+import type { FigureBox } from "../shared/chemical-library/geometry.ts";
 const toolkit = await moleculeToolkit(),
   fonts = await loadFigureFonts();
+
+test("folded neutral nitro groups do not display their internal charges", async () => {
+  const c = prepareCompound(toolkit, {
+    id: "cmp_example",
+    title: "Example",
+    smiles: "c1ccccc1[N+](=O)[O-]",
+    sources: [{ source: "example", locator: "Structures" }],
+  });
+  c.layout.abbreviations = ["NO2"];
+  const geometry = await prepareFigure(
+    { [c.id]: c },
+    { ref: c.id },
+    { toolkit, fonts, style },
+  );
+  const charges: string[] = [];
+  walkGeometry(geometry.root, (node) => {
+    if (node.attributes["data-charge-owner"])
+      charges.push(node.attributes["data-charge-owner"]);
+  });
+  assert.deepEqual(charges, []);
+});
 
 test("bond diagnostics catch a stretched bond within an enlarged structure", async () => {
   const c = prepareCompound(toolkit, {
@@ -435,7 +459,7 @@ test("scene arrow condition lines reserve their measured ink height", async () =
   );
 });
 
-test("compiled ester labels clear bonds after saving aligned coordinates", async () => {
+test("compiled ester labels clear bonds and adjacent labels after saving aligned coordinates", async () => {
   const compiled = await compileFigure({
     title: "Aligned ester",
     anchor: "b",
@@ -451,6 +475,29 @@ test("compiled ester labels clear bonds after saving aligned coordinates", async
     style,
   });
   assert.deepEqual(figureGeometryDiagnostics(geometry, style), []);
+  const labels = new Map<string, FigureBox>();
+  const abbreviations = new Set<string>();
+  walkGeometry(geometry.root, (node, matrix) => {
+    const id = node.attributes["data-label"];
+    if (!id?.startsWith("a:") || !node.bounds) return;
+    labels.set(
+      id,
+      unionBoxes([labels.get(id) ?? null, transformBox(node.bounds, matrix)])!,
+    );
+    if (node.attributes["data-label-text"]) abbreviations.add(id);
+  });
+  assert.ok(abbreviations.size > 0);
+  for (const id of abbreviations) {
+    const a = labels.get(id)!;
+    for (const [other, b] of labels) {
+      if (other === id) continue;
+      const gap = Math.hypot(
+        Math.max(a.x - b.x - b.width, b.x - a.x - a.width, 0),
+        Math.max(a.y - b.y - b.height, b.y - a.y - a.height, 0),
+      );
+      assert.ok(gap >= 8.3, `${id} to ${other}: ${gap}`);
+    }
+  }
 });
 
 test("compiled layouts reserve a three-digit number line for page references", async () => {

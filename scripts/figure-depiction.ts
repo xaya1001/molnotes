@@ -662,6 +662,9 @@ function nativeLabelCost(
           d,
         });
     }
+    // Keep the coarse terminal-label clearance (0.4 depiction units) when
+    // measuring real ink, including adjacent unabridged atom labels.
+    const clearance = (bond / 1.5) * 0.4;
     let score = 0;
     for (const [i, a] of boxes) {
       for (const [j, b] of boxes)
@@ -669,11 +672,11 @@ function nativeLabelCost(
           score +=
             Math.max(
               0,
-              Math.min(a.right, b.right) - Math.max(a.left, b.left) + 0.8,
+              Math.min(a.right, b.right) - Math.max(a.left, b.left) + clearance,
             ) *
             Math.max(
               0,
-              Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) + 0.8,
+              Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) + clearance,
             );
       if (names.has(i))
         for (const b of bonds)

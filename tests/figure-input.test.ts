@@ -971,7 +971,7 @@ test("new depictions place charge markers for their new bond directions", async 
       await import("../src/ui/library/geometry-diagnostics.ts");
   const input = {
     title: "Charged transformation",
-    compounds: { a: "COC(=O)c1ccccc1", b: "COC(=O)c1ccccc1[N+](=O)[O-]" },
+    compounds: { a: "COC(=O)c1cccnc1", b: "COC(=O)c1ccc[n+](C)c1" },
     steps: [{ from: "a", to: "b" }],
   };
   const first = await compileFigure(input);
