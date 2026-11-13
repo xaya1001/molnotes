@@ -31,6 +31,7 @@ function fail(error: string) {
   pending.clear();
 }
 python.on("error", (error) => fail(error.message));
+python.stdin.on("error", (error) => fail(error.message));
 python.on("exit", (code, signal) =>
   fail(`Chemical toolkit exited (${signal ?? code})`),
 );

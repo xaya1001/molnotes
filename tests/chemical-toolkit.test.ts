@@ -12,7 +12,7 @@ test("a stopped chemical service rejects its request and the command exits", asy
   const root = await mkdtemp(join(tmpdir(), "chemical-service-"));
   try {
     const interpreter = join(root, "interpreter");
-    await writeFile(interpreter, "#!/bin/sh\nexit 7\n");
+    await writeFile(interpreter, "#!/bin/sh\nexec 0<&-\nsleep 0.05\nexit 7\n");
     await chmod(interpreter, 0o700);
     const entry = join(root, "request.mjs");
     const toolkit = new URL("../shared/molecule-toolkit.ts", import.meta.url)
@@ -29,7 +29,7 @@ test("a stopped chemical service rejects its request and the command exits", asy
     assert.equal(result.error, undefined);
     assert.equal(result.signal, null);
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /Chemical toolkit exited \(7\)/);
+    assert.match(result.stderr, /Chemical toolkit exited \(7\)|EPIPE/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
