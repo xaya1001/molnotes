@@ -138,7 +138,7 @@ const either =
     fail(p, "invalid value");
   };
 const styles = new Set(["bond", "width", "charges", "dots", "ring_h"]);
-const deferred = new Set(["forming", "mark", "notes", "bend"]);
+const deferred = new Set(["mark", "notes", "bend"]);
 export function validateFigureInput(value: unknown): {
   input: FigureInput;
   warnings: string[];

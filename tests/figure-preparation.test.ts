@@ -18,6 +18,89 @@ import type { FigureBox } from "../shared/chemical-library/geometry.ts";
 const toolkit = await moleculeToolkit(),
   fonts = await loadFigureFonts();
 
+test("structure scale enlarges rendered bonds while preserving label size", async () => {
+  const render = async (scale: number) => {
+    const compiled = await compileFigure({
+      kind: "mechanism",
+      frames: [{ id: "one", smiles: "CCO", scale }],
+    });
+    const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+      toolkit,
+      fonts,
+      style,
+    });
+    const bonds: number[] = [],
+      labels: number[] = [];
+    walkGeometry(geometry.root, (node) => {
+      if (node.attributes["data-bond-lengths"])
+        bonds.push(...JSON.parse(node.attributes["data-bond-lengths"]));
+      if (node.attributes["data-label"] && node.bounds)
+        labels.push(node.bounds.height);
+    });
+    return {
+      bond: bonds.sort((a, b) => a - b)[Math.floor(bonds.length / 2)],
+      labels,
+    };
+  };
+  const plain = await render(1),
+    enlarged = await render(1.5);
+  assert.ok(Math.abs(enlarged.bond / plain.bond - 1.5) < 0.02);
+  assert.equal(enlarged.labels.length, plain.labels.length);
+  enlarged.labels.forEach((height, i) =>
+    assert.ok(Math.abs(height - plain.labels[i]) < 0.01),
+  );
+});
+
+test("fragment placement keeps vertical lone-pair clearances finite", async () => {
+  const compiled = await compileFigure({
+    kind: "mechanism",
+    frames: [
+      {
+        id: "addition",
+        smiles: "[O:1]=[C:2](OC)C.[CH3:3][NH2:4]",
+        arrows: [
+          { from: "lp(4)", to: "between(4,2)" },
+          { from: "pi(1,2)", to: "atom(1)" },
+        ],
+      },
+    ],
+  });
+  const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit,
+    fonts,
+    style,
+  });
+  assert.ok(isFigureGeometry(geometry));
+  assert.ok(
+    !figureGeometryDiagnostics(geometry, style).some(
+      (d) => d.code === "BOND_LABEL_OVERLAP",
+    ),
+  );
+});
+
+test("electron head selection clears the complete halogen label", async () => {
+  const compiled = await compileFigure({
+    kind: "mechanism",
+    frames: [
+      {
+        id: "leaving",
+        smiles: "[CH3:1][Br:2]",
+        arrows: [{ from: "bond(1,2)", to: "atom(2)" }],
+      },
+    ],
+  });
+  const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit,
+    fonts,
+    style,
+  });
+  assert.ok(
+    !figureGeometryDiagnostics(geometry, style).some(
+      (d) => d.code === "ARROW_HEAD_OVERLAP",
+    ),
+  );
+});
+
 test("reaction changes preserve normal ink on unmarked atoms and bonds", async () => {
   const compiled = await compileFigure({
     compounds: { a: "CCCO", b: "CCC=O" },
@@ -1498,4 +1581,63 @@ test("automatic circles use an outline when a neighbouring label crosses their b
     });
     assert.equal(actual, shape === "auto" ? "outline" : "circle");
   }
+});
+
+test("saved frame drawings retain geometry and pass the normal proof diagnostics", async (t) => {
+  const { mkdtemp, mkdir, writeFile, rm } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const { sha256 } = await import("../shared/assets.ts");
+  const { figureBuildRunner } =
+    await import("../scripts/content/figure-build.ts");
+  const { figureViewKey } = await import("../shared/chemical-library/views.ts");
+  const { diagnoseFigure } = await import("../scripts/figure-diagnostics.ts");
+  const compiled = await compileFigure({
+    kind: "mechanism",
+    frames: [{ id: "one", smiles: "CCO" }],
+  });
+  const reference = { ...compiled.reference, frame: "one" };
+  const original = await prepareFigure(compiled.entries, reference, {
+      toolkit,
+      fonts,
+      style,
+    }),
+    svg = geometrySvg(original),
+    asset = sha256(svg) + ".svg";
+  const root = await mkdtemp(join(tmpdir(), "saved-figure-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, "library/assets"), { recursive: true });
+  await writeFile(join(root, "library/assets", asset), svg);
+  const entry = compiled.entries[reference.ref];
+  assert.equal(entry.kind, "mechanism");
+  entry.frames[0].drawings = {
+    [figureViewKey(reference)]: {
+      asset,
+      width: original.width,
+      height: original.height,
+      minimumScale: original.minimumScale,
+    },
+  };
+  entry.frames[0].scene.molecules[0].at.x += 20;
+  const css = Object.entries(style.values)
+    .map(([k, v]) => `${k}: ${v};`)
+    .join("\n");
+  const runner = figureBuildRunner(
+    compiled.entries,
+    root,
+    `:root {${css}}`,
+    "test",
+  );
+  t.after(() => runner.close());
+  const rendered = await runner.prepare(reference, 0);
+  assert.equal(rendered.kind, "chemical");
+  if (rendered.kind !== "chemical") throw Error("Expected chemical geometry");
+  assert.equal(rendered.geometry.width, original.width);
+  assert.equal(rendered.geometry.height, original.height);
+  assert.deepEqual(rendered.geometry.atomPoints, original.atomPoints);
+  assert.deepEqual(diagnoseFigure(rendered.geometry, style), []);
+  await assert.rejects(
+    runner.prepare({ ...reference, numbers: { structure: "4" } }, 0),
+    /no saved drawing/,
+  );
 });

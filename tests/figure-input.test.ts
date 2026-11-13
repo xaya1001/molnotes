@@ -37,6 +37,26 @@ const fixture = async (name: string) =>
     ),
   );
 
+test("forming arrows persist dashed bonds only when selected", async () => {
+  for (const forming of [false, true]) {
+    const compiled = await compileFigure({
+      kind: "mechanism",
+      forming: true,
+      frames: [
+        {
+          id: "addition",
+          smiles: "[O-:1].[CH2:2]=[O:3]",
+          arrows: [{ from: "lp(1)", to: "between(1,2)", forming }],
+        },
+      ],
+    });
+    const scene = (compiled.entries[compiled.reference.ref] as Mechanism)
+      .frames[0].scene;
+    assert.equal(scene.partialBonds?.length ?? 0, forming ? 1 : 0);
+    assert.deepEqual(compiled.warnings, []);
+  }
+});
+
 test("step enclosures override structure defaults and empty selections clear one step", async () => {
   const compiled = await compileFigure({
     kind: "route",
@@ -358,8 +378,7 @@ test("YAML boundary rejects unsupported kinds and style fields, validates deferr
     ],
   };
   const r = await compileFigure(deferred);
-  assert.equal(r.warnings.length, 1);
-  assert.match(r.warnings[0], /已保存、渲染待实现/);
+  assert.deepEqual(r.warnings, []);
   await assert.rejects(
     compileFigure({
       ...deferred,
