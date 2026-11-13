@@ -168,6 +168,30 @@ test("disconnected electron events keep each fragment's free orientation", async
   assert.ok(Math.abs(coords.a4.y - coords.a3.y + 1) < 0.001);
 });
 
+test("mixed electron events straighten once after orienting their fragments", async () => {
+  const compiled = await compileFigure({
+    kind: "mechanism",
+    frames: [
+      {
+        id: "event",
+        smiles: "[Br:1][CH2:2]CCCC=C.[Sn:8](CCCC)(CCCC)CCCC |^1:7|",
+        arrows: [
+          { from: "radical(8)", to: "atom(1)", electrons: 1 },
+          { from: "bond(1,2)", to: "atom(8)", electrons: 1 },
+          { from: "bond(1,2)", to: "atom(2)", electrons: 1 },
+        ],
+      },
+    ],
+  });
+  const placement = (compiled.entries[compiled.reference.ref] as Mechanism)
+    .frames[0].scene.molecules[0];
+  const compound = compiled.entries[placement.compound] as Compound;
+  const coords = compound.variants![placement.variant!].coords;
+  // Mapped Br-C direction from chemfig.depict, in one-bond units with y down.
+  assert.ok(Math.abs(coords.a2.x - coords.a1.x + 0.7436) < 0.002);
+  assert.ok(Math.abs(coords.a2.y - coords.a1.y + 0.6685) < 0.002);
+});
+
 test("structures and reactions without electron events retain their saved orientation", async () => {
   const smiles = "[2H:1][CH2:2][C:3](=[O:4])C.[OH-:5]";
   for (const input of [

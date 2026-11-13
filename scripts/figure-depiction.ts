@@ -402,60 +402,44 @@ function free(
   electronFragments = false,
 ) {
   mol.set_new_coords(coordgen);
-  if (electronFragments) {
-    // chemfig.depict / Compute2DCoords canonicalizes disconnected fragments separately.
-    // Apply the same free depiction and StraightenDepiction to each fragment.
-    const fragments = mol.get_frags(),
-      mapping: number[][] = JSON.parse(fragments.mappings).fragsMolAtomMapping,
-      points = xy(mol);
-    try {
-      for (const [index, atoms] of mapping.entries()) {
-        const fragment = free(rd, fragments.molList.at(index)!, coordgen);
-        try {
-          const coords = xy(fragment),
-            cx = atoms.reduce((sum, i) => sum + points[i][0], 0) / atoms.length,
-            cy = atoms.reduce((sum, i) => sum + points[i][1], 0) / atoms.length,
-            fx = coords.reduce((sum, p) => sum + p[0], 0) / coords.length,
-            fy = coords.reduce((sum, p) => sum + p[1], 0) / coords.length;
-          atoms.forEach((atom, i) => {
-            points[atom] = [coords[i][0] - fx + cx, coords[i][1] - fy + cy];
-          });
-        } finally {
-          fragment.delete();
-        }
-      }
-      const result = withCoordinates(rd, mol, points);
-      mol.delete();
-      return result;
-    } finally {
+  if (!coordgen) {
+    // chemfig.depict / Compute2DCoords canonicalizes each embedded fragment;
+    // its one StraightenDepiction call then turns the complete mixture.
+    // RDDepict's 2D transform avoids normalize_depiction(1)'s possible mirror.
+    const points = xy(mol),
+      canonical = points.map((p): [number, number] => [...p]);
+    let groups = [points.map((_, i) => i)];
+    if (electronFragments) {
+      const fragments = mol.get_frags();
+      groups = JSON.parse(fragments.mappings).fragsMolAtomMapping;
       fragments.molList.delete();
     }
-  }
-  if (!coordgen) {
-    // RDDepict's EmbeddedFrag::canonicalizeOrientation rotates in 2D.
-    // normalize_depiction(1) uses a 3D canonical transform and may mirror the plane.
-    const points = xy(mol),
-      cx = points.reduce((n, p) => n + p[0], 0) / points.length,
-      cy = points.reduce((n, p) => n + p[1], 0) / points.length;
-    const centered = points.map(([x, y]): [number, number] => [x - cx, y - cy]);
-    const xx = centered.reduce((n, p) => n + p[0] * p[0], 0),
-      yy = centered.reduce((n, p) => n + p[1] * p[1], 0),
-      cross = centered.reduce((n, p) => n + p[0] * p[1], 0);
-    const ex = 2 * cross,
-      ey = yy - xx + Math.hypot(xx - yy, 2 * cross),
-      length = Math.hypot(ex, ey);
-    const canonical = withCoordinates(
-      rd,
-      mol,
-      length > 1e-4
-        ? centered.map(([x, y]): [number, number] => [
-            (x * ex + y * ey) / length,
-            (-x * ey + y * ex) / length,
-          ])
-        : centered,
-    );
+    for (const atoms of groups) {
+      const cx = atoms.reduce((n, i) => n + points[i][0], 0) / atoms.length,
+        cy = atoms.reduce((n, i) => n + points[i][1], 0) / atoms.length,
+        centered = atoms.map((i): [number, number] => [
+          points[i][0] - cx,
+          points[i][1] - cy,
+        ]);
+      const xx = centered.reduce((n, p) => n + p[0] * p[0], 0),
+        yy = centered.reduce((n, p) => n + p[1] * p[1], 0),
+        cross = centered.reduce((n, p) => n + p[0] * p[1], 0);
+      const ex = 2 * cross,
+        ey = yy - xx + Math.hypot(xx - yy, 2 * cross),
+        length = Math.hypot(ex, ey);
+      atoms.forEach((atom, i) => {
+        const [x, y] = centered[i];
+        canonical[atom] = [
+          (length > 1e-4 ? (x * ex + y * ey) / length : x) +
+            (electronFragments ? cx : 0),
+          (length > 1e-4 ? (-x * ey + y * ex) / length : y) +
+            (electronFragments ? cy : 0),
+        ];
+      });
+    }
+    const oriented = withCoordinates(rd, mol, canonical);
     mol.delete();
-    mol = canonical;
+    mol = oriented;
   }
   mol.straighten_depiction();
   mol.normalize_depiction(0);
