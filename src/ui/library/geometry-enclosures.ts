@@ -83,27 +83,28 @@ export function drawEnclosure(
     }
     parts.push(part);
   }
-  if (parts.length === 1 || (enclosure.shape && enclosure.shape !== "auto"))
-    return [drawPart(enclosure, positions, parent, ctx, emphasis)].filter(
-      (p) => p !== undefined,
-    );
-  return parts.flatMap((part, i) => {
-    const node = drawPart(
-      {
-        ...enclosure,
-        id: `${enclosure.id}:${i + 1}`,
-        atoms: enclosure.atoms?.filter((a) => part.has(key(a))),
-        bonds: enclosure.bonds?.filter((pair) =>
-          pair.every((a) => part.has(key(a))),
-        ),
-      },
-      positions,
-      parent,
-      ctx,
-      emphasis,
-    );
-    return node ? [node] : [];
-  });
+  const selections =
+    parts.length === 1 || (enclosure.shape && enclosure.shape !== "auto")
+      ? [enclosure]
+      : parts.map((part, i) => ({
+          ...enclosure,
+          id: `${enclosure.id}:${i + 1}`,
+          atoms: enclosure.atoms?.filter((a) => part.has(key(a))),
+          bonds: enclosure.bonds?.filter((pair) =>
+            pair.every((a) => part.has(key(a))),
+          ),
+        }));
+  const nodes: NonNullable<ReturnType<typeof drawPart>>[] = [];
+  for (const selection of selections) {
+    const node = drawPart(selection, positions, parent, ctx);
+    if (!node) {
+      nodes.forEach(ctx.remove);
+      paintSelection(enclosure, parent, ctx, emphasis);
+      return [];
+    }
+    nodes.push(node);
+  }
+  return nodes;
 }
 
 function drawPart(
@@ -111,7 +112,6 @@ function drawPart(
   positions: Record<string, Point>,
   parent: FigureGroup,
   ctx: ReturnType<typeof createFigureScene>,
-  emphasis: "primary" | "supporting",
 ) {
   const selected = new Set([
     ...(enclosure.atoms ?? []).map(key),
@@ -259,50 +259,7 @@ function drawPart(
       d = path(candidate, padding);
       if (!touches(d)) break;
     }
-    if (touches(d)) {
-      const atoms = new Set(enclosure.atoms?.map(key));
-      const bonds = new Set(
-        enclosure.bonds?.map((pair) => pair.map(key).sort().join("/")),
-      );
-      const color =
-        emphasis === "primary"
-          ? "var(--chemical-focus)"
-          : "var(--chemical-support)";
-      const line =
-        emphasis === "primary"
-          ? "var(--chemical-focus-line)"
-          : "var(--chemical-support-line)";
-      for (const node of ctx.nodes(parent)) {
-        if (
-          ctx.data(node, "bond") !== undefined &&
-          bonds.has((ctx.data(node, "atoms") ?? "").split(" ").sort().join("/"))
-        ) {
-          if (node.paint.fill !== "none") ctx.setStyle(node, "fill", color);
-          else {
-            ctx.setStyle(node, "stroke", color);
-            ctx.setStyle(node, "strokeWidth", line);
-          }
-        } else if (
-          atoms.has(
-            ctx.data(node, "chargeOwner") ?? ctx.data(node, "label") ?? "",
-          )
-        ) {
-          ctx.setStyle(node, "fill", color);
-        }
-      }
-      const molecules = new Set(
-        [...(enclosure.atoms ?? []), ...(enclosure.bonds ?? []).flat()].map(
-          (a) => a.molecule,
-        ),
-      );
-      for (const group of [parent, ...ctx.nodes(parent)])
-        if (
-          group.kind === "group" &&
-          molecules.has(ctx.data(group, "molecule"))
-        )
-          spaceBondEndpoints(group, ctx);
-      return;
-    }
+    if (touches(d)) return;
   }
   const node = ctx.element("path", { d });
   node.paint.lineCap = "round";
@@ -316,4 +273,48 @@ function drawPart(
   ctx.setData(node, "encloseAtoms", [...selected].join(" "));
   ctx.append(parent, node);
   return node;
+}
+
+function paintSelection(
+  enclosure: Enclosure,
+  parent: FigureGroup,
+  ctx: ReturnType<typeof createFigureScene>,
+  emphasis: "primary" | "supporting",
+) {
+  const atoms = new Set(enclosure.atoms?.map(key));
+  const bonds = new Set(
+    enclosure.bonds?.map((pair) => pair.map(key).sort().join("/")),
+  );
+  const color =
+    emphasis === "primary"
+      ? "var(--chemical-focus)"
+      : "var(--chemical-support)";
+  const line =
+    emphasis === "primary"
+      ? "var(--chemical-focus-line)"
+      : "var(--chemical-support-line)";
+  for (const node of ctx.nodes(parent)) {
+    if (
+      ctx.data(node, "bond") !== undefined &&
+      bonds.has((ctx.data(node, "atoms") ?? "").split(" ").sort().join("/"))
+    ) {
+      if (node.paint.fill !== "none") ctx.setStyle(node, "fill", color);
+      else {
+        ctx.setStyle(node, "stroke", color);
+        ctx.setStyle(node, "strokeWidth", line);
+      }
+    } else if (
+      atoms.has(ctx.data(node, "chargeOwner") ?? ctx.data(node, "label") ?? "")
+    ) {
+      ctx.setStyle(node, "fill", color);
+    }
+  }
+  const molecules = new Set(
+    [...(enclosure.atoms ?? []), ...(enclosure.bonds ?? []).flat()].map(
+      (a) => a.molecule,
+    ),
+  );
+  for (const group of [parent, ...ctx.nodes(parent)])
+    if (group.kind === "group" && molecules.has(ctx.data(group, "molecule")))
+      spaceBondEndpoints(group, ctx);
 }

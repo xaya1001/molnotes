@@ -222,7 +222,7 @@ test("automatic enclosures reject a shape that cannot clear a selected label and
   }
 });
 
-test("independent enclosures preserve label gaps without overlapping each other", async () => {
+test("one failed component makes the entire selection use solid focus", async () => {
   const { createFigureScene } =
     await import("../src/ui/library/scene-geometry.ts");
   const { drawEnclosure } =
@@ -252,7 +252,9 @@ test("independent enclosures preserve label gaps without overlapping each other"
     ctx,
     [],
   );
-  assert.equal(enclosures.length, 1);
+  assert.equal(enclosures.length, 0);
+  for (const label of ctx.nodes(root).filter((n) => n.attributes["data-label"]))
+    assert.equal(label.paint.fill, style.values["--chemical-focus"]);
   assert.deepEqual(
     figureGeometryDiagnostics(
       {
@@ -446,7 +448,7 @@ test("automatic enclosures keep a full gap from unselected label boxes", async (
   }
 });
 
-test("automatic components fall back to solid focus when every enclosure conflicts", async () => {
+test("a failing first component colors the entire selection with its focus style", async () => {
   const { createFigureScene } =
     await import("../src/ui/library/scene-geometry.ts");
   const { drawEnclosure } =
@@ -491,6 +493,11 @@ test("automatic components fall back to solid focus when every enclosure conflic
     });
     ctx.setStyle(label, "fill", "var(--chemical-ink)");
     ctx.append(root, label);
+    const otherLabel = ctx.element("path", {
+      d: "M138 38H142V42H138Z",
+      "data-label": "m:a6",
+    });
+    ctx.append(root, otherLabel);
     drawEnclosure(
       {
         id: "selection",
@@ -509,8 +516,7 @@ test("automatic components fall back to solid focus when every enclosure conflic
     const enclosures = ctx
       .nodes(root)
       .filter((n) => n.attributes["data-enclose"]);
-    assert.equal(enclosures.length, 1);
-    assert.equal(enclosures[0].attributes["data-enclose-atoms"], "m:a6");
+    assert.equal(enclosures.length, 0);
     const color =
       style.values[
         emphasis === "primary" ? "--chemical-focus" : "--chemical-support"
@@ -527,6 +533,7 @@ test("automatic components fall back to solid focus when every enclosure conflic
       assert.equal(bond.paint.strokeWidth, width);
     }
     assert.equal(label.paint.fill, color);
+    assert.equal(otherLabel.paint.fill, color);
     assert.equal(bonds[3].paint.stroke, style.values["--chemical-ink"]);
     assert.deepEqual(
       figureGeometryDiagnostics(
