@@ -108,13 +108,7 @@ export async function readChemicalLibrary(root: string, stage?: AssetStage) {
           frame.scene,
           `${e.id}/${frame.id}`,
         );
-    for (const drawing of Object.values(e.drawings ?? {}))
-      await registerAsset(e.id, drawing.asset, "image/svg+xml");
     if (e.kind === "image") await registerAsset(e.id, e.asset, e.mime);
-    if (e.kind === "mechanism")
-      for (const frame of e.frames)
-        for (const drawing of Object.values(frame.drawings ?? {}))
-          await registerAsset(e.id, drawing.asset, "image/svg+xml");
   }
   return { entries, assets, files: entryFiles };
 }

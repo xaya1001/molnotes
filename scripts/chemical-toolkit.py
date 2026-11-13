@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import sys
 
-from rdkit import Chem, RDLogger, rdBase
+from rdkit import Chem, Geometry, RDLogger, rdBase
 from rdkit.Chem import AllChem, rdAbbreviations, rdDepictor, rdFMCS
 from rdkit.Chem.Draw import rdMolDraw2D
 
@@ -33,8 +33,11 @@ def parse_molecule(text, options):
         if not mols:
             return None
         mol = mols[0]
-        mol.UpdatePropertyCache(strict=False)
-        Chem.FastFindRings(mol)
+        if options.get("sanitize", True):
+            Chem.SanitizeMol(mol)
+        else:
+            mol.UpdatePropertyCache(strict=False)
+            Chem.FastFindRings(mol)
         return mol
     if "M  END" in text:
         return Chem.MolFromMolBlock(text, sanitize=options.get("sanitize", True), removeHs=options.get("removeHs", True))
@@ -91,9 +94,6 @@ def invoke(op, args):
         if op == "get_mcs_as_smarts":
             return result.smartsString
         return json.dumps({"smarts": result.smartsString, "numAtoms": result.numAtoms, "numBonds": result.numBonds, "canceled": result.canceled})
-    if op == "prefer_coordgen":
-        rdDepictor.SetPreferCoordGen(args[0])
-        return None
     handle, *rest = args
     if op == "delete":
         del objects[handle]
@@ -107,8 +107,6 @@ def invoke(op, args):
         return 2 if mol.GetNumConformers() else 0
     if op == "get_num_atoms":
         return mol.GetNumHeavyAtoms() if rest and rest[0] else mol.GetNumAtoms()
-    if op == "get_num_bonds":
-        return mol.GetNumBonds()
     if op == "get_json":
         return Chem.MolToJSON(mol)
     if op in ("get_smiles", "get_cxsmiles"):
@@ -160,10 +158,6 @@ def invoke(op, args):
         params.forceRDKit = not options.get("useCoordGen", False)
         rdDepictor.GenerateDepictionMatching2DStructure(mol, reference, atomMap=atom_map, params=params)
         return json.dumps({"atoms": list(after)})
-    if op == "get_frags":
-        mappings = []
-        fragments = Chem.GetMolFrags(mol, asMols=True, sanitizeFrags=False, fragsMolAtomMapping=mappings)
-        return {"molecules": [store(fragment) for fragment in fragments], "mappings": json.dumps({"fragsMolAtomMapping": mappings})}
     if op == "add_hs_in_place":
         objects[handle] = Chem.AddHs(mol, addCoords=True)
         return True
@@ -195,6 +189,11 @@ def invoke(op, args):
             shown = rdAbbreviations.CondenseAbbreviationSubstanceGroups(labelled)
         mapping = list(shown.GetPropsAsDict(includePrivate=True, includeComputed=False)["_origAtomMapping"]) if shown.HasProp("_origAtomMapping") else list(range(mol.GetNumAtoms()))
         return {"molecule": store(shown), "atoms": mapping}
+    if op == "constrain_coordinates":
+        constrained = Chem.Mol(mol)
+        rdDepictor.Compute2DCoords(constrained, canonOrient=False, forceRDKit=True, coordMap={i: Geometry.Point2D(x, y) for i, x, y in rest[0]})
+        conf = constrained.GetConformer()
+        return [[conf.GetAtomPosition(i).x, conf.GetAtomPosition(i).y] for i in range(constrained.GetNumAtoms())]
     if op == "align_atom_map":
         reference = objects[rest[0]]
         params = rdDepictor.ConstrainedDepictionParams()

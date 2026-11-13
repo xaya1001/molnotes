@@ -178,8 +178,7 @@ export function figureProofCache(directory: string) {
       if (
         !isObject(value) ||
         !Array.isArray(value.diagnostics) ||
-        !value.diagnostics.every(isFigureDiagnostic) ||
-        value.diagnostics.some((d) => d.severity === "error")
+        !value.diagnostics.every(isFigureDiagnostic)
       )
         return;
       return value.diagnostics;

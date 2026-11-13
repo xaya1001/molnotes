@@ -34,6 +34,7 @@ import {
 import type { FigureRect } from "../shared/chemical-library/geometry.ts";
 import { insidePolygon } from "../src/ui/library/geometry-collision.ts";
 import { figureDimension } from "./figure-output.ts";
+import { ringHydrogens } from "./figure-scaffolds.ts";
 
 const defaults: MoleculeAbbreviation[] = [
   "OTBS",
@@ -108,6 +109,7 @@ function descriptionMolecule(
       bonds?: { stereo?: string }[];
     }[];
   },
+  sanitize = false,
 ) {
   const coordinates = (data.molecules[0].conformers ?? []).map((c) => c.coords);
   for (const conformer of data.molecules[0].conformers ?? [])
@@ -125,7 +127,7 @@ function descriptionMolecule(
   const mol = rd.get_mol(
     text,
     JSON.stringify({
-      sanitize: false,
+      sanitize,
       removeHs: false,
       // Assign CIP ranks for canonical depiction. JSON has no directional bonds,
       // so reassignment would erase an existing double-bond configuration.
@@ -161,9 +163,10 @@ function contracted(
   const { mol: shown, original } = definitions
     ? rd.condense(full, definitions, [...roots.keys()])
     : {
-        mol: openMolecule(rd, full.get_json(), false),
+        mol: full.copy()!,
         original: graphOf(full).atoms.map((_, i) => i),
       };
+
   displayAtoms.set(shown, {
     original,
     labels: new Map(
@@ -886,8 +889,30 @@ export function depictRoute(
     changed = new Set<string>();
   try {
     for (const [key, r] of structures) {
-      const initial = openMolecule(rd, r.depiction.smiles);
+      let initial = openMolecule(rd, r.depiction.smiles);
       fulls.set(key, initial);
+      if (
+        !r.spec.drawing &&
+        r.spec.arrows?.length &&
+        r.depiction.smiles.includes(".")
+      ) {
+        // chemfig.load_mol adds ring stereocentre H before fragment depiction.
+        const withHs = ringHydrogens(rd, initial);
+        if (withHs !== initial) {
+          try {
+            const ready = descriptionMolecule(
+              rd,
+              JSON.parse(withHs.get_json()),
+              true,
+            );
+            initial.delete();
+            initial = ready;
+            fulls.set(key, initial);
+          } finally {
+            withHs.delete();
+          }
+        }
+      }
       const layout = r.variant
         ? r.compound.variants![r.variant]
         : r.compound.layout;
@@ -1058,15 +1083,49 @@ export function depictRoute(
         ) {
           placeFragments(key);
           const placed = r.compound.variants[variant].coords;
-          const positioned = withCoordinates(
-            rd,
-            final,
-            displayAtoms.get(final)!.original.map((atom): [number, number] => {
-              const p = placed[r.compound.atomIds[r.depiction.atoms[atom]]];
-              const scale = r.spec.scale ?? 1;
-              return [(1.5 * p.x) / scale, (-1.5 * p.y) / scale];
-            }),
-          );
+          const original = displayAtoms.get(final)!.original;
+          const before = xy(final);
+          const after = before.map((point): [number, number] => [...point]);
+          original.forEach((atom, i) => {
+            if (atom >= r.depiction.atoms.length) return;
+            const p = placed[r.compound.atomIds[r.depiction.atoms[atom]]];
+            const scale = r.spec.scale ?? 1;
+            after[i] = [(1.5 * p.x) / scale, (-1.5 * p.y) / scale];
+          });
+          // Drawing-only ring H atoms follow their stereocentre's placed basis.
+          const graph = graphOf(final);
+          const neighbours = (i: number) =>
+            graph.bonds.flatMap(({ atoms: [a, b] }) =>
+              a === i ? [b] : b === i ? [a] : [],
+            );
+          original.forEach((atom, i) => {
+            if (atom < r.depiction.atoms.length) return;
+            const parent = neighbours(i)[0];
+            const [a, b] = neighbours(parent).filter(
+              (j) => original[j] < r.depiction.atoms.length,
+            );
+            const u = [
+              before[a][0] - before[parent][0],
+              before[a][1] - before[parent][1],
+            ];
+            const v = [
+              before[b][0] - before[parent][0],
+              before[b][1] - before[parent][1],
+            ];
+            const h = [
+              before[i][0] - before[parent][0],
+              before[i][1] - before[parent][1],
+            ];
+            const determinant = u[0] * v[1] - u[1] * v[0];
+            const x = (h[0] * v[1] - h[1] * v[0]) / determinant;
+            const y = (u[0] * h[1] - u[1] * h[0]) / determinant;
+            const coordinate = (axis: 0 | 1) =>
+              after[parent][axis] +
+              x * (after[a][axis] - after[parent][axis]) +
+              y * (after[b][axis] - after[parent][axis]);
+            after[i] = [coordinate(0), coordinate(1)];
+          });
+          const positioned = withCoordinates(rd, final, after);
           mols.set(key, positioned);
           final.delete();
           final = positioned;

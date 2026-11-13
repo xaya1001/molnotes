@@ -126,10 +126,11 @@ test("coverage maps preserve zero, positive and absent per-source coverage", asy
   assert.ok(svg.includes('data-text="Source A"'));
 });
 
-test("Markush input rejects website styling and unknown overlay sources", () => {
-  assert.throws(
-    () => validateFigureInput({ ...model, width: 700 }),
-    /style field/,
+test("Markush input accepts density and validates overlay sources", () => {
+  assert.equal(
+    validateFigureInput({ ...model, bond: 24, width: 700, scale: 1.3 }).input
+      .width,
+    700,
   );
   assert.throws(
     () => validateFigureInput({ ...model, view: "overlay" }),
@@ -175,4 +176,38 @@ test("repeat groups retain core identity and joined unit geometry", async () => 
   const svg = geometrySvg(geometry);
   assert.ok(svg.includes("data-repeat-bracket"));
   assert.deepEqual(diagnoseFigure(geometry, opts.style), []);
+});
+
+test("Markush core scale enlarges bonds while retaining label size", async () => {
+  const { walkGeometry } = await import("../src/ui/library/geometry-walk.ts");
+  const measure = async (scale: number) => {
+    const compiled = await compileFigure({ ...model, scale });
+    const geometry = await prepareFigure(
+      compiled.entries,
+      compiled.reference,
+      await options(),
+    );
+    let bonds: number[] = [],
+      labels: number[] = [];
+    walkGeometry(geometry.root, (node) => {
+      if (
+        node.attributes["data-bond-lengths"] &&
+        node.attributes["data-molecule"] === "m0"
+      )
+        bonds = JSON.parse(node.attributes["data-bond-lengths"]);
+      if (node.attributes["data-label"] && node.bounds)
+        labels.push(node.bounds.height);
+    });
+    return { bonds, labels };
+  };
+  const normal = await measure(1),
+    enlarged = await measure(2);
+  assert.ok(normal.bonds.length);
+  assert.ok(
+    enlarged.bonds.every((n, i) => Math.abs(n / normal.bonds[i] - 2) < 0.02),
+  );
+  assert.equal(enlarged.labels.length, normal.labels.length);
+  enlarged.labels.forEach((height, i) =>
+    assert.ok(Math.abs(height - normal.labels[i]) < 0.01),
+  );
 });

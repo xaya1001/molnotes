@@ -145,6 +145,7 @@ export async function prepareMarkush(
     groups: MarkushFigureData["groups"] = {},
     rotation = 0,
     flip?: "h" | "v",
+    scale = 1,
   ): Promise<Drawing> => {
     const rd = options.toolkit,
       mol = openMolecule(rd, smiles.split(" |", 1)[0]),
@@ -261,8 +262,8 @@ export async function prepareMarkush(
         if (flip === "v") p.y *= -1;
         const a = (-rotation * Math.PI) / 180,
           x = p.x;
-        p.x = x * Math.cos(a) - p.y * Math.sin(a);
-        p.y = x * Math.sin(a) + p.y * Math.cos(a);
+        p.x = (x * Math.cos(a) - p.y * Math.sin(a)) * scale;
+        p.y = (x * Math.sin(a) + p.y * Math.cos(a)) * scale;
       }
       const geometry = await renderCompound(c),
         node = ctx.element("g");
@@ -452,7 +453,13 @@ export async function prepareMarkush(
       mol.delete();
     }
   };
-  const core = await draw(entry.core, entry.groups, entry.rot, entry.flip);
+  const core = await draw(
+    entry.core,
+    entry.groups,
+    entry.rot,
+    entry.flip,
+    entry.scale ?? ((entry.view ?? "formula") === "formula" ? 1.3 : 1.7),
+  );
   const merged = new Map<
     string,
     { keys: string[]; group: MarkushFigureData["groups"][string] }
@@ -649,26 +656,44 @@ export async function prepareMarkush(
     return text(a.label, B * 19);
   };
   if ((entry.view ?? "formula") === "formula") {
-    const rows = [];
-    for (const { keys, group } of groups) {
-      const label = text(
+    const labels = groups.map(({ keys }) =>
+      text(
         keys.map((k) => entry.groups[k].label).join(" / "),
         Infinity,
         size,
         true,
-      );
+      ),
+    );
+    const overallLabel = entry.unmodeled
+      ? text("整体", Infinity, size, true)
+      : undefined;
+    const left =
+      Math.max(B * 2, ...labels.map((label) => label.w), overallLabel?.w ?? 0) +
+      B;
+    const definitionWidth =
+      entry.style?.width === undefined
+        ? B * 22
+        : Math.max(B, entry.style.width - left - B * 0.5);
+    const rows = [];
+    for (const [index, { group }] of groups.entries()) {
+      const label = labels[index];
       const cells = await Promise.all(group.alternatives.map(alternative));
       if (group.unmodeled)
-        cells.push(text(`未建模：${group.unmodeled}`, B * 19, size * 0.9));
-      rows.push({ label, body: flow(cells, B * 22, B * 0.65) });
+        cells.push(
+          text(
+            `未建模：${group.unmodeled}`,
+            Math.min(B * 19, definitionWidth),
+            size * 0.9,
+          ),
+        );
+      rows.push({ label, body: flow(cells, definitionWidth, B * 0.65) });
     }
     if (entry.unmodeled)
       rows.push({
-        label: text("整体", Infinity, size, true),
-        body: text(`未建模：${entry.unmodeled}`, B * 22, size * 0.9),
+        label: overallLabel!,
+        body: text(`未建模：${entry.unmodeled}`, definitionWidth, size * 0.9),
       });
-    const left = Math.max(B * 2, ...rows.map((r) => r.label.w)) + B,
-      name = entry.name ? text(entry.name) : undefined;
+    const name = entry.name ? text(entry.name) : undefined;
     width = Math.max(
       core.w + (name ? name.w + B * 1.6 : 0),
       left + Math.max(0, ...rows.map((r) => r.body.w)) + B * 0.5,

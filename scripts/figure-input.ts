@@ -84,6 +84,9 @@ export interface CycleStepInput {
   label?: Key;
 }
 export interface FigureInput {
+  bond?: number;
+  width?: number;
+  scale?: number;
   abbreviate?: ("Ph" | "Trt" | "Bz")[];
   kind?: "route" | "mechanism" | "markush" | "gallery" | "scope" | "cycle";
   core?: MarkushFigureData["core"];
@@ -133,6 +136,10 @@ const number: Rule = (v, p) => {
   if (typeof v !== "number" || !Number.isFinite(v))
     fail(p, "expected finite number");
 };
+const positiveNumber: Rule = (v, p) => {
+  number(v, p);
+  if (Number(v) <= 0) fail(p, "expected positive number");
+};
 const bool: Rule = (v, p) => {
   if (typeof v !== "boolean") fail(p, "expected boolean");
 };
@@ -164,7 +171,7 @@ const either =
     }
     fail(p, "invalid value");
   };
-const styles = new Set(["bond", "width", "charges", "dots", "ring_h"]);
+const styles = new Set(["charges", "dots", "ring_h"]);
 const deferred = new Set(["mark", "notes", "bend"]);
 export function validateFigureInput(value: unknown): {
   input: FigureInput;
@@ -299,6 +306,9 @@ export function validateFigureInput(value: unknown): {
     validateMarkushFigure(value, "figure");
     object(
       {
+        bond: positiveNumber,
+        width: positiveNumber,
+        scale: positiveNumber,
         kind: choice("markush"),
         title: text,
         sources,
@@ -326,6 +336,8 @@ export function validateFigureInput(value: unknown): {
   )
     fail("figure.kind", "expected route | mechanism | gallery | scope | cycle");
   const shared = {
+    bond: positiveNumber,
+    width: positiveNumber,
     kind: choice("route", "mechanism", "gallery", "scope", "cycle"),
     title: text,
     explain: text,

@@ -12,9 +12,6 @@ import { figureViewKey } from "../../shared/chemical-library/views.ts";
 import type { UnitAsset } from "./content-files.ts";
 import { libraryDependencies } from "../../shared/chemical-library/contract.ts";
 import { sha256 } from "../../shared/assets.ts";
-import { nativeDepictionGeometry } from "../../src/ui/library/native-geometry.ts";
-import { walkGeometry } from "../../src/ui/library/geometry-walk.ts";
-import { transformPoint } from "../../src/ui/library/geometry-math.ts";
 import { geometrySvg } from "../../src/ui/library/geometry-tree.ts";
 import { parseFigureStyle } from "../../src/ui/library/scene-geometry.ts";
 import { figureFontFiles, nativeFigureFontFile } from "../figure-fonts.ts";
@@ -43,47 +40,6 @@ export function figureBuildRunner(
     },
     async prepare(reference, slot) {
       const entry = library[reference.ref];
-      const frame =
-        entry.kind === "mechanism"
-          ? (entry.frames.find((f) => f.id === reference.frame) ??
-            entry.frames[0])
-          : undefined;
-      const drawings = frame?.drawings ?? entry.drawings;
-      if (drawings) {
-        const drawing = drawings[figureViewKey(reference)];
-        if (!drawing)
-          throw new Error(
-            `${entry.id}/${frame?.id ?? "compound"}: no saved drawing for this reference`,
-          );
-        const file = stage
-          ? (await stage.get(drawing.asset.slice(0, 64)))?.file
-          : join(root, "library/assets", drawing.asset);
-        if (!file) throw new Error(`${entry.id}: missing saved drawing asset`);
-        const rootNode = nativeDepictionGeometry(await readFile(file, "utf8")),
-          atomPoints: Record<
-            string,
-            import("../../shared/chemical-library/types.ts").Point
-          > = {};
-        walkGeometry(rootNode, (node, matrix) => {
-          if (node.attributes["data-atom-points"])
-            for (const [id, p] of Object.entries(
-              JSON.parse(node.attributes["data-atom-points"]) as Record<
-                string,
-                import("../../shared/chemical-library/types.ts").Point
-              >,
-            ))
-              atomPoints[id] = transformPoint(p, matrix);
-        });
-        const geometry = {
-          format: 1 as const,
-          width: drawing.width,
-          height: drawing.height,
-          minimumScale: drawing.minimumScale,
-          atomPoints,
-          root: rootNode,
-        };
-        return { kind: "chemical", geometry, svg: geometrySvg(geometry) };
-      }
       if (entry.kind === "image")
         return {
           kind: "illustration",

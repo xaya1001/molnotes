@@ -16,6 +16,10 @@ import type {
 
 export interface PythonToolkit extends ChemicalToolkit {
   fontFile(): string;
+  constrain(
+    mol: ChemicalMolecule,
+    positions: [number, number, number][],
+  ): [number, number][];
   condense(
     mol: ChemicalMolecule,
     definitions: string,
@@ -120,6 +124,9 @@ export function pythonToolkit(connection: ChemicalConnection): PythonToolkit {
     constructor(id: number) {
       this.id = id;
     }
+    copy() {
+      return molecule(call("copy", [this.id]));
+    }
     delete() {
       call("delete", [this.id]);
     }
@@ -131,9 +138,6 @@ export function pythonToolkit(connection: ChemicalConnection): PythonToolkit {
     }
     get_num_atoms(heavyOnly = false) {
       return number(call("get_num_atoms", [this.id, heavyOnly]));
-    }
-    get_num_bonds() {
-      return number(call("get_num_bonds", [this.id]));
     }
     get_json() {
       return string(call("get_json", [this.id]));
@@ -190,14 +194,6 @@ export function pythonToolkit(connection: ChemicalConnection): PythonToolkit {
     }
     remove_hs_in_place(details = "{}") {
       return boolean(call("remove_hs_in_place", [this.id, details]));
-    }
-    get_frags() {
-      const value = call("get_frags", [this.id]);
-      if (!isObject(value)) throw new Error("Invalid molecular fragments");
-      return {
-        molList: new MolList(numbers(value.molecules)),
-        mappings: string(value.mappings),
-      };
     }
   }
   class MolList implements ChemicalMolList {
@@ -262,6 +258,16 @@ export function pythonToolkit(connection: ChemicalConnection): PythonToolkit {
     }
   }
   return {
+    constrain: (mol, positions) => {
+      const value = call("constrain_coordinates", [handle(mol), positions]);
+      if (!Array.isArray(value))
+        throw new Error("Invalid constrained coordinates");
+      return value.map((row): [number, number] => {
+        const values = numbers(row);
+        if (values.length !== 2) throw new Error("Invalid constrained point");
+        return [values[0], values[1]];
+      });
+    },
     condense: (mol, definitions, roots) => {
       const value = call("condense_abbreviations", [
         handle(mol),
@@ -294,9 +300,6 @@ export function pythonToolkit(connection: ChemicalConnection): PythonToolkit {
       string(call("get_mcs_as_smarts", [handles(mols), details])),
     get_mcs_as_json: (mols, details = "{}") =>
       string(call("get_mcs_as_json", [handles(mols), details])),
-    prefer_coordgen: (prefer) => {
-      call("prefer_coordgen", [prefer]);
-    },
     version: () => string(call("version")),
     fontFile: () => string(call("font_file")),
   };

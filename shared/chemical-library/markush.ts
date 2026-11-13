@@ -12,6 +12,7 @@ export type MarkushAlternative = (
   by?: Record<string, number | (string | number)[]>;
 };
 export interface MarkushFigureData {
+  scale?: number;
   core: string;
   view?: "formula" | "map" | "overlay";
   name?: string;
@@ -66,6 +67,11 @@ export function validateMarkushFigure(
     (typeof v.rot !== "number" || !Number.isFinite(v.rot))
   )
     fail("invalid rotation");
+  if (
+    v.scale !== undefined &&
+    (typeof v.scale !== "number" || !Number.isFinite(v.scale) || v.scale <= 0)
+  )
+    fail("invalid scale");
   if (v.flip !== undefined && v.flip !== "h" && v.flip !== "v")
     fail("invalid flip");
   if (v.patents !== undefined) {

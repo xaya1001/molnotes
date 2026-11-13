@@ -1,7 +1,5 @@
-import type {
-  ChemicalToolkit as MainModule,
-  ChemicalMolecule as Mol,
-} from "../shared/chemical-toolkit.ts";
+import type { ChemicalMolecule as Mol } from "../shared/chemical-toolkit.ts";
+import type { PythonToolkit as MainModule } from "./chemical-toolkit.ts";
 import { scaffolds } from "./figure-template-data.ts";
 import { graphOf, openMolecule } from "../shared/chemical-library/chemistry.ts";
 import type {
@@ -93,67 +91,14 @@ function compatible(rd: MainModule, mol: Mol, match: number[], xyz: XYZ[]) {
     probe.delete();
   }
 }
-/** MinimalLib has no explicit atom-map overload. Temporary isotopes bind each pin to its chosen target atom. */
+/** Native coordinate pins constrain the saved scaffold without changing atom identity. */
 function constrain(rd: MainModule, mol: Mol, positions: Map<number, XY>) {
-  const data = JSON.parse(mol.get_json()),
-    graph = graphOf(mol),
-    kept = [...positions.keys()].sort((a, b) => a - b),
-    indices = new Map(kept.map((a, i) => [a, i]));
-  const targetData = structuredClone(data);
-  delete targetData.molecules[0].conformers;
-  targetData.molecules[0].atoms.forEach(
-    (a: { isotope?: number }, i: number) => {
-      a.isotope = 1000 + i;
-    },
+  return rd.constrain(
+    mol,
+    [...positions].map(([atom, [x, y]]) => [atom, x, y]),
   );
-  const target = openMolecule(rd, JSON.stringify(targetData), false);
-  data.molecules = [
-    {
-      atoms: kept.map((a) => ({ z: graph.atoms[a].z ?? 6, isotope: 1000 + a })),
-      bonds: graph.bonds
-        .filter((b) => b.atoms.every((a) => indices.has(a)))
-        .map((b) => ({
-          atoms: b.atoms.map((a) => indices.get(a)),
-          bo: b.bo ?? 1,
-        })),
-      conformers: [{ dim: 2, coords: kept.map((a) => positions.get(a)) }],
-    },
-  ];
-  const coordinates = data.molecules[0].conformers[0].coords as XY[];
-  data.molecules[0].conformers[0].coords = [];
-  const reference = openMolecule(
-    rd,
-    JSON.stringify(data).replace(
-      '"coords":[]',
-      '"coords":[' +
-        coordinates
-          .map(([x, y]) => `[${x.toExponential()},${y.toExponential()}]`)
-          .join(",") +
-        "]",
-    ),
-    false,
-  );
-  try {
-    const pattern = reference
-      .get_smarts()
-      .replace(/(\[[^\]]*\])|[-=#:]/g, (_s, atom) => atom ?? "~");
-    if (
-      !target.generate_aligned_coords(
-        reference,
-        JSON.stringify({
-          referenceSmarts: pattern,
-          acceptFailure: false,
-          useCoordGen: false,
-        }),
-      )
-    )
-      throw new Error("Cannot constrain scaffold coordinates");
-    return graphOf(target).conformers![0].coords;
-  } finally {
-    reference.delete();
-    target.delete();
-  }
 }
+
 function extend(mol: Mol, points: XY[], core: Set<number>) {
   const left = new Set(
       graphOf(mol)
@@ -292,7 +237,7 @@ function tidy(mol: Mol, p: XY[], core: Set<number>) {
     }
 }
 /** Add the prototype's ring stereocentre H before constraining and tidying the scaffold. */
-function ringHydrogens(rd: MainModule, source: Mol) {
+export function ringHydrogens(rd: MainModule, source: Mol) {
   const ringsOf = (mol: Mol): number[][] =>
     JSON.parse(mol.get_json()).molecules[0].extensions?.find(
       (e: { name: string }) => e.name === "rdkitRepresentation",

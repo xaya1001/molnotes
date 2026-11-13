@@ -1,10 +1,10 @@
 /** The molecular operations shared by reader chemistry and publication tools. */
 export interface ChemicalMolecule {
+  copy(): ChemicalMolecule | null;
   delete(): void;
   is_valid(): boolean;
   has_coords(): number;
   get_num_atoms(heavyOnly?: boolean): number;
-  get_num_bonds(): number;
   get_json(): string;
   get_smiles(details?: string): string;
   get_cxsmiles(details?: string): string;
@@ -21,7 +21,6 @@ export interface ChemicalMolecule {
   generate_aligned_coords(reference: ChemicalMolecule, details: string): string;
   add_hs_in_place(): boolean;
   remove_hs_in_place(details?: string): boolean;
-  get_frags(): { molList: ChemicalMolList; mappings: string };
 }
 export interface ChemicalMolList {
   append(mol: ChemicalMolecule): number;
@@ -48,6 +47,5 @@ export interface ChemicalToolkit {
   MolList: new () => ChemicalMolList;
   get_mcs_as_smarts(mols: ChemicalMolList, details?: string): string;
   get_mcs_as_json(mols: ChemicalMolList, details?: string): string;
-  prefer_coordgen(prefer: boolean): void;
   version(): string;
 }

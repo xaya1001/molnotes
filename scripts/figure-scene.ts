@@ -1,3 +1,4 @@
+import { chemicalFigureStyle } from "../shared/chemical-library/style.ts";
 import type { LibraryMarkush } from "../shared/chemical-library/types.ts";
 import { scaffoldLayout } from "./figure-scaffolds.ts";
 import { isObject } from "../shared/json.ts";
@@ -192,6 +193,8 @@ export async function compileFigure(
       "sources",
       "explain",
       "footnote",
+      "bond",
+      "width",
     ]);
     const title = String(inputValue.title ?? inputValue.template);
     const id = "cnf_" + sourceKey;
@@ -211,6 +214,15 @@ export async function compileFigure(
         },
       ],
     };
+    if (inputValue.bond !== undefined || inputValue.width !== undefined)
+      entry.style = Object.fromEntries(
+        Object.entries({
+          bond: inputValue.bond,
+          width: inputValue.width,
+        }).filter(([, value]) => value !== undefined),
+      );
+    delete entry.bond;
+    delete entry.width;
     delete entry.explain;
     if (inputValue.explain !== undefined)
       entry.overview = String(inputValue.explain);
@@ -256,7 +268,16 @@ export async function compileFigure(
     locator: words(s.locator) || title,
     ...(s.note === undefined ? {} : { note: words(s.note) }),
   })) ?? [{ source: "unknown", locator: title, note: "Authored figure" }];
+  const style = chemicalFigureStyle(
+    options.style ?? (await loadFigureStyle()),
+    input,
+  );
   const base = {
+    ...(input.bond === undefined && input.width === undefined
+      ? {}
+      : {
+          style: { bond: input.bond, width: input.width },
+        }),
     title,
     sources,
     sourceFile,
@@ -272,6 +293,7 @@ export async function compileFigure(
       kind: "markush",
       id,
       core: input.core!,
+      scale: input.scale,
       groups: input.groups!,
       view: input.view,
       name: input.name,
@@ -632,6 +654,7 @@ export async function compileFigure(
       layout = layoutOf(resolved),
       m = openMolecule(rd, c.smiles);
     layout.methylLabels = [];
+    layout.ionPairs = "keep";
     try {
       const full = graphOf(m),
         groups = compoundAbbreviations(rd, c, layout),
@@ -882,13 +905,7 @@ export async function compileFigure(
       category: "examples",
       frames: [],
     };
-    const scene = await compilePanelScene(
-      entries,
-      panel,
-      input,
-      cells,
-      options.style ?? (await loadFigureStyle()),
-    );
+    const scene = await compilePanelScene(entries, panel, input, cells, style);
     panel.frames.push({
       id: "overview",
       title,
@@ -898,24 +915,55 @@ export async function compileFigure(
     });
     top = panel;
   } else if (kind === "mechanism") {
-    const style = options.style ?? (await loadFigureStyle());
     const frames: Mechanism["frames"] = [],
       maps: NonNullable<Mechanism["maps"]> = [];
+    const linkedFrames =
+      input.frames!.length > 1 &&
+      input.frames!.every((frame) => frame.arrow !== "none") &&
+      input.frames!.some((frame) => frame.arrows?.length);
+    const resolvedFrames = linkedFrames
+      ? new Map<string, Resolved>()
+      : undefined;
+    if (resolvedFrames) {
+      for (const frame of input.frames!) {
+        const fid = String(frame.id);
+        if (resolvedFrames.has(fid)) throw new Error(`Duplicate frame ${fid}`);
+        resolvedFrames.set(fid, await resolveStructure(frame, `frames.${fid}`));
+      }
+      // chemfig.mechanism_route / render propagate orientation through adjacent frames.
+      for (const cid of depictRoute(
+        rd,
+        resolvedFrames,
+        {
+          ...input,
+          steps: input.frames!.slice(1).map((frame, i) => ({
+            from: input.frames![i].id,
+            to: frame.id,
+          })),
+        },
+        (fid) => `${id}_${figureKey(`frames.${fid}`)}`,
+        style,
+      ))
+        generated.add(cid);
+    }
     let prior: Resolved | undefined,
       priorId = "";
     for (const frame of input.frames!) {
       const fid = String(frame.id);
       if (frames.some((f) => f.id === fid))
         throw new Error(`Duplicate frame ${fid}`);
-      const resolved = await resolveStructure(frame, `frames.${fid}`);
-      for (const cid of depictRoute(
-        rd,
-        new Map([[fid, resolved]]),
-        { ...input, steps: [], anchor: fid },
-        () => `${id}_${figureKey(`frames.${fid}`)}`,
-        style,
-      ))
-        generated.add(cid);
+      const resolved = resolvedFrames
+        ? resolvedFrames.get(fid)!
+        : await resolveStructure(frame, `frames.${fid}`);
+      if (!resolvedFrames)
+        for (const cid of depictRoute(
+          rd,
+          new Map([[fid, resolved]]),
+          { ...input, steps: [], anchor: fid },
+          () => `${id}_${figureKey(`frames.${fid}`)}`,
+          style,
+        ))
+          generated.add(cid);
       if (frame.arrows?.length) layoutOf(resolved).methylLabels = [];
       positionArrowFragments(resolved);
       const scene = blank(),
@@ -924,11 +972,12 @@ export async function compileFigure(
       pushArrows(scene, resolved, "structure");
       pushEnclosures(scene, resolved, "structure");
       const arrow = frame.arrow ?? "forward";
+      const arrowY = linkedFrames ? (box.top + box.bottom) / 2 : 0;
       if (arrow !== "none" && input.frames!.at(-1) !== frame)
         scene.reactionArrows!.push({
           id: `next-${fid}`,
-          from: { x: box.right + 1, y: 0 },
-          to: { x: box.right + 5, y: 0 },
+          from: { x: box.right + 1, y: arrowY },
+          to: { x: box.right + 5, y: arrowY },
           kind: arrow,
           above: lines(frame.above),
           below: lines(frame.below),
@@ -1004,7 +1053,7 @@ export async function compileFigure(
       compounds,
       input,
       (key) => `${id}_${figureKey(key)}`,
-      options.style ?? (await loadFigureStyle()),
+      style,
       (key) => {
         const resolved = compounds.get(key)!;
         if ("compound" in resolved) positionArrowFragments(resolved);
@@ -1289,14 +1338,7 @@ export async function compileFigure(
           ),
         }),
       );
-      await compileReactionLayout(
-        entries,
-        reaction,
-        sid,
-        input,
-        step,
-        options.style,
-      );
+      await compileReactionLayout(entries, reaction, sid, input, step, style);
       generated.add(rid);
       reactions.push(reaction);
       steps.push({ id: sid, reaction: rid, at: { x: 0, y: 0 } });
@@ -1317,7 +1359,7 @@ export async function compileFigure(
     if (!routeGraph) top = reactions[0];
     else {
       top = { ...base, kind: "route", id, steps, edges, width: 1, height: 1 };
-      await compileRouteLayout(entries, top, input, rawSteps, options.style);
+      await compileRouteLayout(entries, top, input, rawSteps, style);
     }
   }
   entries[id] = top;
