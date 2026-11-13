@@ -79,7 +79,16 @@ export type ProductInput = {
 export interface FrameInput extends StructureInput {
   id: Key;
   title?: Key;
-  map?: Record<string, number>;
+  compounds?: Record<string, string | StructureInput>;
+  steps?: Pick<StepInput, "id" | "from" | "to" | "above" | "below" | "arrow">[];
+  labels?: {
+    id: Key;
+    at: string;
+    kind: "lonePair" | "radical" | "charge" | "partialCharge" | "text";
+    text?: Key;
+  }[];
+  partialBonds?: { from: string; to: string; order?: number }[];
+  map?: Record<string, number | string>;
   explain?: Key;
   above?: Key;
   below?: Key;
@@ -91,6 +100,7 @@ export interface CycleStepInput {
   label?: Key;
 }
 export interface FigureInput {
+  category?: "reaction" | "comparison" | "resonance" | "examples";
   bond?: number;
   width?: number;
   scale?: number;
@@ -421,22 +431,69 @@ export function validateFigureInput(value: unknown): {
     object(
       {
         ...shared,
+        category: choice("reaction", "comparison", "resonance", "examples"),
         frames: list((v, p) => {
           const frame = {
             id: text,
             title: text,
-            map: map(number),
+            map: map(either(number, string)),
             explain: text,
             above: text,
             below: text,
             arrow: arrowKind,
+            labels: list(
+              object(
+                {
+                  id: text,
+                  at: string,
+                  kind: choice(
+                    "lonePair",
+                    "radical",
+                    "charge",
+                    "partialCharge",
+                    "text",
+                  ),
+                  text,
+                },
+                ["id", "at", "kind"],
+              ),
+            ),
+            partialBonds: list(
+              object({ from: string, to: string, order: positive }, [
+                "from",
+                "to",
+              ]),
+            ),
           };
           if (isObject(v) && "template" in v) {
             validateConformationSpec(v, p, Object.keys(frame));
             for (const [key, rule] of Object.entries(frame))
               if (v[key] !== undefined) rule(v[key], `${p}.${key}`);
             if (v.id === undefined) fail(`${p}.id`, "required");
-          } else
+          } else if (isObject(v) && "compounds" in v)
+            object(
+              {
+                ...frame,
+                compounds,
+                arrows,
+                focus,
+                steps: list(
+                  object(
+                    {
+                      id: text,
+                      from: either(text, list(text)),
+                      to: either(text, list(text)),
+                      above: text,
+                      below: text,
+                      arrow: arrowKind,
+                    },
+                    ["from", "to"],
+                  ),
+                ),
+              },
+              ["id", "compounds"],
+            )(v, p);
+          else
             object(
               {
                 smiles: string,
@@ -474,6 +531,22 @@ export function validateFigureInput(value: unknown): {
     fail("figure", "requires compounds and steps");
   if (kind === "mechanism" && !input.frames!.length)
     fail("figure.frames", "requires frames");
+  if (kind === "mechanism")
+    for (const [i, frame] of input.frames!.entries()) {
+      if (
+        [frame.smiles, frame.template, frame.compounds].filter(
+          (v) => v !== undefined,
+        ).length !== 1
+      )
+        fail(
+          `figure.frames.${i}`,
+          "requires one of smiles, template or compounds",
+        );
+      if (frame.compounds && !Object.keys(frame.compounds).length)
+        fail(`figure.frames.${i}.compounds`, "requires compounds");
+      if (frame.steps && !frame.compounds)
+        fail(`figure.frames.${i}.steps`, "requires compounds");
+    }
   if (
     (kind === "gallery" || kind === "scope") &&
     !Object.keys(input.compounds!).length

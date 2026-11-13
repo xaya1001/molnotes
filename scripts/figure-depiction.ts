@@ -69,10 +69,12 @@ export function figureAbbreviations(
   mol: Mol,
   spec: StructureInput,
   extra: FigureInput["abbreviate"],
+  protectedMaps: number[] = [],
 ) {
   if (spec.abbreviate === false) return { abbreviations: [] };
   const names = matchingAbbreviations(rd, mol, [...defaults, ...(extra ?? [])]);
   const targets = new Set([
+    ...protectedMaps,
     ...(spec.arrows ?? []).flatMap((arrow) =>
       [arrow.from, arrow.to].flatMap((s) =>
         [...s.matchAll(/\d+/g)].map((m) => Number(m[0])),

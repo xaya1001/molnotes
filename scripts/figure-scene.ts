@@ -11,10 +11,12 @@ import {
   compileReactionLayout,
   loadFigureStyle,
 } from "./figure-route.ts";
-import { createFigureScene } from "../src/ui/library/scene-geometry.ts";
-import { conformationGeometry } from "../src/ui/library/conformation-geometry.ts";
+import {
+  createFigureScene,
+  type FigureStyle,
+} from "../src/ui/library/scene-geometry.ts";
 import { loadFigureFonts } from "./figure-fonts.ts";
-import type { FigureStyle } from "../src/ui/library/scene-geometry.ts";
+import { conformationGeometry } from "../src/ui/library/conformation-geometry.ts";
 import { createHash } from "node:crypto";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import {
@@ -41,11 +43,13 @@ import {
 import { finishFigureEntry } from "./figure-output.ts";
 import { routeMetrics } from "../shared/chemical-library/routes.ts";
 import { compilePanelScene, type PanelCell } from "./figure-panels.ts";
+import { compileMechanismFrameLayout } from "./figure-mechanism.ts";
 import {
   validateFigureInput,
   type StructureInput,
   type ProductInput,
   type StepInput,
+  type FrameInput,
 } from "./figure-input.ts";
 import type {
   Anchor,
@@ -379,12 +383,24 @@ export async function compileFigure(
       ),
     ),
   );
+  if (previous?.kind === "mechanism")
+    for (const frame of previous.frames)
+      for (const molecule of frame.scene.molecules) {
+        compoundBindings.set(
+          `frames.${frame.id}.compounds.${molecule.id}`,
+          molecule.compound,
+        );
+        if (frame.scene.molecules.length === 1)
+          compoundBindings.set(`frames.${frame.id}`, molecule.compound);
+      }
   // Remove only entries owned by this route when a step is removed.
   for (const e of Object.values(entries))
     if (e.owner === id) delete entries[e.id];
   async function resolveStructure(
     spec: StructureInput,
     where: string,
+    protectedMaps: number[] = [],
+    piSources: number[][] = [],
   ): Promise<Resolved> {
     if (spec.template) {
       const cid = `cnf_${sourceKey}_${figureKey(where)}`;
@@ -477,6 +493,7 @@ export async function compileFigure(
           ],
         },
         input.abbreviate,
+        protectedMaps,
       );
       const target = openMolecule(rd, compound.smiles),
         query = openMolecule(rd, unmapped);
@@ -509,7 +526,13 @@ export async function compileFigure(
           compound.variants[variant] = layout;
           generated.add(compound.id);
         }
-        if (spec.arrows?.some((a) => a.from.startsWith("pi("))) {
+        const piPairs = [
+          ...piSources,
+          ...(spec.arrows ?? [])
+            .filter((a) => a.from.startsWith("pi("))
+            .map((a) => [...a.from.matchAll(/\d+/g)].map((n) => Number(n[0]))),
+        ];
+        if (piPairs.length) {
           const raw = openMolecule(rd, expanded, false);
           try {
             const orders = new Map(
@@ -540,12 +563,8 @@ export async function compileFigure(
               (ring: number[]) =>
                 ring.length === 6 && ring.every((i) => aromatic.has(i)),
             );
-            for (const a of spec.arrows.filter((a) =>
-              a.from.startsWith("pi("),
-            )) {
-              const pair = [...a.from.matchAll(/\d+/g)].map((n) =>
-                maps.indexOf(Number(n[0])),
-              );
+            for (const numbers of piPairs) {
+              const pair = numbers.map((n) => maps.indexOf(n));
               const bondKey = pair
                 .map((i) => match.atoms![i])
                 .sort((a, b) => a - b)
@@ -836,11 +855,13 @@ export async function compileFigure(
     resolved: Resolved,
     local: string,
     namespaced = false,
+    resolveAtom?: (key: string) => AtomRef,
   ) {
     const arrowId = (id: string) => (namespaced ? `${local}/${id}` : id);
-    const atom = (n: number): AtomRef => {
-      const id = resolved.atoms.get(n);
-      if (!id) throw new Error(`Unknown atom map ${n}`);
+    const atom = (key: string): AtomRef => {
+      if (resolveAtom) return resolveAtom(key);
+      const id = resolved.atoms.get(Number(key));
+      if (!id) throw new Error(`Unknown atom map ${key}`);
       return { molecule: local, atom: id };
     };
     const anchor = (
@@ -849,7 +870,7 @@ export async function compileFigure(
       end: "from" | "to",
     ): Anchor => {
       const match =
-        /^(lp|charge|radical|atom|bond|pi|between)\(\s*(\d+)\s*(?:,\s*(\d+)\s*)?\)$/.exec(
+        /^(lp|charge|radical|atom|bond|pi|between)\(\s*((?:[^\s,():]+:)?\d+)\s*(?:,\s*((?:[^\s,():]+:)?\d+)\s*)?\)$/.exec(
           text,
         );
       if (!match) throw new Error(`Invalid endpoint ${text}`);
@@ -864,11 +885,11 @@ export async function compileFigure(
         if (!b) throw new Error(`Expected atom pair ${text}`);
         return {
           kind: type === "between" ? "formingBond" : (type as "bond" | "pi"),
-          atoms: [atom(Number(a)), atom(Number(b))],
+          atoms: [atom(a), atom(b)],
         };
       }
       if (b) throw new Error(`Expected one atom ${text}`);
-      const at = atom(Number(a));
+      const at = atom(a);
       if (type === "lp") {
         const label = arrow + "-lp";
         scene.labels!.push({
@@ -1053,6 +1074,9 @@ export async function compileFigure(
       maps: NonNullable<Mechanism["maps"]> = [];
     const linkedFrames =
       input.frames!.length > 1 &&
+      input.frames!.every(
+        (frame) => !frame.compounds && !frame.labels && !frame.partialBonds,
+      ) &&
       input.frames!.every((frame) => frame.arrow !== "none") &&
       input.frames!.some((frame) => frame.arrows?.length);
     const resolvedFrames = linkedFrames
@@ -1080,12 +1104,236 @@ export async function compileFigure(
       ))
         generated.add(cid);
     }
-    let prior: Resolved | undefined,
+    let priorAtoms: Map<string, AtomRef> | undefined,
       priorId = "";
+    const appendFrameMaps = (
+      frame: FrameInput,
+      atoms: Map<string, AtomRef>,
+    ) => {
+      if (frame.map && !priorAtoms)
+        throw new Error("First frame cannot have map");
+      if (priorAtoms) {
+        const qualify = (key: string | number) =>
+          String(key).includes(":") ? String(key) : `structure:${key}`;
+        const explicit = new Map(
+          Object.entries(frame.map ?? {}).map(([a, b]) => [
+            qualify(a),
+            qualify(b),
+          ]),
+        );
+        const targets = new Set(explicit.values());
+        for (const [from, to] of explicit)
+          if (!priorAtoms.has(from) || !atoms.has(to))
+            throw new Error(`frames.${frame.id}.map: unknown atom`);
+        const pairs = [...priorAtoms].flatMap(([key, from]) => {
+          const target =
+            explicit.get(key) ?? (targets.has(key) ? undefined : key);
+          const to = target === undefined ? undefined : atoms.get(target);
+          return to
+            ? [{ from, to, fromFrame: priorId, toFrame: String(frame.id) }]
+            : [];
+        });
+        if (
+          new Set(pairs.map((p) => `${p.to.molecule}:${p.to.atom}`)).size !==
+          pairs.length
+        )
+          throw new Error(`frames.${frame.id}.map: duplicate target`);
+        maps.push(...pairs);
+      }
+      priorAtoms = atoms;
+      priorId = String(frame.id);
+    };
     for (const frame of input.frames!) {
       const fid = String(frame.id);
       if (frames.some((f) => f.id === fid))
         throw new Error(`Duplicate frame ${fid}`);
+      if (frame.compounds || frame.labels || frame.partialBonds) {
+        const specs = frame.compounds ?? {
+          structure: { ...frame, arrows: undefined, focus: undefined },
+        };
+        const resolved = new Map<string, Resolved>(),
+          cells: PanelCell[] = [];
+        const eventRefs = (text: string) =>
+          [...text.matchAll(/(?:([^\s,():]+):)?(\d+)/g)].map((m) => ({
+            local: m[1] ?? "structure",
+            number: Number(m[2]),
+          }));
+        for (const [local, raw] of Object.entries(specs)) {
+          const spec = typeof raw === "string" ? { smiles: raw } : raw;
+          const protectedMaps = [
+            ...(frame.arrows ?? []).flatMap((a) => [
+              ...eventRefs(a.from),
+              ...eventRefs(a.to),
+            ]),
+            ...(frame.labels ?? []).flatMap((l) => eventRefs(l.at)),
+            ...(frame.partialBonds ?? []).flatMap((b) => [
+              ...eventRefs(b.from),
+              ...eventRefs(b.to),
+            ]),
+          ]
+            .filter((a) => a.local === local)
+            .map((a) => a.number);
+          const piSources = (frame.arrows ?? [])
+            .filter((a) => a.from.startsWith("pi("))
+            .map((a) => eventRefs(a.from))
+            .filter(
+              (pair) =>
+                pair.length === 2 && pair.every((a) => a.local === local),
+            )
+            .map((pair) => pair.map((a) => a.number));
+          const r = await resolveStructure(
+            spec,
+            `frames.${fid}.compounds.${local}`,
+            protectedMaps,
+            piSources,
+          );
+          resolved.set(local, r);
+        }
+        for (const cid of depictStructures(
+          rd,
+          resolved,
+          {
+            ...input,
+            steps: frame.steps ?? [],
+            anchor: [...resolved.keys()][0],
+          },
+          (local) => `${id}_${figureKey(`frames.${fid}.compounds.${local}`)}`,
+          style,
+        ))
+          generated.add(cid);
+        for (const [local, r] of resolved) {
+          positionArrowFragments(r);
+          const scene = blank();
+          scene.molecules.push(placement(r, local, { x: 0, y: 0 }));
+          pushArrows(scene, r, local, true);
+          pushEnclosures(scene, r, local);
+          cells.push({ key: local, spec: r.spec, scene });
+        }
+        const atoms = new Map<string, AtomRef>(
+          [...resolved].flatMap(([local, r]) =>
+            [...r.atoms].map(
+              ([number, atom]) =>
+                [`${local}:${number}`, { molecule: local, atom }] as const,
+            ),
+          ),
+        );
+        const atom = (key: string): AtomRef => {
+          const value = atoms.get(key.includes(":") ? key : `structure:${key}`);
+          if (!value) throw new Error(`frames.${fid}: unknown atom ${key}`);
+          return value;
+        };
+        const labelContext = createFigureScene(style, await loadFigureFonts());
+        for (const label of frame.labels ?? []) {
+          const at = atom(label.at),
+            r = resolved.get(at.molecule)!;
+          if (!isChemical(r))
+            throw new Error(`frames.${fid}.labels: requires a chemical atom`);
+          let offset = { x: 0, y: 0 };
+          if (label.kind === "text" || label.kind === "partialCharge") {
+            const molecule = openMolecule(rd, r.compound.smiles);
+            try {
+              const index = r.compound.atomIds.indexOf(at.atom),
+                points = placedCoordinates(
+                  rd,
+                  r.compound,
+                  layoutOf(r),
+                  -(r.spec.rot ?? 0) + (r.spec.flip === "v" ? 180 : 0),
+                  !!r.spec.flip,
+                );
+              const angles = graphOf(molecule)
+                .bonds.flatMap((b) =>
+                  b.atoms.includes(index)
+                    ? [b.atoms.find((i) => i !== index)!]
+                    : [],
+                )
+                .map(
+                  (i) =>
+                    (Math.atan2(
+                      -(points[i].y - points[index].y),
+                      points[i].x - points[index].x,
+                    ) +
+                      2 * Math.PI) %
+                    (2 * Math.PI),
+                )
+                .sort((a, b) => a - b);
+              const gaps = angles.map((angle, i) => ({
+                angle,
+                gap:
+                  angles[(i + 1) % angles.length] +
+                  (i === angles.length - 1 ? 2 * Math.PI : 0) -
+                  angle,
+              }));
+              const largest = gaps.sort((a, b) => b.gap - a.gap)[0],
+                angle = largest
+                  ? largest.angle + largest.gap / 2
+                  : -Math.PI / 2;
+              const width =
+                labelContext.textWidth(
+                  words(label.text),
+                  "var(--chemical-font)",
+                ) / labelContext.token("--chemical-bond");
+              offset = {
+                x: Math.cos(angle) * (0.8 + width / 2),
+                y: Math.sin(angle) * 1.1,
+              };
+            } finally {
+              molecule.delete();
+            }
+          }
+          cells
+            .find((cell) => cell.key === at.molecule)!
+            .scene.labels!.push({
+              id: String(label.id),
+              at,
+              kind: label.kind,
+              offset,
+              ...(label.text === undefined ? {} : { text: String(label.text) }),
+            });
+        }
+        const entry: Mechanism = {
+          ...base,
+          kind: "mechanism",
+          id,
+          category: input.category ?? "reaction",
+          frames: [],
+        };
+        const scene = await compileMechanismFrameLayout(
+          entries,
+          entry,
+          frame,
+          cells,
+          input,
+          style,
+        );
+        const first = resolved.values().next().value!;
+        pushArrows(
+          scene,
+          { ...first, spec: { arrows: frame.arrows, focus: frame.focus } },
+          "structure",
+          false,
+          atom,
+        );
+        for (const bond of frame.partialBonds ?? [])
+          (scene.partialBonds ??= []).push({
+            atoms: [atom(bond.from), atom(bond.to)],
+            order: bond.order ?? 1,
+          });
+        scene.comparison =
+          frame.arrow === "none" ||
+          input.category === "comparison" ||
+          input.category === "examples";
+        appendFrameMaps(frame, atoms);
+        frames.push({
+          id: fid,
+          title: words(frame.title) || fid,
+          explanation: words(frame.explain) || words(input.explain) || title,
+          scene,
+          ...(frame.arrow === undefined ? {} : { arrow: frame.arrow }),
+          ...(frame.above === undefined ? {} : { above: lines(frame.above) }),
+          ...(frame.below === undefined ? {} : { below: lines(frame.below) }),
+        });
+        continue;
+      }
       const resolved = resolvedFrames
         ? resolvedFrames.get(fid)!
         : await resolveStructure(frame, `frames.${fid}`);
@@ -1122,36 +1370,15 @@ export async function compileFigure(
         { x: box.left, y: box.top },
         { x: box.right, y: box.bottom },
       ]);
-      if (frame.map && !prior) throw new Error("First frame cannot have map");
-      if (prior) {
-        const explicit = frame.map ?? {},
-          targets = new Set(Object.values(explicit));
-        for (const n of Object.keys(explicit))
-          if (!prior.atoms.has(Number(n)) || !resolved.atoms.has(explicit[n]))
-            throw new Error(`frames.${fid}.map: unknown atom`);
-        const pairs = [...prior.atoms].flatMap(([n, a]) => {
-          const target = Object.hasOwn(explicit, String(n))
-            ? explicit[n]
-            : targets.has(n)
-              ? undefined
-              : n;
-          const b =
-            target === undefined ? undefined : resolved.atoms.get(target);
-          return b
-            ? [
-                {
-                  from: { molecule: "structure", atom: a },
-                  to: { molecule: "structure", atom: b },
-                  fromFrame: priorId,
-                  toFrame: fid,
-                },
-              ]
-            : [];
-        });
-        if (new Set(pairs.map((p) => p.to.atom)).size !== pairs.length)
-          throw new Error(`frames.${fid}.map: duplicate target`);
-        maps.push(...pairs);
-      }
+      appendFrameMaps(
+        frame,
+        new Map(
+          [...resolved.atoms].map(([number, atom]) => [
+            `structure:${number}`,
+            { molecule: "structure", atom },
+          ]),
+        ),
+      );
       frames.push({
         id: fid,
         title: words(frame.title) || fid,
@@ -1161,16 +1388,16 @@ export async function compileFigure(
         above: lines(frame.above),
         below: lines(frame.below),
       });
-      prior = resolved;
-      priorId = fid;
     }
     top = {
       ...base,
       kind: "mechanism",
       id,
-      category: input.frames!.every((f) => f.arrow === "none")
-        ? "comparison"
-        : "reaction",
+      category:
+        input.category ??
+        (input.frames!.every((f) => f.arrow === "none")
+          ? "comparison"
+          : "reaction"),
       frames,
       maps,
     };
