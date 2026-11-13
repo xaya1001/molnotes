@@ -2,6 +2,10 @@ import {
   validateMarkushFigure,
   type MarkushFigureData,
 } from "../shared/chemical-library/markush.ts";
+import {
+  validateConformationSpec,
+  type ConformationSpec,
+} from "../shared/chemical-templates/conformation.ts";
 import { isObject } from "../shared/json.ts";
 import type { ArrowKind } from "../shared/chemical-library/types.ts";
 
@@ -15,7 +19,11 @@ export interface PushInput {
   bend?: number;
   forming?: boolean;
 }
-export interface StructureInput {
+export interface StructureInput extends Omit<
+  Partial<ConformationSpec>,
+  "flip"
+> {
+  ring_h?: boolean;
   smiles?: string;
   text?: Key;
   label?: Key;
@@ -123,6 +131,7 @@ export interface FigureInput {
   frames?: FrameInput[];
   coordgen?: boolean;
   forming?: boolean;
+  ring_h?: boolean;
   anchor?: Key;
   wrap?: "serpentine";
   footnote?: Key;
@@ -180,7 +189,7 @@ const either =
     }
     fail(p, "invalid value");
   };
-const styles = new Set(["charges", "dots", "ring_h"]);
+const styles = new Set(["charges", "dots"]);
 const deferred = new Set(["mark", "notes", "bend"]);
 export function validateFigureInput(value: unknown): {
   input: FigureInput;
@@ -192,7 +201,6 @@ export function validateFigureInput(value: unknown): {
     (v, p) => {
       if (!isObject(v)) fail(p, "expected mapping");
       else {
-        if ("template" in v) fail(`${p}.template`, "尚未支持");
         for (const [k, x] of Object.entries(v)) {
           if (styles.has(k))
             fail(`${p}.${k}`, "website style field is not accepted");
@@ -248,6 +256,7 @@ export function validateFigureInput(value: unknown): {
     align: either(bool, text),
     coordgen: bool,
     drawing: choice("flat", "perspective"),
+    ring_h: bool,
     abbreviate: bool,
     numbers: bool,
     notes: map(text),
@@ -353,12 +362,21 @@ export function validateFigureInput(value: unknown): {
     sources,
     coordgen: bool,
     forming: bool,
+    ring_h: bool,
     footnote: text,
     abbreviate: list(choice("Ph", "Trt", "Bz")),
     mark: string,
   };
+  const structureRule: Rule = (v, p) => {
+    if (isObject(v) && "template" in v) {
+      const common = ["label", "name", "yield", "note", "text"];
+      validateConformationSpec(v, p, common);
+      for (const key of common)
+        if (v[key] !== undefined) text(v[key], `${p}.${key}`);
+    } else object(structure)(v, p);
+  };
   const compounds = map((v, p) =>
-    typeof v === "string" ? string(v, p) : object(structure)(v, p),
+    typeof v === "string" ? string(v, p) : structureRule(v, p),
   );
   const positive: Rule = (v, p) => {
     number(v, p);
@@ -390,7 +408,7 @@ export function validateFigureInput(value: unknown): {
     object(
       {
         ...shared,
-        nodes: list(either(text, object(structure))),
+        nodes: list(either(text, structureRule)),
         steps: list(object({ in: text, out: text, label: text })),
         radius: positive,
         branch: positive,
@@ -414,69 +432,88 @@ export function validateFigureInput(value: unknown): {
       {
         ...shared,
         category: choice("reaction", "comparison", "resonance", "examples"),
-        frames: list(
-          object(
-            {
-              smiles: string,
-              compounds,
-              steps: list(
-                object(
-                  {
-                    id: text,
-                    from: either(text, list(text)),
-                    to: either(text, list(text)),
-                    above: text,
-                    below: text,
-                    arrow: arrowKind,
-                  },
-                  ["from", "to"],
+        frames: list((v, p) => {
+          const frame = {
+            id: text,
+            title: text,
+            map: map(either(number, string)),
+            explain: text,
+            above: text,
+            below: text,
+            arrow: arrowKind,
+            labels: list(
+              object(
+                {
+                  id: text,
+                  at: string,
+                  kind: choice(
+                    "lonePair",
+                    "radical",
+                    "charge",
+                    "partialCharge",
+                    "text",
+                  ),
+                  text,
+                },
+                ["id", "at", "kind"],
+              ),
+            ),
+            partialBonds: list(
+              object({ from: string, to: string, order: positive }, [
+                "from",
+                "to",
+              ]),
+            ),
+          };
+          if (isObject(v) && "template" in v) {
+            validateConformationSpec(v, p, Object.keys(frame));
+            for (const [key, rule] of Object.entries(frame))
+              if (v[key] !== undefined) rule(v[key], `${p}.${key}`);
+            if (v.id === undefined) fail(`${p}.id`, "required");
+          } else if (isObject(v) && "compounds" in v)
+            object(
+              {
+                ...frame,
+                compounds,
+                arrows,
+                focus,
+                steps: list(
+                  object(
+                    {
+                      id: text,
+                      from: either(text, list(text)),
+                      to: either(text, list(text)),
+                      above: text,
+                      below: text,
+                      arrow: arrowKind,
+                    },
+                    ["from", "to"],
+                  ),
                 ),
-              ),
-              labels: list(
-                object(
-                  {
-                    id: text,
-                    at: string,
-                    kind: choice(
-                      "lonePair",
-                      "radical",
-                      "charge",
-                      "partialCharge",
-                      "text",
-                    ),
-                    text,
-                  },
-                  ["id", "at", "kind"],
-                ),
-              ),
-              partialBonds: list(
-                object({ from: string, to: string, order: positive }, [
-                  "from",
-                  "to",
-                ]),
-              ),
-              rot: number,
-              flip: choice("h", "v"),
-              coordgen: bool,
-              drawing: structure.drawing,
-              bracket: structure.bracket,
-              scale: structure.scale,
-              numbers: bool,
-              notes: map(text),
-              arrows,
-              focus,
-              enclose,
-              id: text,
-              title: text,
-              map: map(either(number, string)),
-              explain: text,
-              above: text,
-              below: text,
-              arrow: arrowKind,
-            },
-            ["id"],
-          ),
-        ),
+              },
+              ["id", "compounds"],
+            )(v, p);
+          else
+            object(
+              {
+                smiles: string,
+                rot: number,
+                flip: choice("h", "v"),
+                coordgen: bool,
+                drawing: structure.drawing,
+                ring_h: bool,
+                bracket: structure.bracket,
+                scale: structure.scale,
+                numbers: bool,
+                notes: map(text),
+                arrows,
+                focus,
+                enclose,
+                ...frame,
+              },
+              ["id", "smiles"],
+            )(v, p);
+        }),
       },
       ["frames"],
     )(value, "figure");
@@ -496,8 +533,15 @@ export function validateFigureInput(value: unknown): {
     fail("figure.frames", "requires frames");
   if (kind === "mechanism")
     for (const [i, frame] of input.frames!.entries()) {
-      if (Boolean(frame.smiles) === Boolean(frame.compounds))
-        fail(`figure.frames.${i}`, "requires either smiles or compounds");
+      if (
+        [frame.smiles, frame.template, frame.compounds].filter(
+          (v) => v !== undefined,
+        ).length !== 1
+      )
+        fail(
+          `figure.frames.${i}`,
+          "requires one of smiles, template or compounds",
+        );
       if (frame.compounds && !Object.keys(frame.compounds).length)
         fail(`figure.frames.${i}.compounds`, "requires compounds");
       if (frame.steps && !frame.compounds)

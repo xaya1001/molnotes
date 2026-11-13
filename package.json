@@ -26,6 +26,7 @@
     "figure:draw": "node scripts/figure-draw.ts",
     "figure:lint": "node scripts/figure-lint.ts",
     "figure:compile": "node scripts/figure-compile.ts",
+    "figure:recompile": "node scripts/figure-recompile.ts",
     "figure:compare": "node scripts/figure-compare.ts",
     "figure:render": "node scripts/figure-render.ts",
     "figure:templates": "node scripts/figure-templates.ts"
