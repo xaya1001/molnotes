@@ -58,31 +58,32 @@ export async function compilePanelScene(
     };
   };
   const textBlock = (text: string) => {
+    let height = 0;
+    const leading = (ctx.token("--chemical-caption-font") / B) * 1.25;
     const lines = text
       .split("\n")
       .filter(Boolean)
-      .map((line) => ({ text: line, box: measuredText(line) }));
-    const leading = (ctx.token("--chemical-caption-font") / B) * 1.25;
+      .map((line) => {
+        const box = measuredText(line);
+        const lineHeight = Math.max(leading, box.height + 0.2);
+        const offset = height + (lineHeight - box.height) / 2;
+        height += lineHeight;
+        return { text: line, box, offset };
+      });
     return {
       lines,
       width: Math.max(0, ...lines.map((l) => l.box.width)),
-      height: lines.length * leading,
-      leading,
+      height,
     };
   };
   const putText = (text: string, cx: number, cy: number) => {
     const block = textBlock(text);
-    block.lines.forEach((line, i) =>
+    block.lines.forEach((line) =>
       scene.captions!.push({
         text: line.text,
         at: {
           x: cx,
-          y:
-            cy -
-            block.height / 2 +
-            i * block.leading +
-            (block.leading - line.box.height) / 2 -
-            line.box.y,
+          y: cy - block.height / 2 + line.offset - line.box.y,
         },
       }),
     );

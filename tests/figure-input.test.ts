@@ -1119,3 +1119,23 @@ test("cycle YAML saves clockwise closed steps with incoming and outgoing branche
     /one step per species/,
   );
 });
+
+test("gallery line spacing includes superscripts and subscripts in adjacent captions", async () => {
+  const result = await compileFigure({
+    kind: "gallery",
+    compounds: {
+      a: { smiles: "CCO", yield: "46% yield^b,e", note: "**Me3N**\n1 h" },
+    },
+  });
+  const { prepareFigure } = await import("../src/ui/library/prepare.ts");
+  const { loadFigureStyle } = await import("../scripts/figure-route.ts");
+  const { loadFigureFonts } = await import("../scripts/figure-fonts.ts");
+  const { diagnoseFigure } = await import("../scripts/figure-diagnostics.ts");
+  const style = await loadFigureStyle();
+  const geometry = await prepareFigure(result.entries, result.reference, {
+    toolkit: await moleculeToolkit(),
+    fonts: await loadFigureFonts(),
+    style,
+  });
+  assert.deepEqual(diagnoseFigure(geometry, style), []);
+});
