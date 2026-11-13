@@ -12,6 +12,7 @@ import {
 } from "../shared/chemical-library/chemistry.ts";
 import {
   tableDisplayText,
+  tableTextPieces,
   tableTextAlign,
 } from "../src/ui/topic/table-text.ts";
 import { blockSearchText } from "../shared/topic-blocks.ts";
@@ -194,4 +195,175 @@ test("table text keeps quantities together and aligns prose separately from shor
   );
   assert.equal(tableTextAlign("0.74\n8.2"), "center");
   assert.equal(tableTextAlign("假定 25 °C"), "center");
+});
+
+test("SAR group drawings keep a common core aligned without changing base layouts or record values", async () => {
+  const rd = await moleculeToolkit();
+  const library: Library = {};
+  const smiles = ["CC(=O)Nc1ncccc1", "CCC(=O)Nc1ncccc1", "O"];
+  for (const [i, value] of smiles.entries()) {
+    const c = prepareCompound(rd, {
+      id: `cmp_series${i}`,
+      title: "Sample",
+      smiles: value,
+      sources: [],
+    });
+    if (i === 1)
+      for (const point of Object.values(c.layout.coords))
+        [point.x, point.y] = [-point.y, point.x];
+    library[c.id] = c;
+  }
+  const before = structuredClone(library);
+  const content = await fixture();
+  content.data.collections.examples.records[0].smiles = smiles[0];
+  content.data.collections.examples.records[1].smiles = smiles[1];
+  const raw = structuredClone(content.data.collections.examples.records);
+  await compileTableStructures(content, library, "sites/sample/content.json");
+  const item = content.data.sarCases.pairs[0];
+  const a = item.structureFigures["1"].smiles;
+  const b = item.structureFigures["2"].smiles;
+  const ac = library[a.ref],
+    bc = library[b.ref];
+  assert.ok(ac.kind === "compound");
+  assert.ok(bc.kind === "compound");
+  const am = rd.get_mol(ac.smiles)!,
+    bm = rd.get_mol(bc.smiles)!;
+  try {
+    const matches: { atoms: number[] } = JSON.parse(bm.get_substruct_match(am));
+    assert.equal(matches.atoms.length, ac.atomIds.length);
+    const coordsA = ac.variants![a.variant].coords;
+    const coordsB = bc.variants![b.variant].coords;
+    const pairs = ac.atomIds.map((id, i) => [
+      coordsA[id],
+      coordsB[bc.atomIds[matches.atoms[i]]],
+    ]);
+    for (const [pa, pb] of pairs) {
+      assert.ok(
+        Math.abs(pa.x - pairs[0][0].x - (pb.x - pairs[0][1].x)) < 0.003,
+      );
+      assert.ok(
+        Math.abs(pa.y - pairs[0][0].y - (pb.y - pairs[0][1].y)) < 0.003,
+      );
+    }
+  } finally {
+    am.delete();
+    bm.delete();
+  }
+  for (const c of Object.values(before)) {
+    assert.ok(c.kind === "compound");
+    const current = library[c.id];
+    assert.ok(current.kind === "compound");
+    assert.deepEqual(current.layout, c.layout);
+  }
+  assert.deepEqual(content.data.collections.examples.records, raw);
+  assert.doesNotThrow(() =>
+    validateTopicContent(
+      resolveCompoundSlots(content, library, "sample").value,
+    ),
+  );
+
+  content.data.collections.examples.records[1].smiles = smiles[2];
+  delete item.structureFigures;
+  await compileTableStructures(content, library, "sites/sample/content.json");
+  assert.equal(item.structureFigures, undefined);
+});
+
+test("table quantities keep identifiers plain and chemical subscripts adjacent", () => {
+  const runs = tableTextPieces("IC50 nM; CH3 25 °C").flatMap(
+    (piece) => piece.runs,
+  );
+  assert.deepEqual(
+    runs.filter((run) => run.script === "sub").map((run) => run.text),
+    ["3"],
+  );
+});
+
+test("table automatic subscripts distinguish complete formula words from identifiers", () => {
+  for (const text of [
+    "AXT6",
+    "QAK1",
+    "XAT6A",
+    "H3K14xy",
+    "IC50",
+    "DC50",
+    "GI50",
+    "CC50",
+    "EC50",
+    "ED50",
+    "LD50",
+    "XDK4/6",
+    "MX4;11",
+    "AX068",
+    "C2",
+    "H3",
+    "H4",
+    "K14",
+    "N1",
+    "P32",
+    "S14",
+    "V7",
+    "H1234",
+    "H123",
+    "HC1234567B2",
+    "Y123S",
+  ]) {
+    const runs = tableTextPieces(text).flatMap((piece) => piece.runs);
+    assert.equal(runs.map((run) => run.text).join(""), text);
+    assert.deepEqual(
+      runs.filter((run) => run.script),
+      [],
+      text,
+    );
+  }
+  for (const [text, digits] of [
+    ["CH2", ["2"]],
+    ["Et3N", ["3"]],
+    ["NH2 CO2 CF3", ["2", "2", "3"]],
+    ["Boc2O Me3N Ph2P", ["2", "3", "2"]],
+  ]) {
+    const runs = tableTextPieces(String(text)).flatMap((piece) => piece.runs);
+    assert.deepEqual(
+      runs.filter((run) => run.script === "sub").map((run) => run.text),
+      digits,
+    );
+  }
+  const explicit = tableTextPieces("H_{2}O SO4^{2-} SH\\2 C₆H₆").flatMap(
+    (piece) => piece.runs,
+  );
+  assert.deepEqual(
+    explicit.filter((run) => run.script === "sub").map((run) => run.text),
+    ["2", "4", "6", "6"],
+  );
+  assert.deepEqual(
+    explicit.filter((run) => run.script === "super").map((run) => run.text),
+    ["2-"],
+  );
+});
+
+test("SAR references reject absent groups and collections while unconfirmed structures remain valid", async () => {
+  for (const invalid of [{ cases: "missing" }, { collection: "missing" }]) {
+    const content = await fixture();
+    const block = {
+      type: "sar-cases",
+      cases: "pairs",
+      collection: "examples",
+      ...invalid,
+    };
+    content.chapters = [{ blocks: [block] }];
+    await assert.rejects(
+      compileTableStructures(content, {}, "sites/sample/content.json"),
+      /unknown SAR/,
+    );
+  }
+  const unconfirmed = await fixture();
+  unconfirmed.data.collections.examples.records[0].smiles = "";
+  await assert.doesNotReject(
+    compileTableStructures(unconfirmed, {}, "sites/sample/content.json"),
+  );
+  const unknown = await fixture();
+  unknown.data.sarCases.pairs[0].ids = ["missing"];
+  await assert.rejects(
+    compileTableStructures(unknown, {}, "sites/sample/content.json"),
+    /unknown SAR record/,
+  );
 });

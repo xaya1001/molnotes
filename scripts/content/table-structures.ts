@@ -1,3 +1,4 @@
+import { depictSeries } from "../figure-depiction.ts";
 import { createHash } from "node:crypto";
 import { isObject } from "../../shared/json.ts";
 import { resolveData } from "../../shared/topic-blocks.ts";
@@ -14,6 +15,7 @@ import {
 import type {
   Library,
   FigureReference,
+  Compound,
 } from "../../shared/chemical-library/types.ts";
 
 /** Resolve table drawings without changing the record values used by queries and CSV. */
@@ -75,11 +77,17 @@ export async function compileTableStructures(
     validateFigureInstance(library, input);
     return { ...input, type: "figure-ref" };
   }
+  const groups: { cases: string; collection: string }[] = [];
   async function visit(input: unknown, path: string): Promise<void> {
     if (Array.isArray(input)) {
       for (const [i, item] of input.entries())
         await visit(item, `${path}[${i}]`);
     } else if (isObject(input)) {
+      if (input.type === "sar-cases")
+        groups.push({
+          cases: String(input.cases),
+          collection: String(input.collection),
+        });
       if (input.type === "table") {
         const rows = resolveData<unknown>(input.rows, data, `${path}.rows`);
         if (Array.isArray(rows))
@@ -133,4 +141,85 @@ export async function compileTableStructures(
       }
       collection.structureFigures = figures;
     }
+
+  for (const group of groups) {
+    const cases = isObject(data.sarCases)
+        ? data.sarCases[group.cases]
+        : undefined,
+      collection = isObject(data.collections)
+        ? data.collections[group.collection]
+        : undefined;
+    if (!Array.isArray(cases))
+      throw new Error(`${where}: unknown SAR cases ${group.cases}`);
+    if (!isObject(collection))
+      throw new Error(`${where}: unknown SAR collection ${group.collection}`);
+    if (
+      !Array.isArray(collection.records) ||
+      !Array.isArray(collection.fields) ||
+      !isObject(collection.structureFigures)
+    )
+      throw new Error(`${where}: invalid SAR collection ${group.collection}`);
+    for (const item of cases) {
+      if (!isObject(item) || !Array.isArray(item.ids))
+        throw new Error(`${where}: invalid SAR case`);
+      const figures: Record<
+        string,
+        Record<string, FigureReference & { type: "figure-ref" }>
+      > = {};
+      for (const field of collection.fields) {
+        if (!isObject(field) || typeof field.key !== "string")
+          throw new Error(`${where}: invalid SAR field`);
+        if (field.kind !== "smiles") continue;
+        const members: {
+          id: string;
+          drawing: FigureReference;
+          compound: Compound;
+        }[] = [];
+        for (const id of item.ids) {
+          const record = collection.records.find(
+            (record) => isObject(record) && record.id === id,
+          );
+          if (!isObject(record))
+            throw new Error(`${where}: unknown SAR record ${id}`);
+          if (!record[field.key]) continue;
+          const drawings = collection.structureFigures[String(id)];
+          if (!isObject(drawings))
+            throw new Error(
+              `${where}: missing SAR structure ${id}.${field.key}`,
+            );
+          const drawing = drawings[field.key];
+          validateFigureReference(drawing, where);
+          const compound = library[drawing.ref];
+          if (compound.kind !== "compound")
+            throw new Error(`${where}: expected compound`);
+          members.push({ id: String(id), drawing, compound });
+        }
+        const variant =
+          "series_" +
+          createHash("sha256")
+            .update(
+              `${unit}/${group.collection}/${group.cases}/${item.id}/${field.key}`,
+            )
+            .digest("hex")
+            .slice(0, 12);
+        if (
+          depictSeries(
+            await moleculeToolkit(),
+            members.map((m) => ({
+              compound: m.compound,
+              variant: m.drawing.variant,
+            })),
+            variant,
+          )
+        )
+          for (const member of members)
+            (figures[member.id] ??= {})[field.key] = {
+              type: "figure-ref",
+              ref: member.compound.id,
+              variant,
+            };
+      }
+      if (Object.keys(figures).length) item.structureFigures = figures;
+    }
+  }
 }

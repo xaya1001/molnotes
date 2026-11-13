@@ -83,6 +83,7 @@ export interface ClaimSet {
   claims: Claim[];
 }
 export interface SarCase {
+  structureFigures?: Record<string, Record<string, FigureReference>>;
   analysis?: {
     kind: "observation" | "design-around-hypothesis" | "unresolved";
     rationale: string;
