@@ -1,12 +1,11 @@
 import { test as base } from "@playwright/test";
 export * from "@playwright/test";
 
-// Each worker talks to its own server and records file (see
-// playwright.config.ts), so specs in parallel workers never share records.
+// Each worker talks to its own server and records file.
 export const test = base.extend({
-  baseURL: async ({ baseURL }, use, testInfo) => {
-    const url = new URL(baseURL!);
-    url.port = String(Number(url.port) + testInfo.parallelIndex);
-    await use(url.href);
+  baseURL: async ({}, use, testInfo) => {
+    const port =
+      process.env.TEST_SERVER_PORTS!.split(",")[testInfo.parallelIndex];
+    await use(`http://127.0.0.1:${port}/`);
   },
 });
