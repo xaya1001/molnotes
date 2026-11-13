@@ -18,6 +18,41 @@ import type { FigureBox } from "../shared/chemical-library/geometry.ts";
 const toolkit = await moleculeToolkit(),
   fonts = await loadFigureFonts();
 
+test("electron events use the shared red accent and draw selected forming bonds", async () => {
+  const compiled = await compileFigure({
+    kind: "gallery",
+    compounds: {
+      event: {
+        smiles: "[O-:1].[CH2:2]=[O:3]",
+        arrows: [{ from: "lp(1)", to: "between(1,2)", forming: true }],
+      },
+    },
+  });
+  const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit,
+    fonts,
+    style,
+  });
+  let shafts = 0,
+    heads = 0,
+    forming = 0;
+  walkGeometry(geometry.root, (node) => {
+    if (node.attributes["data-electron-arrow"]) {
+      shafts++;
+      assert.equal(node.paint.stroke, style.values["--chemical-focus"]);
+    }
+    if (node.attributes["data-arrow-head"]) {
+      heads++;
+      assert.equal(node.paint.fill, style.values["--chemical-focus"]);
+    }
+    if (node.attributes["data-partial-bond"]) {
+      forming++;
+      assert.ok(node.paint.dashArray);
+    }
+  });
+  assert.deepEqual([shafts, heads, forming], [1, 1, 1]);
+});
+
 test("structure scale enlarges rendered bonds while preserving label size", async () => {
   const render = async (scale: number) => {
     const compiled = await compileFigure({

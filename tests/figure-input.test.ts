@@ -57,6 +57,171 @@ test("forming arrows persist dashed bonds only when selected", async () => {
   }
 });
 
+test("collection cells retain their selected forming bonds", async () => {
+  const compiled = await compileFigure({
+    kind: "gallery",
+    compounds: {
+      event: {
+        smiles: "[O-:1].[CH2:2]=[O:3]",
+        arrows: [{ from: "lp(1)", to: "between(1,2)", forming: true }],
+      },
+    },
+  });
+  const scene = (compiled.entries[compiled.reference.ref] as Mechanism)
+    .frames[0].scene;
+  assert.equal(scene.partialBonds?.length, 1);
+  assert.deepEqual(
+    scene.partialBonds![0].atoms,
+    scene.arrows![0].to.kind === "formingBond" ? scene.arrows![0].to.atoms : [],
+  );
+});
+
+test("collection electron events align their reacting fragments", async () => {
+  const compiled = await compileFigure({
+    kind: "gallery",
+    compounds: {
+      event: {
+        smiles: "[CH2:1]=[C:2](OC)[CH:5]=[CH2:6].[CH2:7]=[CH:8]C#N",
+        arrows: [
+          { from: "pi(1,2)", to: "between(1,7)", forming: true },
+          { from: "pi(5,6)", to: "bond(2,5)" },
+          { from: "pi(7,8)", to: "between(8,6)", forming: true },
+        ],
+      },
+    },
+  });
+  const scene = (compiled.entries[compiled.reference.ref] as Mechanism)
+    .frames[0].scene;
+  const placement = scene.molecules[0];
+  const compound = compiled.entries[placement.compound] as Compound;
+  const coords =
+    compound.variants?.[placement.variant!]?.coords ?? compound.layout.coords;
+  const bonds = scene
+    .arrows!.filter((a) => a.to.kind === "formingBond")
+    .map((a) => {
+      assert.equal(a.to.kind, "formingBond");
+      return a.to.atoms.map((at) => coords[at.atom]);
+    });
+  const distance = ([a, b]: (typeof bonds)[number]) =>
+    Math.hypot(a.x - b.x, a.y - b.y);
+  assert.ok(Math.abs(distance(bonds[0]) - distance(bonds[1])) < 1e-6);
+});
+
+test("route electron events align reacting fragments after depiction", async () => {
+  const compiled = await compileFigure({
+    kind: "route",
+    changes: "off",
+    compounds: {
+      event: {
+        smiles: "[CH2:1]=[C:2](OC)[CH:5]=[CH2:6].[CH2:7]=[CH:8]C#N",
+        arrows: [
+          { from: "pi(1,2)", to: "between(1,7)" },
+          { from: "pi(5,6)", to: "bond(2,5)" },
+          { from: "pi(7,8)", to: "between(8,6)" },
+        ],
+      },
+      product: "CCO",
+      final: "CC=O",
+    },
+    steps: [
+      { from: "event", to: "product" },
+      { from: "product", to: "final" },
+    ],
+  });
+  const route = compiled.entries[compiled.reference.ref] as Route;
+  const scene = (compiled.entries[route.steps[0].reaction] as Reaction).scene;
+  const placement = scene.molecules.find((m) => m.id === "event")!;
+  const compound = compiled.entries[placement.compound] as Compound;
+  const coords = compound.variants![placement.variant!].coords;
+  const bonds = scene
+    .arrows!.filter((a) => a.to.kind === "formingBond")
+    .map((a) => {
+      assert.equal(a.to.kind, "formingBond");
+      return a.to.atoms.map((at) => coords[at.atom]);
+    });
+  const distance = ([a, b]: (typeof bonds)[number]) =>
+    Math.hypot(a.x - b.x, a.y - b.y);
+  assert.ok(Math.abs(distance(bonds[0]) - distance(bonds[1])) < 1e-6);
+});
+
+test("disconnected electron events keep each fragment's free orientation", async () => {
+  const compiled = await compileFigure({
+    kind: "mechanism",
+    frames: [
+      {
+        id: "event",
+        smiles: "[2H:1][CH2:2][C:3](=[O:4])C.[OH-:5]",
+        arrows: [
+          { from: "charge(5)", to: "atom(1)" },
+          { from: "bond(1,2)", to: "bond(2,3)" },
+          { from: "pi(3,4)", to: "atom(4)" },
+        ],
+      },
+    ],
+  });
+  const placement = (compiled.entries[compiled.reference.ref] as Mechanism)
+    .frames[0].scene.molecules[0];
+  const compound = compiled.entries[placement.compound] as Compound;
+  const coords = compound.variants![placement.variant!].coords;
+  // chemfig.depict: the free carbonyl fragment has its C=O vertical, O above C.
+  assert.ok(Math.abs(coords.a4.x - coords.a3.x) < 0.001);
+  assert.ok(Math.abs(coords.a4.y - coords.a3.y + 1) < 0.001);
+});
+
+test("mixed electron events straighten once after orienting their fragments", async () => {
+  const compiled = await compileFigure({
+    kind: "mechanism",
+    frames: [
+      {
+        id: "event",
+        smiles: "[Br:1][CH2:2]CCCC=C.[Sn:8](CCCC)(CCCC)CCCC |^1:7|",
+        arrows: [
+          { from: "radical(8)", to: "atom(1)", electrons: 1 },
+          { from: "bond(1,2)", to: "atom(8)", electrons: 1 },
+          { from: "bond(1,2)", to: "atom(2)", electrons: 1 },
+        ],
+      },
+    ],
+  });
+  const placement = (compiled.entries[compiled.reference.ref] as Mechanism)
+    .frames[0].scene.molecules[0];
+  const compound = compiled.entries[placement.compound] as Compound;
+  const coords = compound.variants![placement.variant!].coords;
+  // Mapped Br-C direction from chemfig.depict, in one-bond units with y down.
+  assert.ok(Math.abs(coords.a2.x - coords.a1.x + 0.7436) < 0.002);
+  assert.ok(Math.abs(coords.a2.y - coords.a1.y + 0.6685) < 0.002);
+});
+
+test("structures and reactions without electron events retain their saved orientation", async () => {
+  const smiles = "[2H:1][CH2:2][C:3](=[O:4])C.[OH-:5]";
+  for (const input of [
+    { kind: "mechanism", frames: [{ id: "event", smiles }] },
+    {
+      kind: "route",
+      anchor: "event",
+      changes: "off",
+      compounds: { event: smiles, product: "CCO" },
+      steps: [{ from: "event", to: "product" }],
+    },
+  ]) {
+    const compiled = await compileFigure(input);
+    const entry = compiled.entries[compiled.reference.ref] as
+      Mechanism | Reaction;
+    const scene =
+      entry.kind === "mechanism" ? entry.frames[0].scene : entry.scene;
+    const placement = scene.molecules[0];
+    const compound = compiled.entries[placement.compound] as Compound;
+    assert.deepEqual(compound.variants![placement.variant!].coords, {
+      a1: { x: -1.155, y: -0.244 },
+      a2: { x: -0.289, y: 0.256 },
+      a3: { x: 0.577, y: -0.244 },
+      a4: { x: 0.289, y: -0.922 },
+      a5: { x: 1.155, y: 0.578 },
+      a6: { x: 0.577, y: 0.922 },
+    });
+  }
+});
+
 test("step enclosures override structure defaults and empty selections clear one step", async () => {
   const compiled = await compileFigure({
     kind: "route",

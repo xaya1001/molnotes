@@ -168,6 +168,8 @@ export async function compilePanelScene(
       });
     (scene.arrows ??= []).push(...(cell.scene.arrows ?? []));
     (scene.labels ??= []).push(...(cell.scene.labels ?? []));
+    if (cell.scene.partialBonds?.length)
+      (scene.partialBonds ??= []).push(...cell.scene.partialBonds);
     (scene.enclose ??= []).push(...(cell.scene.enclose ?? []));
     if (cell.scene.focus) {
       const combined = (scene.focus ??= {});
