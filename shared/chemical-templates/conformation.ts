@@ -48,9 +48,9 @@ export function validateConformationSpec(
   where: string,
   extra: string[] = [],
 ): asserts value is ConformationSpec {
-  const fail = (field: string): never => {
+  function fail(field: string): never {
     throw new Error(`${where}.${field}: invalid conformation field`);
-  };
+  }
   if (!isObject(value)) fail("template");
   const finite = (v: unknown) => typeof v === "number" && Number.isFinite(v);
   const text = (v: unknown): boolean =>
