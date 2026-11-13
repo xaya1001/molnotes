@@ -395,8 +395,42 @@ function matched(rd: Toolkit, mol: Mol, query: Mol): number[] {
     copy.delete();
   }
 }
-function free(rd: Toolkit, mol: Mol, coordgen: boolean) {
+function free(
+  rd: Toolkit,
+  mol: Mol,
+  coordgen: boolean,
+  electronFragments = false,
+) {
   mol.set_new_coords(coordgen);
+  if (electronFragments) {
+    // chemfig.depict / Compute2DCoords canonicalizes disconnected fragments separately.
+    // Apply the same free depiction and StraightenDepiction to each fragment.
+    const fragments = mol.get_frags(),
+      mapping: number[][] = JSON.parse(fragments.mappings).fragsMolAtomMapping,
+      points = xy(mol);
+    try {
+      for (const [index, atoms] of mapping.entries()) {
+        const fragment = free(rd, fragments.molList.at(index)!, coordgen);
+        try {
+          const coords = xy(fragment),
+            cx = atoms.reduce((sum, i) => sum + points[i][0], 0) / atoms.length,
+            cy = atoms.reduce((sum, i) => sum + points[i][1], 0) / atoms.length,
+            fx = coords.reduce((sum, p) => sum + p[0], 0) / coords.length,
+            fy = coords.reduce((sum, p) => sum + p[1], 0) / coords.length;
+          atoms.forEach((atom, i) => {
+            points[atom] = [coords[i][0] - fx + cx, coords[i][1] - fy + cy];
+          });
+        } finally {
+          fragment.delete();
+        }
+      }
+      const result = withCoordinates(rd, mol, points);
+      mol.delete();
+      return result;
+    } finally {
+      fragments.molList.delete();
+    }
+  }
   if (!coordgen) {
     // RDDepict's EmbeddedFrag::canonicalizeOrientation rotates in 2D.
     // normalize_depiction(1) uses a 3D canonical transform and may mirror the plane.
@@ -1011,7 +1045,12 @@ export function depictRoute(
         shown.delete();
         continue;
       }
-      const mol = free(rd, shown, r.spec.coordgen ?? input.coordgen ?? false);
+      const mol = free(
+        rd,
+        shown,
+        r.spec.coordgen ?? input.coordgen ?? false,
+        !!r.spec.arrows?.length && shown.get_smiles().includes("."),
+      );
       mols.set(key, mol);
     }
     if (input.anchor !== undefined && !structures.has(String(input.anchor)))
@@ -1043,7 +1082,11 @@ export function depictRoute(
         if (refKey !== undefined && !compounds.has(refKey))
           throw new Error(`Unknown alignment compound ${refKey}`);
         const reference =
-          refKey && done.has(refKey) ? mols.get(refKey) : undefined;
+          !(r.spec.arrows?.length && mol.get_smiles().includes(".")) &&
+          refKey &&
+          done.has(refKey)
+            ? mols.get(refKey)
+            : undefined;
         const coordgen = r.spec.coordgen ?? input.coordgen ?? false;
         if (reference && r.spec.align !== false) {
           mol = alignDepiction(

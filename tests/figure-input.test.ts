@@ -144,6 +144,60 @@ test("route electron events align reacting fragments after depiction", async () 
   assert.ok(Math.abs(distance(bonds[0]) - distance(bonds[1])) < 1e-6);
 });
 
+test("disconnected electron events keep each fragment's free orientation", async () => {
+  const compiled = await compileFigure({
+    kind: "mechanism",
+    frames: [
+      {
+        id: "event",
+        smiles: "[2H:1][CH2:2][C:3](=[O:4])C.[OH-:5]",
+        arrows: [
+          { from: "charge(5)", to: "atom(1)" },
+          { from: "bond(1,2)", to: "bond(2,3)" },
+          { from: "pi(3,4)", to: "atom(4)" },
+        ],
+      },
+    ],
+  });
+  const placement = (compiled.entries[compiled.reference.ref] as Mechanism)
+    .frames[0].scene.molecules[0];
+  const compound = compiled.entries[placement.compound] as Compound;
+  const coords = compound.variants![placement.variant!].coords;
+  // chemfig.depict: the free carbonyl fragment has its C=O vertical, O above C.
+  assert.ok(Math.abs(coords.a4.x - coords.a3.x) < 0.001);
+  assert.ok(Math.abs(coords.a4.y - coords.a3.y + 1) < 0.001);
+});
+
+test("structures and reactions without electron events retain their saved orientation", async () => {
+  const smiles = "[2H:1][CH2:2][C:3](=[O:4])C.[OH-:5]";
+  for (const input of [
+    { kind: "mechanism", frames: [{ id: "event", smiles }] },
+    {
+      kind: "route",
+      anchor: "event",
+      changes: "off",
+      compounds: { event: smiles, product: "CCO" },
+      steps: [{ from: "event", to: "product" }],
+    },
+  ]) {
+    const compiled = await compileFigure(input);
+    const entry = compiled.entries[compiled.reference.ref] as
+      Mechanism | Reaction;
+    const scene =
+      entry.kind === "mechanism" ? entry.frames[0].scene : entry.scene;
+    const placement = scene.molecules[0];
+    const compound = compiled.entries[placement.compound] as Compound;
+    assert.deepEqual(compound.variants![placement.variant!].coords, {
+      a1: { x: -1.155, y: -0.244 },
+      a2: { x: -0.289, y: 0.256 },
+      a3: { x: 0.577, y: -0.244 },
+      a4: { x: 0.289, y: -0.922 },
+      a5: { x: 1.155, y: 0.578 },
+      a6: { x: 0.577, y: 0.922 },
+    });
+  }
+});
+
 test("step enclosures override structure defaults and empty selections clear one step", async () => {
   const compiled = await compileFigure({
     kind: "route",

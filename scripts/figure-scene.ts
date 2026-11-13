@@ -631,6 +631,7 @@ export async function compileFigure(
     const c = resolved.compound,
       layout = layoutOf(resolved),
       m = openMolecule(rd, c.smiles);
+    layout.methylLabels = [];
     try {
       const full = graphOf(m),
         groups = compoundAbbreviations(rd, c, layout),
