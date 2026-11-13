@@ -1,4 +1,5 @@
 import { Worker } from "node:worker_threads";
+import { chemicalConnection } from "../chemical-toolkit.ts";
 import type { FigureWork } from "../figure-worker.ts";
 import type { FigureGeometry } from "../../shared/chemical-library/geometry.ts";
 import type { Diagnostic } from "../../shared/chemical-library/types.ts";
@@ -10,14 +11,19 @@ import { isObject } from "../../shared/json.ts";
 
 export function figureWorkerPool(css: string) {
   const workers: Array<Worker | undefined> = [];
-  function work(
+  async function work(
     command: FigureWork,
     slot: number,
   ): Promise<FigureGeometry | Diagnostic[]> {
-    const worker = (workers[slot] ??= new Worker(
-      new URL("../figure-worker.ts", import.meta.url),
-      { workerData: css },
-    ));
+    let worker = workers[slot];
+    if (!worker) {
+      const chemical = await chemicalConnection();
+      worker = new Worker(new URL("../figure-worker.ts", import.meta.url), {
+        workerData: { css, chemical },
+        transferList: [chemical.port],
+      });
+      workers[slot] = worker;
+    }
     return new Promise((resolve, reject) => {
       const cleanup = () => {
         worker.off("message", message);

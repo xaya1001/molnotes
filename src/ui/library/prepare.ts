@@ -6,7 +6,7 @@ import type {
   FigureNode,
   FigureRect,
 } from "../../../shared/chemical-library/geometry.ts";
-import type { ChemistryToolkit } from "../chemistry/rdkit.ts";
+import type { ChemicalToolkit as ChemistryToolkit } from "../../../shared/chemical-toolkit.ts";
 import type { FigureFontResolver } from "./font-geometry.ts";
 import {
   createFigureScene,
@@ -275,7 +275,6 @@ export async function prepareFigure(
               multipleBondOffset: token("--chemical-multiple-bond-offset"),
               fixedFontSize: token("--chemical-font"),
               noFreetype: false,
-              fontFile: "BuiltinRobotoRegular",
               atomColourPalette: "bw",
               atomLabelDeuteriumTritium: true,
               addStereoAnnotation: atomNotes

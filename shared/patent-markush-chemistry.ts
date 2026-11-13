@@ -1,4 +1,7 @@
-import type { MainModule, Mol } from "@rdkit/rdkit";
+import type {
+  ChemicalToolkit as MainModule,
+  ChemicalMolecule as Mol,
+} from "./chemical-toolkit.ts";
 import { mappedDummies } from "./reaction-chemistry.ts";
 import {
   validateMarkush,

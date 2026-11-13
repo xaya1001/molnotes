@@ -1005,11 +1005,12 @@ export async function compileFigure(
       input,
       (key) => `${id}_${figureKey(key)}`,
       options.style ?? (await loadFigureStyle()),
+      (key) => {
+        const resolved = compounds.get(key)!;
+        if ("compound" in resolved) positionArrowFragments(resolved);
+      },
     ))
       generated.add(cid);
-    for (const resolved of compounds.values())
-      if ("compound" in resolved && resolved.spec.arrows?.length)
-        positionArrowFragments(resolved);
     const resolve = (key: string) => {
       const r = compounds.get(key);
       if (!r) throw new Error(`Unknown compound ${key}`);

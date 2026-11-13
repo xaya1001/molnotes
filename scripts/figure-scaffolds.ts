@@ -1,4 +1,7 @@
-import type { MainModule, Mol } from "@rdkit/rdkit";
+import type {
+  ChemicalToolkit as MainModule,
+  ChemicalMolecule as Mol,
+} from "../shared/chemical-toolkit.ts";
 import { scaffolds } from "./figure-template-data.ts";
 import { graphOf, openMolecule } from "../shared/chemical-library/chemistry.ts";
 import type {

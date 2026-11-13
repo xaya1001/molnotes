@@ -17,7 +17,7 @@ import { walkGeometry } from "../../src/ui/library/geometry-walk.ts";
 import { transformPoint } from "../../src/ui/library/geometry-math.ts";
 import { geometrySvg } from "../../src/ui/library/geometry-tree.ts";
 import { parseFigureStyle } from "../../src/ui/library/scene-geometry.ts";
-import { figureFontFiles } from "../figure-fonts.ts";
+import { figureFontFiles, nativeFigureFontFile } from "../figure-fonts.ts";
 import { figureBrowser } from "../figure-browser.ts";
 import { figureWorkerPool } from "./figure-worker-pool.ts";
 import { verifyFigureProofs, type ProofRunner } from "./figure-proofs.ts";
@@ -143,6 +143,7 @@ export async function figureBuildVersions(css: string) {
     fonts
       .update(file)
       .update(await readFile(new URL(import.meta.resolve(file))));
+  fonts.update(await readFile(await nativeFigureFontFile()));
   const [
     preparation,
     diagnostics,
@@ -156,11 +157,13 @@ export async function figureBuildVersions(css: string) {
       "scripts/content/figure-build.ts",
       "shared/molecule-toolkit.ts",
       "scripts/figure-fonts.ts",
+      "scripts/chemical-toolkit.py",
+      "scripts/chemical-toolkit-io.ts",
+      "scripts/requirements-material.txt",
       ...templateDataFiles(),
     ]),
     figureRendererFingerprint(root, ["scripts/figure-diagnostics.ts"]),
     figureDependencyFingerprint(root, [
-      "@rdkit/rdkit",
       "fontkit",
       "svg-parser",
       "svgpath",

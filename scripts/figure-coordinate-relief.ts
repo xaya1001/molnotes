@@ -1,4 +1,4 @@
-import type { Mol } from "@rdkit/rdkit";
+import type { ChemicalMolecule as Mol } from "../shared/chemical-toolkit.ts";
 import { graphOf } from "../shared/chemical-library/chemistry.ts";
 
 type Point = [number, number];

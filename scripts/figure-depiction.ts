@@ -1,4 +1,5 @@
-import type { Mol, MainModule as Toolkit } from "@rdkit/rdkit";
+import type { ChemicalMolecule as Mol } from "../shared/chemical-toolkit.ts";
+import type { PythonToolkit as Toolkit } from "./chemical-toolkit.ts";
 import {
   relaxedCoordinates,
   relievedCoordinates,
@@ -14,6 +15,7 @@ import {
   abbreviatedGroups,
   matchingAbbreviations,
   abbreviationLabel,
+  abbreviationSmarts,
   type MoleculeAbbreviation,
 } from "../shared/molecule-abbreviations.ts";
 import type { Compound } from "../shared/chemical-library/types.ts";
@@ -32,13 +34,6 @@ import {
 import type { FigureRect } from "../shared/chemical-library/geometry.ts";
 import { insidePolygon } from "../src/ui/library/geometry-collision.ts";
 import { figureDimension } from "./figure-output.ts";
-
-// The installed MinimalLib exposes this documented overload; its declaration omits it.
-declare module "@rdkit/rdkit" {
-  interface Mol {
-    get_substruct_matches(mol: Mol, details: string): string;
-  }
-}
 
 const defaults: MoleculeAbbreviation[] = [
   "OTBS",
@@ -157,65 +152,29 @@ function contracted(
   allowed?: number[],
 ) {
   const groups = abbreviatedGroups(rd, full, names).filter(
-      (g) => !allowed || allowed.includes(g.atoms[0]),
-    ),
-    removed = new Set(groups.flatMap((g) => g.atoms.slice(1))),
-    roots = new Map(groups.map((g) => [g.atoms[0], g.name]));
-  const data = JSON.parse(full.get_json()),
-    source = data.molecules[0],
-    original: number[] = source.atoms
-      .map((_: unknown, i: number) => i)
-      .filter((i: number) => !removed.has(i)),
-    indices = new Map(original.map((i, j) => [i, j]));
-  const retained: number[] = source.bonds
-      .map((_: unknown, i: number) => i)
-      .filter((i: number) =>
-        source.bonds[i].atoms.every((a: number) => indices.has(a)),
-      ),
-    bondIndices = new Map(retained.map((i, j) => [i, j]));
-  const representation = source.extensions?.find(
-    (e: { name: string }) => e.name === "rdkitRepresentation",
+    (g) => !allowed || allowed.includes(g.atoms[0]),
   );
-  source.atoms = original.map((i) =>
-    roots.has(i) ? { z: 0 } : source.atoms[i],
-  );
-  source.bonds = retained.map((i) => {
-    const b = source.bonds[i];
-    return {
-      ...b,
-      atoms: b.atoms.map((a: number) => indices.get(a)),
-      ...(b.stereoAtoms
-        ? { stereoAtoms: b.stereoAtoms.map((a: number) => indices.get(a)) }
-        : {}),
-    };
-  });
-  delete source.conformers;
-  source.extensions = representation
-    ? [
-        {
-          name: "rdkitRepresentation",
-          formatVersion: 2,
-          aromaticAtoms: (representation.aromaticAtoms ?? [])
-            .filter((a: number) => indices.has(a) && !roots.has(a))
-            .map((a: number) => indices.get(a)),
-          aromaticBonds: (representation.aromaticBonds ?? [])
-            .filter((b: number) => bondIndices.has(b))
-            .map((b: number) => bondIndices.get(b)),
-          atomRings: (representation.atomRings ?? [])
-            .filter((r: number[]) =>
-              r.every((a) => indices.has(a) && !roots.has(a)),
-            )
-            .map((r: number[]) => r.map((a) => indices.get(a))),
-        },
-      ]
-    : [];
-  const shown = descriptionMolecule(rd, data);
+  const roots = new Map(groups.map((g) => [g.atoms[0], g.name]));
+  const definitions = [...new Set(groups.map((g) => g.name))]
+    .map((name) => `${name} ${abbreviationSmarts[name]} ${name} ${name}`)
+    .join("\n");
+  const { mol: shown, original } = definitions
+    ? rd.condense(full, definitions, [...roots.keys()])
+    : {
+        mol: openMolecule(rd, full.get_json(), false),
+        original: graphOf(full).atoms.map((_, i) => i),
+      };
   displayAtoms.set(shown, {
     original,
-    labels: new Map([...roots].map(([i, name]) => [indices.get(i)!, name])),
+    labels: new Map(
+      original.flatMap((atom, i) =>
+        roots.has(atom) ? [[i, roots.get(atom)!] as const] : [],
+      ),
+    ),
   });
   return shown;
 }
+
 function matchingCopy(rd: Toolkit, mol: Mol) {
   const data = JSON.parse(mol.get_json());
   for (const [i, name] of displayAtoms.get(mol)?.labels ?? [])
@@ -238,36 +197,21 @@ function alignCore(
     currentMatch = matched(rd, mol, query),
     referenceMatch = matched(rd, reference, query);
   query.delete();
-  // Stand-in elements distinguish labels during matching only. Depiction must
-  // use the real atoms and an explicit correspondence, as for the source core.
-  const currentData = JSON.parse(mol.get_json()),
-    targetData = JSON.parse(reference.get_json());
-  currentMatch.forEach((a, i) => {
-    currentData.molecules[0].atoms[a].isotope = 2000 + i;
-    targetData.molecules[0].atoms[referenceMatch[i]].isotope = 2000 + i;
-  });
-  let index = 0;
-  const pattern = smarts.replace(/\[[^\]]+\]/g, () => `[${2000 + index++}*]`),
-    current = descriptionMolecule(rd, currentData),
-    target = descriptionMolecule(rd, targetData);
+  const current = withCoordinates(rd, mol, xy(mol));
   try {
-    if (
-      !current.generate_aligned_coords(
-        target,
-        JSON.stringify({
-          referenceSmarts: pattern,
-          acceptFailure: false,
-          useCoordGen: coordgen,
-        }),
-      )
-    )
-      return null;
-    return withCoordinates(rd, mol, xy(current));
-  } finally {
+    rd.alignAtomMap(
+      current,
+      reference,
+      referenceMatch.map((atom, i) => [atom, currentMatch[i]]),
+      coordgen,
+    );
+    return current;
+  } catch (error) {
     current.delete();
-    target.delete();
+    throw error;
   }
 }
+
 function expandedCoordinates(
   rd: Toolkit,
   shown: Mol,
@@ -277,44 +221,25 @@ function expandedCoordinates(
   const { original } = displayAtoms.get(shown)!,
     points = xy(shown);
   if (original.length === full.get_num_atoms()) return points;
-  const data = JSON.parse(full.get_json());
-  for (const i of original) data.molecules[0].atoms[i].isotope = 2000 + i;
-  const working = descriptionMolecule(rd, data),
-    templateData = JSON.parse(shown.get_json());
-  templateData.molecules[0].atoms = original.map((i) => ({
-    z: graphOf(full).atoms[i].z ?? 6,
-    isotope: 2000 + i,
-  }));
-  templateData.molecules[0].extensions = [];
-  const template = descriptionMolecule(rd, templateData);
+  const working = openMolecule(rd, full.get_json(), false);
   try {
-    const pattern = template
-      .get_smarts()
-      .replace(/(\[[^\]]*\])|[-=#:]/g, (_s, atom) => atom ?? "~");
-    if (
-      !working.generate_aligned_coords(
-        template,
-        JSON.stringify({
-          referenceSmarts: pattern,
-          acceptFailure: false,
-          useCoordGen: coordgen,
-        }),
-      )
-    )
-      throw new Error("Cannot expand the contracted depiction");
+    rd.alignAtomMap(
+      working,
+      shown,
+      original.map((atom, i) => [i, atom]),
+      coordgen,
+    );
     working.normalize_depiction(0);
     const expanded = xy(working);
-    // Expansion supplies coordinates for hidden atoms. The visible contracted
-    // depiction owns the skeleton and label attachment positions.
     original.forEach((atom, i) => {
       expanded[atom] = points[i];
     });
     return expanded;
   } finally {
     working.delete();
-    template.delete();
   }
 }
+
 const xy = (mol: Mol) => graphOf(mol).conformers![0].coords;
 function withCoordinates(
   rd: Toolkit,
@@ -395,52 +320,8 @@ function matched(rd: Toolkit, mol: Mol, query: Mol): number[] {
     copy.delete();
   }
 }
-function free(
-  rd: Toolkit,
-  mol: Mol,
-  coordgen: boolean,
-  electronFragments = false,
-) {
+function free(mol: Mol, coordgen: boolean) {
   mol.set_new_coords(coordgen);
-  if (!coordgen) {
-    // chemfig.depict / Compute2DCoords canonicalizes each embedded fragment;
-    // its one StraightenDepiction call then turns the complete mixture.
-    // RDDepict's 2D transform avoids normalize_depiction(1)'s possible mirror.
-    const points = xy(mol),
-      canonical = points.map((p): [number, number] => [...p]);
-    let groups = [points.map((_, i) => i)];
-    if (electronFragments) {
-      const fragments = mol.get_frags();
-      groups = JSON.parse(fragments.mappings).fragsMolAtomMapping;
-      fragments.molList.delete();
-    }
-    for (const atoms of groups) {
-      const cx = atoms.reduce((n, i) => n + points[i][0], 0) / atoms.length,
-        cy = atoms.reduce((n, i) => n + points[i][1], 0) / atoms.length,
-        centered = atoms.map((i): [number, number] => [
-          points[i][0] - cx,
-          points[i][1] - cy,
-        ]);
-      const xx = centered.reduce((n, p) => n + p[0] * p[0], 0),
-        yy = centered.reduce((n, p) => n + p[1] * p[1], 0),
-        cross = centered.reduce((n, p) => n + p[0] * p[1], 0);
-      const ex = 2 * cross,
-        ey = yy - xx + Math.hypot(xx - yy, 2 * cross),
-        length = Math.hypot(ex, ey);
-      atoms.forEach((atom, i) => {
-        const [x, y] = centered[i];
-        canonical[atom] = [
-          (length > 1e-4 ? (x * ex + y * ey) / length : x) +
-            (electronFragments ? cx : 0),
-          (length > 1e-4 ? (-x * ey + y * ex) / length : y) +
-            (electronFragments ? cy : 0),
-        ];
-      });
-    }
-    const oriented = withCoordinates(rd, mol, canonical);
-    mol.delete();
-    mol = oriented;
-  }
   mol.straighten_depiction();
   mol.normalize_depiction(0);
   return mol;
@@ -846,7 +727,6 @@ function nativeLabelCost(
           bonds: [],
           highlightRadius: 0.1,
           atomHighlightsAreCircles: true,
-          fontFile: "BuiltinRobotoRegular",
           noFreetype: false,
           atomLabels,
           addChiralHs: true,
@@ -973,6 +853,7 @@ export function depictRoute(
   input: FigureInput,
   variantName: (key: string) => string,
   style: FigureStyle,
+  placeFragments?: (key: string) => void,
 ) {
   const structures = new Map(
     [...compounds].filter(
@@ -1034,12 +915,7 @@ export function depictRoute(
         shown.delete();
         continue;
       }
-      const mol = free(
-        rd,
-        shown,
-        r.spec.coordgen ?? input.coordgen ?? false,
-        !!r.spec.arrows?.length && shown.get_smiles().includes("."),
-      );
+      const mol = free(shown, r.spec.coordgen ?? input.coordgen ?? false);
       mols.set(key, mol);
     }
     if (input.anchor !== undefined && !structures.has(String(input.anchor)))
@@ -1086,7 +962,6 @@ export function depictRoute(
             expected.get(key)!,
             () =>
               free(
-                rd,
                 contracted(
                   rd,
                   fulls.get(key)!,
@@ -1176,6 +1051,26 @@ export function depictRoute(
           delete r.compound.variants[r.variant];
         r.variant = variant;
         changed.add(r.compound.id);
+        if (
+          placeFragments &&
+          r.spec.arrows?.length &&
+          final.get_smiles().includes(".")
+        ) {
+          placeFragments(key);
+          const placed = r.compound.variants[variant].coords;
+          const positioned = withCoordinates(
+            rd,
+            final,
+            displayAtoms.get(final)!.original.map((atom): [number, number] => {
+              const p = placed[r.compound.atomIds[r.depiction.atoms[atom]]];
+              const scale = r.spec.scale ?? 1;
+              return [(1.5 * p.x) / scale, (-1.5 * p.y) / scale];
+            }),
+          );
+          mols.set(key, positioned);
+          final.delete();
+          final = positioned;
+        }
         const angle = ((r.spec.rot ?? 0) * Math.PI) / 180,
           flipX = r.spec.flip === true || r.spec.flip === "h" ? -1 : 1,
           flipY = r.spec.flip === "v" ? -1 : 1;

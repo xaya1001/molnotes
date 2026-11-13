@@ -1,7 +1,8 @@
-import initRDKit, { type MainModule } from "@rdkit/rdkit";
+import { loadPythonToolkit } from "../scripts/chemical-toolkit.ts";
+import type { PythonToolkit } from "../scripts/chemical-toolkit.ts";
 
-// Publication compilers share one WASM instance, including overlapping callers.
-let toolkit: Promise<MainModule> | undefined;
+let toolkit: Promise<PythonToolkit> | undefined;
+/** Publication compilers and their figure workers share one Python RDKit service. */
 export function moleculeToolkit() {
-  return (toolkit ??= initRDKit());
+  return (toolkit ??= loadPythonToolkit());
 }

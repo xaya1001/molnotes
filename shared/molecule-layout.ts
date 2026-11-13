@@ -5,7 +5,10 @@
 // authored.
 
 import { moleculeSvg } from "../src/ui/chemistry/drawing.ts";
-import type { MainModule, Mol } from "@rdkit/rdkit";
+import type {
+  ChemicalToolkit as MainModule,
+  ChemicalMolecule as Mol,
+} from "./chemical-toolkit.ts";
 
 const BOND = 1.5; // RDKit's depiction bond length
 

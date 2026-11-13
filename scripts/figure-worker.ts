@@ -12,9 +12,9 @@ import type { FigureGeometry } from "../shared/chemical-library/geometry.ts";
 export type FigureWork =
   | { kind: "prepare"; library: Library; reference: FigureReference }
   | { kind: "diagnose"; geometry: FigureGeometry };
-if (typeof workerData !== "string")
+if (typeof workerData?.css !== "string")
   throw new Error("Figure worker requires chemical style input");
-const style = parseFigureStyle(workerData);
+const style = parseFigureStyle(workerData.css);
 parentPort!.on("message", async (work: FigureWork) => {
   try {
     const value =
