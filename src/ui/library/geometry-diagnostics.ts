@@ -415,6 +415,8 @@ export function figureGeometryDiagnostics(
     if (enclosure.node.kind !== "path") continue;
     const id = enclosure.data.enclose;
     const width = enclosure.node.paint.strokeWidth * scale;
+    const clearance =
+      parseFloat(style.values["--chemical-enclose-gap"]) * scale;
     const selected = new Set(enclosure.data.encloseAtoms.split(" "));
     const contours = pathContours(enclosure.node.d, enclosure.matrix);
     const paths = contours.map((c) => c.points);
@@ -423,25 +425,25 @@ export function figureGeometryDiagnostics(
         inkIntersectsBox(
           contours,
           l.r,
-          width,
+          selected.has(l.id) ? width : width + 2 * clearance,
           selected.has(l.id) ? false : "evenodd",
         )
       )
         add(
           "ENCLOSURE_LABEL_OVERLAP",
           [id, l.id],
-          "Move the enclosure clear of the label",
+          "Keep the label clear of the enclosure and a full gap for unselected labels",
         );
     for (const [atom, point] of atomPoints)
       if (
         !selected.has(atom) &&
         visibleAtoms.has(atom) &&
-        contoursCoverPoint(contours, point, width)
+        contoursCoverPoint(contours, point, width + 2 * clearance)
       )
         add(
           "ENCLOSURE_ATOM_OVERLAP",
           [id, atom],
-          "Keep unselected atoms outside the enclosure",
+          "Keep a full enclosure gap from unselected atoms",
         );
     for (const b of bonds) {
       // A bond entering/leaving the selected group crosses its boundary by design.

@@ -226,11 +226,11 @@ function drawPart(
     const contours = pathContours(d);
     return (
       obstacles.some((box) =>
-        inkIntersectsBox(contours, box, width, automatic ? "evenodd" : false),
+        inkIntersectsBox(contours, box, width + 2 * gap, "evenodd"),
       ) ||
       (automatic &&
         otherAtoms.some((point) =>
-          contoursCoverPoint(contours, point, width),
+          contoursCoverPoint(contours, point, width + 2 * gap),
         )) ||
       otherBonds.some(
         (node) =>
@@ -267,46 +267,49 @@ function drawPart(
     }
   }
   if (automatic && touches(d)) {
-    const regions: Polygon[] = [...selected].map((id): Polygon => {
-      const p = positions[id];
-      return [
-        Array.from({ length: 64 }, (_, i): [number, number] => {
-          const angle = (i * Math.PI) / 32;
-          return [
-            p.x + (gap + 1) * Math.cos(angle),
-            p.y + (gap + 1) * Math.sin(angle),
-          ];
-        }),
-      ];
-    });
-    const add = (d: string) => {
-      for (const c of pathContours(d))
-        regions.push([c.points.map((p) => [p.x, p.y])]);
-    };
-    for (const [a, b] of connections)
-      if (selected.has(a) && selected.has(b))
-        add(outline([positions[a], positions[b]], gap + 1));
-    for (const b of labelBoxes)
-      add(
-        outline(
-          [
-            { x: b.x, y: b.y },
-            { x: b.x + b.width, y: b.y },
-            { x: b.x + b.width, y: b.y + b.height },
-            { x: b.x, y: b.y + b.height },
-          ],
-          gap,
-        ),
-      );
-    const region = polygonClipping.union(regions[0], ...regions.slice(1));
-    d = region
-      .flatMap((polygon) =>
-        polygon.map(
-          (ring) =>
-            ring.map(([x, y], i) => `${i ? "L" : "M"}${x} ${y}`).join("") + "Z",
-        ),
-      )
-      .join("");
+    for (const fraction of [0.6, 0.45, 0.3]) {
+      const radius = ctx.token("--chemical-bond") * fraction;
+      const regions: Polygon[] = [...selected].map((id): Polygon => {
+        const p = positions[id];
+        return [
+          Array.from({ length: 64 }, (_, i): [number, number] => {
+            const angle = (i * Math.PI) / 32;
+            return [
+              p.x + radius * Math.cos(angle),
+              p.y + radius * Math.sin(angle),
+            ];
+          }),
+        ];
+      });
+      const add = (d: string) => {
+        for (const c of pathContours(d))
+          regions.push([c.points.map((p) => [p.x, p.y])]);
+      };
+      for (const [a, b] of connections)
+        if (selected.has(a) && selected.has(b))
+          add(outline([positions[a], positions[b]], radius));
+      for (const b of labelBoxes)
+        add(
+          outline(
+            [
+              { x: b.x, y: b.y },
+              { x: b.x + b.width, y: b.y },
+              { x: b.x + b.width, y: b.y + b.height },
+              { x: b.x, y: b.y + b.height },
+            ],
+            radius,
+          ),
+        );
+      const region = polygonClipping.union(regions[0], ...regions.slice(1));
+      d = region
+        .map(
+          ([outer]) =>
+            outer.map(([x, y], i) => `${i ? "L" : "M"}${x} ${y}`).join("") +
+            "Z",
+        )
+        .join("");
+      if (!touches(d)) break;
+    }
     shape = "outline";
   }
   const node = ctx.element("path", { d });

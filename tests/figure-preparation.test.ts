@@ -248,6 +248,65 @@ test("automatic enclosures exclude neighbouring atoms even across an exempt conn
   }
 });
 
+test("automatic enclosures keep a full gap from unselected label boxes", async () => {
+  const { createFigureScene } =
+    await import("../src/ui/library/scene-geometry.ts");
+  const { drawEnclosure } =
+    await import("../src/ui/library/geometry-enclosures.ts");
+  const positions = {
+    "m:a1": { x: 20, y: 20 },
+    "m:a2": { x: 60, y: 20 },
+    "m:a3": { x: 60, y: 60 },
+    "m:a4": { x: 20, y: 60 },
+    "m:a5": { x: -2, y: 40 },
+  };
+  for (const shape of ["auto", "circle"] as const) {
+    const ctx = createFigureScene(style, fonts);
+    const root = ctx.element("g", {
+      "data-molecule": "m",
+      "data-atom-points": JSON.stringify(positions),
+    });
+    const label = ctx.element("path", {
+      d: "M-4 38H0V42H-4Z",
+      "data-label": "m:a5",
+    });
+    ctx.append(root, label);
+    const [enclosure] = drawEnclosure(
+      {
+        id: "selection",
+        shape,
+        atoms: [1, 2, 3, 4].map((i) => ({ molecule: "m", atom: `a${i}` })),
+      },
+      positions,
+      root,
+      ctx,
+      [
+        ["m:a1", "m:a2"],
+        ["m:a2", "m:a3"],
+        ["m:a3", "m:a4"],
+      ],
+    );
+    assert.equal(
+      enclosure.attributes["data-enclose-shape"],
+      shape === "auto" ? "outline" : "circle",
+    );
+    const diagnostics = figureGeometryDiagnostics(
+      {
+        format: 1,
+        width: 120,
+        height: 120,
+        minimumScale: 1,
+        atomPoints: positions,
+        root,
+      },
+      style,
+    ).filter((d) => d.code.startsWith("ENCLOSURE_"));
+    if (shape === "auto") assert.deepEqual(diagnostics, []);
+    else
+      assert.ok(diagnostics.some((d) => d.code === "ENCLOSURE_LABEL_OVERLAP"));
+  }
+});
+
 test("automatic outlines reduce padding when an unrelated bond touches the boundary", async () => {
   const { createFigureScene } =
     await import("../src/ui/library/scene-geometry.ts");
@@ -335,20 +394,25 @@ test("automatic selections split disconnected parts and follow a concave connect
       .nodes(root)
       .filter((n) => n.attributes["data-enclose"]);
     assert.equal(enclosures.length, mode === "split" ? 2 : 1);
-    assert.deepEqual(
-      figureGeometryDiagnostics(
-        {
-          format: 1,
-          width: 120,
-          height: 120,
-          minimumScale: 1,
-          atomPoints: positions,
-          root,
-        },
-        style,
-      ).filter((d) => d.code.startsWith("ENCLOSURE_")),
-      [],
-    );
+    const diagnostics = figureGeometryDiagnostics(
+      {
+        format: 1,
+        width: 120,
+        height: 120,
+        minimumScale: 1,
+        atomPoints: positions,
+        root,
+      },
+      style,
+    ).filter((d) => d.code.startsWith("ENCLOSURE_"));
+    if (mode === "ring") {
+      assert.ok(diagnostics.some((d) => d.code === "ENCLOSURE_ATOM_OVERLAP"));
+      const { pathContours } =
+        await import("../src/ui/library/path-geometry.ts");
+      const enclosure = enclosures[0];
+      assert.ok(enclosure.kind === "path");
+      assert.equal(pathContours(enclosure.d).length, 1);
+    } else assert.deepEqual(diagnostics, []);
   }
 });
 
