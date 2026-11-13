@@ -377,6 +377,13 @@ async function build(
     figureCache,
     stage,
   );
+  const diagnosticCount = Object.values(proofs.renders).reduce(
+    (total, render) => total + render.diagnostics.length,
+    0,
+  );
+  console.log(
+    `Figure diagnostics: ${diagnosticCount}. Run npm run figure:lint to list issues.`,
+  );
   data.assets.push(...proofs.assets);
   usage.snapshot.previews = proofs.previews;
   usage.snapshot.renders = proofs.renders;

@@ -1,7 +1,3 @@
-export type SavedDrawings = Record<
-  string,
-  { asset: string; width: number; height: number; minimumScale: number }
->;
 import type { MarkushFigureData } from "./markush.ts";
 import type { MoleculeAbbreviation } from "../molecule-abbreviations.ts";
 import type { ConformationSpec } from "../chemical-templates/conformation.ts";
@@ -19,12 +15,12 @@ export type Focus = { primary?: FocusGroup; supporting?: FocusGroup[] };
 export type ArrowKind =
   "forward" | "equilibrium" | "resonance" | "retro" | "none";
 export interface EntryBase {
+  style?: { bond?: number; width?: number };
   sourceFile?: string;
   sourceKey?: string;
   owner?: string;
   overview?: string;
   footnote?: string;
-  drawings?: SavedDrawings;
   id: string;
   title: string;
   sources: Evidence[];
@@ -214,7 +210,6 @@ export interface Mechanism extends EntryBase {
     arrow?: ArrowKind;
     above?: string[];
     below?: string[];
-    drawings?: SavedDrawings;
   }[];
   maps?: { from: AtomRef; to: AtomRef; fromFrame: string; toFrame: string }[];
 }

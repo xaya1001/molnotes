@@ -733,6 +733,7 @@ test("scene enclosures surround visible labels without changing molecular ink or
     toolkit,
     fonts,
     style,
+    canvas: "scene",
   });
   for (const shape of ["auto", "circle", "rect", "outline"] as const) {
     scene.enclose = [{ id: "site", atoms: [oxygen], shape }];
@@ -740,6 +741,7 @@ test("scene enclosures surround visible labels without changing molecular ink or
       toolkit,
       fonts,
       style,
+      canvas: "scene",
     });
     assert.deepEqual(after.atomPoints, before.atomPoints);
     const circles: import("../shared/chemical-library/geometry.ts").FigureNode[] =
@@ -1618,61 +1620,52 @@ test("automatic circles use an outline when a neighbouring label crosses their b
   }
 });
 
-test("saved frame drawings retain geometry and pass the normal proof diagnostics", async (t) => {
-  const { mkdtemp, mkdir, writeFile, rm } = await import("node:fs/promises");
-  const { join } = await import("node:path");
-  const { tmpdir } = await import("node:os");
-  const { sha256 } = await import("../shared/assets.ts");
-  const { figureBuildRunner } =
-    await import("../scripts/content/figure-build.ts");
-  const { figureViewKey } = await import("../shared/chemical-library/views.ts");
-  const { diagnoseFigure } = await import("../scripts/figure-diagnostics.ts");
+test("figure canvas follows visible ink instead of saved scene whitespace", async () => {
   const compiled = await compileFigure({
     kind: "mechanism",
-    frames: [{ id: "one", smiles: "CCO" }],
+    frames: [{ id: "one", smiles: "CCC" }],
   });
-  const reference = { ...compiled.reference, frame: "one" };
-  const original = await prepareFigure(compiled.entries, reference, {
-      toolkit,
-      fonts,
-      style,
-    }),
-    svg = geometrySvg(original),
-    asset = sha256(svg) + ".svg";
-  const root = await mkdtemp(join(tmpdir(), "saved-figure-"));
-  t.after(() => rm(root, { recursive: true, force: true }));
-  await mkdir(join(root, "library/assets"), { recursive: true });
-  await writeFile(join(root, "library/assets", asset), svg);
-  const entry = compiled.entries[reference.ref];
+  const entry = compiled.entries[compiled.reference.ref];
   assert.equal(entry.kind, "mechanism");
-  entry.frames[0].drawings = {
-    [figureViewKey(reference)]: {
-      asset,
-      width: original.width,
-      height: original.height,
-      minimumScale: original.minimumScale,
-    },
-  };
-  entry.frames[0].scene.molecules[0].at.x += 20;
-  const css = Object.entries(style.values)
-    .map(([k, v]) => `${k}: ${v};`)
-    .join("\n");
-  const runner = figureBuildRunner(
-    compiled.entries,
-    root,
-    `:root {${css}}`,
-    "test",
+  entry.frames[0].scene.width = 200;
+  entry.frames[0].scene.height = 100;
+  const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit,
+    fonts,
+    style,
+  });
+  const identities: string[] = [];
+  walkGeometry(geometry.root, (node) => {
+    if (node.attributes["data-figure"])
+      identities.push(node.attributes["data-figure"]);
+  });
+  assert.deepEqual(identities, [compiled.reference.ref]);
+  assert.ok(geometry.width < 200);
+  assert.ok(geometry.height < 150);
+  const b = geometry.root.bounds!;
+  assert.ok(b.x >= 0 && b.y >= 0);
+  assert.ok(
+    b.x + b.width <= geometry.width && b.y + b.height <= geometry.height,
   );
-  t.after(() => runner.close());
-  const rendered = await runner.prepare(reference, 0);
-  assert.equal(rendered.kind, "chemical");
-  if (rendered.kind !== "chemical") throw Error("Expected chemical geometry");
-  assert.equal(rendered.geometry.width, original.width);
-  assert.equal(rendered.geometry.height, original.height);
-  assert.deepEqual(rendered.geometry.atomPoints, original.atomPoints);
-  assert.deepEqual(diagnoseFigure(rendered.geometry, style), []);
-  await assert.rejects(
-    runner.prepare({ ...reference, numbers: { structure: "4" } }, 0),
-    /no saved drawing/,
+});
+
+test("authored bond density reaches the website renderer", async () => {
+  const compiled = await compileFigure({
+    kind: "gallery",
+    bond: 24,
+    width: 400,
+    compounds: { a: "CCC" },
+  });
+  const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit,
+    fonts,
+    style,
+  });
+  const points = Object.values(geometry.atomPoints);
+  assert.ok(
+    Math.abs(
+      Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y) - 24,
+    ) < 0.1,
   );
+  assert.ok(geometry.width < 400);
 });

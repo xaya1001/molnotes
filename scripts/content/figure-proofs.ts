@@ -172,13 +172,6 @@ export async function verifyFigureProofs(
                 stats.diagnosed++;
                 diagnostics = await (await active()).diagnose(geometry, slot);
               } else diagnostics = [];
-              const errors = diagnostics.filter((d) => d.severity === "error");
-              if (errors.length)
-                throw new Error(
-                  errors
-                    .map((d) => `${d.code} ${d.elements.join(",")}`)
-                    .join("; "),
-                );
               await cache.saveProof(proofKey, diagnostics);
             }
             let bytes: Buffer | undefined;

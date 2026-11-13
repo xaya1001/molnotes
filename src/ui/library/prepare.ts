@@ -1,3 +1,5 @@
+import { fitFigureCanvas } from "./figure-canvas.ts";
+import { chemicalFigureStyle } from "../../../shared/chemical-library/style.ts";
 import { prepareMarkush } from "./markush-geometry.ts";
 import { finishScaffoldGeometry } from "./scaffold-geometry.ts";
 import { conformationGeometry } from "./conformation-geometry.ts";
@@ -115,12 +117,24 @@ export async function prepareFigure(
     toolkit: ChemistryToolkit;
     fonts: FigureFontResolver;
     style: FigureStyle;
+    canvas?: "scene";
   },
 ): Promise<FigureGeometry> {
+  options = {
+    ...options,
+    style: chemicalFigureStyle(options.style, library[reference.ref]?.style),
+  };
   const markush = library[reference.ref];
   if (markush?.kind === "markush")
-    return prepareMarkush(markush, options, (compound) =>
-      prepareFigure({ [compound.id]: compound }, { ref: compound.id }, options),
+    return fitFigureCanvas(
+      await prepareMarkush(markush, options, (compound) =>
+        prepareFigure(
+          { [compound.id]: compound },
+          { ref: compound.id },
+          options,
+        ),
+      ),
+      parseFloat(options.style.values["--chemical-bond"]),
     );
   const ctx = createFigureScene(options.style, options.fonts);
   const { element, label, token } = ctx;
@@ -2121,5 +2135,13 @@ export async function prepareFigure(
     ),
   );
   refreshGeometry(svg);
-  return { format: 1, root: svg, width, height, minimumScale, atomPoints };
+  const geometry = {
+    format: 1 as const,
+    root: svg,
+    width,
+    height,
+    minimumScale,
+    atomPoints,
+  };
+  return options.canvas === "scene" ? geometry : fitFigureCanvas(geometry, B);
 }

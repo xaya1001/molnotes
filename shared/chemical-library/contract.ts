@@ -310,42 +310,6 @@ function reactionArrow(value: unknown, w: string) {
   }
 }
 
-function savedDrawings(
-  drawings: unknown,
-  id: string,
-  frame: string | undefined,
-  firstFrame: string | undefined,
-  w: string,
-) {
-  object(drawings, w);
-  for (const [view, drawing] of Object.entries(drawings)) {
-    let reference: unknown;
-    try {
-      reference = JSON.parse(view);
-    } catch {
-      fail(w, "invalid drawing reference");
-    }
-    validateFigureReference(reference, w);
-    if (
-      reference.ref !== id ||
-      (frame !== undefined && (reference.frame ?? firstFrame) !== frame)
-    )
-      fail(w, "drawing reference does not match frame");
-    object(drawing, w);
-    text(drawing.asset, w);
-    if (!/^[a-f0-9]{64}\.svg$/.test(drawing.asset))
-      fail(w, "drawing must be a content-addressed SVG");
-    for (const field of ["width", "height", "minimumScale"])
-      number(drawing[field], w);
-    if (
-      Number(drawing.width) <= 0 ||
-      Number(drawing.height) <= 0 ||
-      Number(drawing.minimumScale) < 0 ||
-      Number(drawing.minimumScale) > 1
-    )
-      fail(w, "invalid drawing dimensions");
-  }
-}
 export function validateLibraryEntry(
   v: unknown,
   w = "library",
@@ -379,10 +343,14 @@ export function validateLibraryEntry(
     !v.id.startsWith(prefixes[v.kind as keyof typeof prefixes] + "_")
   )
     fail(w, "ID kind mismatch");
-  if (v.drawings !== undefined) {
-    if (v.kind === "image" || v.kind === "process")
-      fail(w, "saved drawings require a chemical entry");
-    savedDrawings(v.drawings, String(v.id), undefined, undefined, w);
+  if (v.style !== undefined) {
+    object(v.style, w);
+    for (const [key, value] of Object.entries(v.style)) {
+      if (key !== "bond" && key !== "width")
+        fail(w, "unknown figure style field");
+      number(value, w);
+      if (Number(value) <= 0) fail(w, "positive figure style required");
+    }
   }
   if (v.kind === "compound") {
     text(v.smiles, w);
@@ -524,14 +492,6 @@ export function validateLibraryEntry(
       text(f.title, w);
       text(f.explanation, w);
       scene(f.scene, w);
-      if (f.drawings !== undefined)
-        savedDrawings(
-          f.drawings,
-          String(v.id),
-          String(f.id),
-          String((v.frames as { id: string }[])[0].id),
-          w,
-        );
     }
     if (v.maps !== undefined) {
       list(v.maps, w);
