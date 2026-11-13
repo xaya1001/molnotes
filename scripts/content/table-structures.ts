@@ -149,34 +149,44 @@ export async function compileTableStructures(
       collection = isObject(data.collections)
         ? data.collections[group.collection]
         : undefined;
+    if (!Array.isArray(cases))
+      throw new Error(`${where}: unknown SAR cases ${group.cases}`);
+    if (!isObject(collection))
+      throw new Error(`${where}: unknown SAR collection ${group.collection}`);
     if (
-      !Array.isArray(cases) ||
-      !isObject(collection) ||
+      !Array.isArray(collection.records) ||
+      !Array.isArray(collection.fields) ||
       !isObject(collection.structureFigures)
     )
-      continue;
+      throw new Error(`${where}: invalid SAR collection ${group.collection}`);
     for (const item of cases) {
-      if (!isObject(item) || !Array.isArray(item.ids)) continue;
+      if (!isObject(item) || !Array.isArray(item.ids))
+        throw new Error(`${where}: invalid SAR case`);
       const figures: Record<
         string,
         Record<string, FigureReference & { type: "figure-ref" }>
       > = {};
-      if (!Array.isArray(collection.fields)) continue;
       for (const field of collection.fields) {
-        if (
-          !isObject(field) ||
-          field.kind !== "smiles" ||
-          typeof field.key !== "string"
-        )
-          continue;
+        if (!isObject(field) || typeof field.key !== "string")
+          throw new Error(`${where}: invalid SAR field`);
+        if (field.kind !== "smiles") continue;
         const members: {
           id: string;
           drawing: FigureReference;
           compound: Compound;
         }[] = [];
         for (const id of item.ids) {
+          const record = collection.records.find(
+            (record) => isObject(record) && record.id === id,
+          );
+          if (!isObject(record))
+            throw new Error(`${where}: unknown SAR record ${id}`);
+          if (!record[field.key]) continue;
           const drawings = collection.structureFigures[String(id)];
-          if (!isObject(drawings)) continue;
+          if (!isObject(drawings))
+            throw new Error(
+              `${where}: missing SAR structure ${id}.${field.key}`,
+            );
           const drawing = drawings[field.key];
           validateFigureReference(drawing, where);
           const compound = library[drawing.ref];

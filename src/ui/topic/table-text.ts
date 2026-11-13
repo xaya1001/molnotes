@@ -47,6 +47,6 @@ export function tableTextPieces(text: string) {
       quantity:
         /^(?:\d[\d.,]*\u00a0|[≥≤<>~]\u00a0?[+−-]?\d)/.test(part) ||
         (part.startsWith("**") && part.includes("\u00a0")),
-      runs: chemicalTextRuns(part),
+      runs: chemicalTextRuns(part, "table"),
     }));
 }

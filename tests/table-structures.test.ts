@@ -268,12 +268,102 @@ test("SAR group drawings keep a common core aligned without changing base layout
   assert.equal(item.structureFigures, undefined);
 });
 
-test("table quantities preserve adjacent chemical subscripts", () => {
+test("table quantities keep identifiers plain and chemical subscripts adjacent", () => {
   const runs = tableTextPieces("IC50 nM; CH3 25 °C").flatMap(
     (piece) => piece.runs,
   );
   assert.deepEqual(
     runs.filter((run) => run.script === "sub").map((run) => run.text),
-    ["50", "3"],
+    ["3"],
+  );
+});
+
+test("table automatic subscripts distinguish complete formula words from identifiers", () => {
+  for (const text of [
+    "AXT6",
+    "QAK1",
+    "XAT6A",
+    "H3K14xy",
+    "IC50",
+    "DC50",
+    "GI50",
+    "CC50",
+    "EC50",
+    "ED50",
+    "LD50",
+    "XDK4/6",
+    "MX4;11",
+    "AX068",
+    "C2",
+    "H3",
+    "H4",
+    "K14",
+    "N1",
+    "P32",
+    "S14",
+    "V7",
+    "H1234",
+    "H123",
+    "HC1234567B2",
+    "Y123S",
+  ]) {
+    const runs = tableTextPieces(text).flatMap((piece) => piece.runs);
+    assert.equal(runs.map((run) => run.text).join(""), text);
+    assert.deepEqual(
+      runs.filter((run) => run.script),
+      [],
+      text,
+    );
+  }
+  for (const [text, digits] of [
+    ["CH2", ["2"]],
+    ["Et3N", ["3"]],
+    ["NH2 CO2 CF3", ["2", "2", "3"]],
+    ["Boc2O Me3N Ph2P", ["2", "3", "2"]],
+  ]) {
+    const runs = tableTextPieces(String(text)).flatMap((piece) => piece.runs);
+    assert.deepEqual(
+      runs.filter((run) => run.script === "sub").map((run) => run.text),
+      digits,
+    );
+  }
+  const explicit = tableTextPieces("H_{2}O SO4^{2-} SH\\2 C₆H₆").flatMap(
+    (piece) => piece.runs,
+  );
+  assert.deepEqual(
+    explicit.filter((run) => run.script === "sub").map((run) => run.text),
+    ["2", "4", "6", "6"],
+  );
+  assert.deepEqual(
+    explicit.filter((run) => run.script === "super").map((run) => run.text),
+    ["2-"],
+  );
+});
+
+test("SAR references reject absent groups and collections while unconfirmed structures remain valid", async () => {
+  for (const invalid of [{ cases: "missing" }, { collection: "missing" }]) {
+    const content = await fixture();
+    const block = {
+      type: "sar-cases",
+      cases: "pairs",
+      collection: "examples",
+      ...invalid,
+    };
+    content.chapters = [{ blocks: [block] }];
+    await assert.rejects(
+      compileTableStructures(content, {}, "sites/sample/content.json"),
+      /unknown SAR/,
+    );
+  }
+  const unconfirmed = await fixture();
+  unconfirmed.data.collections.examples.records[0].smiles = "";
+  await assert.doesNotReject(
+    compileTableStructures(unconfirmed, {}, "sites/sample/content.json"),
+  );
+  const unknown = await fixture();
+  unknown.data.sarCases.pairs[0].ids = ["missing"];
+  await assert.rejects(
+    compileTableStructures(unknown, {}, "sites/sample/content.json"),
+    /unknown SAR record/,
   );
 });
