@@ -25,7 +25,8 @@
     "molecule:layout": "node scripts/layout.ts",
     "figure:compile": "node scripts/figure-compile.ts",
     "figure:compare": "node scripts/figure-compare.ts",
-    "figure:render": "node scripts/figure-render.ts"
+    "figure:render": "node scripts/figure-render.ts",
+    "figure:templates": "node scripts/figure-templates.ts"
   },
   "dependencies": {
     "@fontsource/noto-serif-sc": "5.3.1",

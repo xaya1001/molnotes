@@ -19,6 +19,7 @@ const names = {
   image: "图片",
   process: "过程图",
   markush: "通式与覆盖地图",
+  conformation: "构象与投影式",
 };
 const catalogEntries = computed(() =>
   Object.values(props.library.entries).filter(

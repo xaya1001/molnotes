@@ -1,4 +1,5 @@
 import { validateMarkushFigure } from "./markush.ts";
+import { validateConformationSpec } from "../chemical-templates/conformation.ts";
 import { isObject } from "../json.ts";
 import { validateProcess } from "../process.ts";
 import type {
@@ -81,7 +82,47 @@ function layout(v: unknown, w: string) {
     v.ionPairs !== "keep"
   )
     fail(w, "ionPairs must be near or keep");
-  for (const p of Object.values(v.coords)) point(p, w);
+  const coordinates = v.coords;
+  for (const p of Object.values(coordinates)) point(p, w);
+  if (v.scaffold !== undefined) {
+    const s = v.scaffold;
+    object(s, w);
+    text(s.id, w);
+    if (s.drawing !== "flat" && s.drawing !== "perspective")
+      fail(w, "unknown scaffold drawing");
+    const bond = (b: unknown) => {
+      strings(b, w);
+      if (b.length !== 2) fail(w, "scaffold bond requires two atoms");
+      for (const id of b)
+        if (!Object.hasOwn(coordinates, id)) fail(w, "unknown scaffold atom");
+    };
+    list(s.bonds, w);
+    s.bonds.forEach(bond);
+    if (s.drawing === "perspective") {
+      object(s.depths, w);
+      Object.values(s.depths).forEach((n) => number(n, w));
+      for (const b of s.bonds) {
+        strings(b, w);
+        for (const id of b)
+          if (!Object.hasOwn(s.depths, id)) fail(w, "scaffold depth required");
+      }
+      list(s.depthWidth, w);
+      if (s.depthWidth.length !== 2)
+        fail(w, "scaffold depth width requires two values");
+      s.depthWidth.forEach((n) => {
+        number(n, w);
+        if (Number(n) <= 0) fail(w, "positive scaffold width required");
+      });
+    }
+    if (s.overpasses !== undefined) {
+      list(s.overpasses, w);
+      for (const pair of s.overpasses) {
+        list(pair, w);
+        if (pair.length !== 2) fail(w, "overpass requires two bonds");
+        pair.forEach(bond);
+      }
+    }
+  }
   if (v.atomNumbers !== undefined) {
     object(v.atomNumbers, w);
     for (const value of Object.values(v.atomNumbers)) {
@@ -286,7 +327,7 @@ export function validateLibraryEntry(
   text(v.id, w);
   text(v.title, w);
   if (v.footnote !== undefined) text(v.footnote, w);
-  if (!/^(cmp|rxn|rte|mec|img|prc|mku)_[a-z0-9_-]+$/.test(v.id))
+  if (!/^(cmp|rxn|rte|mec|img|prc|cnf|mku)_[a-z0-9_-]+$/.test(v.id))
     fail(w, "invalid stable ID");
   list(v.sources, w);
   if (!v.sources.length) fail(w, "source required");
@@ -304,6 +345,7 @@ export function validateLibraryEntry(
     image: "img",
     process: "prc",
     markush: "mku",
+    conformation: "cnf",
   };
   if (
     !Object.hasOwn(prefixes, String(v.kind)) ||
@@ -463,6 +505,18 @@ export function validateLibraryEntry(
     }
   } else if (v.kind === "markush") {
     validateMarkushFigure(v, w);
+  } else if (v.kind === "conformation") {
+    validateConformationSpec(v, w, [
+      "kind",
+      "id",
+      "title",
+      "sources",
+      "sourceFile",
+      "sourceKey",
+      "owner",
+      "overview",
+      "footnote",
+    ]);
   } else if (v.kind === "process") {
     validateProcess(v, w);
   } else {

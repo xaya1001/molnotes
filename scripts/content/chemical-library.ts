@@ -36,6 +36,7 @@ export async function readChemicalLibrary(root: string, stage?: AssetStage) {
     "images",
     "processes",
     "markush",
+    "conformations",
   ]) {
     const files = await readdir(join(base, dir), { withFileTypes: true }).catch(
       (e: NodeJS.ErrnoException) => {
@@ -63,6 +64,7 @@ export async function readChemicalLibrary(root: string, stage?: AssetStage) {
           image: "images",
           process: "processes",
           markush: "markush",
+          conformation: "conformations",
         }[value.kind] !== dir
       )
         throw new Error(`${value.id}: wrong library directory`);
@@ -126,7 +128,7 @@ export function libraryUsage(
       ("type" in value && value.type === "figure-ref") ||
       ("ref" in value &&
         typeof value.ref === "string" &&
-        /^(cmp|rxn|rte|mec|img|prc|mku)_/.test(value.ref))
+        /^(cmp|rxn|rte|mec|img|prc|cnf|mku)_/.test(value.ref))
     ) {
       validateFigureReference(value);
       if (!entries[value.ref])

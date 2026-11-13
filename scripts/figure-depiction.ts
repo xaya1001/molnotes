@@ -996,6 +996,21 @@ export function depictRoute(
         ),
       );
       expected.set(key, graphSignature(rd, shown));
+      if (r.spec.drawing) {
+        const coords = r.depiction.atoms.map(
+          (a) => layout.coords[r.compound.atomIds[a]],
+        );
+        mols.set(
+          key,
+          withCoordinates(
+            rd,
+            initial,
+            coords.map((p) => [p.x * 1.5, -p.y * 1.5]),
+          ),
+        );
+        shown.delete();
+        continue;
+      }
       const mol = free(rd, shown, r.spec.coordgen ?? input.coordgen ?? false);
       mols.set(key, mol);
     }
@@ -1020,7 +1035,7 @@ export function depictRoute(
       if (done.has(key)) continue;
       const r = structures.get(key);
       let mol = mols.get(key);
-      if (r && mol) {
+      if (r && mol && !r.spec.drawing) {
         const refKey =
           typeof r.spec.align === "string" || typeof r.spec.align === "number"
             ? String(r.spec.align)
