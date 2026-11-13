@@ -32,6 +32,7 @@ import {
   bondTraces,
   inkBox,
   labelBoxes,
+  overlap,
   spaceBondEndpoints,
   spaceChiralHydrogens,
   spaceAtomNumber,
@@ -622,9 +623,120 @@ export async function prepareFigure(
       );
       for (const [index, mark] of Object.entries(marks)) {
         const i = Number(index),
-          aid = key({ molecule: id, atom: c.atomIds[i] }),
-          center = mark.point,
+          aid = key({ molecule: id, atom: c.atomIds[i] });
+        let center = mark.point,
           r = mark.radius;
+        if (!chargeAims[aid]) {
+          const labels = [
+            ...ctx.nodes(g, (node) => ctx.data(node, "label") === aid),
+          ];
+          let boxes = labels.map((e) => inkBox(e, g, ctx));
+          if (groups.some((g) => g.name === "PPh3" && g.atoms[0] === i)) {
+            boxes.sort(
+              (a, b) =>
+                Math.hypot(
+                  a.x + a.width / 2 - positions[i].x,
+                  a.y + a.height / 2 - positions[i].y,
+                ) -
+                Math.hypot(
+                  b.x + b.width / 2 - positions[i].x,
+                  b.y + b.height / 2 - positions[i].y,
+                ),
+            );
+            boxes = boxes.slice(0, 1);
+          }
+          const left = Math.min(...boxes.map((b) => b.x)),
+            right = Math.max(...boxes.map((b) => b.x + b.width));
+          const top = Math.min(...boxes.map((b) => b.y)),
+            bottom = Math.max(...boxes.map((b) => b.y + b.height));
+          const chargeAngle = layout.chargeAngles?.[c.atomIds[i]];
+          const bondAngles = graph.bonds
+            .flatMap(({ atoms: [a, b] }, index) => {
+              if (hiddenBonds.has(index) || (a !== i && b !== i)) return [];
+              const p = positions[a === i ? b : a],
+                origin = positions[i];
+              return [
+                (Math.atan2(p.y - origin.y, p.x - origin.x) + 2 * Math.PI) %
+                  (2 * Math.PI),
+              ];
+            })
+            .sort((a, b) => a - b);
+          const gaps = bondAngles
+            .map((a, k) => {
+              const gap =
+                (bondAngles[k + 1] ?? bondAngles[0] + 2 * Math.PI) - a;
+              const middle = a + gap / 2;
+              return { gap, middle };
+            })
+            .sort((a, b) =>
+              Math.abs(a.gap - b.gap) > 1e-6
+                ? b.gap - a.gap
+                : Math.cos(b.middle + Math.PI / 4) -
+                  Math.cos(a.middle + Math.PI / 4),
+            );
+          r = B * 0.19;
+          const centerAt = (angle: number) => {
+            const ux = Math.cos(angle),
+              uy = Math.sin(angle);
+            const distance =
+              Math.min(
+                Math.abs(ux) < 1e-5
+                  ? Infinity
+                  : (right - left) / 2 / Math.abs(ux),
+                Math.abs(uy) < 1e-5
+                  ? Infinity
+                  : (bottom - top) / 2 / Math.abs(uy),
+              ) +
+              r +
+              B * 0.09;
+            return {
+              x: (left + right) / 2 + ux * distance,
+              y: (top + bottom) / 2 + uy * distance,
+            };
+          };
+          const angles =
+            chargeAngle === undefined
+              ? [
+                  -Math.PI / 4,
+                  ...gaps.map((g) => g.middle),
+                  ...Array.from({ length: 24 }, (_, i) => (i * Math.PI) / 12),
+                ]
+              : [radians(chargeAngle)];
+          const otherLabels = labelBoxes(g, ctx),
+            traces = bondTraces(g, ctx);
+          const candidates = angles.map((angle) => {
+            const center = centerAt(angle);
+            const outer = r + token("--chemical-line") / 2;
+            const marker = rectangle(
+              center.x - outer,
+              center.y - outer,
+              2 * outer,
+              2 * outer,
+            );
+            const combined = rectangle(
+              Math.min(left, marker.left),
+              Math.min(top, marker.top),
+              Math.max(right, marker.right) - Math.min(left, marker.left),
+              Math.max(bottom, marker.bottom) - Math.min(top, marker.top),
+            );
+            let cost = 0;
+            for (const [other, box] of otherLabels)
+              if (other !== aid) cost += overlap(combined, box);
+            const collisions = traces.filter((trace) =>
+              inkIntersectsBox(
+                trace.contours,
+                marker,
+                trace.width,
+                trace.filled,
+              ),
+            ).length;
+            return { center, cost, collisions };
+          });
+          candidates.sort(
+            (a, b) => a.collisions - b.collisions || a.cost - b.cost,
+          );
+          center = candidates[0].center;
+        }
         const charge = element("g", {
           "data-label": aid + ":charge",
           "data-charge-owner": aid,
@@ -633,7 +745,7 @@ export async function prepareFigure(
         const color = f.atoms.has(aid)
           ? "var(--chemical-focus)"
           : "var(--chemical-ink)";
-        const line = token("--chemical-line") * 0.85;
+        const line = token("--chemical-line") * (chargeAims[aid] ? 0.85 : 1);
         ctx.append(
           charge,
           stroke(
@@ -642,7 +754,7 @@ export async function prepareFigure(
             String(line),
           ),
         );
-        const arm = r * 0.52;
+        const arm = r * (chargeAims[aid] ? 0.52 : 0.5);
         ctx.append(
           charge,
           stroke(
@@ -650,7 +762,7 @@ export async function prepareFigure(
               d: `M${center.x - arm} ${center.y}H${center.x + arm}${chargeValues[index] > 0 ? `M${center.x} ${center.y - arm}V${center.y + arm}` : ""}`,
             }),
             color,
-            String(line * 1.15),
+            String(chargeAims[aid] ? line * 1.15 : line),
           ),
         );
         ctx.append(g, charge);
