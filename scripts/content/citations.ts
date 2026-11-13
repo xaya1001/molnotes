@@ -1,11 +1,10 @@
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { extname, isAbsolute, join } from "node:path";
-import { homedir } from "node:os";
+import { extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { citedSource } from "../../shared/source-citations.ts";
 import { contentType } from "../../shared/assets.ts";
-import { setting } from "../../shared/settings.ts";
+import { pythonInterpreter } from "../python.ts";
 import type { Citations } from "../../shared/snapshot.ts";
 import type { SourceRegistry } from "../../shared/source-citations.ts";
 import type { CitationOccurrence, UnitAsset } from "./content-files.ts";
@@ -46,12 +45,7 @@ function material(
   requests: ShelfRequest[],
   shelf: Shelf,
 ): Promise<MaterialResult[]> {
-  const python =
-    process.env.MOLNOTES_PYTHON || process.env.MOLNOTES_PYTHON_FILE
-      ? setting("MOLNOTES_PYTHON")
-      : join(homedir(), "miniconda3", "bin", "python3");
-  if (!isAbsolute(python))
-    throw new Error("MOLNOTES_PYTHON must be an absolute interpreter path");
+  const python = pythonInterpreter();
   return new Promise((resolve, reject) => {
     const env = { ...process.env };
     if (shelf.materials) env.MOLNOTES_MATERIALS_DIR = shelf.materials;

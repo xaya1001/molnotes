@@ -1,4 +1,4 @@
-import type { MainModule } from "@rdkit/rdkit";
+import type { ChemicalToolkit as MainModule } from "../chemical-toolkit.ts";
 import { mappedDummies, substituteProduct } from "../reaction-chemistry.ts";
 import { openMolecule, unmappedMolecule } from "./chemistry.ts";
 import type { Compound, Library } from "./types.ts";

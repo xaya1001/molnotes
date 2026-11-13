@@ -1,4 +1,5 @@
-import type { Mol, MainModule as Toolkit } from "@rdkit/rdkit";
+import type { ChemicalMolecule as Mol } from "../shared/chemical-toolkit.ts";
+import type { PythonToolkit as Toolkit } from "./chemical-toolkit.ts";
 import { figureCommonCore } from "./figure-depiction.ts";
 import {
   graphOf,

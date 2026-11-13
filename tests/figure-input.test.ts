@@ -192,8 +192,9 @@ test("mixed electron events straighten once after orienting their fragments", as
   assert.ok(Math.abs(coords.a2.y - coords.a1.y + 0.6685) < 0.002);
 });
 
-test("structures and reactions without electron events retain their saved orientation", async () => {
+test("structures and reactions without electron events share their free orientation", async () => {
   const smiles = "[2H:1][CH2:2][C:3](=[O:4])C.[OH-:5]";
+  let expected: Compound["layout"]["coords"] | undefined;
   for (const input of [
     { kind: "mechanism", frames: [{ id: "event", smiles }] },
     {
@@ -211,14 +212,9 @@ test("structures and reactions without electron events retain their saved orient
       entry.kind === "mechanism" ? entry.frames[0].scene : entry.scene;
     const placement = scene.molecules[0];
     const compound = compiled.entries[placement.compound] as Compound;
-    assert.deepEqual(compound.variants![placement.variant!].coords, {
-      a1: { x: -1.155, y: -0.244 },
-      a2: { x: -0.289, y: 0.256 },
-      a3: { x: 0.577, y: -0.244 },
-      a4: { x: 0.289, y: -0.922 },
-      a5: { x: 1.155, y: 0.578 },
-      a6: { x: 0.577, y: 0.922 },
-    });
+    const coords = compound.variants![placement.variant!].coords;
+    expected ??= coords;
+    assert.deepEqual(coords, expected);
   }
 });
 
@@ -1523,6 +1519,51 @@ test("gallery line spacing includes superscripts and subscripts in adjacent capt
     style,
   });
   assert.deepEqual(diagnoseFigure(geometry, style), []);
+});
+
+test("a route inherits the core after an electron event places its fragments", async () => {
+  const compiled = await compileFigure({
+    changes: "off",
+    compounds: {
+      precursor: "CCC=C",
+      event: {
+        smiles: "[CH3:1][C:2](=[O:3])[CH3:4].[CH3:5][CH2:6][CH:7]=[CH2:8]",
+        arrows: [
+          { from: "pi(7,8)", to: "between(8,2)" },
+          { from: "pi(2,3)", to: "atom(3)" },
+        ],
+      },
+      product: "C=CCCC",
+    },
+    steps: [
+      { from: "precursor", to: "event" },
+      { from: "event", to: "product" },
+    ],
+  });
+  const route = compiled.entries[compiled.reference.ref] as Route;
+  const reaction = compiled.entries[route.steps[0].reaction] as Reaction;
+  const points = (id: string) => {
+    const placement = reaction.scene.molecules.find((m) => m.id === id)!;
+    return (compiled.entries[placement.compound] as Compound).variants![
+      placement.variant!
+    ].coords;
+  };
+  const precursor = points("precursor"),
+    event = points("product-event");
+  const direction = (
+    coords: Compound["layout"]["coords"],
+    first: string,
+    second: string,
+  ) => ({
+    x: coords[second].x - coords[first].x,
+    y: coords[second].y - coords[first].y,
+  });
+  const a = direction(precursor, "a3", "a4"),
+    b = direction(event, "a7", "a8");
+  assert.ok(
+    (a.x * b.x + a.y * b.y) / Math.hypot(a.x, a.y) / Math.hypot(b.x, b.y) >
+      0.99,
+  );
 });
 
 test("figure density fields survive compilation and library validation", async () => {

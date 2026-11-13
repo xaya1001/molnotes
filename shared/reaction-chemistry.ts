@@ -1,5 +1,8 @@
 import { layoutProblems } from "./molecule-layout.ts";
-import type { MainModule, Mol } from "@rdkit/rdkit";
+import type {
+  ChemicalToolkit as MainModule,
+  ChemicalMolecule as Mol,
+} from "./chemical-toolkit.ts";
 import { abbreviationSmarts } from "./molecule-abbreviations.ts";
 import type { SubstrateScope, SynthesisRoute } from "./reaction-scheme.ts";
 

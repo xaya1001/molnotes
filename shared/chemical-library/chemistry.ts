@@ -1,12 +1,14 @@
-import type { Mol } from "@rdkit/rdkit";
+import type { ChemicalMolecule as Mol } from "../chemical-toolkit.ts";
 import { ionPairCoordinates } from "./ion-layout.ts";
 import {
   validateAbbreviations,
   abbreviatedGroups,
 } from "../molecule-abbreviations.ts";
 import type { Compound, CompoundLayout, Point } from "./types.ts";
-export type Toolkit =
-  import("../../src/ui/chemistry/rdkit.ts").ChemistryToolkit;
+export type Toolkit = Pick<
+  import("../chemical-toolkit.ts").ChemicalToolkit,
+  "get_mol" | "get_qmol"
+>;
 export interface ChemicalGraph {
   atoms: {
     z?: number;

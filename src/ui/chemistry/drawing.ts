@@ -27,7 +27,13 @@ export const moleculeDrawingOptions = {
 
 /** A fixed canvas with room for labels prevents RDKit's flexicanvas fitting from changing scale. */
 export function moleculeSvg(
-  mol: MoleculeHandle,
+  mol: Pick<
+    MoleculeHandle,
+    | "normalize_depiction"
+    | "set_new_coords"
+    | "get_json"
+    | "get_svg_with_highlights"
+  >,
   options: Record<string, unknown> = {},
 ) {
   if (mol.normalize_depiction(0, -1) < 0) {

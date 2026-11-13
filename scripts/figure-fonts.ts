@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import { decodeFigureFont } from "../src/ui/library/font-geometry.ts";
 import type {
   FigureFont,
@@ -93,4 +94,8 @@ export function figureFontFiles() {
       ),
     ),
   ];
+}
+
+export async function nativeFigureFontFile() {
+  return (await moleculeToolkit()).fontFile();
 }

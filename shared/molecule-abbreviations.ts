@@ -1,7 +1,9 @@
 import type {
-  ChemistryToolkit,
-  MoleculeHandle,
-} from "../src/ui/chemistry/rdkit.ts";
+  ChemicalToolkit,
+  ChemicalMolecule as MoleculeHandle,
+} from "./chemical-toolkit.ts";
+
+type ChemistryToolkit = Pick<ChemicalToolkit, "get_qmol">;
 
 // The first query atom is the attachment outside the group. A match must have
 // exactly that one external bond, so a larger substituent cannot be truncated.
