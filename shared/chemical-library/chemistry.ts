@@ -560,35 +560,37 @@ export function validateSceneChemistry(
   where: string,
 ) {
   const molecules = new Map(
-    scene.molecules.map((placement) => {
-      const compound = library[placement.compound];
-      if (compound?.kind !== "compound")
-        throw new Error(`${where}: missing compound`);
-      const layout = placement.variant
-        ? compound.variants![placement.variant]
-        : compound.layout;
-      const mol = openMolecule(
-        toolkit,
-        layout.molblock ?? compound.smiles,
-        !layout.molblock,
-      );
-      try {
-        return [
-          placement.id,
-          {
-            compound,
-            graph: graphOf(mol),
-            hidden: new Set(
-              compoundAbbreviations(toolkit, compound, layout).flatMap((g) =>
-                g.atoms.slice(1),
+    scene.molecules
+      .filter((p) => library[p.compound]?.kind !== "conformation")
+      .map((placement) => {
+        const compound = library[placement.compound];
+        if (compound?.kind !== "compound")
+          throw new Error(`${where}: missing compound`);
+        const layout = placement.variant
+          ? compound.variants![placement.variant]
+          : compound.layout;
+        const mol = openMolecule(
+          toolkit,
+          layout.molblock ?? compound.smiles,
+          !layout.molblock,
+        );
+        try {
+          return [
+            placement.id,
+            {
+              compound,
+              graph: graphOf(mol),
+              hidden: new Set(
+                compoundAbbreviations(toolkit, compound, layout).flatMap((g) =>
+                  g.atoms.slice(1),
+                ),
               ),
-            ),
-          },
-        ] as const;
-      } finally {
-        mol.delete();
-      }
-    }),
+            },
+          ] as const;
+        } finally {
+          mol.delete();
+        }
+      }),
   );
   const atom = (ref: import("./types.ts").AtomRef, allowFolded = false) => {
     const molecule = molecules.get(ref.molecule),

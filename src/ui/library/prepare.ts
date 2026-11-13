@@ -311,7 +311,7 @@ export async function prepareFigure(
               highlightRadius: 0.1,
               atomHighlightsAreCircles: true,
               prepareMolsBeforeDrawing: true,
-              addChiralHs: !layout.scaffold,
+              addChiralHs: !layout.scaffold && layout.ringHydrogens !== false,
               useMolBlockWedging: !!layout.wedgeBonds?.length,
               wedgeBonds: !layout.wedgeBonds?.length,
             }),
@@ -960,30 +960,33 @@ export async function prepareFigure(
           ctx.append(g, mark);
         }
       }
-      const local = reference.numbers?.[id];
-      const numbers = local ? figureLabelLines(local) : figureNumbers[id];
-      if (numbers?.length) {
-        const bounds = ctx.box(g);
-        const group = element("g", { "data-number": `${id}:number` });
-        ctx.append(g, group);
-        let bottom = bounds.y + bounds.height + B * 0.55;
-        for (const [index, number] of numbers.entries()) {
-          const e = label(
-            {
-              x: bounds.x + bounds.width / 2,
-              y: bottom,
-            },
-            number,
-            "var(--chemical-number-font)",
-          );
-          ctx.set(e, "data-label", `${id}:number:${index}`);
-          ctx.append(group, e);
-          bottom += ctx.box(e).height + B * 0.15;
-        }
-      }
+      appendNumbers(g, id);
     } finally {
       if (depiction !== mol) depiction.delete();
       mol.delete();
+    }
+  }
+  function appendNumbers(g: FigureGroup, id: string) {
+    const local = reference.numbers?.[id];
+    const numbers = local ? figureLabelLines(local) : figureNumbers[id];
+    if (numbers?.length) {
+      const bounds = ctx.box(g);
+      const group = element("g", { "data-number": `${id}:number` });
+      ctx.append(g, group);
+      let bottom = bounds.y + bounds.height + B * 0.55;
+      for (const [index, number] of numbers.entries()) {
+        const e = label(
+          {
+            x: bounds.x + bounds.width / 2,
+            y: bottom,
+          },
+          number,
+          "var(--chemical-number-font)",
+        );
+        ctx.set(e, "data-label", `${id}:number:${index}`);
+        ctx.append(group, e);
+        bottom += ctx.box(e).height + B * 0.15;
+      }
     }
   }
   function encloseFocus(
@@ -1049,8 +1052,9 @@ export async function prepareFigure(
     const positions = new Map<string, Point>();
     const savedPoints: Record<string, Point> = {};
     for (const p of s.molecules) {
-      const c = library[p.compound] as Compound,
-        layout = p.variant ? c.variants![p.variant] : c.layout;
+      const c = library[p.compound];
+      if (c.kind !== "compound") continue;
+      const layout = p.variant ? c.variants![p.variant] : c.layout;
       const coords = placedCoordinates(toolkit, c, layout, p.rotate, p.mirror);
       c.atomIds.forEach(
         (atom, i) =>
@@ -1087,6 +1091,17 @@ export async function prepareFigure(
     }
     for (const p of s.molecules) {
       const c = library[p.compound];
+      if (c?.kind === "conformation") {
+        const g = element("g", {
+          "data-molecule": prefix + p.id,
+          "data-compound": c.id,
+          transform: `translate(${p.at.x * B} ${p.at.y * B})`,
+        });
+        ctx.append(g, conformationGeometry(c, ctx, prefix + p.id));
+        appendNumbers(g, prefix + p.id);
+        ctx.append(parent, g);
+        continue;
+      }
       if (c?.kind !== "compound")
         throw new Error(`Missing compound ${p.compound}`);
       const layout = p.variant ? c.variants?.[p.variant] : c.layout;
