@@ -29,7 +29,7 @@ export interface StructureInput {
     id?: Key;
     atoms?: number[];
     bonds?: number[][];
-    shape?: string;
+    shape?: "auto" | "circle" | "rect" | "outline";
   }[];
   scale?: number;
   bracket?: boolean | "ts";
@@ -38,6 +38,7 @@ export interface StructureInput {
   note?: Key;
 }
 export interface StepInput {
+  enclose?: Record<string, NonNullable<StructureInput["enclose"]>>;
   id?: Key;
   title?: Key;
   sources?: FigureInput["sources"];
@@ -137,14 +138,7 @@ const either =
     fail(p, "invalid value");
   };
 const styles = new Set(["bond", "width", "charges", "dots", "ring_h"]);
-const deferred = new Set([
-  "changes",
-  "enclose",
-  "forming",
-  "mark",
-  "notes",
-  "bend",
-]);
+const deferred = new Set(["forming", "mark", "notes", "bend"]);
 export function validateFigureInput(value: unknown): {
   input: FigureInput;
   warnings: string[];
@@ -263,6 +257,7 @@ export function validateFigureInput(value: unknown): {
         choice(true, false, "on", "off"),
         object({ add: list(number), remove: list(number) }),
       ),
+      enclose: map(enclose),
       explain: text,
       arrow: arrowKind,
       tags: list(string),

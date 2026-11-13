@@ -3,6 +3,7 @@ import {
   insidePolygon,
   polygonHitsSegment,
   polygonsOverlap,
+  polylinesTouch,
 } from "./geometry-collision.ts";
 import type {
   Diagnostic,
@@ -29,6 +30,9 @@ import {
   pathMetrics,
   inkIntersectsBox,
   pathContours,
+  contoursCoverPoint,
+  contoursContainPoint,
+  contoursContainBox,
 } from "./path-geometry.ts";
 interface Measured {
   node: FigureNode;
@@ -404,6 +408,120 @@ export function figureGeometryDiagnostics(
   const arrows = [
     ...elements.filter((node) => node.data.electronArrow !== undefined),
   ].map((el) => ({ el, id: el.data.electronArrow!, points: samples(el) }));
+  const enclosures = elements.filter((e) => e.data.enclose !== undefined);
+  const visibleAtoms = new Set([
+    ...bonds.flatMap((b) => b.own),
+    ...labels.map((l) => l.id),
+  ]);
+  for (const [index, enclosure] of enclosures.entries()) {
+    if (enclosure.node.kind !== "path") continue;
+    const id = enclosure.data.enclose;
+    const width = enclosure.node.paint.strokeWidth * scale;
+    const clearance =
+      parseFloat(style.values["--chemical-enclose-gap"]) * scale;
+    const selected = new Set(enclosure.data.encloseAtoms.split(" "));
+    const contours = pathContours(enclosure.node.d, enclosure.matrix);
+    const paths = contours.map((c) => c.points);
+    for (const l of all)
+      if (
+        selected.has(l.id)
+          ? !contoursContainBox(contours, l.r, width + 2 * clearance)
+          : inkIntersectsBox(contours, l.r, width + 2 * clearance, true)
+      )
+        add(
+          "ENCLOSURE_LABEL_OVERLAP",
+          [id, l.id],
+          "Keep selected labels fully inside and unselected labels outside, with a full enclosure gap",
+        );
+    for (const [atom, point] of atomPoints)
+      if (
+        selected.has(atom)
+          ? !contoursContainPoint(contours, point, width + 2 * clearance)
+          : visibleAtoms.has(atom) &&
+            contoursCoverPoint(contours, point, width + 2 * clearance)
+      )
+        add(
+          "ENCLOSURE_ATOM_OVERLAP",
+          [id, atom],
+          "Keep selected atoms inside and unselected atoms outside, with a full enclosure gap",
+        );
+    for (const b of bonds) {
+      // A bond entering/leaving the selected group crosses its boundary by design.
+      if (b.own.some((a) => selected.has(a))) continue;
+      if (
+        paths.some((points) =>
+          polylinesTouch(
+            points,
+            b.points,
+            (width + b.el.node.paint.strokeWidth * scale) / 2,
+          ),
+        )
+      )
+        add(
+          "ENCLOSURE_BOND_OVERLAP",
+          [id, b.id],
+          "Move the enclosure clear of unrelated bonds",
+        );
+    }
+    const arrowParts = elements.filter(
+      (e) =>
+        e.data.electronArrow !== undefined ||
+        e.data.reactionArrow !== undefined ||
+        e.data.routeEdge !== undefined ||
+        e.data.headPoints !== undefined,
+    );
+    for (const a of arrowParts)
+      if (
+        paths.some((points) =>
+          polylinesTouch(
+            points,
+            samples(a),
+            (width + a.node.paint.strokeWidth * scale) / 2,
+          ),
+        ) ||
+        (a.data.headPoints !== undefined &&
+          paths.flat().some((p) =>
+            insidePolygon(
+              p,
+              (JSON.parse(a.data.headPoints) as Point[]).map((q) =>
+                transformPoint(q, a.matrix),
+              ),
+            ),
+          ))
+      )
+        add(
+          "ENCLOSURE_ARROW_OVERLAP",
+          [
+            id,
+            a.data.electronArrow ??
+              a.data.reactionArrow ??
+              a.data.routeEdge ??
+              a.data.arrowHead ??
+              a.data.reactionHead,
+          ],
+          "Separate the enclosure and arrow",
+        );
+    for (const other of enclosures.slice(index + 1)) {
+      if (other.node.kind !== "path") continue;
+      const otherContours = pathContours(other.node.d, other.matrix);
+      if (
+        paths.some((points) =>
+          otherContours.some((c) =>
+            polylinesTouch(
+              points,
+              c.points,
+              (width + other.node.paint.strokeWidth * scale) / 2,
+            ),
+          ),
+        )
+      )
+        add(
+          "ENCLOSURE_OVERLAP",
+          [id, other.data.enclose],
+          "Separate the enclosure boundaries",
+        );
+    }
+  }
   for (const edge of elements.filter(
     (node) => node.data.routeEdge !== undefined,
   )) {

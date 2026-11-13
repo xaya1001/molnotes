@@ -107,6 +107,12 @@ export interface SceneLabel {
   text?: string;
   angle?: number;
 }
+export interface Enclosure {
+  id: string;
+  atoms?: AtomRef[];
+  bonds?: [AtomRef, AtomRef][];
+  shape?: "auto" | "circle" | "rect" | "outline";
+}
 export interface Scene {
   width: number;
   height: number;
@@ -114,6 +120,8 @@ export interface Scene {
   arrows?: ElectronArrow[];
   labels?: SceneLabel[];
   focus?: Focus;
+  enclose?: Enclosure[];
+  changes?: Pick<FocusGroup, "atoms" | "bonds">;
   transitionState?: boolean;
   comparison?: boolean;
   reactionArrows?: {

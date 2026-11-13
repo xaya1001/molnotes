@@ -19,6 +19,7 @@ const identities = [
   "reactionArrow",
   "reactionHead",
   "routeEdge",
+  "enclose",
 ];
 
 export function observationKey(

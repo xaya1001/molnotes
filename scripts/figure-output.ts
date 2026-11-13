@@ -4,6 +4,7 @@ import type { LibraryEntry } from "../shared/chemical-library/types.ts";
 const dimensions = new Set(["x", "y", "width", "height", "textWidth"]);
 const optionalLists = new Set([
   "arrows",
+  "enclose",
   "labels",
   "reactionArrows",
   "captions",
@@ -38,6 +39,8 @@ export function finishFigureEntry<T extends LibraryEntry>(entry: T): T {
       }
       if (isObject(value.focus) && !Object.keys(value.focus).length)
         delete value.focus;
+      if (isObject(value.changes) && !Object.keys(value.changes).length)
+        delete value.changes;
     }
   }
   visit(entry);

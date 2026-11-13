@@ -6,7 +6,12 @@ import type {
   FigureMatrix,
 } from "../../../shared/chemical-library/geometry.ts";
 import { identityMatrix, pointsBox, transformPoint } from "./geometry-math.ts";
-import { polygonHitsSegment, polygonsOverlap } from "./geometry-collision.ts";
+import {
+  insidePolygon,
+  polygonHitsSegment,
+  polygonsOverlap,
+  polylinesTouch,
+} from "./geometry-collision.ts";
 
 export function parsedPath(d: string) {
   const path = svgpath(d);
@@ -136,6 +141,8 @@ export function samplePath(d: string, step: number, matrix = identityMatrix()) {
   );
 }
 
+export const contourSampleStep = 1.5;
+
 export function pathContours(d: string, matrix = identityMatrix()) {
   const subpaths: string[] = [];
   parsedPath(d)
@@ -155,10 +162,53 @@ export function pathContours(d: string, matrix = identityMatrix()) {
       else curved = true;
     });
     const points = curved
-      ? samplePath(path, 1.5, matrix)
+      ? samplePath(path, contourSampleStep, matrix)
       : vertices.map((p) => transformPoint(p, matrix));
     return { points, box: pointsBox(points) };
   });
+}
+
+/** Check a closed contour interior and its boundary ink. */
+export function contoursCoverPoint(
+  contours: ReturnType<typeof pathContours>,
+  point: Point,
+  width: number,
+) {
+  return (
+    contours.some((c) => insidePolygon(point, c.points)) ||
+    contours.some((c) => polylinesTouch(c.points, [point, point], width / 2))
+  );
+}
+
+/** Require an interior point with clearance from the continuous boundary ink. */
+export function contoursContainPoint(
+  contours: ReturnType<typeof pathContours>,
+  point: Point,
+  boundaryWidth: number,
+) {
+  return (
+    contours.some((c) => insidePolygon(point, c.points)) &&
+    !contours.some((c) =>
+      polylinesTouch(c.points, [point, point], boundaryWidth / 2),
+    )
+  );
+}
+
+/** The complete label box must be inside and clear of every boundary segment. */
+export function contoursContainBox(
+  contours: ReturnType<typeof pathContours>,
+  box: FigureBox,
+  boundaryWidth: number,
+) {
+  return (
+    [
+      { x: box.x, y: box.y },
+      { x: box.x + box.width, y: box.y },
+      { x: box.x + box.width, y: box.y + box.height },
+      { x: box.x, y: box.y + box.height },
+    ].every((p) => contoursContainPoint(contours, p, boundaryWidth)) &&
+    !inkIntersectsBox(contours, box, boundaryWidth, false)
+  );
 }
 
 /** Test visible bond contours and stroke width against a complete label box. */
@@ -184,7 +234,11 @@ export function inkIntersectsBox(
       bounds.y + bounds.height + pad < box.y
     )
       return false;
-    if (filled && points.length >= 3 && polygonsOverlap(points, polygon))
+    if (
+      filled === true &&
+      points.length >= 3 &&
+      polygonsOverlap(points, polygon)
+    )
       return true;
     return (
       strokeWidth > 0 &&
