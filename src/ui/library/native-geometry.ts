@@ -7,6 +7,14 @@ import { identityMatrix } from "./geometry-math.ts";
 import { figureGroup, figurePath, plainPaint } from "./geometry-tree.ts";
 import { svgTransform } from "./path-geometry.ts";
 
+const xmlEntities: Record<string, string> = {
+  quot: '"',
+  apos: "'",
+  lt: "<",
+  gt: ">",
+  amp: "&",
+};
+
 export function nativePaint(
   properties: Record<string, string | number>,
   inherited: FigurePaint,
@@ -139,7 +147,13 @@ export function nativeDepictionGeometry(
             key.startsWith("data-") ||
             key.startsWith("aria-"),
         )
-        .map(([key, value]) => [key, String(value)]),
+        .map(([key, value]) => [
+          key,
+          String(value).replace(
+            /&(quot|apos|lt|gt|amp);/g,
+            (_, name: string) => xmlEntities[name],
+          ),
+        ]),
     );
     return node;
   };

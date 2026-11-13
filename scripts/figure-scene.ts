@@ -4,6 +4,7 @@ import { isObject } from "../shared/json.ts";
 import { validateConformationSpec } from "../shared/chemical-templates/conformation.ts";
 import { depictRoute, figureAbbreviations } from "./figure-depiction.ts";
 import { reactionChanges } from "./figure-changes.ts";
+import { placeArrowFragments } from "./figure-fragments.ts";
 import {
   compileRouteLayout,
   compileReactionLayout,
@@ -25,6 +26,7 @@ import {
   graphSignature,
   molecularSmiles,
   placedCoordinates,
+  compoundAbbreviations,
   type Toolkit,
   validateSceneChemistry,
 } from "../shared/chemical-library/chemistry.ts";
@@ -127,13 +129,18 @@ const keyOf = (v: string | number | { id: string | number }) =>
 const layoutOf = (r: Resolved) =>
   r.variant ? r.compound.variants![r.variant] : r.compound.layout;
 function bounds(rd: Toolkit, r: Resolved) {
+  const hidden = new Set(
+    compoundAbbreviations(rd, r.compound, layoutOf(r)).flatMap((g) =>
+      g.atoms.slice(1),
+    ),
+  );
   const ps = placedCoordinates(
     rd,
     r.compound,
     layoutOf(r),
     -(r.spec.rot ?? 0) + (r.spec.flip === "v" ? 180 : 0),
     !!r.spec.flip,
-  );
+  ).filter((_, i) => !hidden.has(i));
   return {
     left: Math.min(...ps.map((p) => p.x)) - 0.8,
     right: Math.max(...ps.map((p) => p.x)) + 0.8,
@@ -404,14 +411,54 @@ export async function compileFigure(
           const raw = openMolecule(rd, expanded, false);
           try {
             const orders = new Map(
-              graphOf(raw).bonds.map((b) => [
+              graphOf(target).bonds.map((b) => [
+                [...b.atoms].sort((a, b) => a - b).join(","),
+                b.bo ?? 1,
+              ]),
+            );
+            for (const b of graphOf(raw).bonds) {
+              if (!Number.isInteger(b.bo ?? 1)) continue;
+              orders.set(
                 b.atoms
                   .map((i) => match.atoms![i])
                   .sort((a, b) => a - b)
                   .join(","),
                 b.bo ?? 1,
-              ]),
+              );
+            }
+            const representation = JSON.parse(
+              m.get_json(),
+            ).molecules[0].extensions?.find(
+              (e: { name: string }) => e.name === "rdkitRepresentation",
             );
+            const aromatic = new Set<number>(
+              representation?.aromaticAtoms ?? [],
+            );
+            const rings: number[][] = (representation?.atomRings ?? []).filter(
+              (ring: number[]) =>
+                ring.length === 6 && ring.every((i) => aromatic.has(i)),
+            );
+            for (const a of spec.arrows.filter((a) =>
+              a.from.startsWith("pi("),
+            )) {
+              const pair = [...a.from.matchAll(/\d+/g)].map((n) =>
+                maps.indexOf(Number(n[0])),
+              );
+              const bondKey = pair
+                .map((i) => match.atoms![i])
+                .sort((a, b) => a - b)
+                .join(",");
+              if (orders.get(bondKey) === 2) continue;
+              const ring = rings.find((r) => pair.every((i) => r.includes(i)));
+              if (ring)
+                for (let i = 0; i < ring.length; i++) {
+                  const key = [ring[i], ring[(i + 1) % ring.length]]
+                    .map((i) => match.atoms![i])
+                    .sort((a, b) => a - b)
+                    .join(",");
+                  orders.set(key, orders.get(key) === 2 ? 1 : 2);
+                }
+            }
             let inBonds = false;
             const molblock = target
               .get_v3Kmolblock()
@@ -575,6 +622,84 @@ export async function compileFigure(
       ...(resolved.spec.flip ? { mirror: true } : {}),
     };
   }
+  function positionArrowFragments(resolved: Resolved) {
+    if (
+      !resolved.spec.arrows?.length ||
+      !resolved.compound.smiles.includes(".")
+    )
+      return;
+    const c = resolved.compound,
+      layout = layoutOf(resolved),
+      m = openMolecule(rd, c.smiles);
+    try {
+      const full = graphOf(m),
+        groups = compoundAbbreviations(rd, c, layout),
+        hidden = new Set(groups.flatMap((g) => g.atoms.slice(1))),
+        visible = c.atomIds.map((_, i) => i).filter((i) => !hidden.has(i));
+      const index = new Map(visible.map((i, n) => [i, n])),
+        scale = resolved.spec.scale ?? 1;
+      const graph = {
+        atoms: visible.map((i) =>
+          groups.some((g) => g.atoms[0] === i)
+            ? { z: 0, impHs: 0 }
+            : full.atoms[i],
+        ),
+        bonds: full.bonds
+          .filter((b) => b.atoms.every((i) => index.has(i)))
+          .map((b) => ({
+            ...b,
+            atoms: b.atoms.map((i) => index.get(i)!) as [number, number],
+          })),
+      };
+      const before = visible.map((i) => ({
+        x: layout.coords[c.atomIds[i]].x / scale,
+        y: -layout.coords[c.atomIds[i]].y / scale,
+      }));
+      const ids = (text: string) =>
+        [...text.matchAll(/\d+/g)].map((n) =>
+          index.get(c.atomIds.indexOf(resolved.atoms.get(Number(n[0]))!))!,
+        );
+      const links = resolved.spec.arrows.flatMap((a) => {
+        const from = ids(a.from),
+          to = ids(a.to);
+        return a.to.startsWith("between(")
+          ? [[to[0], to[1]] as [number, number]]
+          : from.flatMap((i) => to.map((j) => [i, j] as [number, number]));
+      });
+      const after = placeArrowFragments(graph, before, links),
+        coords = structuredClone(layout.coords);
+      visible.forEach(
+        (i, n) =>
+          (coords[c.atomIds[i]] = {
+            x: after[n].x * scale,
+            y: -after[n].y * scale,
+          }),
+      );
+      for (const group of groups) {
+        const root = group.atoms[0],
+          outside = group.attachment,
+          oldRoot = layout.coords[c.atomIds[root]],
+          oldOutside = layout.coords[c.atomIds[outside]],
+          newRoot = coords[c.atomIds[root]],
+          newOutside = coords[c.atomIds[outside]];
+        const angle =
+          Math.atan2(newRoot.y - newOutside.y, newRoot.x - newOutside.x) -
+          Math.atan2(oldRoot.y - oldOutside.y, oldRoot.x - oldOutside.x);
+        for (const i of group.atoms.slice(1)) {
+          const p = layout.coords[c.atomIds[i]],
+            x = p.x - oldRoot.x,
+            y = p.y - oldRoot.y;
+          coords[c.atomIds[i]] = {
+            x: newRoot.x + x * Math.cos(angle) - y * Math.sin(angle),
+            y: newRoot.y + x * Math.sin(angle) + y * Math.cos(angle),
+          };
+        }
+      }
+      layout.coords = coords;
+    } finally {
+      m.delete();
+    }
+  }
   function pushArrows(
     scene: Scene,
     resolved: Resolved,
@@ -648,6 +773,20 @@ export async function compileFigure(
           ? {}
           : { bend: a.side === "left" || a.side === 1 ? "left" : "right" }),
       });
+      if (to.kind === "formingBond" && (a.forming ?? input.forming)) {
+        const bonds = (scene.partialBonds ??= []);
+        if (
+          !bonds.some((b) =>
+            b.atoms.every((at) =>
+              to.atoms.some(
+                (other) =>
+                  at.molecule === other.molecule && at.atom === other.atom,
+              ),
+            ),
+          )
+        )
+          bonds.push({ atoms: to.atoms, order: 1 });
+      }
     }
     const focus = resolved.spec.focus;
     if (focus) {
@@ -747,6 +886,7 @@ export async function compileFigure(
     });
     top = panel;
   } else if (kind === "mechanism") {
+    const style = options.style ?? (await loadFigureStyle());
     const frames: Mechanism["frames"] = [],
       maps: NonNullable<Mechanism["maps"]> = [];
     let prior: Resolved | undefined,
@@ -755,8 +895,18 @@ export async function compileFigure(
       const fid = String(frame.id);
       if (frames.some((f) => f.id === fid))
         throw new Error(`Duplicate frame ${fid}`);
-      const resolved = await resolveStructure(frame, `frames.${fid}`),
-        scene = blank(),
+      const resolved = await resolveStructure(frame, `frames.${fid}`);
+      for (const cid of depictRoute(
+        rd,
+        new Map([[fid, resolved]]),
+        { ...input, steps: [], anchor: fid },
+        () => `${id}_${figureKey(`frames.${fid}`)}`,
+        style,
+      ))
+        generated.add(cid);
+      if (frame.arrows?.length) layoutOf(resolved).methylLabels = [];
+      positionArrowFragments(resolved);
+      const scene = blank(),
         box = bounds(rd, resolved);
       scene.molecules.push(placement(resolved, "structure", { x: 0, y: 0 }));
       pushArrows(scene, resolved, "structure");

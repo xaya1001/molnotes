@@ -75,6 +75,26 @@ export async function readChemicalLibrary(root: string, stage?: AssetStage) {
   validateLibrary(entries);
   const toolkit = Object.keys(entries).length ? await moleculeToolkit() : null;
   const seen = new Set<string>();
+  async function registerAsset(id: string, asset: string, mime: string) {
+    if (seen.has(asset)) return;
+    const file = join(base, "assets", asset);
+    if (!(await lstat(file)).isFile())
+      throw new Error(`${id}: expected regular image asset`);
+    if (contentType(asset) !== mime)
+      throw new Error(`${id}: image MIME differs from extension`);
+    const bytes = await readFile(file);
+    const hash = sha256(bytes);
+    if (!asset.startsWith(hash + "."))
+      throw new Error(`${id}: image hash mismatch`);
+    seen.add(asset);
+    assets.push({
+      scope: "library",
+      path: `assets/${asset}`,
+      ...(await assetResource(bytes, stage)),
+      content_type: mime,
+      prompt: null,
+    });
+  }
   for (const e of Object.values(entries)) {
     if (e.kind === "compound") validateCompound(toolkit!, e);
     if (e.kind === "route") routeMetrics(e, entries);
@@ -88,25 +108,13 @@ export async function readChemicalLibrary(root: string, stage?: AssetStage) {
           frame.scene,
           `${e.id}/${frame.id}`,
         );
-    if (e.kind === "image" && !seen.has(e.asset)) {
-      const file = join(base, "assets", e.asset);
-      if (!(await lstat(file)).isFile())
-        throw new Error(`${e.id}: expected regular image asset`);
-      if (contentType(e.asset) !== e.mime)
-        throw new Error(`${e.id}: image MIME differs from extension`);
-      const bytes = await readFile(file);
-      const hash = sha256(bytes);
-      if (!e.asset.startsWith(hash + "."))
-        throw new Error(`${e.id}: image hash mismatch`);
-      seen.add(e.asset);
-      assets.push({
-        scope: "library",
-        path: `assets/${e.asset}`,
-        ...(await assetResource(bytes, stage)),
-        content_type: e.mime,
-        prompt: null,
-      });
-    }
+    for (const drawing of Object.values(e.drawings ?? {}))
+      await registerAsset(e.id, drawing.asset, "image/svg+xml");
+    if (e.kind === "image") await registerAsset(e.id, e.asset, e.mime);
+    if (e.kind === "mechanism")
+      for (const frame of e.frames)
+        for (const drawing of Object.values(frame.drawings ?? {}))
+          await registerAsset(e.id, drawing.asset, "image/svg+xml");
   }
   return { entries, assets, files: entryFiles };
 }

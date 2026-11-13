@@ -236,15 +236,6 @@ function scene(v: unknown, w: string): asserts v is Scene {
       anchor(a.to, w);
       if (a.electrons !== 1 && a.electrons !== 2)
         fail(w, "electrons must be 1 or 2");
-      if (a.curve === undefined) continue;
-      object(a.curve, w);
-      number(a.curve.exitAngle, w);
-      number(a.curve.entryAngle, w);
-      list(a.curve.reach, w);
-      if (a.curve.reach.length !== 2) fail(w, "two reaches required");
-      a.curve.reach.forEach((x) => number(x, w));
-      for (const k of ["control1", "control2"])
-        if (a.curve[k] !== undefined) point(a.curve[k], w);
     }
   }
   if (v.partialBonds !== undefined) {
@@ -319,6 +310,42 @@ function reactionArrow(value: unknown, w: string) {
   }
 }
 
+function savedDrawings(
+  drawings: unknown,
+  id: string,
+  frame: string | undefined,
+  firstFrame: string | undefined,
+  w: string,
+) {
+  object(drawings, w);
+  for (const [view, drawing] of Object.entries(drawings)) {
+    let reference: unknown;
+    try {
+      reference = JSON.parse(view);
+    } catch {
+      fail(w, "invalid drawing reference");
+    }
+    validateFigureReference(reference, w);
+    if (
+      reference.ref !== id ||
+      (frame !== undefined && (reference.frame ?? firstFrame) !== frame)
+    )
+      fail(w, "drawing reference does not match frame");
+    object(drawing, w);
+    text(drawing.asset, w);
+    if (!/^[a-f0-9]{64}\.svg$/.test(drawing.asset))
+      fail(w, "drawing must be a content-addressed SVG");
+    for (const field of ["width", "height", "minimumScale"])
+      number(drawing[field], w);
+    if (
+      Number(drawing.width) <= 0 ||
+      Number(drawing.height) <= 0 ||
+      Number(drawing.minimumScale) < 0 ||
+      Number(drawing.minimumScale) > 1
+    )
+      fail(w, "invalid drawing dimensions");
+  }
+}
 export function validateLibraryEntry(
   v: unknown,
   w = "library",
@@ -352,6 +379,11 @@ export function validateLibraryEntry(
     !v.id.startsWith(prefixes[v.kind as keyof typeof prefixes] + "_")
   )
     fail(w, "ID kind mismatch");
+  if (v.drawings !== undefined) {
+    if (v.kind === "image" || v.kind === "process")
+      fail(w, "saved drawings require a chemical entry");
+    savedDrawings(v.drawings, String(v.id), undefined, undefined, w);
+  }
   if (v.kind === "compound") {
     text(v.smiles, w);
     if (v.attachment !== undefined) text(v.attachment, w);
@@ -492,6 +524,14 @@ export function validateLibraryEntry(
       text(f.title, w);
       text(f.explanation, w);
       scene(f.scene, w);
+      if (f.drawings !== undefined)
+        savedDrawings(
+          f.drawings,
+          String(v.id),
+          String(f.id),
+          String((v.frames as { id: string }[])[0].id),
+          w,
+        );
     }
     if (v.maps !== undefined) {
       list(v.maps, w);

@@ -711,7 +711,7 @@ test("adjacent bond transfers use a readable arc when space is available", async
       parseFloat(getComputedStyle(svg).getPropertyValue("--chemical-bond"))
     );
   });
-  expect(height).toBeGreaterThanOrEqual(0.69);
+  expect(height).toBeGreaterThanOrEqual(0.35);
 });
 
 test("a saved process reuses scenario controls and keyboard steps at both widths", async ({

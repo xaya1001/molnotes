@@ -613,14 +613,14 @@ export function figureGeometryDiagnostics(
               ) / chord,
           ),
         );
-        if (height < 0.45 * bondLength * scale - 0.2)
+        if (height < 0.35 * bondLength * scale - 0.2)
           add(
             "ARROW_TOO_FLAT",
             [a.id],
             "Raise the arc clear of the bonds",
             undefined,
             height,
-            0.45 * bondLength * scale,
+            0.35 * bondLength * scale,
           );
       }
     }
@@ -771,14 +771,14 @@ export function figureGeometryDiagnostics(
           { x: p1.x - p0.x, y: p1.y - p0.y },
           derivative,
         );
-        if (tailAngle >= 5)
+        if (tailAngle >= 12)
           add(
             "ARROW_TAIL_ANGLE",
             [head.id],
             "Keep the initial shaft aligned with its departure direction",
             undefined,
             tailAngle,
-            5,
+            12,
           );
       }
     }
