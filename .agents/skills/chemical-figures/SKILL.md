@@ -84,7 +84,7 @@ These kinds compile to a `mec_` entry with one static `overview` scene; pages re
 - Image references keep local `alt` and caption. Use `presentation: figure` for the ordinary framed image, or `presentation: note` for a centered note illustration. Existing SVG library presentation is the default. Scene, picture-question and original-page image slots accept `{ref: img_<id>}` while retaining their own controls.
 - Use normal ink plus the shared red accent. At most one primary focus and two supporting focuses; one coordinated electron event may include several related arrows. Keep unchanged structures in normal ink and use the shared design tokens for color, weight, bond length and glyph sizes.
 
-Website chemical style is owned by `src/ui/styles/tokens.css`. At a 32px bond, atom and condition text use 20.71px, compound labels 22.59px and plus signs 26.35px. Bond, enclosure and solid-focus strokes use 1.98px; electron-arrow shafts use 2.28px and reaction-arrow shafts and brackets use 2.48px. RDKit drawing and label-placement measurement read the same double-bond offset (0.17) and atom-label padding (0.08) tokens. Native atom glyphs use RDKit Roboto; other figure text uses the pinned website fonts.
+Website chemical style is owned by `src/ui/styles/tokens.css`. At a 32px bond, atom text uses 21px (an integer for RDKit), condition text 20.71px, compound labels 22.59px and plus signs 26.35px. Bond, enclosure and solid-focus strokes use 1.98px; electron-arrow shafts use 2.28px and reaction-arrow shafts and brackets use 2.48px. RDKit drawing and label-placement measurement read the same double-bond offset (0.17) and atom-label padding (0.08) tokens. Native atom glyphs use RDKit Roboto; other figure text uses the pinned website fonts.
 
 ## Common fixes
 

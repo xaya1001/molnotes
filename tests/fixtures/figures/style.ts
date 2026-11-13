@@ -20,7 +20,7 @@ export const figureStyle = {
     "--chemical-reaction-line": "2.48px",
     "--chemical-multiple-bond-offset": "0.17",
     "--chemical-atom-label-padding": "0.08",
-    "--chemical-font": "20.71px",
+    "--chemical-font": "21px",
     "--chemical-script-font": "20.71px",
     "--chemical-caption-font": "20.71px",
     "--chemical-number-font": "22.59px",
