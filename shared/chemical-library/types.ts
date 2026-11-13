@@ -54,7 +54,7 @@ export interface CompoundLayout {
   compact?: { atom: string; text: string; anchor: "first" | "last" };
   abbreviationAtoms?: string[];
   abbreviations?: MoleculeAbbreviation[];
-  repeatUnits?: { atoms: string[]; label: string }[];
+  repeatUnits?: { atoms: string[]; label: string; compact?: boolean }[];
   atomNumbers?: Record<string, number>;
 }
 export interface Compound extends EntryBase {
@@ -144,8 +144,14 @@ export interface Scene {
   captions?: {
     at: Point;
     text: string;
-    tone?: "comparison";
+    tone?: "comparison" | "yield";
     align?: "start" | "middle" | "end";
+  }[];
+  captionBoxes?: {
+    at: Point;
+    width: number;
+    height: number;
+    border?: boolean;
   }[];
   partialBonds?: { atoms: [AtomRef, AtomRef]; order: number }[];
 }

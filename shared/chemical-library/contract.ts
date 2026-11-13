@@ -141,6 +141,8 @@ function layout(v: unknown, w: string) {
       if (!unit.atoms.length) fail(w, "repeat unit requires atoms");
       unit.atoms.forEach((atom) => text(atom, w));
       text(unit.label, w);
+      if (unit.compact !== undefined && typeof unit.compact !== "boolean")
+        fail(w, "compact repeat must be boolean");
     }
   }
   for (const k of ["pins", "labels"]) {
@@ -246,6 +248,19 @@ function scene(v: unknown, w: string): asserts v is Scene {
       object(b, w);
       pair(b.atoms, w);
       number(b.order, w);
+    }
+  }
+  if (v.captionBoxes !== undefined) {
+    list(v.captionBoxes, w);
+    for (const box of v.captionBoxes) {
+      object(box, w);
+      point(box.at, w);
+      number(box.width, w);
+      number(box.height, w);
+      if (Number(box.width) <= 0 || Number(box.height) <= 0)
+        fail(w, "positive caption box required");
+      if (box.border !== undefined && typeof box.border !== "boolean")
+        fail(w, "caption border must be boolean");
     }
   }
 }

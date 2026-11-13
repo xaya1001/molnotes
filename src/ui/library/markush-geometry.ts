@@ -26,9 +26,11 @@ import {
 } from "./scene-geometry.ts";
 import type { FigureFontResolver } from "./font-geometry.ts";
 import { refreshGeometry } from "./geometry-tree.ts";
+import { unionBoxes } from "./geometry-math.ts";
+import type { FigureBox } from "../../../shared/chemical-library/geometry.ts";
 
 type Block = { node: FigureGroup; w: number; h: number };
-type Drawing = Block & { anchors: Record<string, Point[]> };
+type Drawing = Block & { anchors: Record<string, FigureBox[]> };
 const supers = "⁰¹²³⁴⁵⁶⁷⁸⁹ᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏ";
 const rich = (text: string) =>
   text
@@ -200,10 +202,17 @@ export async function prepareMarkush(
         .map((g) => ({
           atoms: g.atoms.map((i) => c.atomIds[i]),
           label: g.properties.LABEL ?? "n",
+          ...(g.atoms.length === 1 &&
+          (graph.atoms[g.atoms[0]].z ?? 6) === 6 &&
+          graph.atoms[g.atoms[0]].impHs === 2
+            ? { compact: true }
+            : {}),
         }));
       c.template = dummies.map((d) => ({
         atom: c.atomIds[d.atom],
-        label: nativeLabel(groups[String(d.map)]?.label ?? ""),
+        label: nativeLabel(
+          (groups[String(d.map)]?.label ?? "").split(/\s*–\s*/)[0],
+        ),
         allowed: [],
         description: "R attachment",
       }));
@@ -217,6 +226,36 @@ export async function prepareMarkush(
           (e: { name: string }) => e.name === "rdkitRepresentation",
         )?.atomRings ?? [];
       const coords = c.layout.coords;
+      // Give an inline methylene label room on both sides while keeping each
+      // connected side rigid, as in the prototype's stretch operation.
+      for (const unit of c.layout.repeatUnits.filter((u) => u.compact)) {
+        const i = c.atomIds.indexOf(unit.atoms[0]),
+          p = coords[unit.atoms[0]];
+        if (rings.some((r) => r.includes(i))) continue;
+        for (const neighbor of graph.bonds
+          .filter((b) => b.atoms.includes(i))
+          .map((b) => b.atoms.find((a) => a !== i)!)) {
+          const component = new Set<number>([neighbor]),
+            todo = [neighbor];
+          while (todo.length) {
+            const a = todo.pop()!;
+            for (const bond of graph.bonds.filter((b) => b.atoms.includes(a))) {
+              const n = bond.atoms.find((n) => n !== a)!;
+              if (n !== i && !component.has(n)) {
+                component.add(n);
+                todo.push(n);
+              }
+            }
+          }
+          const q = coords[c.atomIds[neighbor]],
+            dx = (q.x - p.x) * 0.8,
+            dy = (q.y - p.y) * 0.8;
+          for (const n of component) {
+            coords[c.atomIds[n]].x += dx;
+            coords[c.atomIds[n]].y += dy;
+          }
+        }
+      }
       // Geminal terminal groups splay around the ring's outward bisector.
       for (let i = 0; i < graph.atoms.length; i++) {
         const ns = graph.bonds
@@ -337,10 +376,54 @@ export async function prepareMarkush(
         ctx.setStyle(wave, "strokeWidth", String(ctx.token("--chemical-line")));
         ctx.append(node, wave);
       }
-      const anchors: Record<string, Point[]> = {};
+      const anchors: Record<string, FigureBox[]> = {};
       for (const d of dummies) {
         if (!groups[String(d.map)]) continue;
-        if (!floating.includes(d)) anchors[String(d.map)] = [positions[d.atom]];
+        if (floating.includes(d)) continue;
+        const labelBox = unionBoxes(
+          ctx
+            .nodes(node)
+            .filter(
+              (n) =>
+                n.attributes["data-label"] === `${prefix}:${c.atomIds[d.atom]}`,
+            )
+            .map((n) => ctx.inkBox(n, node)),
+        )!;
+        anchors[String(d.map)] = [labelBox];
+        const parts = groups[String(d.map)].label
+          .split(/\s*–\s*/)
+          .filter(Boolean);
+        const neighbor = graph.bonds
+          .find((b) => b.atoms.includes(d.atom))!
+          .atoms.find((a) => a !== d.atom)!;
+        const direction = positions[d.atom].x >= positions[neighbor].x ? 1 : -1;
+        let previous = labelBox;
+        for (const part of parts.slice(1)) {
+          const lb = text(part, Infinity, ctx.token("--chemical-font"));
+          const x =
+            direction > 0
+              ? previous.x + previous.width + B
+              : previous.x - B - lb.w;
+          const y = previous.y + previous.height / 2 - lb.h / 2;
+          const link = line(
+            node,
+            {
+              x:
+                direction > 0
+                  ? previous.x + previous.width + B * 0.15
+                  : previous.x - B * 0.15,
+              y: y + lb.h / 2,
+            },
+            {
+              x: direction > 0 ? x - B * 0.15 : x + lb.w + B * 0.15,
+              y: y + lb.h / 2,
+            },
+          );
+          ctx.setData(link, "markush-link", String(d.map));
+          put(node, lb, x, y);
+          previous = { x, y, width: lb.w, height: lb.h };
+          anchors[String(d.map)].push(previous);
+        }
       }
       const used = new Set<string>();
       for (const d of floating) {
@@ -439,7 +522,7 @@ export async function prepareMarkush(
                 ? -lb.h - B * 0.15
                 : B * 0.15);
         put(node, lb, x, y);
-        anchors[String(d.map)] = [{ x: x + lb.w / 2, y: y + lb.h / 2 }];
+        anchors[String(d.map)] = [{ x, y, width: lb.w, height: lb.h }];
       }
       const box = ctx.box(node),
         result = crop(node);
@@ -731,8 +814,12 @@ export async function prepareMarkush(
       const points = keys.flatMap((k) => core.anchors[k] ?? []),
         anchor = points.length
           ? {
-              x: points.reduce((s, p) => s + p.x, 0) / points.length,
-              y: points.reduce((s, p) => s + p.y, 0) / points.length,
+              x:
+                points.reduce((s, p) => s + p.x + p.width / 2, 0) /
+                points.length,
+              y:
+                points.reduce((s, p) => s + p.y + p.height / 2, 0) /
+                points.length,
             }
           : undefined;
       return { keys, group, node, w, h: title.h + size * 0.4 + body.h, anchor };
@@ -754,7 +841,7 @@ export async function prepareMarkush(
     const right = attached.slice(0, nr),
       left = attached.slice(nr).reverse(),
       gap = B * 1.1,
-      lead = B * 3.2,
+      lead = B * 1.6,
       stack = (cs: typeof calls) =>
         cs.reduce((s, c) => s + c.h, 0) + gap * Math.max(0, cs.length - 1),
       wl = Math.max(0, ...left.map((c) => c.w)),
@@ -773,13 +860,28 @@ export async function prepareMarkush(
         put(root, c, side === "L" ? cx + cw - c.w : cx, y);
         const sx = side === "L" ? cx + cw + B * 0.4 : cx - B * 0.4,
           sy = y + size / 2;
-        for (const k of c.keys)
-          for (const a of core.anchors[k] ?? []) {
-            const ax = a.x + x,
-              ay = a.y + cy,
+        for (const k of c.keys) {
+          const a = [...(core.anchors[k] ?? [])].sort(
+            (a, b) =>
+              Math.hypot(
+                a.x + a.width / 2 + x - sx,
+                a.y + a.height / 2 + cy - sy,
+              ) -
+              Math.hypot(
+                b.x + b.width / 2 + x - sx,
+                b.y + b.height / 2 + cy - sy,
+              ),
+          )[0];
+          if (a) {
+            const ax = a.x + a.width / 2 + x,
+              ay = a.y + a.height / 2 + cy,
               d = Math.hypot(ax - sx, ay - sy),
-              ex = ax - ((ax - sx) / d) * B * 0.8,
-              ey = ay - ((ay - sy) / d) * B * 0.8;
+              edge = Math.min(
+                a.width / 2 / Math.abs(ax - sx),
+                a.height / 2 / Math.abs(ay - sy),
+              ),
+              ex = ax - (ax - sx) * edge - ((ax - sx) / d) * B * 0.12,
+              ey = ay - (ay - sy) * edge - ((ay - sy) / d) * B * 0.12;
             line(
               root,
               { x: sx, y: sy },
@@ -796,6 +898,7 @@ export async function prepareMarkush(
               }),
             );
           }
+        }
         y += c.h + gap;
       }
     }

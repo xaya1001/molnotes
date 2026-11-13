@@ -85,3 +85,36 @@ test("series core completion is independent of wall time and incomplete searches
     /common-core calculation did not complete/,
   );
 });
+
+test("terminal alkoxy rotation frees neighboring labels while preserving branch geometry", async () => {
+  const rd = await moleculeToolkit();
+  const mol = rd.get_mol(
+    "*CCC(OC)C |(-1.5,0,;0,0,;1.5,0,;3,0,;3,1.5,;4.5,1.5,;3,-1.5,)|",
+  )!;
+  try {
+    const inkCost = (points: [number, number][]) =>
+      points[4][0] <= 3.4 ? 10 : points[0][1] > 0.4 ? 0 : 5;
+    const points = relievedCoordinates(mol, new Map([[0, "CO2H"]]), inkCost);
+    assert.ok(points);
+    assert.equal(inkCost(points), 0);
+    assert.deepEqual(
+      [points[1], points[2], points[3], points[6]],
+      [
+        [0, 0],
+        [1.5, 0],
+        [3, 0],
+        [3, -1.5],
+      ],
+    );
+    assert.ok(Math.abs(Math.hypot(...points[0]) - 1.5) < 1e-9);
+    const ox = points[4][0] - 3,
+      oy = points[4][1];
+    const cx = points[5][0] - points[4][0],
+      cy = points[5][1] - points[4][1];
+    assert.ok(Math.abs(Math.hypot(ox, oy) - 1.5) < 1e-9);
+    assert.ok(Math.abs(Math.hypot(cx, cy) - 1.5) < 1e-9);
+    assert.ok(Math.abs(ox * cx + oy * cy) < 1e-9);
+  } finally {
+    mol.delete();
+  }
+});

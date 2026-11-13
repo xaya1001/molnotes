@@ -118,7 +118,10 @@ export function relievedCoordinates(
     .trim()
     .split("\n")
     .map((line) => line.trim().split(/\s+/)[3]);
-  const terms = new Map<number, { parent: number; length: number }>();
+  const terms = new Map<
+    number,
+    { parent: number; length: number; child?: number }
+  >();
   for (const [i, atom] of graph.atoms.entries()) {
     const length = labels.has(i)
       ? labels.get(i)!.replace(/<[^>]+>/g, "").length
@@ -129,8 +132,42 @@ export function relievedCoordinates(
           ((atom.impHs ?? 0) > 1 ? 1 : 0);
     if (neighbors[i].length === 1 && length >= 2)
       terms.set(i, { parent: neighbors[i][0], length });
+    // The oxygen of a terminal methoxy group remains visible beside wide
+    // abbreviations. Its methyl follows the same rotation so both bonds and
+    // the O-C angle retain their geometry.
+    if (measure && atom.z === 8 && neighbors[i].length === 2) {
+      const child = neighbors[i].find(
+        (n) =>
+          neighbors[n].length === 1 &&
+          (graph.atoms[n].z ?? 6) === 6 &&
+          graph.atoms[n].impHs === 3,
+      );
+      if (child !== undefined)
+        terms.set(i, {
+          parent: neighbors[i].find((n) => n !== child)!,
+          length,
+          child,
+        });
+    }
   }
   if (!terms.size) return;
+  const move = (i: number, p: Point) => {
+    const { parent, child } = terms.get(i)!;
+    if (child !== undefined) {
+      const q = points[parent],
+        old = points[i];
+      const angle =
+        Math.atan2(p[1] - q[1], p[0] - q[0]) -
+        Math.atan2(old[1] - q[1], old[0] - q[0]);
+      const x = points[child][0] - old[0],
+        y = points[child][1] - old[1];
+      points[child] = [
+        p[0] + x * Math.cos(angle) - y * Math.sin(angle),
+        p[1] + x * Math.sin(angle) + y * Math.cos(angle),
+      ];
+    }
+    points[i] = p;
+  };
   const box = (i: number, p: Point) => {
     const t = terms.get(i)!,
       w = t.length * 0.62;
@@ -156,6 +193,7 @@ export function relievedCoordinates(
       if (
         j !== i &&
         j !== parent &&
+        j !== terms.get(i)!.child &&
         x0 - margin < x &&
         x < x1 + margin &&
         y0 - margin < y &&
@@ -199,7 +237,7 @@ export function relievedCoordinates(
         }
       }
       if (chosen) {
-        points[i] = chosen;
+        move(i, chosen);
         moved = true;
         changed = true;
       }
@@ -236,8 +274,8 @@ export function relievedCoordinates(
         : [0, 20, -20, 40, -40, 60, -60, 80, -80];
       for (const u of angles)
         for (const v of angles) {
-          points[i] = rotate(a, u);
-          points[j] = rotate(b, v);
+          move(i, rotate(a, u));
+          move(j, rotate(b, v));
           const score =
             (measure
               ? measure(points)
@@ -248,37 +286,43 @@ export function relievedCoordinates(
             chosen = [points[i], points[j]];
           }
         }
-      points[i] = chosen[0];
-      points[j] = chosen[1];
+      move(i, chosen[0]);
+      move(j, chosen[1]);
       changed ||= chosen[0] !== a || chosen[1] !== b;
     }
   // Native ink can cover a nearby bond even when the approximate label box is clear.
   if (measure)
-    for (const [i, term] of terms) {
-      let best = measure(points);
-      if (best < 0.3) continue;
-      const original = points[i],
-        q = points[term.parent],
-        vx = original[0] - q[0],
-        vy = original[1] - q[1];
-      let chosen = original;
-      for (const deg of [
-        10, -10, 20, -20, 30, -30, 40, -40, 50, -50, 60, -60, 70, -70, 80, -80,
-        90, -90,
-      ]) {
-        const angle = (deg * Math.PI) / 180;
-        points[i] = [
-          q[0] + vx * Math.cos(angle) - vy * Math.sin(angle),
-          q[1] + vx * Math.sin(angle) + vy * Math.cos(angle),
-        ];
-        const score = measure(points) + Math.abs(deg) * 0.004;
-        if (score < best - 0.05) {
-          best = score;
-          chosen = points[i];
+    for (let pass = 0; pass < 3; pass++) {
+      let moved = false;
+      for (const [i, term] of terms) {
+        let best = measure(points);
+        if (best < 0.3) continue;
+        const original = points[i],
+          q = points[term.parent],
+          vx = original[0] - q[0],
+          vy = original[1] - q[1];
+        let chosen = original;
+        for (const deg of [
+          10, -10, 20, -20, 30, -30, 40, -40, 50, -50, 60, -60, 70, -70, 80,
+          -80, 90, -90,
+        ]) {
+          const angle = (deg * Math.PI) / 180;
+          move(i, [
+            q[0] + vx * Math.cos(angle) - vy * Math.sin(angle),
+            q[1] + vx * Math.sin(angle) + vy * Math.cos(angle),
+          ]);
+          const score = measure(points) + Math.abs(deg) * 0.004;
+          if (score < best - 0.05) {
+            best = score;
+            chosen = points[i];
+          }
         }
+        move(i, chosen);
+        changed ||= chosen !== original;
+        moved ||= chosen !== original;
       }
-      points[i] = chosen;
-      changed ||= chosen !== original;
+      // Moving a small terminal branch can free a sector for an earlier label.
+      if (!moved) break;
     }
   return changed ? points : undefined;
 }
