@@ -1,21 +1,26 @@
 import type { FigureGeometry } from "../../../shared/chemical-library/geometry.ts";
-import { figureGroup, refreshGeometry } from "./geometry-tree.ts";
+import {
+  figureGroup,
+  refreshGeometry,
+  transformedNodeBox,
+} from "./geometry-tree.ts";
 
 /** The prototype route margin is 0.8 bond lengths on every side. */
 export function fitFigureCanvas(
   geometry: FigureGeometry,
   bond: number,
 ): FigureGeometry {
-  const { root, atomPoints } = geometry;
-  refreshGeometry(root);
-  const bounds = root.bounds;
+  const { root: content, atomPoints } = geometry;
+  refreshGeometry(content);
+  const bounds = transformedNodeBox(content);
   if (!bounds) return geometry;
   const margin = bond * 0.8;
   const dx = margin - bounds.x,
     dy = margin - bounds.y;
-  const wrapper = figureGroup(root.children);
-  wrapper.transform = [1, 0, 0, 1, dx, dy];
-  root.children = [wrapper];
+  content.transform[4] += dx;
+  content.transform[5] += dy;
+  const root = figureGroup([content]);
+  root.attributes = { ...content.attributes };
   for (const point of Object.values(atomPoints)) {
     point.x += dx;
     point.y += dy;
@@ -26,5 +31,5 @@ export function fitFigureCanvas(
   root.attributes.width = String(width);
   root.attributes.height = String(height);
   refreshGeometry(root);
-  return { ...geometry, width, height };
+  return { ...geometry, root, width, height };
 }
