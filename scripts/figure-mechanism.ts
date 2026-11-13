@@ -7,9 +7,13 @@ import type {
   Reaction,
   Route,
   Scene,
+  AtomRef,
 } from "../shared/chemical-library/types.ts";
 import { compilePanelScene, type PanelCell } from "./figure-panels.ts";
 import { compileRouteLayout } from "./figure-route.ts";
+import { prepareFigure } from "../src/ui/library/prepare.ts";
+import { loadFigureFonts } from "./figure-fonts.ts";
+import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 
 const words = (value: string | number | undefined) =>
   value === undefined ? "" : String(value);
@@ -30,15 +34,54 @@ export async function compileMechanismFrameLayout(
   cells: PanelCell[],
   input: FigureInput,
   style: FigureStyle,
+  contacts: [AtomRef, AtomRef][],
 ): Promise<Scene> {
-  if (!frame.steps?.length)
-    return compilePanelScene(
+  if (!frame.steps?.length) {
+    const forward = await compilePanelScene(
       library,
       entry,
       { ...input, kind: "gallery" },
       cells,
       style,
     );
+    if (cells.length !== 2 || !contacts.length) return forward;
+    const reverse = await compilePanelScene(
+      library,
+      entry,
+      { ...input, kind: "gallery" },
+      [...cells].reverse(),
+      style,
+    );
+    const options = {
+      style,
+      fonts: await loadFigureFonts(),
+      toolkit: await moleculeToolkit(),
+      canvas: "scene" as const,
+    };
+    const distance = async (scene: Scene) => {
+      const probe: Mechanism = {
+        ...entry,
+        frames: [
+          { id: "measure", title: "Measure", explanation: "Measure", scene },
+        ],
+      };
+      const geometry = await prepareFigure(
+        { ...library, [entry.id]: probe },
+        { ref: entry.id },
+        options,
+      );
+      const at = (ref: AtomRef) =>
+        geometry.atomPoints[`${ref.molecule}:${ref.atom}`];
+      return contacts.reduce(
+        (sum, [a, b]) => sum + Math.hypot(at(a).x - at(b).x, at(a).y - at(b).y),
+        0,
+      );
+    };
+    // Keep the reaction sites close by putting their exposed ends toward one another.
+    return (await distance(reverse)) < (await distance(forward)) - 0.1
+      ? reverse
+      : forward;
+  }
 
   const byKey = new Map(cells.map((cell) => [cell.key, cell])),
     working = { ...library },

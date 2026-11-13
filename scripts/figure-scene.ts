@@ -510,6 +510,7 @@ export async function compileFigure(
           (i) => compound.atomIds[match.atoms![i]],
         );
         if (
+          compound.smiles.includes(".") ||
           JSON.stringify(abbreviations.abbreviations) !==
             JSON.stringify(compound.layout.abbreviations ?? []) ||
           JSON.stringify(abbreviationAtoms) !==
@@ -569,7 +570,7 @@ export async function compileFigure(
                 .map((i) => match.atoms![i])
                 .sort((a, b) => a - b)
                 .join(",");
-              if (orders.get(bondKey) === 2) continue;
+              if ((orders.get(bondKey) ?? 1) >= 2) continue;
               const ring = rings.find((r) => pair.every((i) => r.includes(i)));
               if (ring)
                 for (let i = 0; i < ring.length; i++) {
@@ -770,16 +771,12 @@ export async function compileFigure(
     };
   }
   function positionArrowFragments(resolved: Resolved) {
-    if (
-      !isChemical(resolved) ||
-      !resolved.spec.arrows?.length ||
-      !resolved.compound.smiles.includes(".")
-    )
+    if (!isChemical(resolved) || !resolved.compound.smiles.includes("."))
       return;
     const c = resolved.compound,
       layout = layoutOf(resolved),
       m = openMolecule(rd, c.smiles);
-    layout.methylLabels = [];
+    if (resolved.spec.arrows?.length) layout.methylLabels = [];
     layout.ionPairs = "keep";
     try {
       const full = graphOf(m),
@@ -809,7 +806,7 @@ export async function compileFigure(
         [...text.matchAll(/\d+/g)].map((n) =>
           index.get(c.atomIds.indexOf(resolved.atoms.get(Number(n[0]))!))!,
         );
-      const links = resolved.spec.arrows.flatMap((a) => {
+      const links = (resolved.spec.arrows ?? []).flatMap((a) => {
         const from = ids(a.from),
           to = ids(a.to);
         return a.to.startsWith("between(")
@@ -1189,18 +1186,23 @@ export async function compileFigure(
           );
           resolved.set(local, r);
         }
-        for (const cid of depictStructures(
-          rd,
-          resolved,
-          {
-            ...input,
-            steps: frame.steps ?? [],
-            anchor: [...resolved.keys()][0],
-          },
-          (local) => `${id}_${figureKey(`frames.${fid}.compounds.${local}`)}`,
-          style,
-        ))
-          generated.add(cid);
+        if (
+          frame.steps?.length ||
+          frame.arrows?.length ||
+          [...resolved.values()].some((r) => r.spec.arrows?.length)
+        )
+          for (const cid of depictStructures(
+            rd,
+            resolved,
+            {
+              ...input,
+              steps: frame.steps ?? [],
+              anchor: [...resolved.keys()][0],
+            },
+            (local) => `${id}_${figureKey(`frames.${fid}.compounds.${local}`)}`,
+            style,
+          ))
+            generated.add(cid);
         for (const [local, r] of resolved) {
           positionArrowFragments(r);
           const scene = blank();
@@ -1304,6 +1306,18 @@ export async function compileFigure(
           cells,
           input,
           style,
+          (frame.arrows ?? []).flatMap((arrow) => {
+            const from = eventRefs(arrow.from).map((ref) =>
+                atom(`${ref.local}:${ref.number}`),
+              ),
+              to = eventRefs(arrow.to).map((ref) =>
+                atom(`${ref.local}:${ref.number}`),
+              );
+            const pairs: [AtomRef, AtomRef][] = arrow.to.startsWith("between(")
+              ? [[to[0], to[1]]]
+              : from.flatMap((a) => to.map((b): [AtomRef, AtomRef] => [a, b]));
+            return pairs.filter(([a, b]) => a.molecule !== b.molecule);
+          }),
         );
         const first = resolved.values().next().value!;
         pushArrows(

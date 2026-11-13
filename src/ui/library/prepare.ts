@@ -261,8 +261,14 @@ export async function prepareFigure(
           ? `H${atom.impHs > 1 ? `<sub>${atom.impHs}</sub>` : ""}`
           : "";
         const isolated = !graph.bonds.some((b) => b.atoms.includes(i));
+        const neighbors = graph.bonds.flatMap((b) =>
+          b.atoms.includes(i) ? [b.atoms.find((a) => a !== i)!] : [],
+        );
         atomLabels[i] =
-          isolated && [8, 16].includes(atom.z ?? 6) ? h + symbol : symbol + h;
+          (isolated && [8, 16].includes(atom.z ?? 6)) ||
+          (neighbors.length === 1 && coords[neighbors[0]].x > coords[i].x)
+            ? h + symbol
+            : symbol + h;
       }
       for (const t of c.template ?? [])
         atomLabels[c.atomIds.indexOf(t.atom)] = t.label;
@@ -1331,7 +1337,10 @@ export async function prepareFigure(
               fill: "var(--chemical-ink)",
             }),
           );
-      } else ctx.append(g, label(p, l.text ?? ""));
+      } else {
+        ctx.append(g, label(p, l.text ?? ""));
+        spaceAtomNumber(g, parent, atom(l.at), ctx);
+      }
     }
     function anchor(a: Anchor): Point {
       if (a.kind === "atom") return atom(a.at);

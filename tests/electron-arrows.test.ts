@@ -143,3 +143,43 @@ test("two reacting ends fold together and face the second fragment evenly", () =
       1e-6,
   );
 });
+
+test("spectators leave the reacting fragment network free", () => {
+  const graph = {
+    atoms: [{ z: 8 }, {}, {}, { z: 7 }, {}],
+    bonds: [
+      { atoms: [1, 2] as [number, number] },
+      { atoms: [3, 4] as [number, number] },
+    ],
+  };
+  const placed = placeArrowFragments(
+    graph,
+    [
+      { x: 0, y: 0 },
+      { x: 3, y: 0 },
+      { x: 4, y: 0 },
+      { x: 3.5, y: 0.1 },
+      { x: 4.5, y: 0.1 },
+    ],
+    [[1, 3]],
+  );
+  assert.ok(distance(placed[1], placed[3]) >= 2.3 - 1e-6);
+  assert.ok(
+    Math.min(...placed.slice(1).map((p) => distance(p, placed[0]))) >=
+      2.3 - 1e-6,
+  );
+  assert.ok(Math.abs(distance(placed[1], placed[2]) - 1) < 1e-6);
+  assert.ok(Math.abs(distance(placed[3], placed[4]) - 1) < 1e-6);
+});
+
+test("unlinked fragments reserve space for their labels", () => {
+  const placed = placeArrowFragments(
+    { atoms: [{ z: 7 }, { z: 8 }], bonds: [] },
+    [
+      { x: 0, y: 0 },
+      { x: 0.5, y: 0 },
+    ],
+    [],
+  );
+  assert.ok(distance(placed[0], placed[1]) >= 2.3 - 1e-6);
+});

@@ -1079,11 +1079,7 @@ export function depictRoute(
           delete r.compound.variants[r.variant];
         r.variant = variant;
         changed.add(r.compound.id);
-        if (
-          placeFragments &&
-          r.spec.arrows?.length &&
-          final.get_smiles().includes(".")
-        ) {
+        if (placeFragments && final.get_smiles().includes(".")) {
           placeFragments(key);
           const placed = r.compound.variants[variant].coords;
           const original = displayAtoms.get(final)!.original;
