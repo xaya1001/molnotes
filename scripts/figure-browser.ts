@@ -1,6 +1,11 @@
 import { createServer } from "vite";
 import vue from "@vitejs/plugin-vue";
-import { chromium, type Browser, type Page } from "@playwright/test";
+import {
+  chromium,
+  type Browser,
+  type ConsoleMessage,
+  type Page,
+} from "@playwright/test";
 import type {
   FigureReference,
   Library,
@@ -109,8 +114,24 @@ window.proof=async(library,ref)=>{
       pages = await Promise.all(
         Array.from({ length: pageCount }, async () => {
           const target = await next.newPage();
-          await target.goto(previewUrl);
-          await target.waitForFunction(() => "proof" in window);
+          const messages: string[] = [];
+          const onConsole = (message: ConsoleMessage) => {
+            messages.push(`console.${message.type()}: ${message.text()}`);
+          };
+          const onPageError = (error: Error) =>
+            messages.push(`pageerror: ${error.message}`);
+          target.on("console", onConsole);
+          target.on("pageerror", onPageError);
+          try {
+            await target.goto(previewUrl);
+            await target.waitForFunction(() => "proof" in window);
+          } catch (error) {
+            if (messages.length) console.error(messages.join("\n"));
+            throw error;
+          } finally {
+            target.off("console", onConsole);
+            target.off("pageerror", onPageError);
+          }
           await target.evaluate((value) => {
             (window as unknown as { figureLibrary: Library }).figureLibrary =
               value;

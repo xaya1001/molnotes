@@ -12,9 +12,9 @@ import { requireBrowserBuild } from "./browser-build.ts";
 
 await requireBrowserBuild();
 const directory = await mkdtemp(join(tmpdir(), "il-content-browser-"));
-// One server per Playwright worker on consecutive ports, each with its own
+// One server per Playwright worker on an assigned port, each with its own
 // records file, all serving the same snapshot.
-const [firstPort, count] = process.argv.slice(2).map(Number);
+const count = Number(process.argv[2]);
 const records = Array.from({ length: count }, (_, i) =>
   openRecords(join(directory, `records-${i}.sqlite`)),
 );
@@ -56,14 +56,23 @@ try {
       }),
     ),
   );
-  servers = records.map((store, i) => {
+  const ports: number[] = [];
+  for (const store of records) {
     const server = createWebServer({
       records: store,
       snapshot: join(releases, "current"),
     });
-    server.listen(firstPort + i, "127.0.0.1");
-    return server;
-  });
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    servers.push(server);
+    const address = server.address();
+    if (!address || typeof address === "string")
+      throw new Error("Test server has no TCP address");
+    ports.push(address.port);
+  }
+  console.log(`Test server ports: ${ports.join(",")}`);
 } catch (error) {
   console.error((error as Error).message);
   await close();
