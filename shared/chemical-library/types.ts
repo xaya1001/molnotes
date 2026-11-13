@@ -1,4 +1,5 @@
 import type { MoleculeAbbreviation } from "../molecule-abbreviations.ts";
+import type { ConformationSpec } from "../chemical-templates/conformation.ts";
 import type { ProcessData } from "../process.ts";
 
 export type Point = { x: number; y: number };
@@ -29,6 +30,14 @@ export interface CompoundLayout {
   molblock?: string;
   /** Coordinates in bond units, positive y downward. Keys are persistent atom IDs. */
   coords: Record<string, Point>;
+  scaffold?: {
+    id: string;
+    drawing: "flat" | "perspective";
+    bonds: [string, string][];
+    depths?: Record<string, number>;
+    depthWidth?: [number, number];
+    overpasses?: [[string, string], [string, string]][];
+  };
   pins?: Record<string, Point>;
   /** Counterions sit near the charge centre by default; keep preserves authored separation. */
   ionPairs?: "near" | "keep";
@@ -226,8 +235,17 @@ export interface LibraryImage extends EntryBase {
 export interface LibraryProcess extends EntryBase, ProcessData {
   kind: "process";
 }
+export interface Conformation extends EntryBase, ConformationSpec {
+  kind: "conformation";
+}
 export type LibraryEntry =
-  Compound | Reaction | Route | Mechanism | LibraryImage | LibraryProcess;
+  | Compound
+  | Reaction
+  | Route
+  | Mechanism
+  | LibraryImage
+  | LibraryProcess
+  | Conformation;
 export type Library = Record<string, LibraryEntry>;
 export interface FigureReference {
   ref: string;
