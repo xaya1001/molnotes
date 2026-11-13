@@ -30,6 +30,7 @@ import {
   pathMetrics,
   inkIntersectsBox,
   pathContours,
+  contoursCoverPoint,
 } from "./path-geometry.ts";
 interface Measured {
   node: FigureNode;
@@ -406,28 +407,52 @@ export function figureGeometryDiagnostics(
     ...elements.filter((node) => node.data.electronArrow !== undefined),
   ].map((el) => ({ el, id: el.data.electronArrow!, points: samples(el) }));
   const enclosures = elements.filter((e) => e.data.enclose !== undefined);
+  const visibleAtoms = new Set([
+    ...bonds.flatMap((b) => b.own),
+    ...labels.map((l) => l.id),
+  ]);
   for (const [index, enclosure] of enclosures.entries()) {
     if (enclosure.node.kind !== "path") continue;
     const id = enclosure.data.enclose;
-    const points = samples(enclosure);
     const width = enclosure.node.paint.strokeWidth * scale;
     const selected = new Set(enclosure.data.encloseAtoms.split(" "));
     const contours = pathContours(enclosure.node.d, enclosure.matrix);
+    const paths = contours.map((c) => c.points);
     for (const l of labels)
-      if (inkIntersectsBox(contours, l.r, width, false))
+      if (
+        inkIntersectsBox(
+          contours,
+          l.r,
+          width,
+          selected.has(l.id) ? false : "evenodd",
+        )
+      )
         add(
           "ENCLOSURE_LABEL_OVERLAP",
           [id, l.id],
           "Move the enclosure clear of the label",
         );
+    for (const [atom, point] of atomPoints)
+      if (
+        !selected.has(atom) &&
+        visibleAtoms.has(atom) &&
+        contoursCoverPoint(contours, point, width)
+      )
+        add(
+          "ENCLOSURE_ATOM_OVERLAP",
+          [id, atom],
+          "Keep unselected atoms outside the enclosure",
+        );
     for (const b of bonds) {
       // A bond entering/leaving the selected group crosses its boundary by design.
       if (b.own.some((a) => selected.has(a))) continue;
       if (
-        polylinesTouch(
-          points,
-          b.points,
-          (width + b.el.node.paint.strokeWidth * scale) / 2,
+        paths.some((points) =>
+          polylinesTouch(
+            points,
+            b.points,
+            (width + b.el.node.paint.strokeWidth * scale) / 2,
+          ),
         )
       )
         add(
@@ -445,13 +470,15 @@ export function figureGeometryDiagnostics(
     );
     for (const a of arrowParts)
       if (
-        polylinesTouch(
-          points,
-          samples(a),
-          (width + a.node.paint.strokeWidth * scale) / 2,
+        paths.some((points) =>
+          polylinesTouch(
+            points,
+            samples(a),
+            (width + a.node.paint.strokeWidth * scale) / 2,
+          ),
         ) ||
         (a.data.headPoints !== undefined &&
-          points.some((p) =>
+          paths.flat().some((p) =>
             insidePolygon(
               p,
               (JSON.parse(a.data.headPoints) as Point[]).map((q) =>
@@ -472,12 +499,18 @@ export function figureGeometryDiagnostics(
           ],
           "Separate the enclosure and arrow",
         );
-    for (const other of enclosures.slice(index + 1))
+    for (const other of enclosures.slice(index + 1)) {
+      if (other.node.kind !== "path") continue;
+      const otherContours = pathContours(other.node.d, other.matrix);
       if (
-        polylinesTouch(
-          points,
-          samples(other),
-          (width + other.node.paint.strokeWidth * scale) / 2,
+        paths.some((points) =>
+          otherContours.some((c) =>
+            polylinesTouch(
+              points,
+              c.points,
+              (width + other.node.paint.strokeWidth * scale) / 2,
+            ),
+          ),
         )
       )
         add(
@@ -485,6 +518,7 @@ export function figureGeometryDiagnostics(
           [id, other.data.enclose],
           "Separate the enclosure boundaries",
         );
+    }
   }
   for (const edge of elements.filter(
     (node) => node.data.routeEdge !== undefined,

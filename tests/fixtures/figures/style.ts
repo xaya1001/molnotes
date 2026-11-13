@@ -7,7 +7,6 @@ export const figureStyle = {
     "--chemical-min-text": "11px",
     "--chemical-min-script": "11px",
     "--chemical-ink": "#1b1b1b",
-    "--chemical-muted": "#626262",
     "--chemical-focus": "#d32632",
     "--chemical-comparison": "#167f87",
     "--chemical-support": "#303030",

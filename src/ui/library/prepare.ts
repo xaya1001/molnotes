@@ -158,6 +158,7 @@ export async function prepareFigure(
   const B = token("--chemical-bond");
   const toolkit = options.toolkit;
   const atomPoints: Record<string, Point> = {};
+  const atomBonds: [string, string][] = [];
   let width = 0,
     height = 0;
   async function molecule(
@@ -381,11 +382,6 @@ export async function prepareFigure(
         )
           f.atoms.add(ids[0]);
       }
-      const ink = [f.atoms, f.bonds, f.support, f.supportBonds].some(
-        (set) => set.size,
-      )
-        ? "var(--chemical-muted)"
-        : "var(--chemical-ink)";
       for (const node of [...doc.children]) {
         if (node.kind === "rect" || node.kind === "ellipse") continue;
         const cls = ctx.get(node, "class") ?? "";
@@ -436,7 +432,7 @@ export async function prepareFigure(
               ? "var(--chemical-focus)"
               : supporting
                 ? "var(--chemical-support)"
-                : ink,
+                : "var(--chemical-ink)",
           );
           ctx.setStyle(e, "strokeWidth", "var(--chemical-line)");
           if (e.paint.fill && e.paint.fill !== "none") {
@@ -475,7 +471,7 @@ export async function prepareFigure(
               ? "var(--chemical-focus)"
               : f.support.has(aid)
                 ? "var(--chemical-support)"
-                : ink,
+                : "var(--chemical-ink)",
           );
         }
         ctx.append(g, e);
@@ -499,6 +495,13 @@ export async function prepareFigure(
         atomPoints[atom] = plus(p, shift);
       });
       ctx.setData(g, "atomPoints", JSON.stringify(localPoints));
+      for (const {
+        atoms: [a, b],
+      } of graph.bonds)
+        atomBonds.push([
+          key({ molecule: id, atom: c.atomIds[a] }),
+          key({ molecule: id, atom: c.atomIds[b] }),
+        ]);
       const rings: number[][] =
         JSON.parse(mol.get_json()).molecules[0].extensions?.find(
           (extension: { name: string }) =>
@@ -831,6 +834,7 @@ export async function prepareFigure(
         atomPoints,
         parent,
         ctx,
+        atomBonds,
       );
     }
   }
@@ -1494,6 +1498,7 @@ export async function prepareFigure(
         atomPoints,
         parent,
         ctx,
+        atomBonds,
       );
     }
     encloseFocus(f, prefix, parent, hidden);

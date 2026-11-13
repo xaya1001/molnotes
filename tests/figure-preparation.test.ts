@@ -18,6 +18,35 @@ import type { FigureBox } from "../shared/chemical-library/geometry.ts";
 const toolkit = await moleculeToolkit(),
   fonts = await loadFigureFonts();
 
+test("reaction changes preserve normal ink on unmarked atoms and bonds", async () => {
+  const compiled = await compileFigure({
+    compounds: { a: "CCCO", b: "CCC=O" },
+    steps: [{ from: "a", to: "b" }],
+  });
+  const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit,
+    fonts,
+    style,
+  });
+  const colors = new Set<string>();
+  walkGeometry(geometry.root, (node) => {
+    if (!node.attributes["data-bond"] && !node.attributes["data-label"]) return;
+    for (const color of [node.paint.stroke, node.paint.fill]) {
+      if (color === "none") continue;
+      assert.ok(
+        color === style.values["--chemical-ink"] ||
+          color === style.values["--chemical-focus"],
+        `Unexpected molecular ink ${color}`,
+      );
+      colors.add(color);
+    }
+  });
+  assert.deepEqual(
+    colors,
+    new Set([style.values["--chemical-ink"], style.values["--chemical-focus"]]),
+  );
+});
+
 test("a changed implicit carbon stereocentre visibly marks its solid or hashed wedge", async () => {
   for (const product of ["C[C@@H](F)CC", "C[C@H](F)CC"]) {
     const reactant = product.replace(
@@ -99,6 +128,126 @@ test("enclosure diagnostics check boundaries while allowing interior labels and 
   }
 });
 
+test("automatic circles avoid unrelated bonds while explicit circles report their collision", async () => {
+  const { createFigureScene } =
+    await import("../src/ui/library/scene-geometry.ts");
+  const { drawEnclosure } =
+    await import("../src/ui/library/geometry-enclosures.ts");
+  const positions = {
+    "m:a1": { x: 20, y: 20 },
+    "m:a2": { x: 60, y: 20 },
+    "m:a3": { x: 60, y: 60 },
+    "m:a4": { x: 20, y: 60 },
+  };
+  for (const shape of ["circle", "auto"] as const) {
+    const ctx = createFigureScene(style, fonts),
+      root = ctx.element("g", { "data-molecule": "m" });
+    const bond = ctx.element("path", {
+      d: "M6 20V60",
+      "data-bond": "m:outside",
+      "data-atoms": "m:a5 m:a6",
+    });
+    ctx.setStyle(bond, "stroke", "var(--chemical-ink)");
+    ctx.setStyle(bond, "strokeWidth", "var(--chemical-line)");
+    ctx.append(root, bond);
+    const [enclosure] = drawEnclosure(
+      {
+        id: "selection",
+        atoms: [1, 2, 3, 4].map((i) => ({ molecule: "m", atom: `a${i}` })),
+        shape,
+      },
+      positions,
+      root,
+      ctx,
+      [
+        ["m:a1", "m:a2"],
+        ["m:a2", "m:a3"],
+        ["m:a3", "m:a4"],
+      ],
+    );
+    const diagnostics = figureGeometryDiagnostics(
+      {
+        format: 1,
+        width: 120,
+        height: 120,
+        minimumScale: 1,
+        atomPoints: positions,
+        root,
+      },
+      style,
+    ).filter((d) => d.code.startsWith("ENCLOSURE_"));
+    if (shape === "circle")
+      assert.ok(diagnostics.some((d) => d.code === "ENCLOSURE_BOND_OVERLAP"));
+    else {
+      assert.equal(enclosure.attributes["data-enclose-shape"], "outline");
+      assert.deepEqual(diagnostics, []);
+    }
+  }
+});
+
+test("automatic enclosures exclude neighbouring atoms even across an exempt connecting bond", async () => {
+  const { createFigureScene } =
+    await import("../src/ui/library/scene-geometry.ts");
+  const { drawEnclosure } =
+    await import("../src/ui/library/geometry-enclosures.ts");
+  const positions = {
+    "m:a1": { x: 20, y: 20 },
+    "m:a2": { x: 60, y: 20 },
+    "m:a3": { x: 60, y: 60 },
+    "m:a4": { x: 20, y: 60 },
+    "m:a5": { x: 5, y: 40 },
+  };
+  for (const shape of ["auto", "circle"] as const) {
+    const ctx = createFigureScene(style, fonts),
+      root = ctx.element("g", {
+        "data-molecule": "m",
+        "data-atom-points": JSON.stringify(positions),
+      });
+    const bond = ctx.element("path", {
+      d: "M20 20L5 40",
+      "data-bond": "m:connecting",
+      "data-atoms": "m:a1 m:a5",
+    });
+    ctx.setStyle(bond, "stroke", "var(--chemical-ink)");
+    ctx.setStyle(bond, "strokeWidth", "var(--chemical-line)");
+    ctx.append(root, bond);
+    const [enclosure] = drawEnclosure(
+      {
+        id: "selection",
+        atoms: [1, 2, 3, 4].map((i) => ({ molecule: "m", atom: `a${i}` })),
+        shape,
+      },
+      positions,
+      root,
+      ctx,
+      [
+        ["m:a1", "m:a2"],
+        ["m:a2", "m:a3"],
+        ["m:a3", "m:a4"],
+        ["m:a1", "m:a5"],
+      ],
+    );
+    assert.equal(
+      enclosure.attributes["data-enclose-shape"],
+      shape === "auto" ? "outline" : "circle",
+    );
+    const diagnostics = figureGeometryDiagnostics(
+      {
+        format: 1,
+        width: 120,
+        height: 120,
+        minimumScale: 1,
+        atomPoints: positions,
+        root,
+      },
+      style,
+    ).filter((d) => d.code.startsWith("ENCLOSURE_"));
+    if (shape === "auto") assert.deepEqual(diagnostics, []);
+    else
+      assert.ok(diagnostics.some((d) => d.code === "ENCLOSURE_ATOM_OVERLAP"));
+  }
+});
+
 test("automatic outlines reduce padding when an unrelated bond touches the boundary", async () => {
   const { createFigureScene } =
     await import("../src/ui/library/scene-geometry.ts");
@@ -114,7 +263,7 @@ test("automatic outlines reduce padding when an unrelated bond touches the bound
   ctx.setStyle(bond, "stroke", "var(--chemical-ink)");
   ctx.setStyle(bond, "strokeWidth", "var(--chemical-line)");
   ctx.append(parent, bond);
-  const enclosure = drawEnclosure(
+  const [enclosure] = drawEnclosure(
     {
       id: "selected",
       atoms: [1, 2, 3].map((i) => ({ molecule: "m", atom: `a${i}` })),
@@ -126,9 +275,81 @@ test("automatic outlines reduce padding when an unrelated bond touches the bound
     },
     parent,
     ctx,
+    [
+      ["m:a1", "m:a2"],
+      ["m:a2", "m:a3"],
+    ],
   );
   assert.ok(enclosure.bounds!.x + enclosure.bounds!.width < 66);
   assert.equal(enclosure.paint.dashArray, "4 3");
+});
+
+test("automatic selections split disconnected parts and follow a concave connected skeleton", async () => {
+  const { createFigureScene } =
+    await import("../src/ui/library/scene-geometry.ts");
+  const { drawEnclosure } =
+    await import("../src/ui/library/geometry-enclosures.ts");
+  const positions = {
+    "m:a1": { x: 20, y: 20 },
+    "m:a2": { x: 20, y: 60 },
+    "m:a3": { x: 60, y: 60 },
+    "m:a4": { x: 60, y: 20 },
+    "m:a5": { x: 40, y: 30 },
+  };
+  for (const mode of ["split", "concave", "ring"]) {
+    const ctx = createFigureScene(style, fonts);
+    const root = ctx.element("g", {
+      "data-molecule": "m",
+      "data-atom-points": JSON.stringify(positions),
+    });
+    const pairs = [
+      [1, 2],
+      [3, 4],
+      [1, 5],
+      ...(mode === "split" ? [] : [[2, 3]]),
+      ...(mode === "ring" ? [[4, 1]] : []),
+    ];
+    for (const [i, [a, b]] of pairs.entries()) {
+      const p = positions[`m:a${a}` as keyof typeof positions],
+        q = positions[`m:a${b}` as keyof typeof positions];
+      const bond = ctx.element("path", {
+        d: `M${p.x} ${p.y}L${q.x} ${q.y}`,
+        "data-bond": `m:b${i}`,
+        "data-atoms": `m:a${a} m:a${b}`,
+      });
+      ctx.setStyle(bond, "stroke", "var(--chemical-ink)");
+      ctx.setStyle(bond, "strokeWidth", "var(--chemical-line)");
+      ctx.append(root, bond);
+    }
+    drawEnclosure(
+      {
+        id: "selection",
+        atoms: [1, 2, 3, 4].map((i) => ({ molecule: "m", atom: `a${i}` })),
+      },
+      positions,
+      root,
+      ctx,
+      pairs.map(([a, b]): [string, string] => [`m:a${a}`, `m:a${b}`]),
+    );
+    const enclosures = ctx
+      .nodes(root)
+      .filter((n) => n.attributes["data-enclose"]);
+    assert.equal(enclosures.length, mode === "split" ? 2 : 1);
+    assert.deepEqual(
+      figureGeometryDiagnostics(
+        {
+          format: 1,
+          width: 120,
+          height: 120,
+          minimumScale: 1,
+          atomPoints: positions,
+          root,
+        },
+        style,
+      ).filter((d) => d.code.startsWith("ENCLOSURE_")),
+      [],
+    );
+  }
 });
 
 test("ring stereocentres use drawing-only hydrogen wedges without duplicating explicit isotopes", async () => {

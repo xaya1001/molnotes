@@ -6,7 +6,12 @@ import type {
   FigureMatrix,
 } from "../../../shared/chemical-library/geometry.ts";
 import { identityMatrix, pointsBox, transformPoint } from "./geometry-math.ts";
-import { polygonHitsSegment, polygonsOverlap } from "./geometry-collision.ts";
+import {
+  insidePolygon,
+  polygonHitsSegment,
+  polygonsOverlap,
+  polylinesTouch,
+} from "./geometry-collision.ts";
 
 export function parsedPath(d: string) {
   const path = svgpath(d);
@@ -161,12 +166,24 @@ export function pathContours(d: string, matrix = identityMatrix()) {
   });
 }
 
+/** Even-odd interiors preserve holes in a union of expanded skeleton shapes. */
+export function contoursCoverPoint(
+  contours: ReturnType<typeof pathContours>,
+  point: Point,
+  width: number,
+) {
+  return (
+    contours.filter((c) => insidePolygon(point, c.points)).length % 2 === 1 ||
+    contours.some((c) => polylinesTouch(c.points, [point, point], width / 2))
+  );
+}
+
 /** Test visible bond contours and stroke width against a complete label box. */
 export function inkIntersectsBox(
   contours: ReturnType<typeof pathContours>,
   box: FigureBox,
   strokeWidth: number,
-  filled: boolean,
+  filled: boolean | "evenodd",
 ) {
   const polygon = [
     { x: box.x, y: box.y },
@@ -174,6 +191,11 @@ export function inkIntersectsBox(
     { x: box.x + box.width, y: box.y + box.height },
     { x: box.x, y: box.y + box.height },
   ];
+  if (
+    filled === "evenodd" &&
+    polygon.some((p) => contoursCoverPoint(contours, p, strokeWidth))
+  )
+    return true;
   return contours.some(({ points, box: bounds }) => {
     const pad = strokeWidth / 2;
     if (
@@ -184,7 +206,11 @@ export function inkIntersectsBox(
       bounds.y + bounds.height + pad < box.y
     )
       return false;
-    if (filled && points.length >= 3 && polygonsOverlap(points, polygon))
+    if (
+      filled === true &&
+      points.length >= 3 &&
+      polygonsOverlap(points, polygon)
+    )
       return true;
     return (
       strokeWidth > 0 &&
