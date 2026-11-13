@@ -341,8 +341,9 @@ export function electronArrowShapes(
       from.mark &&
       !(ta.length === 2 && ta.includes(fa[0]));
     if (fromMark) s0 = from.mark!.point;
-    const chord = dist(e0, s0),
-      u = unit(sub(e0, s0)),
+    const chord = dist(e0, s0);
+    if (chord < 1e-6) return { curve: null, score: [0, 0] };
+    const u = unit(sub(e0, s0)),
       n = { x: -u.y, y: u.x };
     let h0 = Math.min(Math.max(0.55 * chord, B), 2 * B),
       forced: number | undefined;
@@ -805,6 +806,7 @@ export function electronArrowShapes(
       if (!best.score[0]) break;
     }
   return best.result.map(({ curve: c }, index) => {
+    if (!c) return undefined;
     const { s } = c,
       { vertices, end } = head(c, intents[index].arrow.electrons === 1);
     const points = shaft(c, intents[index].arrow.electrons === 1),

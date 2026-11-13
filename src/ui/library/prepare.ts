@@ -1332,6 +1332,7 @@ export async function prepareFigure(
       const a = intent.arrow,
         electrons = a.electrons,
         shape = shapes[index];
+      if (!shape) continue;
       if (a.from.kind === "lonePair") {
         const labelId = prefix + a.from.label;
         const group = ctx

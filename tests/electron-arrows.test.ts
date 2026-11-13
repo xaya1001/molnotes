@@ -67,6 +67,7 @@ test("forming arrows retain the new bond midpoint with clearance", () => {
     B,
     20,
   );
+  assert.ok(shape);
   assert.equal(shape.vertices[0].x, 50);
   assert.ok(Math.abs(shape.vertices[0].y) <= B * 0.22);
 });
@@ -103,9 +104,10 @@ test("homolysis separates bond origins and draws one barb per electron", () => {
     B,
     20,
   );
+  assert.ok(shapes[0] && shapes[1]);
   assert.ok(distance(shapes[0].points[0], shapes[1].points[0]) > B * 0.2);
   assert.deepEqual(
-    shapes.map((s) => s.vertices.length),
+    shapes.map((s) => s!.vertices.length),
     [3, 3],
   );
 });
