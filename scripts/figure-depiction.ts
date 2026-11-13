@@ -32,6 +32,7 @@ import {
 import type { FigureRect } from "../shared/chemical-library/geometry.ts";
 import { insidePolygon } from "../src/ui/library/geometry-collision.ts";
 import { figureDimension } from "./figure-output.ts";
+import { ringHydrogens } from "./figure-scaffolds.ts";
 
 // The installed MinimalLib exposes this documented overload; its declaration omits it.
 declare module "@rdkit/rdkit" {
@@ -993,6 +994,9 @@ export function depictRoute(
       (pair): pair is [string, Structure] => "compound" in pair[1],
     ),
   );
+  const electronRoute = [...structures.values()].some(
+    (r) => r.spec.arrows?.length,
+  );
   const links = new Map<string, string[]>(),
     add = (a: string, b?: string) => {
       if (!links.has(a)) links.set(a, []);
@@ -1019,8 +1023,30 @@ export function depictRoute(
     changed = new Set<string>();
   try {
     for (const [key, r] of structures) {
-      const initial = openMolecule(rd, r.depiction.smiles);
+      let initial = openMolecule(rd, r.depiction.smiles);
       fulls.set(key, initial);
+      if (
+        !r.spec.drawing &&
+        r.spec.arrows?.length &&
+        r.depiction.smiles.includes(".")
+      ) {
+        // chemfig.load_mol adds ring stereocentre H before fragment depiction.
+        const withHs = ringHydrogens(rd, initial);
+        if (withHs !== initial) {
+          try {
+            const ready = descriptionMolecule(
+              rd,
+              JSON.parse(withHs.get_json()),
+              true,
+            );
+            initial.delete();
+            initial = ready;
+            fulls.set(key, initial);
+          } finally {
+            withHs.delete();
+          }
+        }
+      }
       const layout = r.variant
         ? r.compound.variants![r.variant]
         : r.compound.layout;
@@ -1032,7 +1058,7 @@ export function depictRoute(
           r.depiction.atoms.indexOf(r.compound.atomIds.indexOf(a)),
         ),
         // chemfig.load_mol preserves hybridization before depicting reacting fragments.
-        !!r.spec.arrows?.length && r.depiction.smiles.includes("."),
+        electronRoute,
       );
       expected.set(key, graphSignature(rd, shown));
       if (r.spec.drawing) {

@@ -366,6 +366,63 @@ test("condensed reacting groups retain the source orientation across frames", as
   }
 });
 
+test("ring stereocentre hydrogens participate before depicting a reacting mixture", async () => {
+  const compiled = await compileFigure({
+    kind: "mechanism",
+    coordgen: true,
+    frames: [
+      {
+        id: "event",
+        smiles: "C=C1CC[CH:1]=[C:2](C)CC[C@@H]2[C@H]1CC2(C)C.[H+:3]",
+        arrows: [{ from: "pi(1,2)", to: "atom(3)" }],
+      },
+    ],
+  });
+  const scene = (compiled.entries[compiled.reference.ref] as Mechanism)
+    .frames[0].scene;
+  const placement = scene.molecules[0],
+    compound = compiled.entries[placement.compound] as Compound;
+  const coords = compound.variants![placement.variant!].coords;
+  const from = scene.arrows![0].from;
+  assert.equal(from.kind, "pi");
+  const [a, b] = from.atoms.map((at) => coords[at.atom]);
+  assert.ok(b.x < a.x);
+  assert.ok(b.y > a.y);
+});
+
+test("electron-event routes retain the chemistry of their unannotated anchor", async () => {
+  const compiled = await compileFigure({
+    kind: "route",
+    anchor: "start",
+    changes: "off",
+    compounds: {
+      start: { smiles: "CC#N", abbreviate: false },
+      event: {
+        smiles: "[O-:1].[CH2:2]=[O:3]",
+        arrows: [{ from: "lp(1)", to: "atom(2)" }],
+      },
+      product: "CC(O)C#N",
+    },
+    steps: [
+      { from: "start", to: "event" },
+      { from: "event", to: "product" },
+    ],
+  });
+  const route = compiled.entries[compiled.reference.ref] as Route;
+  const scene = (compiled.entries[route.steps[0].reaction] as Reaction).scene;
+  const placement = scene.molecules.find((m) => m.id === "start")!,
+    compound = compiled.entries[placement.compound] as Compound;
+  const coords = compound.variants![placement.variant!].coords;
+  const [a, n, b] = [coords.a1, coords.a2, coords.a3],
+    u = { x: a.x - n.x, y: a.y - n.y },
+    v = { x: b.x - n.x, y: b.y - n.y };
+  assert.ok(
+    Math.abs(
+      (u.x * v.x + u.y * v.y) / Math.hypot(u.x, u.y) / Math.hypot(v.x, v.y) + 1,
+    ) < 0.001,
+  );
+});
+
 test("step enclosures override structure defaults and empty selections clear one step", async () => {
   const compiled = await compileFigure({
     kind: "route",

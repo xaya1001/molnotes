@@ -289,7 +289,7 @@ function tidy(mol: Mol, p: XY[], core: Set<number>) {
     }
 }
 /** Add the prototype's ring stereocentre H before constraining and tidying the scaffold. */
-function ringHydrogens(rd: MainModule, source: Mol) {
+export function ringHydrogens(rd: MainModule, source: Mol) {
   const ringsOf = (mol: Mol): number[][] =>
     JSON.parse(mol.get_json()).molecules[0].extensions?.find(
       (e: { name: string }) => e.name === "rdkitRepresentation",

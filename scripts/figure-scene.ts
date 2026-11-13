@@ -632,6 +632,7 @@ export async function compileFigure(
       layout = layoutOf(resolved),
       m = openMolecule(rd, c.smiles);
     layout.methylLabels = [];
+    layout.ionPairs = "keep";
     try {
       const full = graphOf(m),
         groups = compoundAbbreviations(rd, c, layout),
