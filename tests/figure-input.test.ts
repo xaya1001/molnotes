@@ -57,6 +57,93 @@ test("forming arrows persist dashed bonds only when selected", async () => {
   }
 });
 
+test("collection cells retain their selected forming bonds", async () => {
+  const compiled = await compileFigure({
+    kind: "gallery",
+    compounds: {
+      event: {
+        smiles: "[O-:1].[CH2:2]=[O:3]",
+        arrows: [{ from: "lp(1)", to: "between(1,2)", forming: true }],
+      },
+    },
+  });
+  const scene = (compiled.entries[compiled.reference.ref] as Mechanism)
+    .frames[0].scene;
+  assert.equal(scene.partialBonds?.length, 1);
+  assert.deepEqual(
+    scene.partialBonds![0].atoms,
+    scene.arrows![0].to.kind === "formingBond" ? scene.arrows![0].to.atoms : [],
+  );
+});
+
+test("collection electron events align their reacting fragments", async () => {
+  const compiled = await compileFigure({
+    kind: "gallery",
+    compounds: {
+      event: {
+        smiles: "[CH2:1]=[C:2](OC)[CH:5]=[CH2:6].[CH2:7]=[CH:8]C#N",
+        arrows: [
+          { from: "pi(1,2)", to: "between(1,7)", forming: true },
+          { from: "pi(5,6)", to: "bond(2,5)" },
+          { from: "pi(7,8)", to: "between(8,6)", forming: true },
+        ],
+      },
+    },
+  });
+  const scene = (compiled.entries[compiled.reference.ref] as Mechanism)
+    .frames[0].scene;
+  const placement = scene.molecules[0];
+  const compound = compiled.entries[placement.compound] as Compound;
+  const coords =
+    compound.variants?.[placement.variant!]?.coords ?? compound.layout.coords;
+  const bonds = scene
+    .arrows!.filter((a) => a.to.kind === "formingBond")
+    .map((a) => {
+      assert.equal(a.to.kind, "formingBond");
+      return a.to.atoms.map((at) => coords[at.atom]);
+    });
+  const distance = ([a, b]: (typeof bonds)[number]) =>
+    Math.hypot(a.x - b.x, a.y - b.y);
+  assert.ok(Math.abs(distance(bonds[0]) - distance(bonds[1])) < 1e-6);
+});
+
+test("route electron events align reacting fragments after depiction", async () => {
+  const compiled = await compileFigure({
+    kind: "route",
+    changes: "off",
+    compounds: {
+      event: {
+        smiles: "[CH2:1]=[C:2](OC)[CH:5]=[CH2:6].[CH2:7]=[CH:8]C#N",
+        arrows: [
+          { from: "pi(1,2)", to: "between(1,7)" },
+          { from: "pi(5,6)", to: "bond(2,5)" },
+          { from: "pi(7,8)", to: "between(8,6)" },
+        ],
+      },
+      product: "CCO",
+      final: "CC=O",
+    },
+    steps: [
+      { from: "event", to: "product" },
+      { from: "product", to: "final" },
+    ],
+  });
+  const route = compiled.entries[compiled.reference.ref] as Route;
+  const scene = (compiled.entries[route.steps[0].reaction] as Reaction).scene;
+  const placement = scene.molecules.find((m) => m.id === "event")!;
+  const compound = compiled.entries[placement.compound] as Compound;
+  const coords = compound.variants![placement.variant!].coords;
+  const bonds = scene
+    .arrows!.filter((a) => a.to.kind === "formingBond")
+    .map((a) => {
+      assert.equal(a.to.kind, "formingBond");
+      return a.to.atoms.map((at) => coords[at.atom]);
+    });
+  const distance = ([a, b]: (typeof bonds)[number]) =>
+    Math.hypot(a.x - b.x, a.y - b.y);
+  assert.ok(Math.abs(distance(bonds[0]) - distance(bonds[1])) < 1e-6);
+});
+
 test("step enclosures override structure defaults and empty selections clear one step", async () => {
   const compiled = await compileFigure({
     kind: "route",

@@ -1530,7 +1530,7 @@ export async function prepareFigure(
             ? "var(--chemical-focus)"
             : focused.supportArrows.has(prefix + a.id)
               ? "var(--chemical-support)"
-              : "var(--chemical-ink)";
+              : "var(--chemical-focus)";
       const path = stroke(
         element("path", {
           d: shape.shaft,

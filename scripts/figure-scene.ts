@@ -856,6 +856,17 @@ export async function compileFigure(
           spec,
           kind === "cycle" ? `nodes.${key}` : `compounds.${key}`,
         );
+        if (spec.arrows?.length)
+          for (const cid of depictRoute(
+            rd,
+            new Map([[key, resolved]]),
+            { ...input, steps: [], anchor: key },
+            () => `${id}_${figureKey(`compounds.${key}`)}`,
+            options.style ?? (await loadFigureStyle()),
+          ))
+            generated.add(cid);
+        // Prototype chemfig.depict applies arrows.place_fragments to every electron event.
+        positionArrowFragments(resolved);
         scene.molecules.push(placement(resolved, key, { x: 0, y: 0 }));
         pushArrows(scene, resolved, key, true);
         pushEnclosures(scene, resolved, key);
@@ -995,6 +1006,9 @@ export async function compileFigure(
       options.style ?? (await loadFigureStyle()),
     ))
       generated.add(cid);
+    for (const resolved of compounds.values())
+      if ("compound" in resolved && resolved.spec.arrows?.length)
+        positionArrowFragments(resolved);
     const resolve = (key: string) => {
       const r = compounds.get(key);
       if (!r) throw new Error(`Unknown compound ${key}`);

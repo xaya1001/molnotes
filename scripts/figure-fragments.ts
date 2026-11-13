@@ -15,7 +15,7 @@ const turn = (p: Point, a: number) => ({
   y: p.x * Math.sin(a) + p.y * Math.cos(a),
 });
 
-/** A2 fragment contact placement; coordinates use one bond as their unit, y upward. */
+/** Port of arrows.place_fragments; coordinates use one bond as their unit, y upward. */
 export function placeArrowFragments(
   graph: ChemicalGraph,
   input: Point[],
@@ -67,7 +67,7 @@ export function placeArrowFragments(
     }
     return [];
   };
-  // Fold a two-contact chain about an acyclic single bond, then put its reacting edge level.
+  // arrows._fold_together: fold the chain, then put its reacting edge level.
   for (let i = 0; i < contacts.length; i++)
     for (let j = i + 1; j < contacts.length; j++) {
       const [p1, q1] = contacts[i],
@@ -149,6 +149,7 @@ export function placeArrowFragments(
         }
       }
     }
+  // arrows._opening: widest gap, narrowed by labels and terminal hydrogens.
   function opening(i: number, at: (i: number) => Point) {
     const neighbors = nb(i),
       atom = graph.atoms[i];

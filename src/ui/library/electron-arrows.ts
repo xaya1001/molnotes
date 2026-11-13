@@ -67,7 +67,7 @@ function* permutations<T>(items: T[]): Generator<T[]> {
       yield [items[i], ...rest];
 }
 
-/** A2 candidate arcs, including the forming edges when identifying ring corners. */
+/** Port of arrows.draw candidate arcs, including forming edges when identifying ring corners. */
 export function electronArrowShapes(
   intents: ArrowIntent[],
   atoms: Record<string, ArrowAtom>,
