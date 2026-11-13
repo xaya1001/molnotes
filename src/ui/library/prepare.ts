@@ -269,7 +269,10 @@ export async function prepareFigure(
               fixedBondLength: B / 1.5,
               bondLineWidth: token("--chemical-line"),
               scaleBondWidth: false,
-              additionalAtomLabelPadding: 0.066,
+              additionalAtomLabelPadding: token(
+                "--chemical-atom-label-padding",
+              ),
+              multipleBondOffset: token("--chemical-multiple-bond-offset"),
               fixedFontSize: token("--chemical-font"),
               noFreetype: false,
               fontFile: "BuiltinRobotoRegular",
@@ -930,6 +933,8 @@ export async function prepareFigure(
               d: `M${left + arm} ${top}H${left}V${bottom}H${left + arm} M${right - arm} ${top}H${right}V${bottom}H${right - arm}`,
               "data-bracket": id,
             }),
+            "var(--chemical-ink)",
+            "var(--chemical-reaction-line)",
           ),
         );
         if (bracket === "ts") {
@@ -1582,6 +1587,7 @@ export async function prepareFigure(
               "data-reaction-arrow": prefix + a.id,
             }),
             ink,
+            "var(--chemical-reaction-line)",
           ),
           element("path", {
             d: shape.head,
@@ -1622,6 +1628,7 @@ export async function prepareFigure(
               "data-reaction-arrow": prefix + a.id,
             }),
             ink,
+            "var(--chemical-reaction-line)",
           ),
         );
       } else {

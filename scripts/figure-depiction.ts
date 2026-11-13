@@ -850,7 +850,12 @@ function nativeLabelCost(
           noFreetype: false,
           atomLabels,
           addChiralHs: true,
-          additionalAtomLabelPadding: 0.066,
+          additionalAtomLabelPadding: parseFloat(
+            style.values["--chemical-atom-label-padding"],
+          ),
+          multipleBondOffset: parseFloat(
+            style.values["--chemical-multiple-bond-offset"],
+          ),
         }),
       ),
       boxes = new Map<number, FigureRect>(),
