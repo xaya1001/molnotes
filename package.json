@@ -37,6 +37,7 @@
     "markdown-it": "15.0.3",
     "markdown-it-cjk-friendly": "3.0.0",
     "motion-v": "2.8.0",
+    "polygon-clipping": "0.15.7",
     "reka-ui": "2.11.0",
     "svg-parser": "2.1.0",
     "svg-path-properties": "2.2.0",
