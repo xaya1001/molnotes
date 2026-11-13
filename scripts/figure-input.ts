@@ -468,10 +468,13 @@ export function validateFigureInput(value: unknown): {
     if (input.cycleSteps && input.cycleSteps.length !== input.nodes!.length)
       fail("figure.steps", "requires one step per species");
   }
+  const pending = ["gallery", "scope", "cycle"].includes(String(kind))
+    ? warnings.filter((path) => !path.endsWith(".mark"))
+    : warnings;
   return {
     input,
-    warnings: warnings.length
-      ? [`已保存、渲染待实现: ${warnings.join(", ")}`]
+    warnings: pending.length
+      ? [`已保存、渲染待实现: ${pending.join(", ")}`]
       : [],
   };
 }

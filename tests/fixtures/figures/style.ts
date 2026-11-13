@@ -23,6 +23,8 @@ export const figureStyle = {
     "--chemical-font": "21px",
     "--chemical-script-font": "20.71px",
     "--chemical-caption-font": "20.71px",
+    "--chemical-yield": "#1f3fd0",
+    "--chemical-panel-fill": "#e3e3e3",
     "--chemical-number-font": "22.59px",
     "--chemical-plus-font": "26.35px",
     "--chemical-atom-note-scale": "0.62",

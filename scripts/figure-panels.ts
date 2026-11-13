@@ -96,6 +96,14 @@ export async function compilePanelScene(
     boxes.push(box);
     return box;
   };
+  const putBox = (box: FigureBox) => {
+    (scene.captionBoxes ??= []).push({
+      at: { x: box.x, y: box.y },
+      width: box.width,
+      height: box.height,
+    });
+    boxes.push(box);
+  };
   const measured = await Promise.all(
     cells.map(async (cell) => {
       const probe: Mechanism = {
@@ -139,7 +147,13 @@ export async function compilePanelScene(
                   : words(cell.spec.label),
                 words(cell.spec.name),
               ),
-              ...(cell.spec.yield ? [cell.spec.yield] : []),
+              ...(cell.spec.yield
+                ? [
+                    input.kind === "scope"
+                      ? `**${cell.spec.yield}**`
+                      : cell.spec.yield,
+                  ]
+                : []),
               ...(cell.spec.note === undefined ? [] : [words(cell.spec.note)]),
             ].join("\n");
       const block = textBlock(label);
@@ -171,6 +185,17 @@ export async function compilePanelScene(
     if (cell.scene.partialBonds?.length)
       (scene.partialBonds ??= []).push(...cell.scene.partialBonds);
     (scene.enclose ??= []).push(...(cell.scene.enclose ?? []));
+    if (cell.scene.changes) {
+      const changes = (scene.changes ??= {});
+      changes.atoms = [
+        ...(changes.atoms ?? []),
+        ...(cell.scene.changes.atoms ?? []),
+      ];
+      changes.bonds = [
+        ...(changes.bonds ?? []),
+        ...(cell.scene.changes.bonds ?? []),
+      ];
+    }
     if (cell.scene.focus) {
       const combined = (scene.focus ??= {});
       if (cell.scene.focus.primary) {
@@ -200,7 +225,8 @@ export async function compilePanelScene(
       ];
     }
     const top = cy - cell.height / 2;
-    if (cell.label)
+    if (cell.label) {
+      const start = scene.captions!.length;
       putText(
         cell.label,
         cx,
@@ -209,6 +235,13 @@ export async function compilePanelScene(
           (cell.body.height ? 0.4 : 0) +
           textBlock(cell.label).height / 2,
       );
+      if (input.kind === "scope" && cell.spec.yield)
+        for (const caption of scene.captions!.slice(start))
+          if (caption.text === `**${cell.spec.yield}**`) {
+            caption.text = cell.spec.yield;
+            caption.tone = "yield";
+          }
+    }
     boxes.push({
       x: cx - cell.width / 2,
       y: top,
@@ -367,6 +400,7 @@ export async function compilePanelScene(
               o.y < candidate.y + candidate.height,
           )
         ) {
+          putBox(candidate);
           putText(label.text, p.x, p.y);
           break;
         }
@@ -382,9 +416,10 @@ export async function compilePanelScene(
         : [{ items: measured.map((c) => c.key) }];
     for (const group of groups) {
       if (group.title !== undefined) {
-        const h = textBlock(words(group.title)).height;
+        const h = Math.max(1.5, textBlock(`**${group.title}**`).height + 0.4);
+        putBox({ x: 0, y, width, height: h });
         putText(`**${group.title}**`, width / 2, y + h / 2);
-        y += h + 0.9;
+        y += h + 0.6;
       }
       if (group.subtitle !== undefined) {
         const text = `*${group.subtitle}*`,
@@ -451,6 +486,7 @@ export async function compilePanelScene(
   for (const p of [
     ...scene.molecules.map((m) => m.at),
     ...scene.captions!.map((c) => c.at),
+    ...(scene.captionBoxes ?? []).map((c) => c.at),
     ...scene.reactionArrows!.flatMap((a) => [
       a.from,
       a.to,

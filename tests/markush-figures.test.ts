@@ -153,7 +153,7 @@ test("Markush input accepts density and validates overlay sources", () => {
 test("repeat groups retain core identity and joined unit geometry", async () => {
   const compiled = await compileFigure({
     kind: "markush",
-    core: "[*:1]CCc1ccccc1 |Sg:n:1:n:ht|",
+    core: "[*:1]CCc1ccccc1 |Sg:n:1,2:n:ht|",
     groups: {
       "1": {
         label: "R¹",
@@ -210,4 +210,93 @@ test("Markush core scale enlarges bonds while retaining label size", async () =>
   enlarged.labels.forEach((height, i) =>
     assert.ok(Math.abs(height - normal.labels[i]) < 0.01),
   );
+});
+
+test("coverage leaders end beside the visible R label", async () => {
+  const { walkGeometry } = await import("../src/ui/library/geometry-walk.ts");
+  const { transformBox } = await import("../src/ui/library/geometry-math.ts");
+  const compiled = await compileFigure({ ...model, view: "map" });
+  const opts = await options(),
+    geometry = await prepareFigure(compiled.entries, compiled.reference, opts);
+  const labelParts = new Map<
+      string,
+      { x: number; y: number; width: number; height: number }[]
+    >(),
+    ends: { x: number; y: number }[] = [];
+  walkGeometry(geometry.root, (n, m) => {
+    if (n.attributes["data-label"]?.startsWith("m0:") && n.bounds) {
+      const key = n.attributes["data-label"];
+      labelParts.set(key, [
+        ...(labelParts.get(key) ?? []),
+        transformBox(n.bounds, m)!,
+      ]);
+    }
+    if (n.kind === "ellipse" && n.rx === 1.7) {
+      const b = transformBox(n.bounds, m)!;
+      ends.push({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
+    }
+  });
+  assert.equal(ends.length, 2);
+  const { unionBoxes } = await import("../src/ui/library/geometry-math.ts");
+  const labels = [...labelParts.values()].map((bs) => unionBoxes(bs)!);
+  for (const p of ends)
+    assert.ok(
+      labels.some(
+        (b) =>
+          Math.hypot(
+            Math.max(b.x - p.x, 0, p.x - b.x - b.width),
+            Math.max(b.y - p.y, 0, p.y - b.y - b.height),
+          ) < 6,
+      ),
+      JSON.stringify(p),
+    );
+});
+
+test("linked R labels draw separate readable labels joined by a bond", async () => {
+  const { walkGeometry } = await import("../src/ui/library/geometry-walk.ts");
+  const compiled = await compileFigure({
+    kind: "markush",
+    core: "c1ccccc1[*:1]",
+    groups: { 1: { label: "L–R⁴", alternatives: [{ label: "H" }] } },
+  });
+  const geometry = await prepareFigure(
+    compiled.entries,
+    compiled.reference,
+    await options(),
+  );
+  const nodes: (typeof geometry.root)[] = [];
+  walkGeometry(geometry.root, (n) => nodes.push(n));
+  assert.ok(
+    nodes.some(
+      (n) =>
+        n.kind === "text" &&
+        n.text === "R4" &&
+        n.runs.some((r) => r.text === "4" && r.shift < 0),
+    ),
+  );
+  assert.ok(nodes.some((n) => n.attributes["data-markush-link"]));
+});
+
+test("single methylene repeats use a compact formula while larger repeats retain brackets", async () => {
+  const { walkGeometry } = await import("../src/ui/library/geometry-walk.ts");
+  const render = async (core: string) => {
+    const c = await compileFigure({
+      kind: "markush",
+      core,
+      groups: { 1: { label: "R¹", alternatives: [{ label: "H" }] } },
+    });
+    const g = await prepareFigure(c.entries, c.reference, await options());
+    const nodes: (typeof g.root)[] = [];
+    walkGeometry(g.root, (n) => nodes.push(n));
+    return nodes;
+  };
+  const compact = await render("[*:1]CCc1ccccc1 |Sg:n:1:n:ht|");
+  assert.ok(
+    compact.some(
+      (n) => n.attributes["data-label-text"] === "(CH<sub>2</sub>)<sub>n</sub>",
+    ),
+  );
+  assert.ok(!compact.some((n) => n.attributes["data-repeat-bracket"]));
+  const repeated = await render("[*:1]CCc1ccccc1 |Sg:n:1,2:n:ht|");
+  assert.ok(repeated.some((n) => n.attributes["data-repeat-bracket"]));
 });

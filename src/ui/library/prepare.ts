@@ -266,6 +266,10 @@ export async function prepareFigure(
       }
       for (const t of c.template ?? [])
         atomLabels[c.atomIds.indexOf(t.atom)] = t.label;
+      for (const unit of layout.repeatUnits ?? [])
+        if (unit.compact)
+          atomLabels[c.atomIds.indexOf(unit.atoms[0])] =
+            `(CH<sub>2</sub>)<sub>${unit.label}</sub>`;
       const xs = coords.map((p) => p.x),
         ys = coords.map((p) => p.y);
       const draw = (
@@ -383,6 +387,28 @@ export async function prepareFigure(
           ),
         ),
       );
+      const compactRepeats = new Set(
+        (layout.repeatUnits ?? [])
+          .filter((u) => u.compact)
+          .flatMap((u) => u.atoms),
+      );
+      if (compactRepeats.size)
+        ctx.setData(
+          g,
+          "regularBondLengths",
+          JSON.stringify(
+            graph.bonds
+              .filter(({ atoms }) =>
+                atoms.every((i) => !compactRepeats.has(c.atomIds[i])),
+              )
+              .map(({ atoms: [a, b] }) =>
+                Math.hypot(
+                  positions[a].x - positions[b].x,
+                  positions[a].y - positions[b].y,
+                ),
+              ),
+          ),
+        );
       if (layout.scaffold) {
         const core = new Set(
           layout.scaffold.bonds.flat().map((id) => c.atomIds.indexOf(id)),
@@ -881,6 +907,7 @@ export async function prepareFigure(
         }
       }
       for (const [index, unit] of (layout.repeatUnits ?? []).entries()) {
+        if (unit.compact) continue;
         const inside = new Set(
           unit.atoms.map((atom) => c.atomIds.indexOf(atom)),
         );
@@ -1685,6 +1712,14 @@ export async function prepareFigure(
         });
       }
     }
+    for (const [i, box] of (s.captionBoxes ?? []).entries()) {
+      const e = element("path", {
+        d: `M${box.at.x * B} ${box.at.y * B}h${box.width * B}v${box.height * B}h${-box.width * B}Z`,
+        "data-caption-box": prefix + i,
+      });
+      ctx.setStyle(e, "fill", "var(--chemical-panel-fill)");
+      ctx.append(parent, e);
+    }
     for (const [i, c] of (s.captions ?? []).entries()) {
       const e = label(
         mul(c.at, B),
@@ -1697,6 +1732,10 @@ export async function prepareFigure(
       ctx.setData(e, "label", prefix + "caption:" + i);
       if (s.comparison && c.tone === "comparison")
         ctx.setStyle(e, "fill", "var(--chemical-comparison)");
+      if (c.tone === "yield") {
+        ctx.setStyle(e, "fill", "var(--chemical-yield)");
+        ctx.setStyle(e, "fontWeight", "700");
+      }
       ctx.append(parent, e);
     }
     for (const b of s.partialBonds ?? []) {

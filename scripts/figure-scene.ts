@@ -892,6 +892,32 @@ export async function compileFigure(
         // Prototype chemfig.depict applies arrows.place_fragments to every electron event.
         positionArrowFragments(resolved);
         scene.molecules.push(placement(resolved, key, { x: 0, y: 0 }));
+        const mark = spec.mark ?? input.mark;
+        if (mark) {
+          const query = rd.get_qmol(mark);
+          if (!query) throw new Error(`${key}: invalid mark SMARTS`);
+          const mol = openMolecule(rd, resolved.compound.smiles);
+          try {
+            const matches: { atoms: number[]; bonds: number[] }[] = JSON.parse(
+              mol.get_substruct_matches(query),
+            );
+            const atom = (i: number): AtomRef => ({
+              molecule: key,
+              atom: resolved.compound.atomIds[i],
+            });
+            const graph = graphOf(mol);
+            scene.changes = {
+              atoms: [...new Set(matches.flatMap((m) => m.atoms))].map(atom),
+              bonds: [...new Set(matches.flatMap((m) => m.bonds))].map((i) => {
+                const [a, b] = graph.bonds[i].atoms;
+                return [atom(a), atom(b)];
+              }),
+            };
+          } finally {
+            mol.delete();
+            query.delete();
+          }
+        }
         pushArrows(scene, resolved, key, true);
         pushEnclosures(scene, resolved, key);
       } else if (spec.text === undefined)
