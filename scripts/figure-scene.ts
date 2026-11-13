@@ -1000,17 +1000,18 @@ export async function compileFigure(
         positionArrowFragments(resolved);
         scene.molecules.push(placement(resolved, key, { x: 0, y: 0 }));
         const mark = spec.mark ?? input.mark;
-        if (mark) {
+        const compound = resolved.compound;
+        if (mark && compound.kind === "compound") {
           const query = rd.get_qmol(mark);
           if (!query) throw new Error(`${key}: invalid mark SMARTS`);
-          const mol = openMolecule(rd, resolved.compound.smiles);
+          const mol = openMolecule(rd, compound.smiles);
           try {
             const matches: { atoms: number[]; bonds: number[] }[] = JSON.parse(
               mol.get_substruct_matches(query),
             );
             const atom = (i: number): AtomRef => ({
               molecule: key,
-              atom: resolved.compound.atomIds[i],
+              atom: compound.atomIds[i],
             });
             const graph = graphOf(mol);
             scene.changes = {

@@ -29,7 +29,14 @@ const scope = {
 };
 
 test("scope marks color the matching atoms and bond", async () => {
-  const { nodes, style } = await drawing(scope);
+  const { nodes, style } = await drawing({
+    ...scope,
+    compounds: {
+      ...scope.compounds,
+      b: { template: "chair", subs: { "1a": "Me" } },
+    },
+    groups: [{ title: "Products", items: ["a", "b"] }],
+  });
   const colored = nodes.filter(
     (n) =>
       n.paint.fill === style.values["--chemical-focus"] ||
