@@ -187,9 +187,9 @@ test("mixed electron events straighten once after orienting their fragments", as
     .frames[0].scene.molecules[0];
   const compound = compiled.entries[placement.compound] as Compound;
   const coords = compound.variants![placement.variant!].coords;
-  // Mapped Br-C direction from chemfig.depict, in one-bond units with y down.
-  assert.ok(Math.abs(coords.a2.x - coords.a1.x + 0.7436) < 0.002);
-  assert.ok(Math.abs(coords.a2.y - coords.a1.y + 0.6685) < 0.002);
+  // Mapped Br-C direction with the shared drawing style, in one-bond units with y down.
+  assert.ok(Math.abs(coords.a2.x - coords.a1.x + 0.616) < 0.002);
+  assert.ok(Math.abs(coords.a2.y - coords.a1.y + 0.788) < 0.002);
 });
 
 test("structures and reactions without electron events retain their saved orientation", async () => {
