@@ -1599,6 +1599,12 @@ test("figure canvas follows visible ink instead of saved scene whitespace", asyn
     fonts,
     style,
   });
+  const identities: string[] = [];
+  walkGeometry(geometry.root, (node) => {
+    if (node.attributes["data-figure"])
+      identities.push(node.attributes["data-figure"]);
+  });
+  assert.deepEqual(identities, [compiled.reference.ref]);
   assert.ok(geometry.width < 200);
   assert.ok(geometry.height < 150);
   const b = geometry.root.bounds!;
