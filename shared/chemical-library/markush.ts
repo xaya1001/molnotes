@@ -43,9 +43,9 @@ export function validateMarkushFigure(
   value: unknown,
   where: string,
 ): asserts value is MarkushFigureData {
-  const fail = (message: string): never => {
+  function fail(message: string): never {
     throw new Error(`${where}: ${message}`);
-  };
+  }
   const text = (v: unknown) => {
     if (typeof v !== "string" || !v.trim()) fail("expected text");
   };

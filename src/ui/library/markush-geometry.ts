@@ -265,8 +265,8 @@ export async function prepareMarkush(
         p.y = x * Math.sin(a) + p.y * Math.cos(a);
       }
       const geometry = await renderCompound(c),
-        node = geometry.root;
-      ctx.append(ctx.element("g"), node);
+        node = ctx.element("g");
+      ctx.append(node, geometry.root);
       const positions = c.atomIds.map(
         (id) => geometry.atomPoints[`compound:${id}`],
       );
