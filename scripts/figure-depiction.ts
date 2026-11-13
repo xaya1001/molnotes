@@ -113,6 +113,7 @@ function descriptionMolecule(
       bonds?: { stereo?: string }[];
     }[];
   },
+  sanitize = false,
 ) {
   const coordinates = (data.molecules[0].conformers ?? []).map((c) => c.coords);
   for (const conformer of data.molecules[0].conformers ?? [])
@@ -130,7 +131,7 @@ function descriptionMolecule(
   const mol = rd.get_mol(
     text,
     JSON.stringify({
-      sanitize: false,
+      sanitize,
       removeHs: false,
       // Assign CIP ranks for canonical depiction. JSON has no directional bonds,
       // so reassignment would erase an existing double-bond configuration.
@@ -155,6 +156,7 @@ function contracted(
   full: Mol,
   names: readonly MoleculeAbbreviation[] = [],
   allowed?: number[],
+  sanitize = false,
 ) {
   const groups = abbreviatedGroups(rd, full, names).filter(
       (g) => !allowed || allowed.includes(g.atoms[0]),
@@ -209,7 +211,24 @@ function contracted(
         },
       ]
     : [];
-  const shown = descriptionMolecule(rd, data);
+  let shown: Mol | undefined;
+  if (sanitize) {
+    // chemfig.load_mol uses native condensation, retaining the root's hybridization.
+    const native = full.copy()!;
+    const mapping: { atoms: number[]; bonds: number[] } = JSON.parse(
+      native.condense_abbreviations(1, false),
+    );
+    if (
+      mapping.atoms.length === original.length &&
+      mapping.atoms.every((atom, i) => atom === original[i]) &&
+      mapping.bonds.length === retained.length &&
+      mapping.bonds.every((bond, i) => bond === retained[i])
+    )
+      shown = native;
+    else native.delete();
+  }
+  // Explicit group selections can differ from the native abbreviation set.
+  shown ??= descriptionMolecule(rd, data, sanitize);
   displayAtoms.set(shown, {
     original,
     labels: new Map([...roots].map(([i, name]) => [indices.get(i)!, name])),
@@ -1012,6 +1031,8 @@ export function depictRoute(
         layout.abbreviationAtoms?.map((a) =>
           r.depiction.atoms.indexOf(r.compound.atomIds.indexOf(a)),
         ),
+        // chemfig.load_mol preserves hybridization before depicting reacting fragments.
+        !!r.spec.arrows?.length && r.depiction.smiles.includes("."),
       );
       expected.set(key, graphSignature(rd, shown));
       if (r.spec.drawing) {

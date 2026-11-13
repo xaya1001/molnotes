@@ -222,6 +222,150 @@ test("structures and reactions without electron events retain their saved orient
   }
 });
 
+test("polar fragment contacts retain the source donor and carbonyl direction", async () => {
+  const compiled = await compileFigure({
+    kind: "gallery",
+    compounds: {
+      event: {
+        smiles: "N#[C-:1].C[C:2](=[O:3])C",
+        arrows: [
+          { from: "lp(1)", to: "atom(2)" },
+          { from: "pi(2,3)", to: "atom(3)" },
+        ],
+      },
+    },
+  });
+  const scene = (compiled.entries[compiled.reference.ref] as Mechanism)
+    .frames[0].scene;
+  const placement = scene.molecules[0],
+    compound = compiled.entries[placement.compound] as Compound;
+  const coords = compound.variants![placement.variant!].coords;
+  const [attack, open] = scene.arrows!;
+  const from = attack.from;
+  assert.equal(from.kind, "lonePair");
+  assert.equal(attack.to.kind, "atom");
+  assert.equal(open.to.kind, "atom");
+  const donor = coords[scene.labels!.find((l) => l.id === from.label)!.at.atom],
+    carbon = coords[attack.to.at.atom],
+    oxygen = coords[open.to.at.atom];
+  assert.ok(carbon.x > donor.x);
+  assert.ok(oxygen.x > carbon.x);
+  assert.ok(Math.abs(oxygen.y - carbon.y) < 0.001);
+});
+
+test("fragment depiction retains a linear charged electrophile", async () => {
+  const compiled = await compileFigure({
+    kind: "gallery",
+    compounds: {
+      event: {
+        smiles: "[CH2:1]=[CH2:2].[O:5]=[N+:3]=[O:4]",
+        arrows: [
+          { from: "pi(1,2)", to: "atom(3)" },
+          { from: "pi(3,4)", to: "atom(4)" },
+        ],
+      },
+    },
+  });
+  const scene = (compiled.entries[compiled.reference.ref] as Mechanism)
+    .frames[0].scene;
+  const placement = scene.molecules[0],
+    compound = compiled.entries[placement.compound] as Compound;
+  const coords = compound.variants![placement.variant!].coords;
+  const [a, n, b] = [coords.a3, coords.a4, coords.a5];
+  const u = { x: a.x - n.x, y: a.y - n.y },
+    v = { x: b.x - n.x, y: b.y - n.y };
+  assert.ok(
+    Math.abs(
+      (u.x * v.x + u.y * v.y) / Math.hypot(u.x, u.y) / Math.hypot(v.x, v.y) + 1,
+    ) < 0.001,
+  );
+});
+
+test("sequential electron frames inherit the reacting chain direction", async () => {
+  const compiled = await compileFigure({
+    kind: "mechanism",
+    frames: [
+      {
+        id: "first",
+        smiles: "[Br:1][CH2:2]CCCC=C.[Sn:8](CCCC)(CCCC)CCCC |^1:7|",
+        arrows: [
+          { from: "radical(8)", to: "atom(1)", electrons: 1 },
+          { from: "bond(1,2)", to: "atom(8)", electrons: 1 },
+          { from: "bond(1,2)", to: "atom(2)", electrons: 1 },
+        ],
+      },
+      {
+        id: "second",
+        smiles: "[CH2:1]CCC[CH:5]=[CH2:6]",
+        arrows: [
+          { from: "radical(1)", to: "atom(5)" },
+          { from: "pi(5,6)", to: "atom(1)", electrons: 1 },
+          { from: "pi(5,6)", to: "atom(6)", electrons: 1 },
+        ],
+      },
+    ],
+  });
+  const frame = (compiled.entries[compiled.reference.ref] as Mechanism)
+    .frames[1];
+  const placement = frame.scene.molecules[0],
+    compound = compiled.entries[placement.compound] as Compound;
+  const coords = compound.variants![placement.variant!].coords;
+  assert.ok(coords.a1.x > coords.a6.x);
+});
+
+test("inter-frame arrows center on the complete reacting fragments", async () => {
+  const compiled = await compileFigure({
+    kind: "mechanism",
+    frames: [
+      {
+        id: "first",
+        smiles: "[O-:1].[CH2:2]=[O:3]",
+        arrows: [{ from: "lp(1)", to: "atom(2)" }],
+      },
+      { id: "second", smiles: "OCCO" },
+    ],
+  });
+  const scene = (compiled.entries[compiled.reference.ref] as Mechanism)
+    .frames[0].scene;
+  const placement = scene.molecules[0],
+    compound = compiled.entries[placement.compound] as Compound;
+  const coords = Object.values(compound.variants![placement.variant!].coords);
+  const center =
+    placement.at.y +
+    (Math.min(...coords.map((p) => p.y)) +
+      Math.max(...coords.map((p) => p.y))) /
+      2;
+  assert.ok(Math.abs(scene.reactionArrows![0].from.y - center) < 0.001);
+  assert.equal(scene.reactionArrows![0].from.y, scene.reactionArrows![0].to.y);
+});
+
+test("condensed reacting groups retain the source orientation across frames", async () => {
+  const compiled = await compileFigure({
+    kind: "mechanism",
+    frames: [
+      {
+        id: "first",
+        smiles: "CC(C)([O-:3])C#N.[H:4][O+:5]([H])[H]",
+        arrows: [
+          { from: "lp(3)", to: "atom(4)" },
+          { from: "bond(4,5)", to: "atom(5)" },
+        ],
+      },
+      { id: "second", smiles: "CC(C)(O)C#N" },
+    ],
+  });
+  const frames = (compiled.entries[compiled.reference.ref] as Mechanism).frames;
+  for (const frame of frames) {
+    const placement = frame.scene.molecules[0],
+      compound = compiled.entries[placement.compound] as Compound;
+    const coords = compound.variants![placement.variant!].coords;
+    assert.ok(Math.abs(coords.a5.x - coords.a2.x) < 0.001);
+    assert.ok(coords.a5.y < coords.a2.y);
+    assert.ok(coords.a4.x > coords.a2.x);
+    assert.ok(Math.abs(coords.a4.y - coords.a2.y) < 0.001);
+  }
+});
+
 test("step enclosures override structure defaults and empty selections clear one step", async () => {
   const compiled = await compileFigure({
     kind: "route",
