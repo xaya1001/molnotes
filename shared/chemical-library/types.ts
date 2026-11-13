@@ -147,7 +147,12 @@ export interface Scene {
     tone?: "comparison" | "yield";
     align?: "start" | "middle" | "end";
   }[];
-  captionBoxes?: { at: Point; width: number; height: number }[];
+  captionBoxes?: {
+    at: Point;
+    width: number;
+    height: number;
+    border?: boolean;
+  }[];
   partialBonds?: { atoms: [AtomRef, AtomRef]; order: number }[];
 }
 export interface Participant {

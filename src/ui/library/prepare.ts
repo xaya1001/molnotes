@@ -1733,6 +1733,10 @@ export async function prepareFigure(
         "data-caption-box": prefix + i,
       });
       ctx.setStyle(e, "fill", "var(--chemical-panel-fill)");
+      if (box.border) {
+        ctx.setStyle(e, "stroke", "var(--chemical-panel-stroke)");
+        ctx.setStyle(e, "strokeWidth", "var(--chemical-panel-line)");
+      }
       ctx.append(parent, e);
     }
     for (const [i, c] of (s.captions ?? []).entries()) {

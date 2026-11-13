@@ -112,6 +112,8 @@
   --chemical-caption-font: 20.71px;
   --chemical-yield: #1f3fd0;
   --chemical-panel-fill: #e3e3e3;
+  --chemical-panel-stroke: #9a9a9a;
+  --chemical-panel-line: 0.6px;
   --chemical-number-font: 22.59px;
   --chemical-plus-font: 26.35px;
   --chemical-atom-note-scale: 0.62;

@@ -71,6 +71,11 @@ test("cycle step names have a gray box enclosing every line", async () => {
   const bar = nodes.find((n) => n.attributes["data-caption-box"] !== undefined);
   assert.ok(bar?.bounds);
   assert.equal(bar.paint.fill, style.values["--chemical-panel-fill"]);
+  assert.equal(bar.paint.stroke, style.values["--chemical-panel-stroke"]);
+  assert.equal(
+    bar.paint.strokeWidth,
+    parseFloat(style.values["--chemical-panel-line"]),
+  );
   const boxes: { x: number; y: number; width: number; height: number }[] = [];
   let panel: (typeof boxes)[number] | undefined;
   walkGeometry(geometry.root, (n, m) => {

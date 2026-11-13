@@ -259,6 +259,8 @@ function scene(v: unknown, w: string): asserts v is Scene {
       number(box.height, w);
       if (Number(box.width) <= 0 || Number(box.height) <= 0)
         fail(w, "positive caption box required");
+      if (box.border !== undefined && typeof box.border !== "boolean")
+        fail(w, "caption border must be boolean");
     }
   }
 }

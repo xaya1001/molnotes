@@ -96,11 +96,12 @@ export async function compilePanelScene(
     boxes.push(box);
     return box;
   };
-  const putBox = (box: FigureBox) => {
+  const putBox = (box: FigureBox, border = false) => {
     (scene.captionBoxes ??= []).push({
       at: { x: box.x, y: box.y },
       width: box.width,
       height: box.height,
+      ...(border ? { border: true } : {}),
     });
     boxes.push(box);
   };
@@ -400,7 +401,16 @@ export async function compilePanelScene(
               o.y < candidate.y + candidate.height,
           )
         ) {
-          putBox(candidate);
+          const px = (ctx.token("--chemical-caption-font") / B) * 0.45;
+          putBox(
+            {
+              x: p.x - b.width / 2 - px,
+              y: p.y - b.height / 2 - px / 2,
+              width: b.width + 2 * px,
+              height: b.height + px,
+            },
+            true,
+          );
           putText(label.text, p.x, p.y);
           break;
         }
