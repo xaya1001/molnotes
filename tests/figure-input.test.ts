@@ -334,7 +334,7 @@ test("YAML boundary rejects unsupported kinds and style fields, validates deferr
       () => validateFigureInput({ ...input, [field]: 1 }),
       new RegExp(field),
     );
-  for (const kind of ["gallery", "scope", "table", "cycle"])
+  for (const kind of ["table"])
     assert.throws(() => validateFigureInput({ ...input, kind }), /尚未支持/);
   assert.throws(
     () =>
@@ -1033,4 +1033,109 @@ test("new depictions place charge markers for their new bond directions", async 
         d.elements.some((e) => e.endsWith(":charge")),
     ),
   );
+});
+
+test("grouped scope and gallery YAML save reusable structures with ordered labels", async () => {
+  const input = {
+    kind: "scope",
+    compounds: {
+      a: { smiles: "CCO", yield: "80%", note: "1 h" },
+      b: { smiles: "CCCO", label: "**B**", yield: "72%" },
+      c: "CC(C)O",
+    },
+    groups: [
+      { title: "First group", items: ["b", "a"] },
+      { subtitle: "Second group", items: ["c"] },
+    ],
+  };
+  const result = await compileFigure(input, {}, "scope");
+  const entry = result.entries[result.reference.ref] as Mechanism;
+  const scene = entry.frames[0].scene;
+  assert.equal(entry.category, "examples");
+  assert.deepEqual(
+    scene.molecules.map((m) => m.id),
+    ["b", "a", "c"],
+  );
+  assert.ok(scene.captions?.some((c) => c.text === "80%"));
+  assert.ok(scene.captions?.some((c) => c.text === "1 h"));
+  assert.ok(scene.molecules[2].at.y > scene.molecules[0].at.y);
+  assert.deepEqual(
+    (await compileFigure(input, result.entries, "scope")).entries,
+    result.entries,
+  );
+  const gallery = await compileFigure({
+    kind: "gallery",
+    cols: 2,
+    compounds: input.compounds,
+  });
+  const grid = (gallery.entries[gallery.reference.ref] as Mechanism).frames[0]
+    .scene;
+  assert.ok(grid.molecules[2].at.y > grid.molecules[0].at.y);
+  assert.throws(
+    () => validateFigureInput({ ...input, groups: [{ items: ["missing"] }] }),
+    /unknown compound/,
+  );
+});
+
+test("cycle YAML saves clockwise closed steps with incoming and outgoing branches", async () => {
+  const input = {
+    kind: "cycle",
+    nodes: ["A", { smiles: "CCO", label: "B" }, "C", "D"],
+    steps: [
+      { in: "X", out: "Y", label: "Exchange" },
+      {},
+      { out: "Z" },
+      { in: "W" },
+    ],
+  };
+  const result = await compileFigure(input, {}, "cycle");
+  const scene = (result.entries[result.reference.ref] as Mechanism).frames[0]
+    .scene;
+  const arrows = scene.reactionArrows!;
+  assert.deepEqual(
+    arrows.filter((a) => a.id.startsWith("step-")).map((a) => a.id),
+    ["step-1", "step-2", "step-3", "step-4"],
+  );
+  assert.deepEqual(
+    arrows.filter((a) => /^(in|out)-/.test(a.id)).map((a) => a.id),
+    ["in-1", "out-1", "out-3", "in-4"],
+  );
+  assert.ok(arrows.every((a) => a.controls?.length === 2));
+  assert.ok(
+    arrows.find((a) => a.id === "step-1")!.to.x >
+      arrows.find((a) => a.id === "step-1")!.from.x,
+  );
+  assert.ok(
+    arrows.find((a) => a.id === "step-4")!.to.y <
+      arrows.find((a) => a.id === "step-4")!.from.y,
+  );
+  assert.equal(scene.molecules[0].id, "2");
+  assert.deepEqual(
+    (await compileFigure(input, result.entries, "cycle")).entries,
+    result.entries,
+  );
+  assert.throws(
+    () => validateFigureInput({ ...input, steps: [{}] }),
+    /one step per species/,
+  );
+});
+
+test("gallery line spacing includes superscripts and subscripts in adjacent captions", async () => {
+  const result = await compileFigure({
+    kind: "gallery",
+    compounds: {
+      a: { smiles: "CCO", yield: "46% yield^b,e", note: "**Me3N**\n1 h" },
+    },
+  });
+  const { prepareFigure } = await import("../src/ui/library/prepare.ts");
+  const { loadFigureStyle } = await import("../scripts/figure-route.ts");
+  const { loadFigureFonts } = await import("../scripts/figure-fonts.ts");
+  const { diagnoseFigure } = await import("../scripts/figure-diagnostics.ts");
+  const style = await loadFigureStyle();
+  const geometry = await prepareFigure(result.entries, result.reference, {
+    toolkit: await moleculeToolkit(),
+    fonts: await loadFigureFonts(),
+    style,
+  });
+  assert.deepEqual(diagnoseFigure(geometry, style), []);
 });

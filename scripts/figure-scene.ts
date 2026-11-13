@@ -34,6 +34,7 @@ import {
 } from "../shared/chemical-library/contract.ts";
 import { finishFigureEntry } from "./figure-output.ts";
 import { routeMetrics } from "../shared/chemical-library/routes.ts";
+import { compilePanelScene, type PanelCell } from "./figure-panels.ts";
 import {
   validateFigureInput,
   type StructureInput,
@@ -229,11 +230,11 @@ export async function compileFigure(
   const kind = input.kind ?? "route",
     count = input.steps?.length ?? 0;
   const routeGraph =
-    kind !== "mechanism" && (count > 1 || previous?.kind === "route");
+    kind === "route" && (count > 1 || previous?.kind === "route");
   const prefix =
     kind === "markush"
       ? "mku_"
-      : kind === "mechanism"
+      : kind !== "route"
         ? "mec_"
         : routeGraph
           ? "rte_"
@@ -694,7 +695,58 @@ export async function compileFigure(
     }
   }
   let top: LibraryEntry;
-  if (kind === "mechanism") {
+  if (kind === "gallery" || kind === "scope" || kind === "cycle") {
+    const cells: PanelCell[] = [];
+    const items: (readonly [string, StructureInput])[] =
+      kind === "cycle"
+        ? input.nodes!.map(
+            (raw, i) =>
+              [
+                String(i + 1),
+                typeof raw === "object" ? raw : { text: raw },
+              ] as const,
+          )
+        : Object.entries(input.compounds!).map(
+            ([key, raw]) =>
+              [key, typeof raw === "string" ? { smiles: raw } : raw] as const,
+          );
+    for (const [key, spec] of items) {
+      const scene = blank();
+      if (spec.smiles) {
+        const resolved = await resolveStructure(
+          spec,
+          kind === "cycle" ? `nodes.${key}` : `compounds.${key}`,
+        );
+        scene.molecules.push(placement(resolved, key, { x: 0, y: 0 }));
+        pushArrows(scene, resolved, key, true);
+        pushEnclosures(scene, resolved, key);
+      } else if (spec.text === undefined)
+        throw new Error(`${key}: requires smiles or text`);
+      cells.push({ key, spec, scene });
+    }
+    const panel: Mechanism = {
+      ...base,
+      kind: "mechanism",
+      id,
+      category: "examples",
+      frames: [],
+    };
+    const scene = await compilePanelScene(
+      entries,
+      panel,
+      input,
+      cells,
+      options.style ?? (await loadFigureStyle()),
+    );
+    panel.frames.push({
+      id: "overview",
+      title,
+      explanation: words(input.explain) || title,
+      scene,
+      arrow: "none",
+    });
+    top = panel;
+  } else if (kind === "mechanism") {
     const frames: Mechanism["frames"] = [],
       maps: NonNullable<Mechanism["maps"]> = [];
     let prior: Resolved | undefined,
