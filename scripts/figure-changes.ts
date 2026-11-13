@@ -1,10 +1,9 @@
-import type { Mol } from "@rdkit/rdkit";
+import type { Mol, MainModule as Toolkit } from "@rdkit/rdkit";
 import { figureCommonCore } from "./figure-depiction.ts";
 import {
   graphOf,
   openMolecule,
   type ChemicalGraph,
-  type Toolkit,
 } from "../shared/chemical-library/chemistry.ts";
 import type {
   AtomRef,
@@ -14,7 +13,7 @@ import type {
   Reaction,
 } from "../shared/chemical-library/types.ts";
 
-type Graph = ChemicalGraph & {
+type Graph = Omit<ChemicalGraph, "bonds"> & {
   bonds: {
     atoms: [number, number];
     bo?: number;

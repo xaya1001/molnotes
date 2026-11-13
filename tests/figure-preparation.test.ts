@@ -143,7 +143,7 @@ test("ring stereocentres use drawing-only hydrogen wedges without duplicating ex
       id: "cmp_ring",
       title: "Ring",
       smiles,
-      sources: [{ source: "example" }],
+      sources: [{ source: "example", locator: "Figure 1" }],
     });
     const before = structuredClone(c);
     const geometry = await prepareFigure(
