@@ -892,6 +892,7 @@ export function depictRoute(
       let initial = openMolecule(rd, r.depiction.smiles);
       fulls.set(key, initial);
       if (
+        (r.spec.ring_h ?? input.ring_h ?? true) &&
         !r.spec.drawing &&
         r.spec.arrows?.length &&
         r.depiction.smiles.includes(".")

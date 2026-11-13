@@ -47,6 +47,8 @@ export interface CompoundLayout {
   stereoAnnotations?: boolean;
   wedgeBonds?: { from: string; to: string; style: "solid" | "hashed" }[];
   hydrogens?: Record<string, Point>;
+  /** Whether native drawing adds ring stereocentre hydrogen wedges. */
+  ringHydrogens?: boolean;
   methylLabels?: string[];
   chargeAngles?: Record<string, number>;
   compact?: { atom: string; text: string; anchor: "first" | "last" };
@@ -77,6 +79,7 @@ export interface Compound extends EntryBase {
 }
 export interface Placement {
   id: string;
+  /** Compound or graph-free conformation entry. */
   compound: string;
   variant?: string;
   at: Point;

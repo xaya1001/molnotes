@@ -355,9 +355,10 @@ export function scaffoldLayout(
   rd: MainModule,
   compound: Compound,
   drawing: "flat" | "perspective",
+  showRingHydrogens = true,
 ): CompoundLayout {
   const original = openMolecule(rd, compound.smiles);
-  const mol = ringHydrogens(rd, original);
+  const mol = showRingHydrogens ? ringHydrogens(rd, original) : original;
   try {
     const hit = matchingScaffold(rd, mol);
     if (!hit)

@@ -123,6 +123,8 @@ function layout(v: unknown, w: string) {
       }
     }
   }
+  if (v.ringHydrogens !== undefined && typeof v.ringHydrogens !== "boolean")
+    fail(w, "ringHydrogens must be boolean");
   if (v.atomNumbers !== undefined) {
     object(v.atomNumbers, w);
     for (const value of Object.values(v.atomNumbers)) {
@@ -739,7 +741,14 @@ export function validateLibrary(library: Library) {
           : entry.kind === "image"
             ? "image"
             : "compound";
-      if (other.kind !== kind) fail(entry.id, `expected ${kind}: ${id}`);
+      if (
+        other.kind !== kind &&
+        !(
+          (entry.kind === "reaction" || entry.kind === "mechanism") &&
+          other.kind === "conformation"
+        )
+      )
+        fail(entry.id, `expected ${kind}: ${id}`);
     }
     if (entry.kind === "route")
       for (const step of entry.steps) {
@@ -765,9 +774,9 @@ export function validateLibrary(library: Library) {
       const ids = new Set(s.molecules.map((m) => m.id));
       for (const m of s.molecules) {
         const c = library[m.compound];
-        if (!c || c.kind !== "compound")
+        if (!c || (c.kind !== "compound" && c.kind !== "conformation"))
           fail(entry.id, `unknown compound ${m.compound}`);
-        if (m.variant && !c.variants?.[m.variant])
+        if (m.variant && (c.kind !== "compound" || !c.variants?.[m.variant]))
           fail(entry.id, `unknown variant ${m.variant}`);
       }
       if (entry.kind === "reaction")

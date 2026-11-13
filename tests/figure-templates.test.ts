@@ -253,3 +253,102 @@ test("conformation labels follow their own slot endpoints", async () => {
   });
   assert.ok(labels.get("CH3")! < labels.get("H")! - 20);
 });
+
+test("template structures participate in routes, panels and mechanism frames", async () => {
+  const chair = {
+    template: "chair",
+    subs: { "1a": { t: "CH3", color: "#c00" } },
+    bracket: "ts",
+  };
+  for (const input of [
+    {
+      compounds: { a: "CCO", b: chair, c: "CC=O" },
+      steps: [
+        { from: "a", to: "b" },
+        { from: "b", to: "c" },
+      ],
+    },
+    {
+      kind: "gallery",
+      compounds: {
+        a: chair,
+        b: { template: "newman", front: ["H", "H", "CH3"] },
+      },
+    },
+    {
+      kind: "mechanism",
+      frames: [
+        { id: "a", ...chair, above: "Heat", explain: "First view" },
+        { id: "b", ...chair, flip: true },
+      ],
+    },
+  ]) {
+    const result = await compileFigure(input, {}, "embedded");
+    const entry = result.entries[result.reference.ref];
+    const refs =
+      entry.kind === "mechanism"
+        ? entry.frames.map((f) => ({ ...result.reference, frame: f.id }))
+        : [result.reference];
+    for (const ref of refs) {
+      const geometry = await prepareFigure(result.entries, ref, {
+        toolkit,
+        fonts,
+        style,
+      });
+      const svg = geometrySvg(geometry);
+      assert.ok(svg.includes('data-conformation="chair"'));
+      assert.ok(svg.includes("#c00"));
+      assert.ok(geometry.width > 0 && geometry.height > 0);
+      const labels: string[] = [];
+      walkGeometry(geometry.root, (n) => {
+        const id = n.attributes["data-label"];
+        if (id?.includes(":text")) labels.push(id);
+      });
+      assert.equal(new Set(labels).size, labels.length);
+      if (entry.kind === "route") assert.ok(svg.includes("data-number"));
+    }
+    assert.deepEqual(
+      (await compileFigure(input, result.entries, "embedded")).entries,
+      result.entries,
+    );
+  }
+});
+
+test("ring hydrogen defaults and structure overrides are saved per depiction", async () => {
+  const smiles = "C1CC[C@H]2CCCC[C@@H]2C1";
+  const result = await compileFigure({
+    kind: "gallery",
+    ring_h: false,
+    compounds: { a: { smiles }, b: { smiles, ring_h: true } },
+  });
+  const entry = result.entries[result.reference.ref];
+  assert.equal(entry.kind, "mechanism");
+  if (entry.kind !== "mechanism") return;
+  const layouts = entry.frames[0].scene.molecules.map((p) => {
+    const c = result.entries[p.compound];
+    assert.equal(c.kind, "compound");
+    if (c.kind !== "compound") throw new Error("Expected compound");
+    return p.variant ? c.variants![p.variant] : c.layout;
+  });
+  assert.deepEqual(
+    layouts.map((l) => l.ringHydrogens),
+    [false, true],
+  );
+  const counts = [];
+  for (const p of entry.frames[0].scene.molecules) {
+    const c = result.entries[p.compound];
+    assert.equal(c.kind, "compound");
+    if (c.kind !== "compound") continue;
+    const geometry = await prepareFigure(
+      result.entries,
+      { ref: c.id, variant: p.variant },
+      { toolkit, fonts, style },
+    );
+    const bonds = new Set<string>();
+    walkGeometry(geometry.root, (n) => {
+      if (n.attributes["data-bond"]) bonds.add(n.attributes["data-bond"]);
+    });
+    counts.push(bonds.size);
+  }
+  assert.ok(counts[1] > counts[0]);
+});

@@ -718,14 +718,6 @@ test("YAML boundary rejects unsupported kinds and style fields, validates deferr
     );
   for (const kind of ["table"])
     assert.throws(() => validateFigureInput({ ...input, kind }), /尚未支持/);
-  assert.throws(
-    () =>
-      validateFigureInput({
-        ...input,
-        compounds: { a: { template: "chair" } },
-      }),
-    /尚未支持/,
-  );
   const deferred = {
     kind: "mechanism",
     forming: true,

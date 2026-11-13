@@ -58,7 +58,11 @@ function hits(p: XY, q: XY, b: Box, pad: number) {
   return true;
 }
 /** The saved ring geometry and text-placement rules are shared by previews and publication. */
-export function conformationGeometry(spec: ConformationSpec, ctx: FigureScene) {
+export function conformationGeometry(
+  spec: ConformationSpec,
+  ctx: FigureScene,
+  id = "conformation",
+) {
   const B = ctx.token("--chemical-bond"),
     S = ctx.token("--chemical-line"),
     ink = ctx.value("--chemical-ink");
@@ -78,7 +82,7 @@ export function conformationGeometry(spec: ConformationSpec, ctx: FigureScene) {
       "stroke-linecap": "round",
       ...(dash ? { "stroke-dasharray": `${S * 2.6} ${S * 2.4}` } : {}),
     });
-    if (!spec.slots) ctx.setData(n, "bond", `conformation:line${serial++}`);
+    if (!spec.slots) ctx.setData(n, "bond", `${id}:line${serial++}`);
     ctx.append(group, n);
     return n;
   };
@@ -92,7 +96,7 @@ export function conformationGeometry(spec: ConformationSpec, ctx: FigureScene) {
       box = ctx.box(n);
     ctx.set(n, "y", n.position.y + p[1] - (box.y + box.height / 2));
     ctx.setStyle(n, "fill", color);
-    ctx.setData(n, "label", `conformation:text${serial++}`);
+    ctx.setData(n, "label", `${id}:text${serial++}`);
     ctx.append(group, n);
   };
   const clip = (p: XY, q: XY, t?: string): XY => {

@@ -11,6 +11,9 @@ import {
   compileReactionLayout,
   loadFigureStyle,
 } from "./figure-route.ts";
+import { createFigureScene } from "../src/ui/library/scene-geometry.ts";
+import { conformationGeometry } from "../src/ui/library/conformation-geometry.ts";
+import { loadFigureFonts } from "./figure-fonts.ts";
 import type { FigureStyle } from "../src/ui/library/scene-geometry.ts";
 import { createHash } from "node:crypto";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
@@ -48,6 +51,7 @@ import type {
   Anchor,
   AtomRef,
   Compound,
+  Conformation,
   Evidence,
   Library,
   LibraryEntry,
@@ -115,21 +119,64 @@ export function expandFigureSmiles(smiles: string) {
     },
   );
 }
-interface Resolved {
+interface ChemicalStructure {
   variant?: string;
   compound: Compound;
   atoms: Map<number, string>;
   spec: StructureInput;
   depiction: { smiles: string; atoms: number[] };
 }
+interface TemplateStructure {
+  compound: Conformation;
+  atoms: Map<number, string>;
+  spec: StructureInput;
+  variant?: undefined;
+}
+type Resolved = ChemicalStructure | TemplateStructure;
+function isChemical(r: Resolved): r is ChemicalStructure {
+  return r.compound.kind === "compound";
+}
+function depictStructures(
+  rd: Parameters<typeof depictRoute>[0],
+  structures: Map<string, Resolved | StructureInput>,
+  input: Parameters<typeof depictRoute>[2],
+  variantName: Parameters<typeof depictRoute>[3],
+  style: FigureStyle,
+  placeFragments?: (key: string) => void,
+) {
+  const chemical = new Map(
+    [...structures].map(([key, r]) => [
+      key,
+      "compound" in r && !isChemical(r) ? r.spec : r,
+    ]),
+  );
+  const anchor =
+    input.anchor === undefined
+      ? undefined
+      : structures.get(String(input.anchor));
+  return depictRoute(
+    rd,
+    chemical,
+    {
+      ...input,
+      anchor:
+        anchor && "compound" in anchor && !isChemical(anchor)
+          ? undefined
+          : input.anchor,
+    },
+    variantName,
+    style,
+    placeFragments,
+  );
+}
 function endpoints<T>(value: T | T[]): T[] {
   return Array.isArray(value) ? value : [value];
 }
 const keyOf = (v: string | number | { id: string | number }) =>
   typeof v === "object" ? String(v.id) : String(v);
-const layoutOf = (r: Resolved) =>
+const layoutOf = (r: ChemicalStructure) =>
   r.variant ? r.compound.variants![r.variant] : r.compound.layout;
-function bounds(rd: Toolkit, r: Resolved) {
+function chemicalBounds(rd: Toolkit, r: ChemicalStructure) {
   const hidden = new Set(
     compoundAbbreviations(rd, r.compound, layoutOf(r)).flatMap((g) =>
       g.atoms.slice(1),
@@ -316,6 +363,7 @@ export async function compileFigure(
       sourceFile,
     };
   }
+  const templateFonts = await loadFigureFonts();
   const previousReactions =
     previous?.kind === "reaction"
       ? [previous]
@@ -338,6 +386,38 @@ export async function compileFigure(
     spec: StructureInput,
     where: string,
   ): Promise<Resolved> {
+    if (spec.template) {
+      const cid = `cnf_${sourceKey}_${figureKey(where)}`;
+      const compound: Conformation = {
+        template: spec.template,
+        subs: spec.subs,
+        atoms: spec.atoms,
+        bonds: spec.bonds,
+        mirror: spec.mirror,
+        rot: spec.rot,
+        scale: spec.scale,
+        sub_len: spec.sub_len,
+        slots: spec.slots,
+        clash: spec.clash,
+        front: spec.front,
+        back: spec.back,
+        dihedral: spec.dihedral,
+        rows: spec.rows,
+        top: spec.top,
+        bottom: spec.bottom,
+        bracket: spec.bracket,
+        // Template flip exchanges ring conformations; mirror reflects the drawing.
+        flip: typeof spec.flip === "boolean" ? spec.flip : undefined,
+        id: cid,
+        kind: "conformation",
+        title: words(spec.label) || spec.template,
+        sources,
+        owner: id,
+      };
+      entries[cid] = compound;
+      generated.add(cid);
+      return { compound, spec, atoms: new Map() };
+    }
     if (!spec.smiles) throw new Error(`${where}: structure requires smiles`);
     const expanded = expandFigureSmiles(spec.smiles),
       m = openMolecule(rd, expanded);
@@ -559,6 +639,18 @@ export async function compileFigure(
           };
           generated.add(compound.id);
         }
+        if (spec.ring_h !== undefined || input.ring_h !== undefined) {
+          const layout = variant
+            ? compound.variants![variant]
+            : compound.layout;
+          variant ??= `${id}_${figureKey(where)}`;
+          compound.variants ??= {};
+          compound.variants[variant] = {
+            ...structuredClone(layout),
+            ringHydrogens: spec.ring_h ?? input.ring_h,
+          };
+          generated.add(compound.id);
+        }
         if (spec.drawing) {
           const layout = variant
             ? compound.variants![variant]
@@ -569,6 +661,7 @@ export async function compileFigure(
             rd,
             { ...compound, layout },
             spec.drawing,
+            spec.ring_h ?? input.ring_h ?? true,
           );
           generated.add(compound.id);
         }
@@ -627,7 +720,20 @@ export async function compileFigure(
       m.delete();
     }
   }
+  function bounds(rd: Toolkit, r: Resolved) {
+    if (isChemical(r)) return chemicalBounds(rd, r);
+    const ctx = createFigureScene(style, templateFonts);
+    const box = ctx.box(conformationGeometry(r.compound, ctx));
+    return {
+      left: box.x / ctx.token("--chemical-bond"),
+      right: (box.x + box.width) / ctx.token("--chemical-bond"),
+      top: box.y / ctx.token("--chemical-bond"),
+      bottom: (box.y + box.height) / ctx.token("--chemical-bond"),
+    };
+  }
   function placement(resolved: Resolved, local: string, at: Point): Placement {
+    if (!isChemical(resolved))
+      return { id: local, compound: resolved.compound.id, at };
     return {
       id: local,
       compound: resolved.compound.id,
@@ -646,6 +752,7 @@ export async function compileFigure(
   }
   function positionArrowFragments(resolved: Resolved) {
     if (
+      !isChemical(resolved) ||
       !resolved.spec.arrows?.length ||
       !resolved.compound.smiles.includes(".")
     )
@@ -875,13 +982,13 @@ export async function compileFigure(
           );
     for (const [key, spec] of items) {
       const scene = blank();
-      if (spec.smiles) {
+      if (spec.smiles || spec.template) {
         const resolved = await resolveStructure(
           spec,
           kind === "cycle" ? `nodes.${key}` : `compounds.${key}`,
         );
         if (spec.arrows?.length)
-          for (const cid of depictRoute(
+          for (const cid of depictStructures(
             rd,
             new Map([[key, resolved]]),
             { ...input, steps: [], anchor: key },
@@ -957,7 +1064,7 @@ export async function compileFigure(
         resolvedFrames.set(fid, await resolveStructure(frame, `frames.${fid}`));
       }
       // chemfig.mechanism_route / render propagate orientation through adjacent frames.
-      for (const cid of depictRoute(
+      for (const cid of depictStructures(
         rd,
         resolvedFrames,
         {
@@ -982,7 +1089,7 @@ export async function compileFigure(
         ? resolvedFrames.get(fid)!
         : await resolveStructure(frame, `frames.${fid}`);
       if (!resolvedFrames)
-        for (const cid of depictRoute(
+        for (const cid of depictStructures(
           rd,
           new Map([[fid, resolved]]),
           { ...input, steps: [], anchor: fid },
@@ -990,7 +1097,8 @@ export async function compileFigure(
           style,
         ))
           generated.add(cid);
-      if (frame.arrows?.length) layoutOf(resolved).methylLabels = [];
+      if (isChemical(resolved) && frame.arrows?.length)
+        layoutOf(resolved).methylLabels = [];
       positionArrowFragments(resolved);
       const scene = blank(),
         box = bounds(rd, resolved);
@@ -1071,10 +1179,12 @@ export async function compileFigure(
       const spec = typeof raw === "string" ? { smiles: raw } : raw;
       compounds.set(
         key,
-        spec.smiles ? await resolveStructure(spec, `compounds.${key}`) : spec,
+        spec.smiles || spec.template
+          ? await resolveStructure(spec, `compounds.${key}`)
+          : spec,
       );
     }
-    for (const cid of depictRoute(
+    for (const cid of depictStructures(
       rd,
       compounds,
       input,

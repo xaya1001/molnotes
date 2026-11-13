@@ -296,8 +296,11 @@ export function reactionChanges(
     return s;
   };
   try {
-    const reactants = reaction.reactants.map(load);
+    const reactants = reaction.reactants
+      .filter((p) => library[p.compound]?.kind !== "conformation")
+      .map(load);
     for (const participant of reaction.products) {
+      if (library[participant.compound]?.kind === "conformation") continue;
       const product = load(participant),
         name = participant.number || participant.sourceKey || participant.id;
       const label = `${reaction.title} → 产物 ${name}`;
