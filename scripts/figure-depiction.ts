@@ -346,20 +346,27 @@ function crowded(mol: Mol, limit: number) {
   return false;
 }
 function common(rd: Toolkit, reference: Mol, mol: Mol, strict: boolean) {
+  return commonCore(rd, [reference, mol], strict);
+}
+function commonCore(
+  rd: Toolkit,
+  molecules: Mol[],
+  strict: boolean,
+  timeout = 2,
+) {
   const list = new rd.MolList();
   try {
-    const a = matchingCopy(rd, reference),
-      b = matchingCopy(rd, mol);
-    list.append(a);
-    list.append(b);
-    a.delete();
-    b.delete();
+    for (const mol of molecules) {
+      const copy = matchingCopy(rd, mol);
+      list.append(copy);
+      copy.delete();
+    }
     const result: { numAtoms: number; smarts: string; canceled: boolean } =
       JSON.parse(
         rd.get_mcs_as_json(
           list,
           JSON.stringify({
-            Timeout: 2,
+            Timeout: timeout,
             RingMatchesRingOnly: strict,
             CompleteRingsOnly: strict,
             MatchChiralTag: false,
@@ -427,8 +434,13 @@ function rings(mol: Mol): number[][] {
     )?.atomRings ?? []
   );
 }
-function follow(rd: Toolkit, mol: Mol, reference: Mol, coordgen: boolean) {
-  const result = common(rd, reference, mol, false);
+function follow(
+  rd: Toolkit,
+  mol: Mol,
+  reference: Mol,
+  coordgen: boolean,
+  result = common(rd, reference, mol, false),
+) {
   if (result.numAtoms < 4) return false;
   const query = rd.get_qmol(result.smarts)!;
   try {
@@ -518,8 +530,12 @@ function follow(rd: Toolkit, mol: Mol, reference: Mol, coordgen: boolean) {
     query.delete();
   }
 }
-function orient(rd: Toolkit, mol: Mol, reference: Mol) {
-  const result = common(rd, reference, mol, false);
+function orient(
+  rd: Toolkit,
+  mol: Mol,
+  reference: Mol,
+  result = common(rd, reference, mol, false),
+) {
   if (result.numAtoms < 3) return;
   const query = rd.get_qmol(result.smarts)!;
   try {
@@ -573,6 +589,161 @@ function orient(rd: Toolkit, mol: Mol, reference: Mol) {
     }
   } finally {
     query.delete();
+  }
+}
+
+/** Reuse the route's core, pinned-atom and rigid-orientation chain. */
+function alignDepiction(
+  rd: Toolkit,
+  mol: Mol,
+  reference: Mol,
+  coordgen: boolean,
+  identity: string,
+  fresh: () => Mol,
+  groupCore?: ReturnType<typeof commonCore>,
+) {
+  const core = groupCore ?? common(rd, reference, mol, true);
+  let aligned = false;
+  if (
+    core.numAtoms >= 4 &&
+    core.numAtoms >=
+      0.6 * Math.min(reference.get_num_atoms(), mol.get_num_atoms())
+  ) {
+    const candidate = alignCore(rd, mol, reference, core.smarts, coordgen);
+    if (candidate) {
+      mol.delete();
+      mol = candidate;
+      aligned = retainsStereo(rd, mol, identity);
+    }
+  }
+  if (!aligned) {
+    mol.delete();
+    mol = fresh();
+    aligned =
+      follow(rd, mol, reference, coordgen, groupCore) &&
+      retainsStereo(rd, mol, identity);
+  }
+  if (!aligned) {
+    mol.delete();
+    mol = fresh();
+    const coordinates = orient(rd, mol, reference, groupCore);
+    if (coordinates) {
+      const rotated = withCoordinates(rd, mol, coordinates);
+      mol.delete();
+      mol = rotated;
+    }
+  }
+  return mol;
+}
+
+/** Ring atoms define a series scaffold without the acyclic substituent search. */
+function seriesSkeleton(rd: Toolkit, mol: Mol) {
+  const data = JSON.parse(mol.get_json()),
+    source = data.molecules[0],
+    representation = source.extensions?.find(
+      (e: { name: string }) => e.name === "rdkitRepresentation",
+    ),
+    atomRings: number[][] = representation?.atomRings ?? [],
+    atoms = [...new Set(atomRings.flat())].sort((a, b) => a - b);
+  if (!atoms.length) return matchingCopy(rd, mol);
+  const indices = new Map(atoms.map((a, i) => [a, i])),
+    bonds: { b: { atoms: number[]; bo?: number }; i: number }[] = source.bonds
+      .map((b: { atoms: number[]; bo?: number }, i: number) => ({ b, i }))
+      .filter(({ b }: { b: { atoms: number[] } }) =>
+        b.atoms.every((a) => indices.has(a)),
+      ),
+    bondIndices = new Map(bonds.map(({ i }, j) => [i, j]));
+  source.atoms = atoms.map((a) => ({ z: source.atoms[a].z ?? 6 }));
+  source.bonds = bonds.map(({ b }) => ({
+    atoms: b.atoms.map((a) => indices.get(a)),
+    bo: b.bo ?? 1,
+  }));
+  delete source.conformers;
+  source.extensions = [
+    {
+      name: "rdkitRepresentation",
+      formatVersion: 2,
+      aromaticAtoms: (representation.aromaticAtoms ?? [])
+        .filter((a: number) => indices.has(a))
+        .map((a: number) => indices.get(a)),
+      aromaticBonds: (representation.aromaticBonds ?? [])
+        .filter((b: number) => bondIndices.has(b))
+        .map((b: number) => bondIndices.get(b)),
+      atomRings: atomRings.map((ring) => ring.map((a) => indices.get(a))),
+    },
+  ];
+  return descriptionMolecule(rd, data);
+}
+
+/** Group-specific saved layouts share the MCS of every member, leaving base views intact. */
+export function depictSeries(
+  rd: Toolkit,
+  compounds: { compound: Compound; variant?: string }[],
+  variant: string,
+) {
+  if (compounds.length < 2) return false;
+  const mols: Mol[] = [],
+    skeletons: Mol[] = [];
+  try {
+    const fresh = (index: number) => {
+      const { compound, variant } = compounds[index],
+        layout = variant ? compound.variants![variant] : compound.layout,
+        source = openMolecule(rd, compound.smiles);
+      try {
+        return withCoordinates(
+          rd,
+          source,
+          compound.atomIds.map((id) => [
+            1.5 * layout.coords[id].x,
+            -1.5 * layout.coords[id].y,
+          ]),
+        );
+      } finally {
+        source.delete();
+      }
+    };
+    compounds.forEach((_, i) => mols.push(fresh(i)));
+    mols.forEach((mol) => skeletons.push(seriesSkeleton(rd, mol)));
+    // Zero disables RDKit's elapsed-time cutoff; incomplete results cannot pick a layout.
+    const core = commonCore(rd, skeletons, true, 0);
+    if (core.canceled)
+      throw new Error("Series common-core calculation did not complete");
+    if (core.numAtoms < 3) return false;
+    const anchor = mols.reduce(
+        (best, mol, i) =>
+          mol.get_num_atoms() > mols[best].get_num_atoms() ? i : best,
+        0,
+      ),
+      reference = mols[anchor];
+    for (const [i, item] of compounds.entries()) {
+      if (i !== anchor)
+        mols[i] = alignDepiction(
+          rd,
+          mols[i],
+          reference,
+          false,
+          graphSignature(rd, mols[i]),
+          () => fresh(i),
+          core,
+        );
+      mols[i].normalize_depiction(0);
+      const points = savedCoordinates(xy(mols[i]), [], [], 1),
+        layout = item.variant
+          ? item.compound.variants![item.variant]
+          : item.compound.layout;
+      item.compound.variants ??= {};
+      item.compound.variants[variant] = {
+        ...structuredClone(layout),
+        coords: Object.fromEntries(
+          item.compound.atomIds.map((id, j) => [id, points[j]]),
+        ),
+      };
+      delete item.compound.variants[variant].chargeAngles;
+    }
+    return true;
+  } finally {
+    mols.forEach((mol) => mol.delete());
+    skeletons.forEach((mol) => mol.delete());
   }
 }
 
@@ -825,6 +996,21 @@ export function depictRoute(
         ),
       );
       expected.set(key, graphSignature(rd, shown));
+      if (r.spec.drawing) {
+        const coords = r.depiction.atoms.map(
+          (a) => layout.coords[r.compound.atomIds[a]],
+        );
+        mols.set(
+          key,
+          withCoordinates(
+            rd,
+            initial,
+            coords.map((p) => [p.x * 1.5, -p.y * 1.5]),
+          ),
+        );
+        shown.delete();
+        continue;
+      }
       const mol = free(rd, shown, r.spec.coordgen ?? input.coordgen ?? false);
       mols.set(key, mol);
     }
@@ -849,7 +1035,7 @@ export function depictRoute(
       if (done.has(key)) continue;
       const r = structures.get(key);
       let mol = mols.get(key);
-      if (r && mol) {
+      if (r && mol && !r.spec.drawing) {
         const refKey =
           typeof r.spec.align === "string" || typeof r.spec.align === "number"
             ? String(r.spec.align)
@@ -860,81 +1046,33 @@ export function depictRoute(
           refKey && done.has(refKey) ? mols.get(refKey) : undefined;
         const coordgen = r.spec.coordgen ?? input.coordgen ?? false;
         if (reference && r.spec.align !== false) {
-          const commonCore = common(rd, reference, mol, true);
-          let aligned = false;
-          if (
-            commonCore.numAtoms >= 4 &&
-            commonCore.numAtoms >=
-              0.6 * Math.min(reference.get_num_atoms(), mol.get_num_atoms())
-          ) {
-            const core = alignCore(
-              rd,
-              mol,
-              reference,
-              commonCore.smarts,
-              coordgen,
-            );
-            if (core) {
-              mol.delete();
-              mol = core;
-              mols.set(key, mol);
-              aligned = true;
-            }
-          }
-          aligned = aligned && retainsStereo(rd, mol, expected.get(key)!);
-          if (!aligned) {
-            mol.delete();
-            mol = free(
-              rd,
-              contracted(
+          mol = alignDepiction(
+            rd,
+            mol,
+            reference,
+            coordgen,
+            expected.get(key)!,
+            () =>
+              free(
                 rd,
-                fulls.get(key)!,
-                (r.variant
-                  ? r.compound.variants![r.variant]
-                  : r.compound.layout
-                ).abbreviations,
-                (r.variant
-                  ? r.compound.variants![r.variant]
-                  : r.compound.layout
-                ).abbreviationAtoms?.map((a) =>
-                  r.depiction.atoms.indexOf(r.compound.atomIds.indexOf(a)),
+                contracted(
+                  rd,
+                  fulls.get(key)!,
+                  (r.variant
+                    ? r.compound.variants![r.variant]
+                    : r.compound.layout
+                  ).abbreviations,
+                  (r.variant
+                    ? r.compound.variants![r.variant]
+                    : r.compound.layout
+                  ).abbreviationAtoms?.map((a) =>
+                    r.depiction.atoms.indexOf(r.compound.atomIds.indexOf(a)),
+                  ),
                 ),
+                coordgen,
               ),
-              coordgen,
-            );
-            mols.set(key, mol);
-            aligned =
-              follow(rd, mol, reference, coordgen) &&
-              retainsStereo(rd, mol, expected.get(key)!);
-          }
-          if (!aligned) {
-            mol.delete();
-            mol = free(
-              rd,
-              contracted(
-                rd,
-                fulls.get(key)!,
-                (r.variant
-                  ? r.compound.variants![r.variant]
-                  : r.compound.layout
-                ).abbreviations,
-                (r.variant
-                  ? r.compound.variants![r.variant]
-                  : r.compound.layout
-                ).abbreviationAtoms?.map((a) =>
-                  r.depiction.atoms.indexOf(r.compound.atomIds.indexOf(a)),
-                ),
-              ),
-              coordgen,
-            );
-            mols.set(key, mol);
-            const coordinates = orient(rd, mol, reference);
-            if (coordinates) {
-              const rotated = withCoordinates(rd, mol, coordinates);
-              mols.set(key, rotated);
-              mol.delete();
-            }
-          }
+          );
+          mols.set(key, mol);
         }
         let final = mols.get(key)!;
         final.normalize_depiction(0);

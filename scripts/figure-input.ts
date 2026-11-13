@@ -1,3 +1,7 @@
+import {
+  validateMarkushFigure,
+  type MarkushFigureData,
+} from "../shared/chemical-library/markush.ts";
 import { isObject } from "../shared/json.ts";
 import type { ArrowKind } from "../shared/chemical-library/types.ts";
 
@@ -20,6 +24,7 @@ export interface StructureInput {
   flip?: boolean | "h" | "v";
   align?: boolean | Key;
   coordgen?: boolean;
+  drawing?: "flat" | "perspective";
   abbreviate?: boolean;
   numbers?: boolean;
   notes?: Record<string, Key>;
@@ -73,14 +78,36 @@ export interface FrameInput extends StructureInput {
   below?: Key;
   arrow?: ArrowKind;
 }
+export interface CycleStepInput {
+  in?: Key;
+  out?: Key;
+  label?: Key;
+}
 export interface FigureInput {
   abbreviate?: ("Ph" | "Trt" | "Bz")[];
-  kind?: "route" | "mechanism";
+  kind?: "route" | "mechanism" | "markush" | "gallery" | "scope" | "cycle";
+  core?: MarkushFigureData["core"];
+  groups?: MarkushFigureData["groups"];
+  view?: MarkushFigureData["view"];
+  name?: string;
+  note?: string;
+  unmodeled?: string;
+  patents?: MarkushFigureData["patents"];
+  gaps?: MarkushFigureData["gaps"];
+  gaps_title?: string;
+  rot?: number;
+  flip?: "h" | "v";
   title?: Key;
   explain?: Key;
   sources?: { source: Key; locator?: Key; note?: Key }[];
   compounds?: Record<string, string | StructureInput>;
   steps?: StepInput[];
+  cycleSteps?: CycleStepInput[];
+  scopeGroups?: { title?: Key; subtitle?: Key; items: Key[] }[];
+  cols?: number;
+  nodes?: (Key | StructureInput)[];
+  radius?: number;
+  branch?: number;
   frames?: FrameInput[];
   coordgen?: boolean;
   forming?: boolean;
@@ -204,6 +231,7 @@ export function validateFigureInput(value: unknown): {
     flip: choice(true, false, "h", "v"),
     align: either(bool, text),
     coordgen: bool,
+    drawing: choice("flat", "perspective"),
     abbreviate: bool,
     numbers: bool,
     notes: map(text),
@@ -267,12 +295,38 @@ export function validateFigureInput(value: unknown): {
   );
   if (!isObject(value)) fail("figure", "expected YAML mapping");
   const kind = value.kind ?? "route";
-  if (["gallery", "scope", "table", "cycle"].includes(String(kind)))
-    fail("figure.kind", "尚未支持");
-  if (kind !== "route" && kind !== "mechanism")
-    fail("figure.kind", "expected route | mechanism");
+  if (kind === "markush") {
+    validateMarkushFigure(value, "figure");
+    object(
+      {
+        kind: choice("markush"),
+        title: text,
+        sources,
+        explain: text,
+        footnote: text,
+        core: string,
+        groups: () => {},
+        view: choice("formula", "map", "overlay"),
+        name: string,
+        note: string,
+        unmodeled: string,
+        patents: map(string),
+        gaps: () => {},
+        gaps_title: string,
+        rot: number,
+        flip: choice("h", "v"),
+      },
+      ["core", "groups"],
+    )(value, "figure");
+    return { input: value as unknown as FigureInput, warnings };
+  }
+  if (kind === "table") fail("figure.kind", "尚未支持");
+  if (
+    !["route", "mechanism", "gallery", "scope", "cycle"].includes(String(kind))
+  )
+    fail("figure.kind", "expected route | mechanism | gallery | scope | cycle");
   const shared = {
-    kind: choice("route", "mechanism"),
+    kind: choice("route", "mechanism", "gallery", "scope", "cycle"),
     title: text,
     explain: text,
     sources,
@@ -282,13 +336,51 @@ export function validateFigureInput(value: unknown): {
     abbreviate: list(choice("Ph", "Trt", "Bz")),
     mark: string,
   };
-  if (kind === "route")
+  const compounds = map((v, p) =>
+    typeof v === "string" ? string(v, p) : object(structure)(v, p),
+  );
+  const positive: Rule = (v, p) => {
+    number(v, p);
+    if (Number(v) <= 0) fail(p, "expected positive number");
+  };
+  if (kind === "gallery" || kind === "scope")
     object(
       {
         ...shared,
-        compounds: map((v, p) =>
-          typeof v === "string" ? string(v, p) : object(structure)(v, p),
-        ),
+        compounds,
+        ...(kind === "gallery"
+          ? {
+              cols: (v: unknown, p: string) => {
+                positive(v, p);
+                if (!Number.isInteger(v)) fail(p, "expected integer");
+              },
+            }
+          : {
+              groups: list(
+                object({ title: text, subtitle: text, items: list(text) }, [
+                  "items",
+                ]),
+              ),
+            }),
+      },
+      kind === "scope" ? ["compounds", "groups"] : ["compounds"],
+    )(value, "figure");
+  else if (kind === "cycle")
+    object(
+      {
+        ...shared,
+        nodes: list(either(text, object(structure))),
+        steps: list(object({ in: text, out: text, label: text })),
+        radius: positive,
+        branch: positive,
+      },
+      ["nodes"],
+    )(value, "figure");
+  else if (kind === "route")
+    object(
+      {
+        ...shared,
+        compounds,
         steps: list(step),
         anchor: text,
         wrap: choice("serpentine"),
@@ -307,6 +399,7 @@ export function validateFigureInput(value: unknown): {
               rot: number,
               flip: choice("h", "v"),
               coordgen: bool,
+              drawing: structure.drawing,
               bracket: structure.bracket,
               scale: structure.scale,
               numbers: bool,
@@ -329,7 +422,12 @@ export function validateFigureInput(value: unknown): {
       ["frames"],
     )(value, "figure");
   // The complete untrusted boundary above establishes the authoring type.
-  const input = value as unknown as FigureInput;
+  // Scope groups and cycle steps retain their separate validated contracts.
+  const input = (kind === "cycle"
+    ? { ...value, steps: undefined, cycleSteps: value.steps }
+    : kind === "scope"
+      ? { ...value, groups: undefined, scopeGroups: value.groups }
+      : value) as unknown as FigureInput;
   if (
     kind === "route" &&
     (!input.steps!.length || !Object.keys(input.compounds!).length)
@@ -337,6 +435,27 @@ export function validateFigureInput(value: unknown): {
     fail("figure", "requires compounds and steps");
   if (kind === "mechanism" && !input.frames!.length)
     fail("figure.frames", "requires frames");
+  if (
+    (kind === "gallery" || kind === "scope") &&
+    !Object.keys(input.compounds!).length
+  )
+    fail("figure.compounds", "requires compounds");
+  if (kind === "scope") {
+    if (!input.scopeGroups!.length) fail("figure.groups", "requires groups");
+    for (const [i, group] of input.scopeGroups!.entries()) {
+      if (!group.items.length)
+        fail(`figure.groups[${i}].items`, "requires compounds");
+      for (const key of group.items)
+        if (!Object.hasOwn(input.compounds!, String(key)))
+          fail(`figure.groups[${i}].items`, `unknown compound ${key}`);
+    }
+  }
+  if (kind === "cycle") {
+    if (input.nodes!.length < 2)
+      fail("figure.nodes", "requires at least two species");
+    if (input.cycleSteps && input.cycleSteps.length !== input.nodes!.length)
+      fail("figure.steps", "requires one step per species");
+  }
   return {
     input,
     warnings: warnings.length

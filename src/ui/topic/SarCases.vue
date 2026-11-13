@@ -98,6 +98,7 @@ function ids(a: string, b: string) {
                 <RecordValue
                   :collection="collection"
                   :field="field"
+                  :structure="item.structureFigures?.[String(id)]?.[field.key]"
                   :record="collection.records.find((r) => r.id === id)!"
                 />
               </dd>

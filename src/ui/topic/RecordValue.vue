@@ -19,9 +19,11 @@ const props = defineProps<{
   field: RecordField;
   record: CollectionRecord;
   detail?: boolean;
+  structure?: import("../../../shared/chemical-library/types.ts").FigureReference;
 }>();
 const drawing = computed(
   () =>
+    props.structure ??
     props.collection.structureFigures?.[String(props.record.id)]?.[
       props.field.key
     ],
