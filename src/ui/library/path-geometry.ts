@@ -166,14 +166,14 @@ export function pathContours(d: string, matrix = identityMatrix()) {
   });
 }
 
-/** Even-odd interiors preserve holes in a union of expanded skeleton shapes. */
+/** Check a closed contour interior and its boundary ink. */
 export function contoursCoverPoint(
   contours: ReturnType<typeof pathContours>,
   point: Point,
   width: number,
 ) {
   return (
-    contours.filter((c) => insidePolygon(point, c.points)).length % 2 === 1 ||
+    contours.some((c) => insidePolygon(point, c.points)) ||
     contours.some((c) => polylinesTouch(c.points, [point, point], width / 2))
   );
 }
@@ -183,7 +183,7 @@ export function inkIntersectsBox(
   contours: ReturnType<typeof pathContours>,
   box: FigureBox,
   strokeWidth: number,
-  filled: boolean | "evenodd",
+  filled: boolean,
 ) {
   const polygon = [
     { x: box.x, y: box.y },
@@ -191,11 +191,6 @@ export function inkIntersectsBox(
     { x: box.x + box.width, y: box.y + box.height },
     { x: box.x, y: box.y + box.height },
   ];
-  if (
-    filled === "evenodd" &&
-    polygon.some((p) => contoursCoverPoint(contours, p, strokeWidth))
-  )
-    return true;
   return contours.some(({ points, box: bounds }) => {
     const pad = strokeWidth / 2;
     if (

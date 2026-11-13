@@ -179,7 +179,7 @@ test("automatic circles avoid unrelated bonds while explicit circles report thei
     if (shape === "circle")
       assert.ok(diagnostics.some((d) => d.code === "ENCLOSURE_BOND_OVERLAP"));
     else {
-      assert.equal(enclosure.attributes["data-enclose-shape"], "outline");
+      assert.equal(enclosure.attributes["data-enclose-shape"], "rect");
       assert.deepEqual(diagnostics, []);
     }
   }
@@ -229,7 +229,7 @@ test("automatic enclosures exclude neighbouring atoms even across an exempt conn
     );
     assert.equal(
       enclosure.attributes["data-enclose-shape"],
-      shape === "auto" ? "outline" : "circle",
+      shape === "auto" ? "rect" : "circle",
     );
     const diagnostics = figureGeometryDiagnostics(
       {
@@ -288,7 +288,7 @@ test("automatic enclosures keep a full gap from unselected label boxes", async (
     );
     assert.equal(
       enclosure.attributes["data-enclose-shape"],
-      shape === "auto" ? "outline" : "circle",
+      shape === "auto" ? "rect" : "circle",
     );
     const diagnostics = figureGeometryDiagnostics(
       {
@@ -307,43 +307,7 @@ test("automatic enclosures keep a full gap from unselected label boxes", async (
   }
 });
 
-test("automatic outlines reduce padding when an unrelated bond touches the boundary", async () => {
-  const { createFigureScene } =
-    await import("../src/ui/library/scene-geometry.ts");
-  const { drawEnclosure } =
-    await import("../src/ui/library/geometry-enclosures.ts");
-  const ctx = createFigureScene(style, fonts),
-    parent = ctx.element("g");
-  const bond = ctx.element("path", {
-    d: "M67 0H97",
-    "data-bond": "m:other",
-    "data-atoms": "m:a4 m:a5",
-  });
-  ctx.setStyle(bond, "stroke", "var(--chemical-ink)");
-  ctx.setStyle(bond, "strokeWidth", "var(--chemical-line)");
-  ctx.append(parent, bond);
-  const [enclosure] = drawEnclosure(
-    {
-      id: "selected",
-      atoms: [1, 2, 3].map((i) => ({ molecule: "m", atom: `a${i}` })),
-    },
-    {
-      "m:a1": { x: 0, y: 0 },
-      "m:a2": { x: 60, y: 30 },
-      "m:a3": { x: 60, y: -30 },
-    },
-    parent,
-    ctx,
-    [
-      ["m:a1", "m:a2"],
-      ["m:a2", "m:a3"],
-    ],
-  );
-  assert.ok(enclosure.bounds!.x + enclosure.bounds!.width < 66);
-  assert.equal(enclosure.paint.dashArray, "4 3");
-});
-
-test("automatic selections split disconnected parts and follow a concave connected skeleton", async () => {
+test("automatic components fall back to solid focus when every enclosure conflicts", async () => {
   const { createFigureScene } =
     await import("../src/ui/library/scene-geometry.ts");
   const { drawEnclosure } =
@@ -354,8 +318,9 @@ test("automatic selections split disconnected parts and follow a concave connect
     "m:a3": { x: 60, y: 60 },
     "m:a4": { x: 60, y: 20 },
     "m:a5": { x: 40, y: 30 },
+    "m:a6": { x: 140, y: 40 },
   };
-  for (const mode of ["split", "concave", "ring"]) {
+  for (const emphasis of ["primary", "supporting"] as const) {
     const ctx = createFigureScene(style, fonts);
     const root = ctx.element("g", {
       "data-molecule": "m",
@@ -363,56 +328,81 @@ test("automatic selections split disconnected parts and follow a concave connect
     });
     const pairs = [
       [1, 2],
+      [2, 3],
       [3, 4],
       [1, 5],
-      ...(mode === "split" ? [] : [[2, 3]]),
-      ...(mode === "ring" ? [[4, 1]] : []),
     ];
-    for (const [i, [a, b]] of pairs.entries()) {
+    const bonds = pairs.map(([a, b], i) => {
       const p = positions[`m:a${a}` as keyof typeof positions],
         q = positions[`m:a${b}` as keyof typeof positions];
-      const bond = ctx.element("path", {
+      const node = ctx.element("path", {
         d: `M${p.x} ${p.y}L${q.x} ${q.y}`,
         "data-bond": `m:b${i}`,
         "data-atoms": `m:a${a} m:a${b}`,
       });
-      ctx.setStyle(bond, "stroke", "var(--chemical-ink)");
-      ctx.setStyle(bond, "strokeWidth", "var(--chemical-line)");
-      ctx.append(root, bond);
-    }
+      ctx.setStyle(node, "stroke", "var(--chemical-ink)");
+      ctx.setStyle(node, "fill", "none");
+      ctx.setStyle(node, "strokeWidth", "var(--chemical-line)");
+      ctx.append(root, node);
+      return node;
+    });
+    const label = ctx.element("path", {
+      d: "M18 18H22V22H18Z",
+      "data-label": "m:a1",
+    });
+    ctx.setStyle(label, "fill", "var(--chemical-ink)");
+    ctx.append(root, label);
     drawEnclosure(
       {
         id: "selection",
-        atoms: [1, 2, 3, 4].map((i) => ({ molecule: "m", atom: `a${i}` })),
+        atoms: [1, 2, 3, 4, 6].map((i) => ({ molecule: "m", atom: `a${i}` })),
+        bonds: pairs.slice(0, 3).map(([a, b]) => [
+          { molecule: "m", atom: `a${a}` },
+          { molecule: "m", atom: `a${b}` },
+        ]),
       },
       positions,
       root,
       ctx,
       pairs.map(([a, b]): [string, string] => [`m:a${a}`, `m:a${b}`]),
+      emphasis,
     );
     const enclosures = ctx
       .nodes(root)
       .filter((n) => n.attributes["data-enclose"]);
-    assert.equal(enclosures.length, mode === "split" ? 2 : 1);
-    const diagnostics = figureGeometryDiagnostics(
-      {
-        format: 1,
-        width: 120,
-        height: 120,
-        minimumScale: 1,
-        atomPoints: positions,
-        root,
-      },
-      style,
-    ).filter((d) => d.code.startsWith("ENCLOSURE_"));
-    if (mode === "ring") {
-      assert.ok(diagnostics.some((d) => d.code === "ENCLOSURE_ATOM_OVERLAP"));
-      const { pathContours } =
-        await import("../src/ui/library/path-geometry.ts");
-      const enclosure = enclosures[0];
-      assert.ok(enclosure.kind === "path");
-      assert.equal(pathContours(enclosure.d).length, 1);
-    } else assert.deepEqual(diagnostics, []);
+    assert.equal(enclosures.length, 1);
+    assert.equal(enclosures[0].attributes["data-enclose-atoms"], "m:a6");
+    const color =
+      style.values[
+        emphasis === "primary" ? "--chemical-focus" : "--chemical-support"
+      ];
+    const width = parseFloat(
+      style.values[
+        emphasis === "primary"
+          ? "--chemical-focus-line"
+          : "--chemical-support-line"
+      ],
+    );
+    for (const bond of bonds.slice(0, 3)) {
+      assert.equal(bond.paint.stroke, color);
+      assert.equal(bond.paint.strokeWidth, width);
+    }
+    assert.equal(label.paint.fill, color);
+    assert.equal(bonds[3].paint.stroke, style.values["--chemical-ink"]);
+    assert.deepEqual(
+      figureGeometryDiagnostics(
+        {
+          format: 1,
+          width: 180,
+          height: 120,
+          minimumScale: 1,
+          atomPoints: positions,
+          root,
+        },
+        style,
+      ),
+      [],
+    );
   }
 });
 

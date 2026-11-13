@@ -426,7 +426,7 @@ export function figureGeometryDiagnostics(
           contours,
           l.r,
           selected.has(l.id) ? width : width + 2 * clearance,
-          selected.has(l.id) ? false : "evenodd",
+          !selected.has(l.id),
         )
       )
         add(

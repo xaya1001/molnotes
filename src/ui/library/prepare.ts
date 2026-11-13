@@ -835,6 +835,7 @@ export async function prepareFigure(
         parent,
         ctx,
         atomBonds,
+        i === 0 ? "primary" : "supporting",
       );
     }
   }

@@ -12,7 +12,7 @@ import {
 } from "./path-geometry.ts";
 import { createFigureScene, type FigureGroup } from "./scene-geometry.ts";
 import { polylinesTouch } from "./geometry-collision.ts";
-import polygonClipping, { type Polygon } from "polygon-clipping";
+import { spaceBondEndpoints } from "./geometry-spacing.ts";
 
 const key = (a: NonNullable<Enclosure["atoms"]>[number]) =>
   `${a.molecule}:${a.atom}`;
@@ -59,14 +59,12 @@ export function drawEnclosure(
   parent: FigureGroup,
   ctx: ReturnType<typeof createFigureScene>,
   connections: readonly [string, string][],
+  emphasis: "primary" | "supporting" = "primary",
 ) {
-  const refs = new Map(
-    [...(enclosure.atoms ?? []), ...(enclosure.bonds ?? []).flat()].map((a) => [
-      key(a),
-      a,
+  const remaining = new Set([
+      ...(enclosure.atoms ?? []).map(key),
+      ...(enclosure.bonds ?? []).flat().map(key),
     ]),
-  );
-  const remaining = new Set(refs.keys()),
     parts: Set<string>[] = [];
   while (remaining.size) {
     const part = new Set<string>(),
@@ -83,13 +81,15 @@ export function drawEnclosure(
     parts.push(part);
   }
   if (parts.length === 1 || (enclosure.shape && enclosure.shape !== "auto"))
-    return [drawPart(enclosure, positions, parent, ctx, connections)];
-  return parts.map((part, i) =>
-    drawPart(
+    return [drawPart(enclosure, positions, parent, ctx, emphasis)].filter(
+      (p) => p !== undefined,
+    );
+  return parts.flatMap((part, i) => {
+    const node = drawPart(
       {
         ...enclosure,
         id: `${enclosure.id}:${i + 1}`,
-        atoms: [...part].map((a) => refs.get(a)!),
+        atoms: enclosure.atoms?.filter((a) => part.has(key(a))),
         bonds: enclosure.bonds?.filter((pair) =>
           pair.every((a) => part.has(key(a))),
         ),
@@ -97,9 +97,10 @@ export function drawEnclosure(
       positions,
       parent,
       ctx,
-      connections,
-    ),
-  );
+      emphasis,
+    );
+    return node ? [node] : [];
+  });
 }
 
 function drawPart(
@@ -107,7 +108,7 @@ function drawPart(
   positions: Record<string, Point>,
   parent: FigureGroup,
   ctx: ReturnType<typeof createFigureScene>,
-  connections: readonly [string, string][],
+  emphasis: "primary" | "supporting",
 ) {
   const selected = new Set([
     ...(enclosure.atoms ?? []).map(key),
@@ -118,7 +119,6 @@ function drawPart(
     if (!p) throw new Error(`Unknown enclosure atom ${id}`);
     return { x: p.x - 1, y: p.y - 1, width: 2, height: 2 };
   });
-  const labelBoxes: FigureBox[] = [];
   for (const node of ctx.nodes(parent)) {
     const atoms = (ctx.data(node, "atoms") ?? "").split(" ");
     if (
@@ -147,21 +147,11 @@ function drawPart(
     ) {
       const box = ctx.inkBox(node, parent);
       boxes.push(box);
-      labelBoxes.push(box);
     }
   }
   const bounds = unionBoxes(boxes)!;
-  const ratio =
-    Math.max(bounds.width, bounds.height) /
-    Math.min(bounds.width, bounds.height);
   let shape =
-    enclosure.shape && enclosure.shape !== "auto"
-      ? enclosure.shape
-      : selected.size === 1 || ratio <= 1.4
-        ? "circle"
-        : ratio >= 2
-          ? "rect"
-          : "outline";
+    enclosure.shape && enclosure.shape !== "auto" ? enclosure.shape : "circle";
   const gap = ctx.token("--chemical-enclose-gap");
   const points = boxes.flatMap((b) => [
     { x: b.x, y: b.y },
@@ -226,12 +216,11 @@ function drawPart(
     const contours = pathContours(d);
     return (
       obstacles.some((box) =>
-        inkIntersectsBox(contours, box, width + 2 * gap, "evenodd"),
+        inkIntersectsBox(contours, box, width + 2 * gap, true),
       ) ||
-      (automatic &&
-        otherAtoms.some((point) =>
-          contoursCoverPoint(contours, point, width + 2 * gap),
-        )) ||
+      otherAtoms.some((point) =>
+        contoursCoverPoint(contours, point, width + 2 * gap),
+      ) ||
       otherBonds.some(
         (node) =>
           node.kind === "path" &&
@@ -248,69 +237,56 @@ function drawPart(
     );
   };
   let d = path(shape, gap);
-  if (shape === "circle" && automatic && touches(d)) {
-    shape = "outline";
-    d = path(shape, gap);
-  }
-  if (shape === "outline" && touches(d)) {
-    for (const [candidate, padding] of [
-      ["rect", gap],
-      ["outline", gap * 0.75],
-      ["outline", gap * 0.5],
-    ] as const) {
-      const next = path(candidate, padding);
-      if (!touches(next)) {
-        shape = candidate;
-        d = next;
-        break;
-      }
-    }
-  }
-  if (automatic && touches(d)) {
-    for (const fraction of [0.6, 0.45, 0.3]) {
-      const radius = ctx.token("--chemical-bond") * fraction;
-      const regions: Polygon[] = [...selected].map((id): Polygon => {
-        const p = positions[id];
-        return [
-          Array.from({ length: 64 }, (_, i): [number, number] => {
-            const angle = (i * Math.PI) / 32;
-            return [
-              p.x + radius * Math.cos(angle),
-              p.y + radius * Math.sin(angle),
-            ];
-          }),
-        ];
-      });
-      const add = (d: string) => {
-        for (const c of pathContours(d))
-          regions.push([c.points.map((p) => [p.x, p.y])]);
-      };
-      for (const [a, b] of connections)
-        if (selected.has(a) && selected.has(b))
-          add(outline([positions[a], positions[b]], radius));
-      for (const b of labelBoxes)
-        add(
-          outline(
-            [
-              { x: b.x, y: b.y },
-              { x: b.x + b.width, y: b.y },
-              { x: b.x + b.width, y: b.y + b.height },
-              { x: b.x, y: b.y + b.height },
-            ],
-            radius,
-          ),
-        );
-      const region = polygonClipping.union(regions[0], ...regions.slice(1));
-      d = region
-        .map(
-          ([outer]) =>
-            outer.map(([x, y], i) => `${i ? "L" : "M"}${x} ${y}`).join("") +
-            "Z",
-        )
-        .join("");
+  if (automatic) {
+    for (const candidate of ["circle", "rect", "outline"] as const) {
+      shape = candidate;
+      d = path(candidate, gap);
       if (!touches(d)) break;
     }
-    shape = "outline";
+    if (touches(d)) {
+      const atoms = new Set(enclosure.atoms?.map(key));
+      const bonds = new Set(
+        enclosure.bonds?.map((pair) => pair.map(key).sort().join("/")),
+      );
+      const color =
+        emphasis === "primary"
+          ? "var(--chemical-focus)"
+          : "var(--chemical-support)";
+      const line =
+        emphasis === "primary"
+          ? "var(--chemical-focus-line)"
+          : "var(--chemical-support-line)";
+      for (const node of ctx.nodes(parent)) {
+        if (
+          ctx.data(node, "bond") !== undefined &&
+          bonds.has((ctx.data(node, "atoms") ?? "").split(" ").sort().join("/"))
+        ) {
+          if (node.paint.fill !== "none") ctx.setStyle(node, "fill", color);
+          else {
+            ctx.setStyle(node, "stroke", color);
+            ctx.setStyle(node, "strokeWidth", line);
+          }
+        } else if (
+          atoms.has(
+            ctx.data(node, "chargeOwner") ?? ctx.data(node, "label") ?? "",
+          )
+        ) {
+          ctx.setStyle(node, "fill", color);
+        }
+      }
+      const molecules = new Set(
+        [...(enclosure.atoms ?? []), ...(enclosure.bonds ?? []).flat()].map(
+          (a) => a.molecule,
+        ),
+      );
+      for (const group of [parent, ...ctx.nodes(parent)])
+        if (
+          group.kind === "group" &&
+          molecules.has(ctx.data(group, "molecule"))
+        )
+          spaceBondEndpoints(group, ctx);
+      return;
+    }
   }
   const node = ctx.element("path", { d });
   node.paint.lineCap = "round";
