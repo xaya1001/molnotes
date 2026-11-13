@@ -35,6 +35,7 @@ export async function readChemicalLibrary(root: string, stage?: AssetStage) {
     "mechanisms",
     "images",
     "processes",
+    "markush",
     "conformations",
   ]) {
     const files = await readdir(join(base, dir), { withFileTypes: true }).catch(
@@ -62,6 +63,7 @@ export async function readChemicalLibrary(root: string, stage?: AssetStage) {
           mechanism: "mechanisms",
           image: "images",
           process: "processes",
+          markush: "markush",
           conformation: "conformations",
         }[value.kind] !== dir
       )
@@ -126,7 +128,7 @@ export function libraryUsage(
       ("type" in value && value.type === "figure-ref") ||
       ("ref" in value &&
         typeof value.ref === "string" &&
-        /^(cmp|rxn|rte|mec|img|prc|cnf)_/.test(value.ref))
+        /^(cmp|rxn|rte|mec|img|prc|cnf|mku)_/.test(value.ref))
     ) {
       validateFigureReference(value);
       if (!entries[value.ref])

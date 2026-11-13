@@ -1,3 +1,4 @@
+import { validateMarkushFigure } from "./markush.ts";
 import { validateConformationSpec } from "../chemical-templates/conformation.ts";
 import { isObject } from "../json.ts";
 import { validateProcess } from "../process.ts";
@@ -326,7 +327,7 @@ export function validateLibraryEntry(
   text(v.id, w);
   text(v.title, w);
   if (v.footnote !== undefined) text(v.footnote, w);
-  if (!/^(cmp|rxn|rte|mec|img|prc|cnf)_[a-z0-9_-]+$/.test(v.id))
+  if (!/^(cmp|rxn|rte|mec|img|prc|cnf|mku)_[a-z0-9_-]+$/.test(v.id))
     fail(w, "invalid stable ID");
   list(v.sources, w);
   if (!v.sources.length) fail(w, "source required");
@@ -343,6 +344,7 @@ export function validateLibraryEntry(
     mechanism: "mec",
     image: "img",
     process: "prc",
+    markush: "mku",
     conformation: "cnf",
   };
   if (
@@ -501,6 +503,8 @@ export function validateLibraryEntry(
         text(m.toFrame, w);
       }
     }
+  } else if (v.kind === "markush") {
+    validateMarkushFigure(v, w);
   } else if (v.kind === "conformation") {
     validateConformationSpec(v, w, [
       "kind",

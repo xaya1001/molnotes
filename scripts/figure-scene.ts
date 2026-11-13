@@ -1,3 +1,4 @@
+import type { LibraryMarkush } from "../shared/chemical-library/types.ts";
 import { scaffoldLayout } from "./figure-scaffolds.ts";
 import { isObject } from "../shared/json.ts";
 import { validateConformationSpec } from "../shared/chemical-templates/conformation.ts";
@@ -229,7 +230,14 @@ export async function compileFigure(
     count = input.steps?.length ?? 0;
   const routeGraph =
     kind !== "mechanism" && (count > 1 || previous?.kind === "route");
-  const prefix = kind === "mechanism" ? "mec_" : routeGraph ? "rte_" : "rxn_";
+  const prefix =
+    kind === "markush"
+      ? "mku_"
+      : kind === "mechanism"
+        ? "mec_"
+        : routeGraph
+          ? "rte_"
+          : "rxn_";
   const id = previous?.id ?? prefix + sourceKey;
   if (!id.startsWith(prefix))
     throw new Error("Changing figure kind requires a new source file");
@@ -250,6 +258,34 @@ export async function compileFigure(
       : { footnote: words(input.footnote) }),
     ...(input.explain === undefined ? {} : { overview: words(input.explain) }),
   };
+  if (kind === "markush") {
+    const entry: LibraryMarkush = finishFigureEntry({
+      ...base,
+      kind: "markush",
+      id,
+      core: input.core!,
+      groups: input.groups!,
+      view: input.view,
+      name: input.name,
+      note: input.note,
+      unmodeled: input.unmodeled,
+      patents: input.patents,
+      gaps: input.gaps,
+      gaps_title: input.gaps_title,
+      rot: input.rot,
+      flip: input.flip,
+    });
+    entries[id] = entry;
+    validateLibrary(entries);
+    return {
+      entries,
+      generated: [id],
+      reference: { ref: id },
+      warnings,
+      review,
+      sourceFile,
+    };
+  }
   const previousReactions =
     previous?.kind === "reaction"
       ? [previous]

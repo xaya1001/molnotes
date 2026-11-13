@@ -77,6 +77,15 @@
 }
 
 :root {
+  --chemical-markush-paper: #fff;
+  --chemical-markush-example: #1f6f5b;
+  --chemical-markush-claim: #a9770e;
+  --chemical-markush-claim-fill: #fff3cf;
+  --chemical-markush-rule: #9aa3ad;
+  --chemical-markush-patent-one: #2563a8;
+  --chemical-markush-patent-two: #b45309;
+  --chemical-markush-patent-three: #7c3aed;
+  --chemical-markush-patent-four: #0f766e;
   --chemical-bond: 32px;
   --chemical-route-width: 1882px;
   --chemical-route-gap: 19.2px;
