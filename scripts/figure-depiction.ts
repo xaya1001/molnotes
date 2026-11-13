@@ -32,6 +32,7 @@ import {
 import type { FigureRect } from "../shared/chemical-library/geometry.ts";
 import { insidePolygon } from "../src/ui/library/geometry-collision.ts";
 import { figureDimension } from "./figure-output.ts";
+import { ringHydrogens } from "./figure-scaffolds.ts";
 
 // The installed MinimalLib exposes this documented overload; its declaration omits it.
 declare module "@rdkit/rdkit" {
@@ -113,6 +114,7 @@ function descriptionMolecule(
       bonds?: { stereo?: string }[];
     }[];
   },
+  sanitize = false,
 ) {
   const coordinates = (data.molecules[0].conformers ?? []).map((c) => c.coords);
   for (const conformer of data.molecules[0].conformers ?? [])
@@ -130,7 +132,7 @@ function descriptionMolecule(
   const mol = rd.get_mol(
     text,
     JSON.stringify({
-      sanitize: false,
+      sanitize,
       removeHs: false,
       // Assign CIP ranks for canonical depiction. JSON has no directional bonds,
       // so reassignment would erase an existing double-bond configuration.
@@ -155,6 +157,7 @@ function contracted(
   full: Mol,
   names: readonly MoleculeAbbreviation[] = [],
   allowed?: number[],
+  sanitize = false,
 ) {
   const groups = abbreviatedGroups(rd, full, names).filter(
       (g) => !allowed || allowed.includes(g.atoms[0]),
@@ -209,7 +212,24 @@ function contracted(
         },
       ]
     : [];
-  const shown = descriptionMolecule(rd, data);
+  let shown: Mol | undefined;
+  if (sanitize) {
+    // chemfig.load_mol uses native condensation, retaining the root's hybridization.
+    const native = full.copy()!;
+    const mapping: { atoms: number[]; bonds: number[] } = JSON.parse(
+      native.condense_abbreviations(1, false),
+    );
+    if (
+      mapping.atoms.length === original.length &&
+      mapping.atoms.every((atom, i) => atom === original[i]) &&
+      mapping.bonds.length === retained.length &&
+      mapping.bonds.every((bond, i) => bond === retained[i])
+    )
+      shown = native;
+    else native.delete();
+  }
+  // Explicit group selections can differ from the native abbreviation set.
+  shown ??= descriptionMolecule(rd, data, sanitize);
   displayAtoms.set(shown, {
     original,
     labels: new Map([...roots].map(([i, name]) => [indices.get(i)!, name])),
@@ -979,6 +999,9 @@ export function depictRoute(
       (pair): pair is [string, Structure] => "compound" in pair[1],
     ),
   );
+  const electronRoute = [...structures.values()].some(
+    (r) => r.spec.arrows?.length,
+  );
   const links = new Map<string, string[]>(),
     add = (a: string, b?: string) => {
       if (!links.has(a)) links.set(a, []);
@@ -1005,8 +1028,30 @@ export function depictRoute(
     changed = new Set<string>();
   try {
     for (const [key, r] of structures) {
-      const initial = openMolecule(rd, r.depiction.smiles);
+      let initial = openMolecule(rd, r.depiction.smiles);
       fulls.set(key, initial);
+      if (
+        !r.spec.drawing &&
+        r.spec.arrows?.length &&
+        r.depiction.smiles.includes(".")
+      ) {
+        // chemfig.load_mol adds ring stereocentre H before fragment depiction.
+        const withHs = ringHydrogens(rd, initial);
+        if (withHs !== initial) {
+          try {
+            const ready = descriptionMolecule(
+              rd,
+              JSON.parse(withHs.get_json()),
+              true,
+            );
+            initial.delete();
+            initial = ready;
+            fulls.set(key, initial);
+          } finally {
+            withHs.delete();
+          }
+        }
+      }
       const layout = r.variant
         ? r.compound.variants![r.variant]
         : r.compound.layout;
@@ -1017,6 +1062,8 @@ export function depictRoute(
         layout.abbreviationAtoms?.map((a) =>
           r.depiction.atoms.indexOf(r.compound.atomIds.indexOf(a)),
         ),
+        // chemfig.load_mol preserves hybridization before depicting reacting fragments.
+        electronRoute,
       );
       expected.set(key, graphSignature(rd, shown));
       if (r.spec.drawing) {

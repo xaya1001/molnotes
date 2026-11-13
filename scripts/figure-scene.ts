@@ -654,6 +654,7 @@ export async function compileFigure(
       layout = layoutOf(resolved),
       m = openMolecule(rd, c.smiles);
     layout.methylLabels = [];
+    layout.ionPairs = "keep";
     try {
       const full = graphOf(m),
         groups = compoundAbbreviations(rd, c, layout),
@@ -916,21 +917,53 @@ export async function compileFigure(
   } else if (kind === "mechanism") {
     const frames: Mechanism["frames"] = [],
       maps: NonNullable<Mechanism["maps"]> = [];
+    const linkedFrames =
+      input.frames!.length > 1 &&
+      input.frames!.every((frame) => frame.arrow !== "none") &&
+      input.frames!.some((frame) => frame.arrows?.length);
+    const resolvedFrames = linkedFrames
+      ? new Map<string, Resolved>()
+      : undefined;
+    if (resolvedFrames) {
+      for (const frame of input.frames!) {
+        const fid = String(frame.id);
+        if (resolvedFrames.has(fid)) throw new Error(`Duplicate frame ${fid}`);
+        resolvedFrames.set(fid, await resolveStructure(frame, `frames.${fid}`));
+      }
+      // chemfig.mechanism_route / render propagate orientation through adjacent frames.
+      for (const cid of depictRoute(
+        rd,
+        resolvedFrames,
+        {
+          ...input,
+          steps: input.frames!.slice(1).map((frame, i) => ({
+            from: input.frames![i].id,
+            to: frame.id,
+          })),
+        },
+        (fid) => `${id}_${figureKey(`frames.${fid}`)}`,
+        style,
+      ))
+        generated.add(cid);
+    }
     let prior: Resolved | undefined,
       priorId = "";
     for (const frame of input.frames!) {
       const fid = String(frame.id);
       if (frames.some((f) => f.id === fid))
         throw new Error(`Duplicate frame ${fid}`);
-      const resolved = await resolveStructure(frame, `frames.${fid}`);
-      for (const cid of depictRoute(
-        rd,
-        new Map([[fid, resolved]]),
-        { ...input, steps: [], anchor: fid },
-        () => `${id}_${figureKey(`frames.${fid}`)}`,
-        style,
-      ))
-        generated.add(cid);
+      const resolved = resolvedFrames
+        ? resolvedFrames.get(fid)!
+        : await resolveStructure(frame, `frames.${fid}`);
+      if (!resolvedFrames)
+        for (const cid of depictRoute(
+          rd,
+          new Map([[fid, resolved]]),
+          { ...input, steps: [], anchor: fid },
+          () => `${id}_${figureKey(`frames.${fid}`)}`,
+          style,
+        ))
+          generated.add(cid);
       if (frame.arrows?.length) layoutOf(resolved).methylLabels = [];
       positionArrowFragments(resolved);
       const scene = blank(),
@@ -939,11 +972,12 @@ export async function compileFigure(
       pushArrows(scene, resolved, "structure");
       pushEnclosures(scene, resolved, "structure");
       const arrow = frame.arrow ?? "forward";
+      const arrowY = linkedFrames ? (box.top + box.bottom) / 2 : 0;
       if (arrow !== "none" && input.frames!.at(-1) !== frame)
         scene.reactionArrows!.push({
           id: `next-${fid}`,
-          from: { x: box.right + 1, y: 0 },
-          to: { x: box.right + 5, y: 0 },
+          from: { x: box.right + 1, y: arrowY },
+          to: { x: box.right + 5, y: arrowY },
           kind: arrow,
           above: lines(frame.above),
           below: lines(frame.below),

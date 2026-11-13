@@ -53,6 +53,50 @@ test("electron events use the shared red accent and draw selected forming bonds"
   assert.deepEqual([shafts, heads, forming], [1, 1, 1]);
 });
 
+test("rendering keeps the compiled contact placement of oppositely charged fragments", async () => {
+  const compiled = await compileFigure({
+    kind: "mechanism",
+    frames: [
+      {
+        id: "event",
+        smiles: "[O-:1].[H:2][O+:3]([H])[H]",
+        arrows: [
+          { from: "lp(1)", to: "atom(2)" },
+          { from: "bond(2,3)", to: "atom(3)" },
+        ],
+      },
+    ],
+  });
+  const entry = compiled.entries[compiled.reference.ref];
+  assert.equal(entry.kind, "mechanism");
+  const scene = entry.frames[0].scene,
+    placement = scene.molecules[0],
+    compound = compiled.entries[placement.compound];
+  assert.equal(compound.kind, "compound");
+  const coords = compound.variants![placement.variant!].coords;
+  const arrow = scene.arrows![0];
+  assert.equal(arrow.from.kind, "lonePair");
+  assert.equal(arrow.to.kind, "atom");
+  const from = arrow.from,
+    label = scene.labels!.find((l) => l.id === from.label)!;
+  const a = label.at.atom,
+    b = arrow.to.at.atom;
+  const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit,
+    fonts,
+    style,
+  });
+  const actualA = geometry.atomPoints["structure:" + a],
+    actualB = geometry.atomPoints["structure:" + b];
+  const bond = Number(style.values["--chemical-bond"].replace("px", ""));
+  assert.ok(
+    Math.abs(actualB.x - actualA.x - (coords[b].x - coords[a].x) * bond) < 0.2,
+  );
+  assert.ok(
+    Math.abs(actualB.y - actualA.y - (coords[b].y - coords[a].y) * bond) < 0.2,
+  );
+});
+
 test("structure scale enlarges rendered bonds while preserving label size", async () => {
   const render = async (scale: number) => {
     const compiled = await compileFigure({
