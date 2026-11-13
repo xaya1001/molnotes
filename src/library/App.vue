@@ -18,6 +18,7 @@ const names = {
   mechanism: "机理与比较",
   image: "图片",
   process: "过程图",
+  conformation: "构象与投影式",
 };
 const catalogEntries = computed(() =>
   Object.values(props.library.entries).filter(

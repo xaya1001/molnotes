@@ -30,6 +30,7 @@ const folders = {
   mechanism: "mechanisms",
   image: "images",
   process: "processes",
+  conformation: "conformations",
 };
 async function save(path: string, text: string) {
   if (

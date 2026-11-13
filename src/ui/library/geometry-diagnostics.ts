@@ -125,7 +125,14 @@ export function figureGeometryDiagnostics(
       required,
       field: "layout",
     });
-  if (!elements.find((node) => node.data.molecule !== undefined)) return errors;
+  if (
+    !elements.some(
+      (node) =>
+        node.data.molecule !== undefined ||
+        node.data.conformation !== undefined,
+    )
+  )
+    return errors;
   const charges = new Map<string, number>();
   for (const marker of elements.filter(
     (node) => node.data.chargeOwner !== undefined,
@@ -222,9 +229,13 @@ export function figureGeometryDiagnostics(
     (node) => node.data.bondLengths !== undefined,
   )) {
     const lengths: number[] = JSON.parse(molecule.data.bondLengths!);
+    const regular: number[] =
+      molecule.data.regularBondLengths === undefined
+        ? lengths
+        : JSON.parse(molecule.data.regularBondLengths);
     const sorted = [...lengths].sort((a, b) => a - b),
       median = sorted[Math.floor(sorted.length / 2)],
-      maximum = Math.max(...lengths);
+      maximum = Math.max(...regular);
     if (maximum > median * 1.5 + 0.2)
       add(
         "BOND_TOO_LONG",
@@ -279,7 +290,7 @@ export function figureGeometryDiagnostics(
     id: el.data.bond!,
     points: samples(el),
     contours: el.node.kind === "path" ? pathContours(el.node.d, el.matrix) : [],
-    own: (el.data.atoms ?? "").split(" "),
+    own: el.data.atoms === undefined ? [] : el.data.atoms.split(" "),
   }));
   const atomPoints = new Map<string, Point>();
   for (const molecule of elements.filter(

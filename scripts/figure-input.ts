@@ -20,6 +20,7 @@ export interface StructureInput {
   flip?: boolean | "h" | "v";
   align?: boolean | Key;
   coordgen?: boolean;
+  drawing?: "flat" | "perspective";
   abbreviate?: boolean;
   numbers?: boolean;
   notes?: Record<string, Key>;
@@ -204,6 +205,7 @@ export function validateFigureInput(value: unknown): {
     flip: choice(true, false, "h", "v"),
     align: either(bool, text),
     coordgen: bool,
+    drawing: choice("flat", "perspective"),
     abbreviate: bool,
     numbers: bool,
     notes: map(text),
@@ -307,6 +309,7 @@ export function validateFigureInput(value: unknown): {
               rot: number,
               flip: choice("h", "v"),
               coordgen: bool,
+              drawing: structure.drawing,
               bracket: structure.bracket,
               scale: structure.scale,
               numbers: bool,

@@ -1,3 +1,4 @@
+import { templateDataFiles } from "../figure-template-data.ts";
 import { readFile, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -110,6 +111,7 @@ export async function figureBuildVersions(css: string) {
       "src/ui/library/prepare.ts",
       "shared/molecule-toolkit.ts",
       "scripts/figure-fonts.ts",
+      ...templateDataFiles(),
     ]),
     figureRendererFingerprint(root, ["scripts/figure-diagnostics.ts"]),
     figureDependencyFingerprint(root, [

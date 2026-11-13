@@ -1,3 +1,5 @@
+import { finishScaffoldGeometry } from "./scaffold-geometry.ts";
+import { conformationGeometry } from "./conformation-geometry.ts";
 import type {
   FigureGeometry,
   FigureNode,
@@ -289,7 +291,7 @@ export async function prepareFigure(
               highlightRadius: 0.1,
               atomHighlightsAreCircles: true,
               prepareMolsBeforeDrawing: true,
-              addChiralHs: true,
+              addChiralHs: !layout.scaffold,
               useMolBlockWedging: !!layout.wedgeBonds?.length,
               wedgeBonds: !layout.wedgeBonds?.length,
             }),
@@ -361,6 +363,53 @@ export async function prepareFigure(
           ),
         ),
       );
+      if (layout.scaffold) {
+        const core = new Set(
+          layout.scaffold.bonds.flat().map((id) => c.atomIds.indexOf(id)),
+        );
+        const adjacent = graph.atoms.map(() => [] as number[]);
+        for (const {
+          atoms: [a, b],
+        } of graph.bonds) {
+          adjacent[a].push(b);
+          adjacent[b].push(a);
+        }
+        const left = new Set(
+          graph.atoms.map((_, i) => i).filter((i) => !core.has(i)),
+        );
+        const regular = new Set<number>();
+        while (left.size) {
+          const first = left.values().next().value!,
+            todo = [first],
+            component = [first];
+          left.delete(first);
+          let attachments = 0;
+          while (todo.length)
+            for (const n of adjacent[todo.pop()!]) {
+              if (core.has(n)) attachments++;
+              else if (left.delete(n)) {
+                component.push(n);
+                todo.push(n);
+              }
+            }
+          if (attachments === 1) component.forEach((i) => regular.add(i));
+        }
+        // A bridge anchored at both ends retains its constrained projection.
+        ctx.setData(
+          g,
+          "regularBondLengths",
+          JSON.stringify(
+            graph.bonds
+              .filter(({ atoms }) => atoms.some((i) => regular.has(i)))
+              .map(({ atoms: [a, b] }) =>
+                Math.hypot(
+                  positions[a].x - positions[b].x,
+                  positions[a].y - positions[b].y,
+                ),
+              ),
+          ),
+        );
+      }
       ctx.append(parent, g);
       const f = focusKeys({ primary: changes });
       // Changes are stored on the full graph. A folded group displays its
@@ -485,6 +534,7 @@ export async function prepareFigure(
         graph.bonds,
         ctx,
       );
+      finishScaffoldGeometry(g, layout, c.atomIds, positions, ctx, mirror);
       const localPoints: Record<string, Point> = {};
       positions.forEach((p, i) => {
         const atom = key({
@@ -1759,7 +1809,18 @@ export async function prepareFigure(
               ctx.remove(child);
       }
   }
-  if (entry.kind === "compound") {
+  if (entry.kind === "conformation") {
+    const group = conformationGeometry(entry, ctx);
+    ctx.append(svg, group);
+    const box = ctx.box(group);
+    ctx.set(
+      group,
+      "transform",
+      `translate(${B * 1.5 - box.x} ${B * 1.5 - box.y})`,
+    );
+    width = box.width + B * 3;
+    height = box.height + B * 3;
+  } else if (entry.kind === "compound") {
     const l = reference.variant
       ? entry.variants?.[reference.variant]
       : entry.layout;
