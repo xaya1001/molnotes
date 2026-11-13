@@ -10,13 +10,13 @@ Use this as the authoring entrypoint. Read the current [content contract](../../
 ## Render and review
 
 1. Check the source, graph, stereochemistry and electron direction. Reuse saved compound IDs and atom IDs.
-2. Write figure YAML and run `npm run figure:compile -- --source figure.yaml --library <content-root>`. Edit and recompile the saved `library/sources/<id>.yaml` to retain the figure ID. Read the [compilation contract](../../../docs/content.md#figure-yaml-compilation) for route and mechanism fields.
+2. For a direct drawing, write YAML and run `npm run figure:draw -- figure.yaml --out <directory|file.svg>`. It compiles in memory without a library or permanent identity. Each frame produces an SVG; diagnostics go to stderr and do not block drawing. Parse, chemistry and renderer failures exit nonzero. To save a reusable figure, run `npm run figure:compile -- --source figure.yaml --library <content-root>`. Edit and recompile the saved `library/sources/<id>.yaml` to retain the figure ID. Read the [compilation contract](../../../docs/content.md#figure-yaml-compilation) for route and mechanism fields.
 3. Run the website renderer, following the workspace heavy-command policy:
    ```sh
    npm run figure:render -- --library <content-root> --entry <id> --out <output>
    ```
    The default renders width 1366; add `--width 390` for a phone proof. Inspect the PNG and JSON diagnostics; a clean diagnostic report does not establish chemical correctness.
-   `content:preview` collects topic `figure-ref` blocks and every mechanism frame, including tabs, and reports the website renderer's diagnostics. Resolve every diagnostic before accepting the preview; the command fails when a library figure has diagnostics or cannot render.
+   `content:preview` collects topic `figure-ref` blocks and every mechanism frame, including tabs, and reports the website renderer's diagnostics. Use `npm run figure:lint -- [<figure.yaml>... | --library <content-root>]` to list diagnostics with files or entries, frames and totals. No arguments checks the configured content library. Lint exits nonzero for issues and remains an independent inspection tool. Content publication retains diagnostics and prints their total; drawing failures stop publication.
 4. Adjust `rot`, `flip` or common-core `align` in source and recompile; routes compute their arrow geometry. For a saved scene, adjust coordinates and semantic endpoint placement, then render and inspect again. Check normal-size labels, visible gaps, arrow origins and heads, and mobile scrolling.
 5. Make the requested comparison HTML, publish it with `artifact publish --task <task> --name <name> <directory>`, run `artifact shot <published-index>`, and inspect that screenshot before returning `artifact url <published-index>`. Artifact review and product/content publication follow the task's separate permissions.
 
@@ -33,6 +33,12 @@ steps:
 
 For process diagrams, save a `kind: process` entry in `library/processes/prc_<id>.yaml`, using the [ProcessData contract](../../../shared/process.ts) (`title`, `label`, `nodes`, optional `total`, and `scenarios`) plus `id` and `sources`. Pages use `figure-ref` with its `prc_` ID. The existing process player renders it, including scenario selection, trace and budget. Check it with `figure:render --library <content-root> --entry <id>` or `content:preview`; process output includes PNGs and diagnostics, while SVG export applies to static figures. Timeline and generic flow fields are in the [data-figure recipe](../../../toolbox/recipes/figures.md).
 
+## Recompile saved figures
+
+Run `npm run figure:recompile -- --library <content-root>` after compiler or drawing changes to regenerate every entry with a saved `sourceFile`. With no `--library`, it uses `MOLNOTES_CONTENT_DIR`. To limit the run, append one or more source YAML paths, for example `npm run figure:recompile -- --library <content-root> <content-root>/library/sources/<id>.yaml`.
+
+The command uses the same compiler and save rules as `figure:compile`, retaining figure, compound, atom and participant IDs and page references. Shared source files are compiled once; figures without a source cannot be recompiled directly. It prints each changed entry and totals for added, modified and deleted entries; obsolete owned reactions are removed. A failed source prints its reason, leaves that compiled figure as saved and allows the remaining sources to run; any failed source makes the final exit status nonzero. Review the changed figures with `figure:render` and compare their visible geometry before accepting the content revision. Recompilation writes the library; publication follows the content workflow.
+
 ## Skeletal and conformation templates
 
 For a registered skeleton, add `drawing: perspective` or `drawing: flat` to a SMILES structure or mechanism frame. The compiler matches the largest registered substructure and constrains its core to the saved view; an explicit drawing request with no match fails. Omit `drawing` for the ordinary layout. Perspective uses saved depth for bond weight and gaps at crossings; the chemical graph and stereochemistry stay with the SMILES. Inspect every wedge, substituent and crossing in both views.
@@ -45,7 +51,7 @@ Template data lives in `shared/chemical-templates/`: one JSON file per skeleton 
 
 Dependencies come from shared compound keys. Write multiple `from`/`to` keys for convergence or multiple products; each product has one producer. Each step creates an owned reaction with a complete standalone view. Connected intermediates appear once; wrapped rows start at their arrow. Two branches of a fork align before joining. If the product will not fit at the right, a short branch can reverse into a downward join. More complex joins use the compound number.
 
-Orientation propagates outward from the largest uncrowded compound, or the figure's `anchor` key. Shared cores inherit coordinates; `align: false` keeps a free depiction, and `align: <key>` chooses another completed reference. `flip` and then `rot` apply after alignment; positive `rot` turns counterclockwise. `wrap: serpentine` reverses the next row after a downward turn. A step can request `turn: down|elbow|wrap`, `side: left|right` for vertical condition text, and `reverse: false` to retain direction. Website tokens own width and spacing; YAML rejects style fields such as `width` and `bond`.
+Orientation propagates outward from the largest uncrowded compound, or the figure's `anchor` key. Shared cores inherit coordinates; `align: false` keeps a free depiction, and `align: <key>` chooses another completed reference. `flip` and then `rot` apply after alignment; positive `rot` turns counterclockwise. `wrap: serpentine` reverses the next row after a downward turn. A step can request `turn: down|elbow|wrap`, `side: left|right` for vertical condition text, and `reverse: false` to retain direction. Optional positive `bond` and `width` override pixel density and the wrapping limit; defaults remain 32 and 1882. Saved entries retain both under `style`. The canvas fits visible ink with a margin of 0.8 bond lengths. Structure and frame `scale` enlarge coordinates while keeping atom labels at the same size.
 
 For other reactants, `others: box|text|plus|none` sets the default; `{id,show}` overrides one. `box` draws a bordered structure above the arrow. `text` uses the compound's `text` or its label/name. `none` omits drawing while retaining the structural participant. Compound `bracket: true` adds brackets; `bracket: ts` adds the transition-state sign. Figure `footnote` sits below the whole diagram. Conditions, labels and footnotes support chemical italic prefixes (`n-`, `t-`, `cis-`), `*italic*`/`**bold**`, Unicode subscripts and `^{superscript}`.
 
@@ -67,7 +73,7 @@ Use `kind: gallery` with `compounds` and optional `cols` (default 4) for a grid.
 
 Use `kind: cycle` with clockwise `nodes` starting at the top. Nodes accept rich text, `{text: ...}` or `{smiles: ..., label: ...}`. Optional `steps` has one entry per node, including the return to the first: `{in?,out?,label?}` saves entering reagents, leaving products and the elementary-step label. `radius` defaults to 150 prototype reference pixels at a 17px reference bond and scales with the site bond length; `branch` defaults to 0.3 of that radius. Increase the radius if a species leaves no connecting arc.
 
-These kinds compile to a `mec_` entry with one static `overview` scene; pages reference its ID normally. Recompile the saved YAML to retain identity, then render with the website renderer. Inspect group order, yields, clockwise step order, branch direction and phone scrolling. Keep an already accepted saved figure when the new scene fails diagnostics, and record its ID in the task's pending list.
+These kinds compile to a `mec_` entry with one static `overview` scene; pages reference its ID normally. Recompile the saved YAML to retain identity, then render with the website renderer. Inspect group order, yields, clockwise step order, branch direction and phone scrolling. Draw and publish the current scene, and inspect its reported diagnostics.
 
 ## Endpoint vocabulary
 
@@ -98,3 +104,5 @@ Website chemical style is owned by `src/ui/styles/tokens.css`. At a 32px bond, a
 Use `kind: markush` with the existing `core`/`groups` fields and compile through `figure:compile`; pages reference the resulting `mku_` ID. See the [formula and coverage contract](../../../docs/content.md#markush-formulas-and-coverage-maps). `view: formula` draws the core, optional `name` and merged R-definition rows; fragment alternatives are structures. Variable ring groups use zero-based `positions`, optional `count`, and different hanging bonds on a shared ring. Core CXSMILES repeat units and `repeat` alternatives retain their brackets and range.
 
 Use `view: map` with authored alternative `examples` counts or IDs and group `outside` labels. For `view: overlay`, provide ordered `patents` and per-alternative `by` counts; missing source keys and zero counts have different meanings. Keep source evidence for these values and for any `gaps` combinations. Conclusions describe chemical structures. Matching and example statistics remain owned by the existing Markush query and coverage table. Render the saved entry at desktop and phone widths using the ordinary figure renderer.
+
+Markush `scale` enlarges core coordinates while preserving label sizes; the defaults are 1.3 for formulas and 1.7 for maps and overlays.
