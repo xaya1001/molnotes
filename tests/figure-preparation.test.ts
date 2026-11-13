@@ -128,6 +128,147 @@ test("enclosure diagnostics check boundaries while allowing interior labels and 
   }
 });
 
+test("enclosures require selected labels and atoms inside with a full ink gap", async () => {
+  const { figureGroup, figurePath } =
+    await import("../src/ui/library/geometry-tree.ts");
+  const ring = figurePath("M20 20H80V80H20Z");
+  ring.attributes = {
+    "data-enclose": "explicit",
+    "data-enclose-atoms": "m:a1",
+  };
+  ring.paint.fill = "none";
+  ring.paint.strokeWidth = 1.6;
+  const label = figurePath("M24 35H36V49H24Z");
+  label.attributes["data-label"] = "m:a1";
+  const root = figureGroup([ring, label]);
+  root.attributes["data-molecule"] = "m";
+  for (const [x, offset] of [
+    [24, 0],
+    [20, -10],
+    [10, -25],
+  ]) {
+    label.transform = [1, 0, 0, 1, offset, 0];
+    root.attributes["data-atom-points"] = JSON.stringify({
+      "m:a1": { x, y: 42 },
+    });
+    const diagnostics = figureGeometryDiagnostics(
+      {
+        format: 1,
+        width: 100,
+        height: 100,
+        minimumScale: 1,
+        atomPoints: { "m:a1": { x, y: 42 } },
+        root,
+      },
+      style,
+    );
+    assert.ok(diagnostics.some((d) => d.code === "ENCLOSURE_LABEL_OVERLAP"));
+    assert.ok(diagnostics.some((d) => d.code === "ENCLOSURE_ATOM_OVERLAP"));
+  }
+});
+
+test("automatic enclosures reject a shape that cannot clear a selected label and its neighbour", async () => {
+  const { createFigureScene } =
+    await import("../src/ui/library/scene-geometry.ts");
+  const { drawEnclosure } =
+    await import("../src/ui/library/geometry-enclosures.ts");
+  const positions = { "m:a1": { x: 40, y: 40 }, "m:a2": { x: 60.5, y: 40 } };
+  for (const shape of ["auto", "rect"] as const) {
+    const ctx = createFigureScene(style, fonts);
+    const root = ctx.element("g", {
+      "data-molecule": "m",
+      "data-atom-points": JSON.stringify(positions),
+    });
+    // The second path represents the label's lowered subscript.
+    for (const d of ["M34 32H42V44H34Z", "M43 42H47V48H43Z"]) {
+      const label = ctx.element("path", { d, "data-label": "m:a1" });
+      ctx.append(root, label);
+    }
+    const bond = ctx.element("path", {
+      d: "M47 40H60.5",
+      "data-bond": "m:b1",
+      "data-atoms": "m:a1 m:a2",
+    });
+    ctx.append(root, bond);
+    const enclosures = drawEnclosure(
+      { id: "selection", shape, atoms: [{ molecule: "m", atom: "a1" }] },
+      positions,
+      root,
+      ctx,
+      [["m:a1", "m:a2"]],
+    );
+    const diagnostics = figureGeometryDiagnostics(
+      {
+        format: 1,
+        width: 100,
+        height: 100,
+        minimumScale: 1,
+        atomPoints: positions,
+        root,
+      },
+      style,
+    ).filter((d) => d.code.startsWith("ENCLOSURE_"));
+    if (shape === "auto") {
+      assert.equal(enclosures.length, 0);
+      assert.deepEqual(diagnostics, []);
+      for (const label of ctx
+        .nodes(root)
+        .filter((n) => n.attributes["data-label"]))
+        assert.equal(label.paint.fill, style.values["--chemical-focus"]);
+    } else {
+      assert.equal(enclosures[0].attributes["data-enclose-shape"], "rect");
+      assert.ok(diagnostics.length > 0);
+    }
+  }
+});
+
+test("independent enclosures preserve label gaps without overlapping each other", async () => {
+  const { createFigureScene } =
+    await import("../src/ui/library/scene-geometry.ts");
+  const { drawEnclosure } =
+    await import("../src/ui/library/geometry-enclosures.ts");
+  const ctx = createFigureScene(style, fonts);
+  const positions = { "m:a1": { x: 40, y: 40 }, "m:a2": { x: 65, y: 40 } };
+  const root = ctx.element("g", {
+    "data-molecule": "m",
+    "data-atom-points": JSON.stringify(positions),
+  });
+  for (const [id, p] of Object.entries(positions)) {
+    ctx.append(
+      root,
+      ctx.element("path", { d: `M${p.x - 5} 35h10v10h-10Z`, "data-label": id }),
+    );
+  }
+  const enclosures = drawEnclosure(
+    {
+      id: "selection",
+      atoms: [
+        { molecule: "m", atom: "a1" },
+        { molecule: "m", atom: "a2" },
+      ],
+    },
+    positions,
+    root,
+    ctx,
+    [],
+  );
+  assert.equal(enclosures.length, 1);
+  assert.deepEqual(
+    figureGeometryDiagnostics(
+      {
+        format: 1,
+        width: 100,
+        height: 100,
+        minimumScale: 1,
+        atomPoints: positions,
+        root,
+      },
+      style,
+    ),
+    [],
+  );
+});
+
 test("automatic circles avoid unrelated bonds while explicit circles report their collision", async () => {
   const { createFigureScene } =
     await import("../src/ui/library/scene-geometry.ts");
@@ -227,10 +368,8 @@ test("automatic enclosures exclude neighbouring atoms even across an exempt conn
         ["m:a1", "m:a5"],
       ],
     );
-    assert.equal(
-      enclosure.attributes["data-enclose-shape"],
-      shape === "auto" ? "rect" : "circle",
-    );
+    if (shape === "auto") assert.equal(enclosure, undefined);
+    else assert.equal(enclosure.attributes["data-enclose-shape"], "circle");
     const diagnostics = figureGeometryDiagnostics(
       {
         format: 1,

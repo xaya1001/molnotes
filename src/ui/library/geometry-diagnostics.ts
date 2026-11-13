@@ -31,6 +31,8 @@ import {
   inkIntersectsBox,
   pathContours,
   contoursCoverPoint,
+  contoursContainPoint,
+  contoursContainBox,
 } from "./path-geometry.ts";
 interface Measured {
   node: FigureNode;
@@ -420,30 +422,28 @@ export function figureGeometryDiagnostics(
     const selected = new Set(enclosure.data.encloseAtoms.split(" "));
     const contours = pathContours(enclosure.node.d, enclosure.matrix);
     const paths = contours.map((c) => c.points);
-    for (const l of labels)
+    for (const l of all)
       if (
-        inkIntersectsBox(
-          contours,
-          l.r,
-          selected.has(l.id) ? width : width + 2 * clearance,
-          !selected.has(l.id),
-        )
+        selected.has(l.id)
+          ? !contoursContainBox(contours, l.r, width + 2 * clearance)
+          : inkIntersectsBox(contours, l.r, width + 2 * clearance, true)
       )
         add(
           "ENCLOSURE_LABEL_OVERLAP",
           [id, l.id],
-          "Keep the label clear of the enclosure and a full gap for unselected labels",
+          "Keep selected labels fully inside and unselected labels outside, with a full enclosure gap",
         );
     for (const [atom, point] of atomPoints)
       if (
-        !selected.has(atom) &&
-        visibleAtoms.has(atom) &&
-        contoursCoverPoint(contours, point, width + 2 * clearance)
+        selected.has(atom)
+          ? !contoursContainPoint(contours, point, width + 2 * clearance)
+          : visibleAtoms.has(atom) &&
+            contoursCoverPoint(contours, point, width + 2 * clearance)
       )
         add(
           "ENCLOSURE_ATOM_OVERLAP",
           [id, atom],
-          "Keep a full enclosure gap from unselected atoms",
+          "Keep selected atoms inside and unselected atoms outside, with a full enclosure gap",
         );
     for (const b of bonds) {
       // A bond entering/leaving the selected group crosses its boundary by design.

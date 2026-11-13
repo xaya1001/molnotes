@@ -141,6 +141,8 @@ export function samplePath(d: string, step: number, matrix = identityMatrix()) {
   );
 }
 
+export const contourSampleStep = 1.5;
+
 export function pathContours(d: string, matrix = identityMatrix()) {
   const subpaths: string[] = [];
   parsedPath(d)
@@ -160,7 +162,7 @@ export function pathContours(d: string, matrix = identityMatrix()) {
       else curved = true;
     });
     const points = curved
-      ? samplePath(path, 1.5, matrix)
+      ? samplePath(path, contourSampleStep, matrix)
       : vertices.map((p) => transformPoint(p, matrix));
     return { points, box: pointsBox(points) };
   });
@@ -175,6 +177,37 @@ export function contoursCoverPoint(
   return (
     contours.some((c) => insidePolygon(point, c.points)) ||
     contours.some((c) => polylinesTouch(c.points, [point, point], width / 2))
+  );
+}
+
+/** Require an interior point with clearance from the continuous boundary ink. */
+export function contoursContainPoint(
+  contours: ReturnType<typeof pathContours>,
+  point: Point,
+  boundaryWidth: number,
+) {
+  return (
+    contours.some((c) => insidePolygon(point, c.points)) &&
+    !contours.some((c) =>
+      polylinesTouch(c.points, [point, point], boundaryWidth / 2),
+    )
+  );
+}
+
+/** The complete label box must be inside and clear of every boundary segment. */
+export function contoursContainBox(
+  contours: ReturnType<typeof pathContours>,
+  box: FigureBox,
+  boundaryWidth: number,
+) {
+  return (
+    [
+      { x: box.x, y: box.y },
+      { x: box.x + box.width, y: box.y },
+      { x: box.x + box.width, y: box.y + box.height },
+      { x: box.x, y: box.y + box.height },
+    ].every((p) => contoursContainPoint(contours, p, boundaryWidth)) &&
+    !inkIntersectsBox(contours, box, boundaryWidth, false)
   );
 }
 

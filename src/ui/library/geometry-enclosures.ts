@@ -9,6 +9,9 @@ import {
   pathContours,
   inkIntersectsBox,
   contoursCoverPoint,
+  contoursContainPoint,
+  contoursContainBox,
+  contourSampleStep,
 } from "./path-geometry.ts";
 import { createFigureScene, type FigureGroup } from "./scene-geometry.ts";
 import { polylinesTouch } from "./geometry-collision.ts";
@@ -119,7 +122,17 @@ function drawPart(
     if (!p) throw new Error(`Unknown enclosure atom ${id}`);
     return { x: p.x - 1, y: p.y - 1, width: 2, height: 2 };
   });
+  const labels = new Map<string, FigureBox>();
   for (const node of ctx.nodes(parent)) {
+    const owner = ctx.data(node, "chargeOwner") ?? ctx.data(node, "label");
+    if (owner)
+      labels.set(
+        owner,
+        unionBoxes([
+          ...(labels.has(owner) ? [labels.get(owner)!] : []),
+          ctx.inkBox(node, parent),
+        ])!,
+      );
     const atoms = (ctx.data(node, "atoms") ?? "").split(" ");
     if (
       ctx.data(node, "bond") !== undefined &&
@@ -141,14 +154,12 @@ function drawPart(
             width: 2 * half,
             height: 2 * half,
           });
-    } else if (
-      selected.has(ctx.data(node, "label") ?? "") ||
-      selected.has(ctx.data(node, "chargeOwner") ?? "")
-    ) {
-      const box = ctx.inkBox(node, parent);
-      boxes.push(box);
     }
   }
+  const selectedLabels = [...labels]
+    .filter(([id]) => selected.has(id))
+    .map(([, box]) => box);
+  boxes.push(...selectedLabels);
   const bounds = unionBoxes(boxes)!;
   let shape =
     enclosure.shape && enclosure.shape !== "auto" ? enclosure.shape : "circle";
@@ -182,22 +193,19 @@ function drawPart(
       .unarc()
       .toString();
   };
-  const obstacles = ctx
-    .nodes(parent)
-    .filter((node) => {
-      const id = ctx.data(node, "chargeOwner") ?? ctx.data(node, "label");
-      return id && !selected.has(id);
-    })
-    .map((node) => ctx.inkBox(node, parent));
-  const otherBonds = ctx
+  const obstacles = [...labels]
+    .filter(([id]) => !selected.has(id))
+    .map(([, box]) => box);
+  const otherBoundaries = ctx
     .nodes(parent)
     .filter(
       (node) =>
         node.kind === "path" &&
-        ctx.data(node, "bond") !== undefined &&
-        !(ctx.data(node, "atoms") ?? "")
-          .split(" ")
-          .some((id) => selected.has(id)),
+        (ctx.data(node, "enclose") !== undefined ||
+          (ctx.data(node, "bond") !== undefined &&
+            !(ctx.data(node, "atoms") ?? "")
+              .split(" ")
+              .some((id) => selected.has(id)))),
     );
   const width = ctx.token("--chemical-enclose-line");
   const automatic = !enclosure.shape || enclosure.shape === "auto";
@@ -215,13 +223,19 @@ function drawPart(
   const touches = (d: string) => {
     const contours = pathContours(d);
     return (
+      selectedLabels.some(
+        (box) => !contoursContainBox(contours, box, width + 2 * gap),
+      ) ||
+      [...selected].some(
+        (id) => !contoursContainPoint(contours, positions[id], width + 2 * gap),
+      ) ||
       obstacles.some((box) =>
         inkIntersectsBox(contours, box, width + 2 * gap, true),
       ) ||
       otherAtoms.some((point) =>
         contoursCoverPoint(contours, point, width + 2 * gap),
       ) ||
-      otherBonds.some(
+      otherBoundaries.some(
         (node) =>
           node.kind === "path" &&
           pathContours(node.d, ctx.relativeMatrix(node, parent)).some((bond) =>
@@ -236,11 +250,13 @@ function drawPart(
       )
     );
   };
-  let d = path(shape, gap);
+  // Include half the stroke, plus the chord sagitta of the sampled rounded joins.
+  const padding = Math.hypot(gap + width / 2, contourSampleStep / 2);
+  let d = path(shape, padding);
   if (automatic) {
     for (const candidate of ["circle", "rect", "outline"] as const) {
       shape = candidate;
-      d = path(candidate, gap);
+      d = path(candidate, padding);
       if (!touches(d)) break;
     }
     if (touches(d)) {
