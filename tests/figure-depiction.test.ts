@@ -41,3 +41,47 @@ test("native ink measurement separates a single terminal label while preserving 
     mol.delete();
   }
 });
+
+test("series core completion is independent of wall time and incomplete searches fail", async () => {
+  const rd = await moleculeToolkit();
+  const { prepareCompound } =
+    await import("../shared/chemical-library/chemistry.ts");
+  const { depictSeries } = await import("../scripts/figure-depiction.ts");
+  const compounds = ["c1ccccc1CCc1ccccc1", "c1ccccc1CCc1ccncc1"].map(
+    (smiles, i) => ({
+      compound: prepareCompound(rd, {
+        id: `cmp_neutral${i}`,
+        title: "Sample",
+        smiles,
+        sources: [],
+      }),
+    }),
+  );
+  assert.equal(depictSeries(rd, compounds, "series"), true);
+  const first = compounds.map(
+    ({ compound }) => compound.variants!.series.coords,
+  );
+  assert.equal(depictSeries(rd, compounds, "series"), true);
+  assert.deepEqual(
+    compounds.map(({ compound }) => compound.variants!.series.coords),
+    first,
+  );
+  const incomplete = new Proxy(rd, {
+    get(target, key) {
+      if (key === "get_mcs_as_json")
+        return (_mols: unknown, details: string) => {
+          assert.equal(JSON.parse(details).Timeout, 0);
+          return JSON.stringify({
+            canceled: true,
+            numAtoms: 6,
+            smarts: "[#6]1:[#6]:[#6]:[#6]:[#6]:[#6]:1",
+          });
+        };
+      return Reflect.get(target, key);
+    },
+  });
+  assert.throws(
+    () => depictSeries(incomplete, compounds, "incomplete"),
+    /common-core calculation did not complete/,
+  );
+});

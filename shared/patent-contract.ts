@@ -298,26 +298,7 @@ export function validatePatentData(
       records.map((r) => field(r, "id")),
       name,
     );
-    if (c.structureFigures !== undefined)
-      for (const [recordId, drawings] of entries(c.structureFigures, name)) {
-        ok(
-          records.some((r) => String(field(r, "id")) === recordId),
-          `${name}: unknown structure record`,
-        );
-        for (const [fieldKey, drawing] of entries(drawings, name)) {
-          ok(
-            checkedFields.some(
-              (f) => f.key === fieldKey && f.kind === "smiles",
-            ),
-            `${name}: unknown structure field`,
-          );
-          validateFigureReference(drawing, name);
-          ok(
-            drawing.ref.startsWith("cmp_"),
-            `${name}: expected compound reference`,
-          );
-        }
-      }
+    structureFigures(c.structureFigures, records, checkedFields, name);
     const checkedRecords: JsonObject[] = [];
     for (const r of records) {
       const at = `${where}: ${name}/${field(r, "id")}`;
@@ -402,6 +383,31 @@ export function validatePatentData(
         for (const note of list(c.notes, at)) text(note, at);
     }
   }
+  function structureFigures(
+    figures: unknown,
+    records: unknown[],
+    fields: JsonObject[],
+    name: string,
+  ) {
+    if (figures !== undefined)
+      for (const [recordId, drawings] of entries(figures, name)) {
+        ok(
+          records.some((r) => String(field(r, "id")) === recordId),
+          `${name}: unknown structure record`,
+        );
+        for (const [fieldKey, drawing] of entries(drawings, name)) {
+          ok(
+            fields.some((f) => f.key === fieldKey && f.kind === "smiles"),
+            `${name}: unknown structure field`,
+          );
+          validateFigureReference(drawing, name);
+          ok(
+            drawing.ref.startsWith("cmp_"),
+            `${name}: expected compound reference`,
+          );
+        }
+      }
+  }
   const allCases: unknown[] = [];
   for (const b of blocks.filter((b) => b.type === "sar-cases"))
     for (const c of list(cases[String(b.cases)], where)) {
@@ -411,6 +417,13 @@ export function validatePatentData(
         text(c[k], where);
       refs(c.ids, String(b.collection), where);
       refs(c.claims, "claims", where);
+      const collection = checkedCollections.get(String(b.collection))!;
+      structureFigures(
+        c.structureFigures,
+        collection.records.filter((r) => list(c.ids, where).includes(r.id)),
+        collection.fields,
+        where,
+      );
     }
   unique(allCases, `${where}: SAR cases`);
 }

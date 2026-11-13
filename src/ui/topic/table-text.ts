@@ -1,3 +1,4 @@
+import { chemicalTextRuns } from "../../../shared/chemical-text.ts";
 import type { CSSProperties } from "vue";
 
 /** Long prose stays readable; short labels and individual numeric readings align as values. */
@@ -33,4 +34,19 @@ export function tableDisplayText(text: string) {
       "$1\u00a0$2",
     )
     .replace(/([≥≤<>~])[ \t]+(?=[+−-]?\d)/g, "$1\u00a0");
+}
+
+/** Preserve table grouping while applying the shared chemical typography. */
+export function tableTextPieces(text: string) {
+  return tableDisplayText(text)
+    .split(
+      /(\*\*[^*]+\*\*|\n|[≥≤<>~]\u00a0?[+−-]?\d[\d.,]*%?(?:\u00a0[^\s*]+)?|(?<![A-Za-z)\]\d.,])\d[\d.,]*\u00a0[^\s*]+)/,
+    )
+    .map((part) => ({
+      newline: part === "\n",
+      quantity:
+        /^(?:\d[\d.,]*\u00a0|[≥≤<>~]\u00a0?[+−-]?\d)/.test(part) ||
+        (part.startsWith("**") && part.includes("\u00a0")),
+      runs: chemicalTextRuns(part),
+    }));
 }

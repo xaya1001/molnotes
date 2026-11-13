@@ -12,6 +12,7 @@ import {
 } from "../shared/chemical-library/chemistry.ts";
 import {
   tableDisplayText,
+  tableTextPieces,
   tableTextAlign,
 } from "../src/ui/topic/table-text.ts";
 import { blockSearchText } from "../shared/topic-blocks.ts";
@@ -194,4 +195,85 @@ test("table text keeps quantities together and aligns prose separately from shor
   );
   assert.equal(tableTextAlign("0.74\n8.2"), "center");
   assert.equal(tableTextAlign("假定 25 °C"), "center");
+});
+
+test("SAR group drawings keep a common core aligned without changing base layouts or record values", async () => {
+  const rd = await moleculeToolkit();
+  const library: Library = {};
+  const smiles = ["CC(=O)Nc1ncccc1", "CCC(=O)Nc1ncccc1", "O"];
+  for (const [i, value] of smiles.entries()) {
+    const c = prepareCompound(rd, {
+      id: `cmp_series${i}`,
+      title: "Sample",
+      smiles: value,
+      sources: [],
+    });
+    if (i === 1)
+      for (const point of Object.values(c.layout.coords))
+        [point.x, point.y] = [-point.y, point.x];
+    library[c.id] = c;
+  }
+  const before = structuredClone(library);
+  const content = await fixture();
+  content.data.collections.examples.records[0].smiles = smiles[0];
+  content.data.collections.examples.records[1].smiles = smiles[1];
+  const raw = structuredClone(content.data.collections.examples.records);
+  await compileTableStructures(content, library, "sites/sample/content.json");
+  const item = content.data.sarCases.pairs[0];
+  const a = item.structureFigures["1"].smiles;
+  const b = item.structureFigures["2"].smiles;
+  const ac = library[a.ref],
+    bc = library[b.ref];
+  assert.ok(ac.kind === "compound");
+  assert.ok(bc.kind === "compound");
+  const am = rd.get_mol(ac.smiles)!,
+    bm = rd.get_mol(bc.smiles)!;
+  try {
+    const matches: { atoms: number[] } = JSON.parse(bm.get_substruct_match(am));
+    assert.equal(matches.atoms.length, ac.atomIds.length);
+    const coordsA = ac.variants![a.variant].coords;
+    const coordsB = bc.variants![b.variant].coords;
+    const pairs = ac.atomIds.map((id, i) => [
+      coordsA[id],
+      coordsB[bc.atomIds[matches.atoms[i]]],
+    ]);
+    for (const [pa, pb] of pairs) {
+      assert.ok(
+        Math.abs(pa.x - pairs[0][0].x - (pb.x - pairs[0][1].x)) < 0.003,
+      );
+      assert.ok(
+        Math.abs(pa.y - pairs[0][0].y - (pb.y - pairs[0][1].y)) < 0.003,
+      );
+    }
+  } finally {
+    am.delete();
+    bm.delete();
+  }
+  for (const c of Object.values(before)) {
+    assert.ok(c.kind === "compound");
+    const current = library[c.id];
+    assert.ok(current.kind === "compound");
+    assert.deepEqual(current.layout, c.layout);
+  }
+  assert.deepEqual(content.data.collections.examples.records, raw);
+  assert.doesNotThrow(() =>
+    validateTopicContent(
+      resolveCompoundSlots(content, library, "sample").value,
+    ),
+  );
+
+  content.data.collections.examples.records[1].smiles = smiles[2];
+  delete item.structureFigures;
+  await compileTableStructures(content, library, "sites/sample/content.json");
+  assert.equal(item.structureFigures, undefined);
+});
+
+test("table quantities preserve adjacent chemical subscripts", () => {
+  const runs = tableTextPieces("IC50 nM; CH3 25 °C").flatMap(
+    (piece) => piece.runs,
+  );
+  assert.deepEqual(
+    runs.filter((run) => run.script === "sub").map((run) => run.text),
+    ["50", "3"],
+  );
 });
