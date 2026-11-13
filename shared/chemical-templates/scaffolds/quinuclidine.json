@@ -1,0 +1,41 @@
+{
+  "id": "quinuclidine",
+  "smiles": "C1CN2CCC1CC2",
+  "smarts": "[#6&R]1~[#6&R]~[#7&R]2~[#6&R]~[#6&R]~[#6&R]~1~[#6&R]~[#6&R]~2",
+  "atom_order": "zero-based SMILES parse order",
+  "sources": {
+    "comparison_row": 6,
+    "reference": "https://commons.wikimedia.org/wiki/File:Quinuclidine.svg",
+    "silhouette_reference": true
+  },
+  "conformer": {
+    "method": "ETKDGv3 + MMFF94",
+    "seed": 20261112,
+    "rdkit": "2026.09.2",
+    "ensemble_size": 1,
+    "conformer_id": 0,
+    "xyz": [
+      [-0.4564288, 0.1540285, 1.5502754],
+      [-0.0213745, 1.3971356, 0.7572764],
+      [0.3572081, 1.0591872, -0.6321351],
+      [1.4700237, 0.0852888, -0.5980536],
+      [1.0828663, -1.1999484, 0.15142],
+      [-0.366055, -1.0854172, 0.6477901],
+      [-1.2631982, -0.8421902, -0.5748496],
+      [-0.8030416, 0.4319156, -1.3017236]
+    ]
+  },
+  "views": {
+    "perspective": {
+      "camera": [
+        [-0.619807919, 0.318487656, 0.717219462],
+        [-0.727262756, -0.576487723, -0.372492669],
+        [0.294833897, -0.752480909, 0.588935867]
+      ],
+      "depth_width": [1, 2.8]
+    },
+    "flat": {
+      "engine": "coordgen"
+    }
+  }
+}

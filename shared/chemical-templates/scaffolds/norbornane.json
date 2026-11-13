@@ -1,0 +1,40 @@
+{
+  "id": "norbornane",
+  "smiles": "C1CC2CCC1C2",
+  "smarts": "[#6&R]1~[#6&R]~[#6&R]2~[#6&R]~[#6&R]~[#6&R]~1~[#6&R]~2",
+  "atom_order": "zero-based SMILES parse order",
+  "sources": {
+    "comparison_row": 1,
+    "reference": "https://commons.wikimedia.org/wiki/File:NorbornaneNumbering.svg",
+    "silhouette_reference": true
+  },
+  "conformer": {
+    "method": "ETKDGv3 + MMFF94",
+    "seed": 20261112,
+    "rdkit": "2026.09.2",
+    "ensemble_size": 1,
+    "conformer_id": 0,
+    "xyz": [
+      [1.374152, 0.6573298, -0.2962168],
+      [1.2172438, -0.8657161, -0.4206837],
+      [-0.1524403, -1.1253675, 0.2291618],
+      [-1.2529924, -0.5882791, -0.7014693],
+      [-1.0960836, 0.9347669, -0.5770036],
+      [0.0748827, 1.0811661, 0.409484],
+      [-0.1647623, -0.0939001, 1.3567276]
+    ]
+  },
+  "views": {
+    "perspective": {
+      "camera": [
+        [-0.966818028, -0.215614636, -0.137015437],
+        [0.005111347, -0.552554309, 0.833461222],
+        [-0.255414909, 0.805105002, 0.535321549]
+      ],
+      "depth_width": [1, 2.8]
+    },
+    "flat": {
+      "engine": "coordgen"
+    }
+  }
+}

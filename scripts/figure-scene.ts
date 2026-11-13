@@ -1,3 +1,7 @@
+import type { LibraryMarkush } from "../shared/chemical-library/types.ts";
+import { scaffoldLayout } from "./figure-scaffolds.ts";
+import { isObject } from "../shared/json.ts";
+import { validateConformationSpec } from "../shared/chemical-templates/conformation.ts";
 import { depictRoute, figureAbbreviations } from "./figure-depiction.ts";
 import { reactionChanges } from "./figure-changes.ts";
 import {
@@ -174,6 +178,46 @@ export async function compileFigure(
   sourceKey = "example",
   options: { style?: FigureStyle } = {},
 ) {
+  if (isObject(inputValue) && inputValue.kind === "conformation") {
+    validateConformationSpec(inputValue, "figure", [
+      "kind",
+      "title",
+      "sources",
+      "explain",
+      "footnote",
+    ]);
+    const title = String(inputValue.title ?? inputValue.template);
+    const id = "cnf_" + sourceKey;
+    const sourceFile = `library/sources/${id}.yaml`;
+    const entry: Record<string, unknown> = {
+      ...inputValue,
+      kind: "conformation" as const,
+      id,
+      title,
+      sourceKey,
+      sourceFile,
+      sources: inputValue.sources ?? [
+        {
+          source: "unknown",
+          locator: title,
+          note: "Authored conformation drawing",
+        },
+      ],
+    };
+    delete entry.explain;
+    if (inputValue.explain !== undefined)
+      entry.overview = String(inputValue.explain);
+    validateLibraryEntry(entry);
+    const entries = { ...structuredClone(existing), [id]: entry };
+    return {
+      entries,
+      reference: { ref: id },
+      generated: [id],
+      sourceFile,
+      warnings: [],
+      review: [],
+    };
+  }
   const { input, warnings } = validateFigureInput(inputValue);
   const review: string[] = [];
   const rd = await moleculeToolkit(),
@@ -187,7 +231,14 @@ export async function compileFigure(
     count = input.steps?.length ?? 0;
   const routeGraph =
     kind === "route" && (count > 1 || previous?.kind === "route");
-  const prefix = kind !== "route" ? "mec_" : routeGraph ? "rte_" : "rxn_";
+  const prefix =
+    kind === "markush"
+      ? "mku_"
+      : kind !== "route"
+        ? "mec_"
+        : routeGraph
+          ? "rte_"
+          : "rxn_";
   const id = previous?.id ?? prefix + sourceKey;
   if (!id.startsWith(prefix))
     throw new Error("Changing figure kind requires a new source file");
@@ -208,6 +259,34 @@ export async function compileFigure(
       : { footnote: words(input.footnote) }),
     ...(input.explain === undefined ? {} : { overview: words(input.explain) }),
   };
+  if (kind === "markush") {
+    const entry: LibraryMarkush = finishFigureEntry({
+      ...base,
+      kind: "markush",
+      id,
+      core: input.core!,
+      groups: input.groups!,
+      view: input.view,
+      name: input.name,
+      note: input.note,
+      unmodeled: input.unmodeled,
+      patents: input.patents,
+      gaps: input.gaps,
+      gaps_title: input.gaps_title,
+      rot: input.rot,
+      flip: input.flip,
+    });
+    entries[id] = entry;
+    validateLibrary(entries);
+    return {
+      entries,
+      generated: [id],
+      reference: { ref: id },
+      warnings,
+      review,
+      sourceFile,
+    };
+  }
   const previousReactions =
     previous?.kind === "reaction"
       ? [previous]
@@ -411,6 +490,19 @@ export async function compileFigure(
           };
           generated.add(compound.id);
         }
+        if (spec.drawing) {
+          const layout = variant
+            ? compound.variants![variant]
+            : compound.layout;
+          variant ??= `${id}_${figureKey(where)}`;
+          compound.variants ??= {};
+          compound.variants[variant] = scaffoldLayout(
+            rd,
+            { ...compound, layout },
+            spec.drawing,
+          );
+          generated.add(compound.id);
+        }
         if (spec.scale !== undefined && spec.scale !== 1) {
           const layout = variant
             ? compound.variants![variant]
@@ -425,6 +517,16 @@ export async function compileFigure(
                 { x: p.x * spec.scale!, y: p.y * spec.scale! },
               ]),
             ),
+            ...(layout.hydrogens
+              ? {
+                  hydrogens: Object.fromEntries(
+                    Object.entries(layout.hydrogens).map(([atom, p]) => [
+                      atom,
+                      { x: p.x * spec.scale!, y: p.y * spec.scale! },
+                    ]),
+                  ),
+                }
+              : {}),
           };
           generated.add(compound.id);
         }

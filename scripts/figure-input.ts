@@ -1,3 +1,7 @@
+import {
+  validateMarkushFigure,
+  type MarkushFigureData,
+} from "../shared/chemical-library/markush.ts";
 import { isObject } from "../shared/json.ts";
 import type { ArrowKind } from "../shared/chemical-library/types.ts";
 
@@ -20,6 +24,7 @@ export interface StructureInput {
   flip?: boolean | "h" | "v";
   align?: boolean | Key;
   coordgen?: boolean;
+  drawing?: "flat" | "perspective";
   abbreviate?: boolean;
   numbers?: boolean;
   notes?: Record<string, Key>;
@@ -80,14 +85,25 @@ export interface CycleStepInput {
 }
 export interface FigureInput {
   abbreviate?: ("Ph" | "Trt" | "Bz")[];
-  kind?: "route" | "mechanism" | "gallery" | "scope" | "cycle";
+  kind?: "route" | "mechanism" | "markush" | "gallery" | "scope" | "cycle";
+  core?: MarkushFigureData["core"];
+  groups?: MarkushFigureData["groups"];
+  view?: MarkushFigureData["view"];
+  name?: string;
+  note?: string;
+  unmodeled?: string;
+  patents?: MarkushFigureData["patents"];
+  gaps?: MarkushFigureData["gaps"];
+  gaps_title?: string;
+  rot?: number;
+  flip?: "h" | "v";
   title?: Key;
   explain?: Key;
   sources?: { source: Key; locator?: Key; note?: Key }[];
   compounds?: Record<string, string | StructureInput>;
   steps?: StepInput[];
   cycleSteps?: CycleStepInput[];
-  groups?: { title?: Key; subtitle?: Key; items: Key[] }[];
+  scopeGroups?: { title?: Key; subtitle?: Key; items: Key[] }[];
   cols?: number;
   nodes?: (Key | StructureInput)[];
   radius?: number;
@@ -215,6 +231,7 @@ export function validateFigureInput(value: unknown): {
     flip: choice(true, false, "h", "v"),
     align: either(bool, text),
     coordgen: bool,
+    drawing: choice("flat", "perspective"),
     abbreviate: bool,
     numbers: bool,
     notes: map(text),
@@ -278,6 +295,31 @@ export function validateFigureInput(value: unknown): {
   );
   if (!isObject(value)) fail("figure", "expected YAML mapping");
   const kind = value.kind ?? "route";
+  if (kind === "markush") {
+    validateMarkushFigure(value, "figure");
+    object(
+      {
+        kind: choice("markush"),
+        title: text,
+        sources,
+        explain: text,
+        footnote: text,
+        core: string,
+        groups: () => {},
+        view: choice("formula", "map", "overlay"),
+        name: string,
+        note: string,
+        unmodeled: string,
+        patents: map(string),
+        gaps: () => {},
+        gaps_title: string,
+        rot: number,
+        flip: choice("h", "v"),
+      },
+      ["core", "groups"],
+    )(value, "figure");
+    return { input: value as unknown as FigureInput, warnings };
+  }
   if (kind === "table") fail("figure.kind", "尚未支持");
   if (
     !["route", "mechanism", "gallery", "scope", "cycle"].includes(String(kind))
@@ -357,6 +399,7 @@ export function validateFigureInput(value: unknown): {
               rot: number,
               flip: choice("h", "v"),
               coordgen: bool,
+              drawing: structure.drawing,
               bracket: structure.bracket,
               scale: structure.scale,
               numbers: bool,
@@ -379,10 +422,12 @@ export function validateFigureInput(value: unknown): {
       ["frames"],
     )(value, "figure");
   // The complete untrusted boundary above establishes the authoring type.
-  // Cycle steps have their own validated contract; keep route consumers typed.
+  // Scope groups and cycle steps retain their separate validated contracts.
   const input = (kind === "cycle"
     ? { ...value, steps: undefined, cycleSteps: value.steps }
-    : value) as unknown as FigureInput;
+    : kind === "scope"
+      ? { ...value, groups: undefined, scopeGroups: value.groups }
+      : value) as unknown as FigureInput;
   if (
     kind === "route" &&
     (!input.steps!.length || !Object.keys(input.compounds!).length)
@@ -396,8 +441,8 @@ export function validateFigureInput(value: unknown): {
   )
     fail("figure.compounds", "requires compounds");
   if (kind === "scope") {
-    if (!input.groups!.length) fail("figure.groups", "requires groups");
-    for (const [i, group] of input.groups!.entries()) {
+    if (!input.scopeGroups!.length) fail("figure.groups", "requires groups");
+    for (const [i, group] of input.scopeGroups!.entries()) {
       if (!group.items.length)
         fail(`figure.groups[${i}].items`, "requires compounds");
       for (const key of group.items)

@@ -374,9 +374,9 @@ export async function compilePanelScene(
   } else {
     let y = 0;
     const width = ctx.token("--chemical-route-width") / B;
-    const groups: NonNullable<FigureInput["groups"]> =
+    const groups: NonNullable<FigureInput["scopeGroups"]> =
       input.kind === "scope"
-        ? input.groups!
+        ? input.scopeGroups!
         : [{ items: measured.map((c) => c.key) }];
     for (const group of groups) {
       if (group.title !== undefined) {

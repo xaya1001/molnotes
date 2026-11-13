@@ -196,6 +196,13 @@ export function createFigureScene(
       if (["d", "cx", "cy", "r", "rx", "ry"].includes(key)) continue;
       if (key === "fill" || key === "stroke")
         setStyle(node, key, String(value));
+      else if (key === "stroke-width")
+        setStyle(node, "strokeWidth", String(value));
+      else if (
+        key === "stroke-linecap" &&
+        (value === "butt" || value === "round" || value === "square")
+      )
+        node.paint.lineCap = value;
       else set(node, key, value);
     }
     return node;
