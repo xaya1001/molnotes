@@ -11,6 +11,7 @@ import {
   type FigureGroup,
 } from "./scene-geometry.ts";
 import { routeGeometryArrow } from "./geometry-arrows.ts";
+import { drawEnclosure } from "./geometry-enclosures.ts";
 import { nativeDepictionGeometry } from "./native-geometry.ts";
 import { transformPoint, rectangle } from "./geometry-math.ts";
 import {
@@ -50,6 +51,7 @@ import type {
   CompoundLayout,
   FigureReference,
   Focus,
+  FocusGroup,
   Library,
   Point,
   Route,
@@ -165,7 +167,7 @@ export async function prepareFigure(
     at: Point,
     rotate = 0,
     mirror = false,
-    focus?: Focus,
+    changes?: FocusGroup,
     parent: FigureGroup = svg,
     bracket?: boolean | "ts",
   ) {
@@ -329,12 +331,14 @@ export async function prepareFigure(
         "data-compound": c.id,
       });
       const nativeBonds = new Map<number, [number, number]>();
+      const bondParts = new Map<number, number>();
       for (const e of ctx
         .nodes(doc)
         .filter((node) => node.kind === "path")
         .filter((node) => (node.attributes.class ?? "").includes("bond-"))) {
         const cls = ctx.get(e, "class")!;
         const i = Number(/bond-(\d+)/.exec(cls)![1]);
+        bondParts.set(i, (bondParts.get(i) ?? 0) + 1);
         const atoms = [...cls.matchAll(/atom-(\d+)/g)].map((m) => Number(m[1]));
         if (i >= drawn.bonds.length && atoms.length === 2)
           nativeBonds.set(i, [atoms[0], atoms[1]]);
@@ -357,7 +361,26 @@ export async function prepareFigure(
         ),
       );
       ctx.append(parent, g);
-      const f = focusKeys(focus);
+      const f = focusKeys({ primary: changes });
+      // Changes are stored on the full graph. A folded group displays its
+      // changed interior at the visible abbreviation root.
+      for (const group of groups) {
+        const ids = group.atoms.map((i) =>
+          key({ molecule: id, atom: c.atomIds[i] }),
+        );
+        if (
+          ids.some((a) => f.atoms.has(a)) ||
+          group.bonds.some((b) =>
+            f.bonds.has(
+              graph.bonds[b].atoms
+                .map((i) => key({ molecule: id, atom: c.atomIds[i] }))
+                .sort()
+                .join("/"),
+            ),
+          )
+        )
+          f.atoms.add(ids[0]);
+      }
       const ink = [f.atoms, f.bonds, f.support, f.supportBonds].some(
         (set) => set.size,
       )
@@ -397,7 +420,14 @@ export async function prepareFigure(
               atom: c.atomIds[i] ?? `hydrogen-${i - c.atomIds.length}`,
             }),
           );
-          const primary = f.bonds.has([...ids].sort().join("/"));
+          const stereoMark =
+            (e.paint.fill !== "none" || (bondParts.get(drawnIndex) ?? 0) > 2) &&
+            ai.some(
+              (i) =>
+                graph.atoms[i]?.stereo &&
+                f.atoms.has(key({ molecule: id, atom: c.atomIds[i] })),
+            );
+          const primary = f.bonds.has([...ids].sort().join("/")) || stereoMark;
           const supporting = f.supportBonds.has([...ids].sort().join("/"));
           ctx.setStyle(
             e,
@@ -408,15 +438,7 @@ export async function prepareFigure(
                 ? "var(--chemical-support)"
                 : ink,
           );
-          ctx.setStyle(
-            e,
-            "strokeWidth",
-            primary
-              ? "var(--chemical-focus-line)"
-              : supporting
-                ? "var(--chemical-support-line)"
-                : "var(--chemical-line)",
-          );
+          ctx.setStyle(e, "strokeWidth", "var(--chemical-line)");
           if (e.paint.fill && e.paint.fill !== "none") {
             // RDKit solid wedges are filled triangles. An added miter stroke
             // extends their narrow tip beyond the stereocenter.
@@ -791,6 +813,27 @@ export async function prepareFigure(
       mol.delete();
     }
   }
+  function encloseFocus(
+    f: Focus | undefined,
+    prefix: string,
+    parent: FigureGroup,
+    hidden = new Set<string>(),
+  ) {
+    for (const [i, group] of [f?.primary, ...(f?.supporting ?? [])].entries()) {
+      const visible = (a: AtomRef) =>
+        a.molecule.startsWith(prefix) &&
+        !hidden.has(a.molecule.slice(prefix.length));
+      const atoms = group?.atoms?.filter(visible);
+      const bonds = group?.bonds?.filter((pair) => pair.every(visible));
+      if (!atoms?.length && !bonds?.length) continue;
+      drawEnclosure(
+        { id: `${prefix}focus:${i}`, atoms, bonds },
+        atomPoints,
+        parent,
+        ctx,
+      );
+    }
+  }
   async function scene(
     s: Scene,
     prefix = "",
@@ -842,7 +885,7 @@ export async function prepareFigure(
         p.at,
         p.rotate,
         p.mirror,
-        f,
+        prefixedFocus({ primary: s.changes }, prefix)?.primary,
         parent,
         p.bracket,
       );
@@ -1431,6 +1474,29 @@ export async function prepareFigure(
         ),
       );
     }
+    for (const enclosure of s.enclose ?? []) {
+      const refs = [
+        ...(enclosure.atoms ?? []),
+        ...(enclosure.bonds ?? []).flat(),
+      ];
+      if (refs.some((a) => hidden.has(a.molecule))) continue;
+      const prefixed = (a: AtomRef) => ({
+        ...a,
+        molecule: prefix + a.molecule,
+      });
+      drawEnclosure(
+        {
+          ...enclosure,
+          id: prefix + enclosure.id,
+          atoms: enclosure.atoms?.map(prefixed),
+          bonds: enclosure.bonds?.map(([a, b]) => [prefixed(a), prefixed(b)]),
+        },
+        atomPoints,
+        parent,
+        ctx,
+      );
+    }
+    encloseFocus(f, prefix, parent, hidden);
     if (s.transitionState) {
       ctx.append(
         parent,
@@ -1719,9 +1785,10 @@ export async function prepareFigure(
       { x: 0, y: 0 },
       0,
       false,
-      reference.focus,
+      undefined,
       group,
     );
+    encloseFocus(reference.focus, "", group);
     const box = ctx.box(group);
     const dx = 1.5 * B - box.x,
       dy = 1.5 * B - box.y;

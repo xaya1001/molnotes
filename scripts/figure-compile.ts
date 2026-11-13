@@ -56,4 +56,5 @@ for (const e of Object.values(existing))
     await unlink(files[e.id]);
 await save(join(root, result.sourceFile), text);
 for (const warning of result.warnings) console.warn(warning);
+for (const line of result.review) console.log(line);
 console.log(result.reference.ref);

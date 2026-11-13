@@ -18,6 +18,227 @@ import type { FigureBox } from "../shared/chemical-library/geometry.ts";
 const toolkit = await moleculeToolkit(),
   fonts = await loadFigureFonts();
 
+test("a changed implicit carbon stereocentre visibly marks its solid or hashed wedge", async () => {
+  for (const product of ["C[C@@H](F)CC", "C[C@H](F)CC"]) {
+    const reactant = product.replace(
+      product.includes("@@") ? "@@" : "@",
+      product.includes("@@") ? "@" : "@@",
+    );
+    const compiled = await compileFigure({
+      compounds: { a: reactant, b: product },
+      steps: [{ from: "a", to: "b" }],
+    });
+    const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+      toolkit,
+      fonts,
+      style,
+    });
+    let redBonds = 0;
+    walkGeometry(geometry.root, (node) => {
+      if (
+        node.attributes["data-bond"]?.startsWith("product-b:") &&
+        (node.paint.fill === style.values["--chemical-focus"] ||
+          node.paint.stroke === style.values["--chemical-focus"])
+      )
+        redBonds++;
+    });
+    assert.ok(redBonds > 0);
+  }
+});
+
+test("enclosure diagnostics check boundaries while allowing interior labels and entering bonds", async () => {
+  const { figureGroup, figurePath } =
+    await import("../src/ui/library/geometry-tree.ts");
+  const path = (d: string, attributes: Record<string, string>) => {
+    const p = figurePath(d);
+    p.attributes = attributes;
+    p.paint.fill = "none";
+    p.paint.stroke = "black";
+    p.paint.strokeWidth = 1.6;
+    return p;
+  };
+  const ring = path("M50 50H90V90H50Z", {
+    "data-enclose": "selection",
+    "data-enclose-atoms": "m:a1",
+  });
+  const inside = path("M65 65H75V75H65Z", { "data-label": "m:a1" });
+  const entering = path("M70 70H115", {
+    "data-bond": "m:b1",
+    "data-atoms": "m:a1 m:a2",
+  });
+  const inspect = (extra: (typeof ring)[] = []) => {
+    const root = figureGroup([ring, inside, entering, ...extra]);
+    root.attributes["data-molecule"] = "m";
+    return figureGeometryDiagnostics(
+      {
+        format: 1,
+        width: 180,
+        height: 180,
+        minimumScale: 1,
+        atomPoints: { "m:a1": { x: 70, y: 70 }, "m:a2": { x: 115, y: 70 } },
+        root,
+      },
+      style,
+    ).filter((d) => d.code.startsWith("ENCLOSURE_"));
+  };
+  assert.deepEqual(inspect(), []);
+  for (const [attributes, code] of [
+    [{ "data-label": "other" }, "ENCLOSURE_LABEL_OVERLAP"],
+    [
+      { "data-bond": "other", "data-atoms": "n:a1 n:a2" },
+      "ENCLOSURE_BOND_OVERLAP",
+    ],
+    [{ "data-reaction-arrow": "other" }, "ENCLOSURE_ARROW_OVERLAP"],
+    [
+      { "data-enclose": "other", "data-enclose-atoms": "n:a1" },
+      "ENCLOSURE_OVERLAP",
+    ],
+  ] as const) {
+    const crossing = path("M85 60H100V80H85Z", attributes);
+    assert.ok(inspect([crossing]).some((d) => d.code === code));
+  }
+});
+
+test("automatic outlines reduce padding when an unrelated bond touches the boundary", async () => {
+  const { createFigureScene } =
+    await import("../src/ui/library/scene-geometry.ts");
+  const { drawEnclosure } =
+    await import("../src/ui/library/geometry-enclosures.ts");
+  const ctx = createFigureScene(style, fonts),
+    parent = ctx.element("g");
+  const bond = ctx.element("path", {
+    d: "M67 0H97",
+    "data-bond": "m:other",
+    "data-atoms": "m:a4 m:a5",
+  });
+  ctx.setStyle(bond, "stroke", "var(--chemical-ink)");
+  ctx.setStyle(bond, "strokeWidth", "var(--chemical-line)");
+  ctx.append(parent, bond);
+  const enclosure = drawEnclosure(
+    {
+      id: "selected",
+      atoms: [1, 2, 3].map((i) => ({ molecule: "m", atom: `a${i}` })),
+    },
+    {
+      "m:a1": { x: 0, y: 0 },
+      "m:a2": { x: 60, y: 30 },
+      "m:a3": { x: 60, y: -30 },
+    },
+    parent,
+    ctx,
+  );
+  assert.ok(enclosure.bounds!.x + enclosure.bounds!.width < 66);
+  assert.equal(enclosure.paint.dashArray, "4 3");
+});
+
+test("ring stereocentres use drawing-only hydrogen wedges without duplicating explicit isotopes", async () => {
+  for (const [smiles, added] of [
+    ["C1[C@H]2CC[C@@H]1C2", 2],
+    ["C1C[C@H]2CCC[C@@H]2C1", 2],
+    ["C[C@H]1CC[C@H](F)CC1", 0],
+    ["C1C[C@]2([H])CCC[C@@H]2C1", 1],
+    ["C1C[C@]2([2H])CCC[C@@H]2C1", 1],
+  ] as const) {
+    const c = prepareCompound(toolkit, {
+      id: "cmp_ring",
+      title: "Ring",
+      smiles,
+      sources: [{ source: "example" }],
+    });
+    const before = structuredClone(c);
+    const geometry = await prepareFigure(
+      { [c.id]: c },
+      { ref: c.id },
+      { toolkit, fonts, style },
+    );
+    const hydrogens = Object.keys(geometry.atomPoints).filter((id) =>
+      id.includes(":hydrogen-"),
+    );
+    assert.equal(hydrogens.length, added);
+    for (const hydrogen of hydrogens) {
+      const wedges: string[] = [];
+      walkGeometry(geometry.root, (node) => {
+        if (
+          node.attributes["data-atoms"]?.split(" ").includes(hydrogen) &&
+          (node.paint.fill !== "none" || node.paint.dashArray)
+        )
+          wedges.push(node.attributes["data-bond"]);
+      });
+      // Solid wedges are filled; hashed wedges consist of several transverse paths.
+      if (!wedges.length) {
+        let strokes = 0;
+        walkGeometry(geometry.root, (node) => {
+          if (node.attributes["data-atoms"]?.split(" ").includes(hydrogen))
+            strokes++;
+        });
+        assert.ok(strokes > 2);
+      }
+    }
+    assert.deepEqual(c, before);
+  }
+});
+
+test("scene enclosures surround visible labels without changing molecular ink or coordinates", async () => {
+  const compiled = await compileFigure({
+    kind: "mechanism",
+    frames: [{ id: "one", smiles: "[CH3:1][CH2:2][OH:3]" }],
+  });
+  const entry = compiled.entries[compiled.reference.ref];
+  assert.equal(entry.kind, "mechanism");
+  const scene = entry.frames[0].scene;
+  const molecule = scene.molecules[0];
+  const compound = compiled.entries[molecule.compound];
+  assert.equal(compound.kind, "compound");
+  const oxygen = { molecule: molecule.id, atom: compound.atomIds[2] };
+  const before = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit,
+    fonts,
+    style,
+  });
+  for (const shape of ["auto", "circle", "rect", "outline"] as const) {
+    scene.enclose = [{ id: "site", atoms: [oxygen], shape }];
+    const after = await prepareFigure(compiled.entries, compiled.reference, {
+      toolkit,
+      fonts,
+      style,
+    });
+    assert.deepEqual(after.atomPoints, before.atomPoints);
+    const circles: import("../shared/chemical-library/geometry.ts").FigureNode[] =
+      [];
+    walkGeometry(after.root, (node) => {
+      if (node.attributes["data-enclose"]) circles.push(node);
+    });
+    assert.equal(circles.length, 1);
+    const circle = circles[0];
+    assert.equal(circle.paint.fill, "none");
+    assert.equal(circle.paint.stroke, style.values["--chemical-focus"]);
+    assert.equal(circle.paint.dashArray, "4 3");
+    const labels: FigureBox[] = [];
+    walkGeometry(after.root, (node, matrix) => {
+      if (node.attributes["data-label"] === `${oxygen.molecule}:${oxygen.atom}`)
+        labels.push(transformBox(node.bounds, matrix)!);
+    });
+    const label = unionBoxes(labels)!;
+    assert.ok(circle.bounds!.x < label.x && circle.bounds!.y < label.y);
+    assert.ok(circle.bounds!.x + circle.bounds!.width > label.x + label.width);
+    assert.ok(
+      circle.bounds!.y + circle.bounds!.height > label.y + label.height,
+    );
+    const withoutCircles = structuredClone(after);
+    const remove = (
+      node: import("../shared/chemical-library/geometry.ts").FigureNode,
+    ) => {
+      if (node.kind !== "group") return;
+      node.children = node.children.filter(
+        (child) => !child.attributes["data-enclose"],
+      );
+      node.children.forEach(remove);
+    };
+    remove(withoutCircles.root);
+    assert.equal(geometrySvg(withoutCircles), geometrySvg(before));
+  }
+});
+
 test("native bond ends clear complete labels at their final stroke width", async () => {
   for (const smiles of ["C[Mg]Br", "C[S+]C", "CC=O"]) {
     const c = prepareCompound(toolkit, {
@@ -820,5 +1041,40 @@ test("compiled layouts reserve a three-digit number line for page references", a
       style,
     });
     assert.deepEqual(figureGeometryDiagnostics(geometry, style), []);
+  }
+});
+
+test("automatic circles use an outline when a neighbouring label crosses their boundary", async () => {
+  const compiled = await compileFigure({
+    kind: "mechanism",
+    frames: [{ id: "one", smiles: "CC(C)(C)O" }],
+  });
+  const entry = compiled.entries[compiled.reference.ref];
+  assert.equal(entry.kind, "mechanism");
+  const scene = entry.frames[0].scene;
+  const p = scene.molecules[0];
+  const compound = compiled.entries[p.compound];
+  assert.equal(compound.kind, "compound");
+  scene.enclose = [
+    {
+      id: "group",
+      atoms: compound.atomIds
+        .slice(0, 4)
+        .map((atom) => ({ molecule: p.id, atom })),
+    },
+  ];
+  for (const shape of ["auto", "circle"] as const) {
+    scene.enclose[0].shape = shape;
+    const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+      toolkit,
+      fonts,
+      style,
+    });
+    let actual: string | undefined;
+    walkGeometry(geometry.root, (node) => {
+      if (node.attributes["data-enclose"])
+        actual = node.attributes["data-enclose-shape"];
+    });
+    assert.equal(actual, shape === "auto" ? "outline" : "circle");
   }
 });

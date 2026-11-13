@@ -76,13 +76,17 @@ export function figureAbbreviations(
 ) {
   if (spec.abbreviate === false) return { abbreviations: [] };
   const names = matchingAbbreviations(rd, mol, [...defaults, ...(extra ?? [])]);
-  const targets = new Set(
-    (spec.arrows ?? []).flatMap((arrow) =>
+  const targets = new Set([
+    ...(spec.arrows ?? []).flatMap((arrow) =>
       [arrow.from, arrow.to].flatMap((s) =>
         [...s.matchAll(/\d+/g)].map((m) => Number(m[0])),
       ),
     ),
-  );
+    ...(spec.enclose ?? []).flatMap((e) => [
+      ...(e.atoms ?? []),
+      ...(e.bonds ?? []).flat(),
+    ]),
+  ]);
   const maps = atomMaps(mol),
     groups = abbreviatedGroups(rd, mol, names),
     retained = groups.filter(
@@ -350,18 +354,19 @@ function common(rd: Toolkit, reference: Mol, mol: Mol, strict: boolean) {
     list.append(b);
     a.delete();
     b.delete();
-    const result: { numAtoms: number; smarts: string } = JSON.parse(
-      rd.get_mcs_as_json(
-        list,
-        JSON.stringify({
-          Timeout: 2,
-          RingMatchesRingOnly: strict,
-          CompleteRingsOnly: strict,
-          MatchChiralTag: false,
-          BondCompare: "Any",
-        }),
-      ),
-    );
+    const result: { numAtoms: number; smarts: string; canceled: boolean } =
+      JSON.parse(
+        rd.get_mcs_as_json(
+          list,
+          JSON.stringify({
+            Timeout: 2,
+            RingMatchesRingOnly: strict,
+            CompleteRingsOnly: strict,
+            MatchChiralTag: false,
+            BondCompare: "Any",
+          }),
+        ),
+      );
     return result;
   } finally {
     list.delete();
@@ -1033,3 +1038,5 @@ export function depictRoute(
     for (const mol of fulls.values()) mol.delete();
   }
 }
+
+export { common as figureCommonCore };

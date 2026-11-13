@@ -1,4 +1,5 @@
 import { depictRoute, figureAbbreviations } from "./figure-depiction.ts";
+import { reactionChanges } from "./figure-changes.ts";
 import {
   compileRouteLayout,
   compileReactionLayout,
@@ -173,6 +174,7 @@ export async function compileFigure(
   options: { style?: FigureStyle } = {},
 ) {
   const { input, warnings } = validateFigureInput(inputValue);
+  const review: string[] = [];
   const rd = await moleculeToolkit(),
     entries: Library = structuredClone(existing),
     generated = new Set<string>();
@@ -273,7 +275,20 @@ export async function compileFigure(
         generated.add(cid);
       }
       let variant: string | undefined;
-      const abbreviations = figureAbbreviations(rd, m, spec, input.abbreviate);
+      const abbreviations = figureAbbreviations(
+        rd,
+        m,
+        {
+          ...spec,
+          enclose: [
+            ...(spec.enclose ?? []),
+            ...(input.steps ?? []).flatMap(
+              (step) => step.enclose?.[where.replace(/^compounds\./, "")] ?? [],
+            ),
+          ],
+        },
+        input.abbreviate,
+      );
       const target = openMolecule(rd, compound.smiles),
         query = openMolecule(rd, unmapped);
       try {
@@ -554,6 +569,28 @@ export async function compileFigure(
       };
     }
   }
+  function pushEnclosures(
+    scene: Scene,
+    resolved: Resolved,
+    local: string,
+    enclosures = resolved.spec.enclose ?? [],
+  ) {
+    const atom = (n: number): AtomRef => {
+      const id = resolved.atoms.get(n);
+      if (!id) throw new Error(`enclose: unknown atom ${n}`);
+      return { molecule: local, atom: id };
+    };
+    for (const [i, e] of enclosures.entries()) {
+      if (!e.atoms?.length && !e.bonds?.length)
+        throw new Error("enclose: requires atoms or bonds");
+      (scene.enclose ??= []).push({
+        id: `${local}/${e.id ?? i + 1}`,
+        shape: e.shape,
+        atoms: e.atoms?.map(atom),
+        bonds: e.bonds?.map(([a, b]) => [atom(a), atom(b)]),
+      });
+    }
+  }
   let top: LibraryEntry;
   if (kind === "mechanism") {
     const frames: Mechanism["frames"] = [],
@@ -569,6 +606,7 @@ export async function compileFigure(
         box = bounds(rd, resolved);
       scene.molecules.push(placement(resolved, "structure", { x: 0, y: 0 }));
       pushArrows(scene, resolved, "structure");
+      pushEnclosures(scene, resolved, "structure");
       const arrow = frame.arrow ?? "forward";
       if (arrow !== "none" && input.frames!.at(-1) !== frame)
         scene.reactionArrows!.push({
@@ -671,6 +709,16 @@ export async function compileFigure(
         producer.set(key, sid);
       }
       for (const r of endpoints(step.from)) resolve(keyOf(r));
+      for (const key of Object.keys(step.enclose ?? {})) {
+        if (
+          ![...endpoints(step.from), ...endpoints(step.to)].some(
+            (p) => keyOf(p) === key,
+          )
+        )
+          throw new Error(
+            `enclose: ${key} is not a participant of step ${sid}`,
+          );
+      }
     }
     const ordered: string[] = [],
       active = new Set<string>();
@@ -793,18 +841,6 @@ export async function compileFigure(
         if (!("compound" in r))
           throw new Error(`${key}: product requires smiles`);
         const p: ProductInput = typeof raw === "object" ? raw : { id: key };
-        if (typeof step.changes === "object")
-          for (const n of [
-            ...(step.changes.add ?? []),
-            ...(step.changes.remove ?? []),
-          ])
-            if (
-              !endpoints(step.to).some((p) => {
-                const t = resolve(keyOf(p));
-                return "compound" in t && t.atoms.has(n);
-              })
-            )
-              throw new Error(`changes: unknown product atom ${n}`);
         products.push({
           id: participantId("products", key),
           sourceKey: key,
@@ -846,6 +882,20 @@ export async function compileFigure(
         );
       }
       extra.push(from, to);
+      for (const p of scene.molecules) {
+        const participant = [...reactants, ...products].find(
+          (v) => v.id === p.id,
+        )!;
+        const resolved = resolve(participant.sourceKey!);
+        if (!("compound" in resolved))
+          throw new Error("Enclosure requires structure");
+        pushEnclosures(
+          scene,
+          resolved,
+          p.id,
+          step.enclose?.[participant.sourceKey!] ?? resolved.spec.enclose,
+        );
+      }
       const { dx, dy } = fit(scene, extra);
       from.x += dx;
       from.y += dy;
@@ -880,6 +930,45 @@ export async function compileFigure(
         arrow: { from, to, textWidth: 5, kind: step.arrow ?? "forward" },
       };
       entries[rid] = reaction;
+      const manual = (numbers: number[] = []) =>
+        numbers.map((n) => {
+          const found = products.flatMap((p) => {
+            const r = resolve(p.sourceKey!);
+            const atom = "compound" in r ? r.atoms.get(n) : undefined;
+            return atom ? [{ molecule: p.id, atom }] : [];
+          });
+          if (found.length !== 1)
+            throw new Error(
+              `changes: atom ${n} must identify exactly one product`,
+            );
+          return found[0];
+        });
+      review.push(
+        ...reactionChanges(rd, entries, reaction, {
+          enabled:
+            input.changes !== false &&
+            input.changes !== "off" &&
+            step.changes !== false &&
+            step.changes !== "off",
+          ...(typeof step.changes === "object"
+            ? {
+                add: manual(step.changes.add),
+                remove: manual(step.changes.remove),
+              }
+            : {}),
+          numbers: Object.fromEntries(
+            products.map((p) => {
+              const r = resolve(p.sourceKey!);
+              return [
+                p.id,
+                "compound" in r
+                  ? Object.fromEntries([...r.atoms].map(([n, a]) => [a, n]))
+                  : {},
+              ];
+            }),
+          ),
+        }),
+      );
       await compileReactionLayout(
         entries,
         reaction,
@@ -931,6 +1020,7 @@ export async function compileFigure(
     generated: [...generated],
     reference: { ref: id },
     warnings,
+    review,
     sourceFile,
   };
 }

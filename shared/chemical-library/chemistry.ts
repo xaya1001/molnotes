@@ -588,12 +588,12 @@ export function validateSceneChemistry(
       }
     }),
   );
-  const atom = (ref: import("./types.ts").AtomRef) => {
+  const atom = (ref: import("./types.ts").AtomRef, allowFolded = false) => {
     const molecule = molecules.get(ref.molecule),
       index = molecule?.compound.atomIds.indexOf(ref.atom) ?? -1;
     if (!molecule || index < 0)
       throw new Error(`${where}: unknown atom ${ref.molecule}:${ref.atom}`);
-    if (molecule.hidden.has(index))
+    if (!allowFolded && molecule.hidden.has(index))
       throw new Error(
         `${where}: folded atom cannot be an anchor ${ref.molecule}:${ref.atom}`,
       );
@@ -601,9 +601,10 @@ export function validateSceneChemistry(
   };
   const bond = (
     refs: [import("./types.ts").AtomRef, import("./types.ts").AtomRef],
+    allowFolded = false,
   ) => {
-    const a = atom(refs[0]),
-      b = atom(refs[1]);
+    const a = atom(refs[0], allowFolded),
+      b = atom(refs[1], allowFolded);
     if (
       refs[0].molecule !== refs[1].molecule ||
       a.index === b.index ||
@@ -636,13 +637,17 @@ export function validateSceneChemistry(
           )
             throw new Error(`${where}: pi anchor requires a multiple bond`);
         }
-      } else if (anchor.kind === "formingBond") anchor.atoms.forEach(atom);
+      } else if (anchor.kind === "formingBond")
+        anchor.atoms.forEach((a) => atom(a));
     }
   for (const group of [
     scene.focus?.primary,
     ...(scene.focus?.supporting ?? []),
+    ...(scene.enclose ?? []),
   ]) {
-    group?.atoms?.forEach(atom);
-    group?.bonds?.forEach(bond);
+    group?.atoms?.forEach((a) => atom(a));
+    group?.bonds?.forEach((b) => bond(b));
   }
+  scene.changes?.atoms?.forEach((a) => atom(a, true));
+  scene.changes?.bonds?.forEach((b) => bond(b, true));
 }

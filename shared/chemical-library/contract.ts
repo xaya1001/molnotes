@@ -146,6 +146,29 @@ function scene(v: unknown, w: string): asserts v is Scene {
       fail(w, "mirror must be boolean");
   }
   focus(v.focus, w);
+  if (v.changes !== undefined) focus({ primary: v.changes }, w);
+  if (v.enclose !== undefined) {
+    list(v.enclose, w);
+    for (const e of v.enclose) {
+      object(e, w);
+      text(e.id, w);
+      if (e.atoms !== undefined) {
+        list(e.atoms, w);
+        e.atoms.forEach((a) => ref(a, w));
+      }
+      if (e.bonds !== undefined) {
+        list(e.bonds, w);
+        e.bonds.forEach((b) => pair(b, w));
+      }
+      if (!e.atoms?.length && !e.bonds?.length)
+        fail(w, "enclosure requires atoms or bonds");
+      if (
+        e.shape !== undefined &&
+        !["auto", "circle", "rect", "outline"].includes(String(e.shape))
+      )
+        fail(w, "unknown enclosure shape");
+    }
+  }
   if (v.labels !== undefined) {
     list(v.labels, w);
     for (const l of v.labels) {
@@ -539,6 +562,16 @@ function validateSceneReferences(
       } else anchor.atoms.forEach(atom);
     }
   for (const bond of scene.partialBonds ?? []) bond.atoms.forEach(atom);
+  unique(
+    (scene.enclose ?? []).map((e) => e.id),
+    "enclosure",
+  );
+  for (const e of scene.enclose ?? []) {
+    e.atoms?.forEach(atom);
+    e.bonds?.forEach((b) => b.forEach(atom));
+  }
+  scene.changes?.atoms?.forEach(atom);
+  scene.changes?.bonds?.forEach((b) => b.forEach(atom));
   validateFocusReferences(
     override ?? scene.focus,
     atom,

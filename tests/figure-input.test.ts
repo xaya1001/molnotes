@@ -37,6 +37,29 @@ const fixture = async (name: string) =>
     ),
   );
 
+test("step enclosures override structure defaults and empty selections clear one step", async () => {
+  const compiled = await compileFigure({
+    kind: "route",
+    compounds: {
+      a: "CCO",
+      b: { smiles: "[CH3:1][CH:2]=[O:3]", enclose: [{ atoms: [3] }] },
+      c: "CC(=O)O",
+    },
+    steps: [
+      { from: "a", to: "b", enclose: { b: [] } },
+      { from: "b", to: "c" },
+    ],
+  });
+  const route = compiled.entries[compiled.reference.ref] as Route;
+  const first = compiled.entries[route.steps[0].reaction] as Reaction;
+  const second = compiled.entries[route.steps[1].reaction] as Reaction;
+  assert.equal(first.scene.enclose, undefined);
+  assert.deepEqual(second.scene.enclose?.[0].atoms, [
+    { molecule: second.reactants[0].id, atom: "a3" },
+  ]);
+  assert.deepEqual(compiled.warnings, []);
+});
+
 test("route YAML compiles linear, convergent and divergent step graphs", async () => {
   for (const [name, edges, length] of [
     ["linear", 2, 3],
@@ -372,7 +395,7 @@ test("compilation stores source and stable entries, and recompilation writes no 
   const run = promisify(execFile),
     args = ["scripts/figure-compile.ts", "--source", source, "--library", root];
   const { stdout } = await run(process.execPath, args),
-    id = stdout.trim();
+    id = stdout.trim().split("\n").at(-1)!;
   const scan = async () => {
     const files: Record<string, string> = {};
     for (const dir of ["sources", "compounds", "reactions", "routes"]) {
@@ -425,7 +448,10 @@ test("compilation stores source and stable entries, and recompilation writes no 
     source,
     text.replace("First transformation.", "Updated explanation."),
   );
-  assert.equal((await run(process.execPath, args)).stdout.trim(), id);
+  assert.equal(
+    (await run(process.execPath, args)).stdout.trim().split("\n").at(-1),
+    id,
+  );
   const saved = join(root, "library", "sources", id + ".yaml");
   assert.equal(
     (
@@ -436,7 +462,10 @@ test("compilation stores source and stable entries, and recompilation writes no 
         "--library",
         root,
       ])
-    ).stdout.trim(),
+    ).stdout
+      .trim()
+      .split("\n")
+      .at(-1),
     id,
   );
 });
@@ -471,6 +500,7 @@ test("shared intermediates draw their electron annotations once", async () => {
       b: {
         smiles: "C[C:1](=[O:2])C",
         arrows: [{ id: "push", from: "pi(1,2)", to: "atom(2)" }],
+        enclose: [{ id: "oxygen", atoms: [2] }],
       },
       c: "CC(O)C",
     },
@@ -484,11 +514,14 @@ test("shared intermediates draw their electron annotations once", async () => {
     fonts: await loadFigureFonts(),
     style: figureStyle,
   });
-  let count = 0;
+  let count = 0,
+    enclosures = 0;
   walkGeometry(geometry.root, (n) => {
     if (n.attributes["data-electron-arrow"]) count++;
+    if (n.attributes["data-enclose"]) enclosures++;
   });
   assert.equal(count, 1);
+  assert.equal(enclosures, 1);
 });
 
 test("route depiction propagates from its largest anchor independently of compound declaration order", async () => {

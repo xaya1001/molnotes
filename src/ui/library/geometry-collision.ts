@@ -1,4 +1,23 @@
 import type { Point } from "../../../shared/chemical-library/types.ts";
+/** Boundary contact, without treating a closed path's interior as ink. */
+export function polylinesTouch(a: Point[], b: Point[], gap: number) {
+  return a
+    .slice(1)
+    .some((q, i) =>
+      b
+        .slice(1)
+        .some(
+          (s, j) =>
+            crosses(a[i], q, b[j], s) ||
+            Math.min(
+              segmentDistance(a[i], b[j], s),
+              segmentDistance(q, b[j], s),
+              segmentDistance(b[j], a[i], q),
+              segmentDistance(s, a[i], q),
+            ) <= gap,
+        ),
+    );
+}
 export function insidePolygon(p: Point, polygon: Point[]) {
   let inside = false;
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
