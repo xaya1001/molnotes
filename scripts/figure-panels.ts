@@ -113,7 +113,7 @@ export async function compilePanelScene(
       const geometry = await prepareFigure(
         { ...library, [entry.id]: probe },
         { ref: entry.id },
-        { toolkit, fonts, style },
+        { toolkit, fonts, style, canvas: "scene" },
       );
       const parts: FigureBox[] = [];
       walkGeometry(geometry.root, (node, matrix) => {

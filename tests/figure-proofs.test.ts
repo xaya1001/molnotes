@@ -175,13 +175,23 @@ test("a corrupt cache record is rendered again", async (t) => {
   await f.run();
   assert.equal(f.calls.length, 1);
 });
-test("a previously accepted figure that becomes blocked still rejects publication", async (t) => {
+test("publication preserves diagnostics and renders the current figure", async (t) => {
   const f = await fixture(t);
   await f.run();
   f.calls.length = 0;
   (f.library.cmp_a as Compound).layout.coords.a2 = { x: 0, y: 0 };
   f.blocked.add("cmp_a");
-  await assert.rejects(f.run(), /cmp_a: BOND_TOO_SMALL/);
+  const result = await f.run();
+  assert.equal(
+    Object.values(result.renders).find((r) => r.diagnostics.length)!
+      .diagnostics[0].code,
+    "BOND_TOO_SMALL",
+  );
+  assert.ok(Object.values(result.renders)[0].asset.endsWith(".svg"));
+  const diagnosed = f.diagnosed();
+  const cached = await f.run();
+  assert.deepEqual(cached.renders, result.renders);
+  assert.equal(f.diagnosed(), diagnosed);
   assert.ok(f.calls.some((r) => r.ref === "cmp_a"));
 });
 
@@ -215,20 +225,29 @@ test("proofs deduplicate captions while preserving local numbers and focus", asy
 
 test("all failures are reported after successful proofs have been cached", async (t) => {
   const f = await fixture(t);
-  f.blocked.add("cmp_a");
-  f.blocked.add("cmp_b");
+  const create = f.options.createRunner;
+  f.options.createRunner = async () => {
+    const runner = await create();
+    const prepare = runner.prepare;
+    runner.prepare = async (reference, slot) => {
+      if (["cmp_a", "cmp_b"].includes(reference.ref))
+        throw new Error("Cannot render structure");
+      return prepare(reference, slot);
+    };
+    return runner;
+  };
   await assert.rejects(f.run(), (error: Error) => {
-    assert.match(error.message, /cmp_a.*BOND_TOO_SMALL/);
-    assert.match(error.message, /cmp_b.*BOND_TOO_SMALL/);
+    assert.match(error.message, /cmp_a.*Cannot render structure/);
+    assert.match(error.message, /cmp_b.*Cannot render structure/);
     return true;
   });
-  assert.equal(f.calls.length, 4);
+  assert.equal(f.calls.length, 2);
   f.calls.length = 0;
-  f.blocked.clear();
+  f.options.createRunner = create;
   const result = await f.run();
   assert.equal(result.stats.proofHits, 2);
   assert.equal(result.stats.diagnosed, 2);
-  assert.equal(result.stats.prepared, 0);
+  assert.equal(result.stats.prepared, 2);
 });
 
 test("two worker slots prepare concurrently and commit previews in reference order", async (t) => {

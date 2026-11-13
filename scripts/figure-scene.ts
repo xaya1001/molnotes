@@ -1,3 +1,4 @@
+import { chemicalFigureStyle } from "../shared/chemical-library/style.ts";
 import type { LibraryMarkush } from "../shared/chemical-library/types.ts";
 import { scaffoldLayout } from "./figure-scaffolds.ts";
 import { isObject } from "../shared/json.ts";
@@ -192,6 +193,8 @@ export async function compileFigure(
       "sources",
       "explain",
       "footnote",
+      "bond",
+      "width",
     ]);
     const title = String(inputValue.title ?? inputValue.template);
     const id = "cnf_" + sourceKey;
@@ -211,6 +214,15 @@ export async function compileFigure(
         },
       ],
     };
+    if (inputValue.bond !== undefined || inputValue.width !== undefined)
+      entry.style = Object.fromEntries(
+        Object.entries({
+          bond: inputValue.bond,
+          width: inputValue.width,
+        }).filter(([, value]) => value !== undefined),
+      );
+    delete entry.bond;
+    delete entry.width;
     delete entry.explain;
     if (inputValue.explain !== undefined)
       entry.overview = String(inputValue.explain);
@@ -256,7 +268,16 @@ export async function compileFigure(
     locator: words(s.locator) || title,
     ...(s.note === undefined ? {} : { note: words(s.note) }),
   })) ?? [{ source: "unknown", locator: title, note: "Authored figure" }];
+  const style = chemicalFigureStyle(
+    options.style ?? (await loadFigureStyle()),
+    input,
+  );
   const base = {
+    ...(input.bond === undefined && input.width === undefined
+      ? {}
+      : {
+          style: { bond: input.bond, width: input.width },
+        }),
     title,
     sources,
     sourceFile,
@@ -272,6 +293,7 @@ export async function compileFigure(
       kind: "markush",
       id,
       core: input.core!,
+      scale: input.scale,
       groups: input.groups!,
       view: input.view,
       name: input.name,
@@ -870,13 +892,7 @@ export async function compileFigure(
       category: "examples",
       frames: [],
     };
-    const scene = await compilePanelScene(
-      entries,
-      panel,
-      input,
-      cells,
-      options.style ?? (await loadFigureStyle()),
-    );
+    const scene = await compilePanelScene(entries, panel, input, cells, style);
     panel.frames.push({
       id: "overview",
       title,
@@ -886,7 +902,6 @@ export async function compileFigure(
     });
     top = panel;
   } else if (kind === "mechanism") {
-    const style = options.style ?? (await loadFigureStyle());
     const frames: Mechanism["frames"] = [],
       maps: NonNullable<Mechanism["maps"]> = [];
     let prior: Resolved | undefined,
@@ -992,7 +1007,7 @@ export async function compileFigure(
       compounds,
       input,
       (key) => `${id}_${figureKey(key)}`,
-      options.style ?? (await loadFigureStyle()),
+      style,
     ))
       generated.add(cid);
     const resolve = (key: string) => {
@@ -1273,14 +1288,7 @@ export async function compileFigure(
           ),
         }),
       );
-      await compileReactionLayout(
-        entries,
-        reaction,
-        sid,
-        input,
-        step,
-        options.style,
-      );
+      await compileReactionLayout(entries, reaction, sid, input, step, style);
       generated.add(rid);
       reactions.push(reaction);
       steps.push({ id: sid, reaction: rid, at: { x: 0, y: 0 } });
@@ -1301,7 +1309,7 @@ export async function compileFigure(
     if (!routeGraph) top = reactions[0];
     else {
       top = { ...base, kind: "route", id, steps, edges, width: 1, height: 1 };
-      await compileRouteLayout(entries, top, input, rawSteps, options.style);
+      await compileRouteLayout(entries, top, input, rawSteps, style);
     }
   }
   entries[id] = top;

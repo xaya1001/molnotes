@@ -349,7 +349,7 @@ test("YAML boundary rejects unsupported kinds and style fields, validates deferr
     compounds: { a: "CCO", b: "CC=O" },
     steps: [{ from: "a", to: "b" }],
   };
-  for (const field of ["bond", "width", "charges", "dots", "ring_h"])
+  for (const field of ["charges", "dots", "ring_h"])
     assert.throws(
       () => validateFigureInput({ ...input, [field]: 1 }),
       new RegExp(field),
@@ -1157,4 +1157,16 @@ test("gallery line spacing includes superscripts and subscripts in adjacent capt
     style,
   });
   assert.deepEqual(diagnoseFigure(geometry, style), []);
+});
+
+test("figure density fields survive compilation and library validation", async () => {
+  const result = await compileFigure({
+    bond: 24,
+    width: 600,
+    compounds: { a: "CCO", b: "CC=O" },
+    steps: [{ from: "a", to: "b" }],
+  });
+  const entry = result.entries[result.reference.ref];
+  assert.equal(entry.style?.bond, 24);
+  assert.equal(entry.style?.width, 600);
 });

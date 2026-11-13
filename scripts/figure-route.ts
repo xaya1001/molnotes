@@ -149,7 +149,7 @@ export async function compileRouteLayout(
           ]),
         ),
       },
-      { toolkit, fonts, style },
+      { toolkit, fonts, style, canvas: "scene" },
     );
     const reservations = new Map<
       string,
@@ -173,6 +173,7 @@ export async function compileRouteLayout(
         toolkit,
         fonts,
         style,
+        canvas: "scene",
       },
     );
     walkGeometry(geometry.root, (node, matrix) => {
