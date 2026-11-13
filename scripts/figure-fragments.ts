@@ -182,10 +182,10 @@ export function placeArrowFragments(
     }
     return angle;
   }
-  const placed = new Set([0]),
+  const placed = new Set([contacts.length ? of[contacts[0][0]] : 0]),
     gap = 2.3;
   for (let round = 0; round < frags.length; round++)
-    for (let n = 1; n < frags.length; n++) {
+    for (let n = 0; n < frags.length; n++) {
       if (placed.has(n)) continue;
       const mine = contacts
         .filter(
@@ -328,5 +328,16 @@ export function placeArrowFragments(
       for (const [i, p] of best!) pos[i] = p;
       placed.add(n);
     }
+  // Pack spectators after the reacting network, leaving room for their labels.
+  for (let n = 0; n < frags.length; n++) {
+    if (placed.has(n)) continue;
+    const fixed = frags.flatMap((frag, i) => (placed.has(i) ? frag : [])),
+      right = Math.max(...fixed.map((i) => pos[i].x)),
+      left = Math.min(...frags[n].map((i) => pos[i].x)),
+      dx = right + gap - left,
+      dy = mean(fixed, pos).y - mean(frags[n], pos).y;
+    for (const i of frags[n]) pos[i] = add(pos[i], { x: dx, y: dy });
+    placed.add(n);
+  }
   return pos;
 }

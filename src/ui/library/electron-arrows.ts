@@ -7,6 +7,7 @@ import {
   polygonsOverlap,
   polygonHitsSegment,
   segmentDistance,
+  angleBetween,
 } from "./geometry-collision.ts";
 
 export interface ArrowAtom {
@@ -379,9 +380,18 @@ export function electronArrowShapes(
         forced = undefined;
       }
     }
-    const ownBond = fa.length === 1 && ta.length === 2 && ta.includes(fa[0]);
-    function curve(side: number, k: number, lean: number): Candidate {
-      const h = side === ringOut ? ringH : h0 * k;
+    const ownBond =
+      (to.kind === "bond" || to.kind === "pi") &&
+      fa.length === 1 &&
+      ta.includes(fa[0]);
+    function curve(
+      side: number,
+      k: number,
+      lean: number,
+      skew = 0,
+      arrival?: number,
+    ): Candidate {
+      const h = side === ringOut ? ringH * Math.max(1, k) : h0 * k;
       let s: Point, c: Point, e: Point, lead: Point | undefined;
       if (ownBond) {
         const a = xy(fa[0]),
@@ -389,8 +399,8 @@ export function electronArrowShapes(
           v = unit(sub(a, o)),
           p = { x: -v.y * side, y: v.x * side };
         const d = add(
-          mul(v, Math.cos((55 * Math.PI) / 180)),
-          mul(p, Math.sin((55 * Math.PI) / 180)),
+          mul(v, Math.cos((lean * Math.PI) / 180)),
+          mul(p, Math.sin((lean * Math.PI) / 180)),
         );
         const r = sourceRadius(
           fa[0],
@@ -447,6 +457,24 @@ export function electronArrowShapes(
           c = add(mid(s, e), mul(n, h * side));
         }
       }
+      if (!ownBond && !lead && skew) {
+        c = add(c, mul(u, skew * chord));
+        if (to.kind === "atom") {
+          const direction = unit(sub(c, e0));
+          e = add(e0, mul(direction, labelRadius(ta[0], direction, 3)));
+        }
+      }
+      if (arrival !== undefined) {
+        const landing = ownBond ? e : e0,
+          angle = Math.atan2(c.y - landing.y, c.x - landing.x) + arrival,
+          direction = { x: Math.cos(angle), y: Math.sin(angle) };
+        lead = add(s, mul(unit(sub(c, s)), h * 0.8));
+        e =
+          to.kind === "atom"
+            ? add(e0, mul(direction, labelRadius(ta[0], direction, 3)))
+            : landing;
+        c = add(e, mul(direction, h * 0.8));
+      }
       const points = sample(s, c, e, lead);
       let clear = nearest(
         ownBond ? points : points.slice(3, 18),
@@ -494,6 +522,35 @@ export function electronArrowShapes(
       const pair = lonePair(c, intent);
 
       let count = 0;
+      const [p0, p1, p2, end] = shaft(c, single),
+        t = Math.min(0.5, (B * 0.15) / (3 * dist(p0, p1))),
+        v = 1 - t,
+        departure = add(
+          add(mul(sub(p1, p0), v * v), mul(sub(p2, p1), 2 * v * t)),
+          mul(sub(end, p2), t * t),
+        );
+      if (angleBetween(sub(p1, p0), departure) >= 11.5) count++;
+      const tip = polygon[0],
+        chord = dist(c.s, tip),
+        length = visible
+          .slice(1)
+          .reduce(
+            (sum, p, i) => sum + dist(visible[i], p),
+            dist(visible.at(-1)!, tip),
+          );
+      if (length < B * 1.25) count++;
+      if (chord < B * 1.2 || (fa.length === 2 && to.kind === "bond")) {
+        const height = Math.max(
+          ...visible.map(
+            (p) =>
+              Math.abs(
+                (tip.x - c.s.x) * (p.y - c.s.y) -
+                  (tip.y - c.s.y) * (p.x - c.s.x),
+              ) / (chord || 1),
+          ),
+        );
+        if (height < B * 0.36) count++;
+      }
       for (const box of boxes)
         if (
           visible.some(
@@ -530,6 +587,15 @@ export function electronArrowShapes(
       }
       if (pair) {
         const rectangle = rectPoints(pair.box);
+        if (polygonsOverlap(polygon, rectangle, 0.5)) count++;
+        if (
+          visible
+            .slice(1)
+            .some((p, i) =>
+              polygonHitsSegment(rectangle, visible[i], p, B * 0.03),
+            )
+        )
+          count++;
         for (const box of [
           ...Object.keys(atoms).flatMap((id) => {
             const b = ownerBox(id);
@@ -729,8 +795,13 @@ export function electronArrowShapes(
     const ownAtom = to.kind === "atom" && fa.includes(ta[0]);
     const candidates: { score: number[]; side: number; curve: Candidate }[] =
       [];
-    for (const [li, lean] of (ownAtom ? [53, 95, 15] : [53]).entries())
-      for (const k of [1, 0.8, 0.6, 0.45])
+    for (const [li, lean] of (ownBond
+      ? [55, 25, 85, 115, 145]
+      : ownAtom
+        ? [53, 95, 15]
+        : [53]
+    ).entries())
+      for (const k of [1, 1.25, 1.5, 2, 3, 0.8, 0.6, 0.45])
         for (const side of sides) {
           const c = curve(side, k, lean);
           candidates.push({
@@ -739,12 +810,54 @@ export function electronArrowShapes(
               Number(ringOut !== undefined && side !== ringOut),
               crowd(c),
               li,
-              -k,
+              Math.abs(k - 1),
             ],
             side,
             curve: c,
           });
         }
+    if (!ownBond && !ownAtom && candidates.every((c) => c.score[0]))
+      for (const skew of [0.5, -0.5, 1, -1])
+        for (const k of [1, 1.5, 2, 3])
+          for (const side of sides) {
+            const c = curve(side, k, 53, skew);
+            candidates.push({
+              score: [
+                trouble(c),
+                Number(ringOut !== undefined && side !== ringOut),
+                crowd(c),
+                0,
+                Math.abs(k - 1) + Math.abs(skew),
+              ],
+              side,
+              curve: c,
+            });
+          }
+    if (
+      (to.kind === "atom" || to.kind === "formingBond" || ownBond) &&
+      !ownAtom &&
+      candidates.every((c) => c.score[0])
+    )
+      for (const degrees of [0, 30, -30, 60, -60, 90, -90, 120, -120, 180])
+        for (const [li, lean] of (ownBond
+          ? [55, 25, 85, 115, 145]
+          : [53]
+        ).entries())
+          for (const k of [1, 1.5, 2, 3])
+            for (const side of sides) {
+              const c = curve(side, k, lean, 0, (degrees * Math.PI) / 180);
+              candidates.push({
+                score: [
+                  trouble(c),
+                  Number(ringOut !== undefined && side !== ringOut),
+                  crowd(c),
+                  li,
+                  1 + Math.abs(k - 1) + Math.abs(degrees) / 180,
+                ],
+                side,
+                curve: c,
+              });
+            }
     candidates.sort((a, b) => compare(a.score, b.score));
     let pick = candidates.filter(
       (c) => compare(c.score, candidates[0].score) === 0,
