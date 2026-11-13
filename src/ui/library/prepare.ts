@@ -1,3 +1,4 @@
+import { prepareMarkush } from "./markush-geometry.ts";
 import type {
   FigureGeometry,
   FigureNode,
@@ -109,6 +110,11 @@ export async function prepareFigure(
     style: FigureStyle;
   },
 ): Promise<FigureGeometry> {
+  const markush = library[reference.ref];
+  if (markush?.kind === "markush")
+    return prepareMarkush(markush, options, (compound) =>
+      prepareFigure({ [compound.id]: compound }, { ref: compound.id }, options),
+    );
   const ctx = createFigureScene(options.style, options.fonts);
   const { element, label, token } = ctx;
   const stroke = (

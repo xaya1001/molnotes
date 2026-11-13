@@ -1,3 +1,4 @@
+import { validateMarkushFigure } from "./markush.ts";
 import { isObject } from "../json.ts";
 import { validateProcess } from "../process.ts";
 import type {
@@ -285,7 +286,7 @@ export function validateLibraryEntry(
   text(v.id, w);
   text(v.title, w);
   if (v.footnote !== undefined) text(v.footnote, w);
-  if (!/^(cmp|rxn|rte|mec|img|prc)_[a-z0-9_-]+$/.test(v.id))
+  if (!/^(cmp|rxn|rte|mec|img|prc|mku)_[a-z0-9_-]+$/.test(v.id))
     fail(w, "invalid stable ID");
   list(v.sources, w);
   if (!v.sources.length) fail(w, "source required");
@@ -302,6 +303,7 @@ export function validateLibraryEntry(
     mechanism: "mec",
     image: "img",
     process: "prc",
+    markush: "mku",
   };
   if (
     !Object.hasOwn(prefixes, String(v.kind)) ||
@@ -459,6 +461,8 @@ export function validateLibraryEntry(
         text(m.toFrame, w);
       }
     }
+  } else if (v.kind === "markush") {
+    validateMarkushFigure(v, w);
   } else if (v.kind === "process") {
     validateProcess(v, w);
   } else {

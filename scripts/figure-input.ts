@@ -1,3 +1,7 @@
+import {
+  validateMarkushFigure,
+  type MarkushFigureData,
+} from "../shared/chemical-library/markush.ts";
 import { isObject } from "../shared/json.ts";
 import type { ArrowKind } from "../shared/chemical-library/types.ts";
 
@@ -75,7 +79,18 @@ export interface FrameInput extends StructureInput {
 }
 export interface FigureInput {
   abbreviate?: ("Ph" | "Trt" | "Bz")[];
-  kind?: "route" | "mechanism";
+  kind?: "route" | "mechanism" | "markush";
+  core?: MarkushFigureData["core"];
+  groups?: MarkushFigureData["groups"];
+  view?: MarkushFigureData["view"];
+  name?: string;
+  note?: string;
+  unmodeled?: string;
+  patents?: MarkushFigureData["patents"];
+  gaps?: MarkushFigureData["gaps"];
+  gaps_title?: string;
+  rot?: number;
+  flip?: "h" | "v";
   title?: Key;
   explain?: Key;
   sources?: { source: Key; locator?: Key; note?: Key }[];
@@ -269,6 +284,31 @@ export function validateFigureInput(value: unknown): {
   const kind = value.kind ?? "route";
   if (["gallery", "scope", "table", "cycle"].includes(String(kind)))
     fail("figure.kind", "尚未支持");
+  if (kind === "markush") {
+    validateMarkushFigure(value, "figure");
+    object(
+      {
+        kind: choice("markush"),
+        title: text,
+        sources,
+        explain: text,
+        footnote: text,
+        core: string,
+        groups: () => {},
+        view: choice("formula", "map", "overlay"),
+        name: string,
+        note: string,
+        unmodeled: string,
+        patents: map(string),
+        gaps: () => {},
+        gaps_title: string,
+        rot: number,
+        flip: choice("h", "v"),
+      },
+      ["core", "groups"],
+    )(value, "figure");
+    return { input: value as unknown as FigureInput, warnings };
+  }
   if (kind !== "route" && kind !== "mechanism")
     fail("figure.kind", "expected route | mechanism");
   const shared = {

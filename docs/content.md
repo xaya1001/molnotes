@@ -273,6 +273,38 @@ Process entries use `kind: "process"` and a `prc_…` ID. Their `title`, `label`
 
 Image entries save `asset`, `mime`, original `width`/`height`, `purpose`, `rights`, `alt`, and an optional pixel `crop: {x,y,width,height}`. Source images remain original bytes. Crop bounds and decoded dimensions are verified. Images fit the reading width and open in the shared image viewer. For uncropped images, `presentation: "figure"` uses the ordinary framed image with caption, and `presentation: "note"` keeps the centered note illustration and caption. Without it, the existing library SVG presentation remains in use. Image slots in scenes and picture questions accept `{ref:"img_…"}` in place of `{src,alt}`. Original-page sources may use `images: [{ref:"img_…"}, …]`, one per PDF page, instead of a path pattern; page references keep their page number and highlight rectangle.
 
+### Markush formulas and coverage maps
+
+`kind: markush` YAML compiles to `library/markush/mku_<id>.yaml`; pages use its `mku_` ID in `figure-ref`. The `core` SMILES and keyed `groups` reuse the [Markush definition fields](../shared/patent-markush.ts). Terminal `[*:n]` atoms identify R positions. Give every core attachment a group; `positions` uses zero-based input atom indices for a variable ring position, with optional `count` text. Two variable groups on one ring draw through different ring bonds. A core may contain CXSMILES repeat groups. `rot` and `flip: h|v` orient this figure's core.
+
+The default `view: formula` draws the core, optional formula `name`, and a definition table. Equal definitions share a row. `fragment` alternatives draw structures; `substituted` ring alternatives show their nested R label; `repeat` alternatives show a joined unit and end with brackets and the authored range. Other alternatives display their labels. Text-only alternatives need just `label`; these are drawing annotations. Chemical queries continue to require the complete typed Markush model. Group and overall `unmodeled` text stays visible. Font measurements and outlined glyphs determine the table and canvas dimensions.
+
+```yaml
+kind: markush
+name: (A)
+core: "c1cc([*:1])ccc1[*:2]"
+groups:
+  "1":
+    label: R¹
+    alternatives:
+      - {
+          type: fragment,
+          id: methyl,
+          label: Methyl,
+          smiles: "*C",
+          examples: [1, 2],
+        }
+      - { label: Halo, examples: 0 }
+    outside: [Alkoxy]
+  "2":
+    label: R²
+    alternatives: [{ label: H, examples: 2 }]
+```
+
+`view: map` puts a callout at each R position. `alternatives[].examples` accepts a nonnegative count or example IDs: positive counts use solid green chips, zero uses pale yellow, and group `outside` labels use a red dashed border. Group definitions without a core anchor appear below the structure. `view: overlay` also requires `patents: {a: Source A, b: Source B}`; each alternative supplies `by: {a: 2, b: 0}`. The ordered sources appear as one square per source: solid means examples, outline means defined without examples, and a dot means absent. An absent source key differs from a zero count. An outside item may be `{label, by}` when another source includes it. `gaps: [{parts: ["R¹ = alkoxy", "R² = alkyl"], note: "…"}]` lists authored combinations below the legend, with optional `gaps_title`.
+
+Coverage counts, source assignments and gap combinations are authored chemical-structure evidence; the renderer preserves them. Keep their provenance in `sources` and any qualifications in `footnote`. Use the existing query and coverage table to calculate model matches. The drawing does not calculate legal claim coverage.
+
 For figure authoring and semantic arrow selectors, use the [chemical-figures project skill](../.agents/skills/chemical-figures/SKILL.md).
 
 Use `npm run figure:render -- --library <content-root> --out <output-directory> [--entry <id>]` to render desktop SVGs, PNGs, context screenshots and JSON geometry/diagnostics (use `--width` for an explicit viewport). The command and website use the same renderer. `--prepare <compound-json> [--molfile <file>]` writes a prepared compound entry to the output directory. Content builds check default figures, variants, mechanism frames and distinct SVG-affecting reference instances at 1366×900; invalid graphs, overlapping labels, crossing or invisible electron arrows, clipped ink and unreadable geometry reject publication. Chemical interpretation still requires the source evidence recorded on each entry. `--references <json-file>` renders an array of page references with local numbers and focus. `--check` writes diagnostics without screenshots. `--inventory` writes a read-only `migration-candidates.json` with original JSON pointers or note lines (topic content and published static data, excluding unpublished authoring candidates), graph/hash matches and proposed permanent IDs; matching structures remain review candidates, and the command does not rewrite source content.

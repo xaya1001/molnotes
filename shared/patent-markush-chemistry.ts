@@ -173,7 +173,7 @@ function same(t: Toolkit, a: Mol, b: Mol) {
 }
 
 /** Join labeled termini through graph substitution, retaining RDKit's stereo serialization. */
-function join(t: Toolkit, left: string, right: string) {
+function join(t: Toolkit, left: string, right: string, canonical = true) {
   const a = parse(t, left),
     b = single(t, right);
   try {
@@ -224,7 +224,7 @@ function join(t: Toolkit, left: string, right: string) {
       block[at] = f.join(" ").replace(/^M V30/, "M  V30");
       const mapped = parse(t, block.join("\n"));
       try {
-        return mapped.get_smiles();
+        return mapped.get_smiles(JSON.stringify({ canonical }));
       } finally {
         mapped.delete();
       }
@@ -234,6 +234,22 @@ function join(t: Toolkit, left: string, right: string) {
   } finally {
     a.delete();
     b.delete();
+  }
+}
+/** One joined repeat unit for depiction; indices in the CXSMILES mark the repeat. */
+export function markushRepeatDrawing(
+  t: Toolkit,
+  a: Pick<Extract<Alternative, { type: "repeat" }>, "unit" | "end">,
+) {
+  const unit = parse(t, a.unit);
+  try {
+    const output = mappedDummies(unit).find((d) => d.map === 2)!.atom;
+    const inside = graph(unit).atoms.flatMap((atom, i) =>
+      atom.z === 0 ? [] : [i - Number(i > output)],
+    );
+    return join(t, a.unit, a.end, false) + ` |Sg:n:${inside.join(",")}:n:ht|`;
+  } finally {
+    unit.delete();
   }
 }
 function repeat(
