@@ -24,13 +24,23 @@ const value = (flag: string) => {
   return i < 0 ? undefined : args[i + 1];
 };
 const root = value("--library"),
-  out = value("--out");
-if (!root || !out)
+  out = value("--out"),
+  input = value("--prepare"),
+  selected = value("--entry"),
+  refsFile = value("--references");
+if (
+  !root ||
+  !out ||
+  (!input &&
+    !args.includes("--inventory") &&
+    !selected &&
+    !refsFile &&
+    !args.includes("--all"))
+)
   throw new Error(
-    "Usage: npm run figure:render -- --library <content-root> --out <directory> [--entry <id>]",
+    "Usage: npm run figure:render -- --library <content-root> --out <directory> (--entry <id> | --all | --references <json-file> | --prepare <compound-json> | --inventory)",
   );
 await mkdir(out, { recursive: true });
-const input = value("--prepare");
 if (input) {
   const draft = JSON.parse(await readFile(input, "utf8"));
   const molfile = value("--molfile");
@@ -79,8 +89,6 @@ if (input) {
 } else {
   const started = performance.now();
   const entries = (await readChemicalLibrary(resolve(root))).entries;
-  const selected = value("--entry");
-  const refsFile = value("--references");
   const references: import("../shared/chemical-library/types.ts").FigureReference[] =
     [];
   if (refsFile) {
