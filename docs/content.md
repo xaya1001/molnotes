@@ -311,11 +311,27 @@ Coverage counts, source assignments and gap combinations are authored chemical-s
 
 For figure authoring and semantic arrow selectors, use the [chemical-figures project skill](../.agents/skills/chemical-figures/SKILL.md).
 
-Use `npm run figure:render -- --library <content-root> --out <output-directory> [--entry <id>]` to render desktop SVGs, PNGs, context screenshots and JSON geometry/diagnostics (use `--width` for an explicit viewport). The command and website use the same renderer. `--prepare <compound-json> [--molfile <file>]` writes a prepared compound entry to the output directory. Content builds check default figures, variants, mechanism frames and distinct SVG-affecting reference instances at 1366×900; rendering failures reject publication. Geometry diagnostics remain on each published render; the build prints their total and points to `figure:lint` without blocking publication. Chemical interpretation still requires the source evidence recorded on each entry. `--references <json-file>` renders an array of page references with local numbers and focus. `--check` writes diagnostics without screenshots. `--inventory` writes a read-only `migration-candidates.json` with original JSON pointers or note lines (topic content and published static data, excluding unpublished authoring candidates), graph/hash matches and proposed permanent IDs; matching structures remain review candidates, and the command does not rewrite source content.
+Use `npm run figure:render -- --library <content-root> --entry <id> --out <output-directory>` to render desktop SVGs, PNGs, context screenshots and JSON geometry/diagnostics (use `--width` for an explicit viewport).
+Pass `--all` instead of `--entry <id>` to render the whole library.
+Rendering requires `--entry`, `--all` or `--references`; omitting a selection exits with usage before reading the library or creating output.
+The command and website use the same renderer.
+`--prepare <compound-json> [--molfile <file>]` writes a prepared compound entry to the output directory.
+Content builds check default figures, variants, mechanism frames and distinct SVG-affecting reference instances at 1366×900; rendering failures reject publication.
+Geometry diagnostics remain on each published render; the build prints their total and points to `figure:lint` without blocking publication.
+Chemical interpretation still requires the source evidence recorded on each entry.
+`--references <json-file>` renders an array of page references with local numbers and focus.
+`--check` writes diagnostics without screenshots.
+`--inventory` writes a read-only `migration-candidates.json` with original JSON pointers or note lines (topic content and published static data, excluding unpublished authoring candidates), graph/hash matches and proposed permanent IDs; matching structures remain review candidates, and the command does not rewrite source content.
 
 ### Direct drawing and lint
 
-Run `npm run figure:draw -- <figure.yaml> --out <directory|file.svg>` to compile in memory and export outlined SVGs without reading or writing a content library or supplying permanent IDs and sources. Each mechanism frame gets its own SVG; multiple frames use numbered filename suffixes. Diagnostics include the input file, frame, code and explanation on stderr; diagnostics preserve successful output and exit status 0. Invalid input, invalid SMILES and rendering failures exit nonzero.
+Run `npm run figure:draw -- <figure.yaml> --out <directory|file.svg>` to compile in memory and export outlined SVGs without reading or writing a content library or supplying permanent IDs and sources.
+A single structure can be a quoted SMILES scalar or a mapping using the same fields as one gallery compound, such as `{smiles: CCO, rot: 30}` or `{template: chair, subs: {1a: CH3}}`.
+It produces one SVG and has no default compound-number caption; an explicit `label` or `name` is retained.
+Skeletal layouts use the compound's SMILES with `drawing: flat|perspective`, which automatically matches a registered skeleton.
+Each mechanism frame gets its own SVG; multiple frames use numbered filename suffixes.
+Diagnostics include the input file, frame, code and explanation on stderr; diagnostics preserve successful output and exit status 0.
+Invalid input, invalid SMILES and rendering failures exit nonzero.
 
 Run `npm run figure:lint -- [<figure.yaml>... | --library <content-root>]` to list diagnostics, one per line, and their total. With no arguments it reads the configured content library, including every saved variant and mechanism frame. Any diagnostic or rendering failure gives a nonzero exit status. This inspection command is independent of build and publication gates.
 

@@ -39,6 +39,54 @@ Run `heavy npm run figure:recompile -- --library <content-root>` after compiler 
 
 The command uses the same compiler and save rules as `figure:compile`, retaining figure, compound, atom and participant IDs and page references. Shared source files are compiled once; figures without a source cannot be recompiled directly. It prints each changed entry and totals for added, modified and deleted entries; obsolete owned reactions are removed. A failed source prints its reason, leaves that compiled figure as saved and allows the remaining sources to run; any failed source makes the final exit status nonzero. Review the changed figures with `figure:render` and compare their visible geometry before accepting the content revision. Recompilation writes the library; publication follows the content workflow.
 
+## 重画一个已有化合物
+
+Start with the saved compound ID and an authoritative reference image.
+Locate its entry and the compiled figures that use it:
+
+```sh
+content_root=<content-root>
+compound_id=cmp_<id>
+rg -l --fixed-strings "$compound_id" "$content_root/library" -g '*.json' -g '*.yaml' -g '*.yml'
+```
+
+Read the compound's `smiles`, `atomIds`, `layout` and `variants`, then the matching figures' `sourceFile`, `owner` and molecule placements (including their `variant`).
+For an owned reaction, use its owner's saved source.
+Search the compound and affected figure IDs in `notes/` and `sites/` to find page references and their local variants, frames, numbers and focus.
+Keep this list for the final render; one compound can appear in several figures.
+
+Write a temporary single-structure YAML using the saved SMILES and the same structure fields accepted by a gallery cell:
+
+```yaml
+smiles: CCO
+rot: 0
+abbreviate: false
+```
+
+For a registered skeletal layout, retain the compound's SMILES and add `drawing: flat` or `drawing: perspective`; matching selects the skeleton automatically.
+The `template` field selects a graph-free conformation, for example `{template: chair, subs: {1a: CH3}}`.
+Run `npm run figure:draw -- <single.yaml> --out <candidate.svg>` and compare the SVG beside the reference image at the same scale.
+Check the graph, stereochemistry, substituent direction, bond geometry and labels against the source.
+
+Write the accepted drawing settings into the existing saved figure source's compound specification.
+For a standalone compound without `sourceFile`, update its existing `layout` or the referenced `variants` layout, retaining its ID, graph, atom IDs and evidence.
+For a skeletal layout, assign `scaffoldLayout(toolkit, compound, "flat")` to the selected saved layout, passing the existing compound to retain its atom mapping.
+SVG paths are output, not saved chemical coordinates.
+Recompile only the saved sources of affected figures, preserving their IDs:
+
+```sh
+heavy npm run figure:recompile -- --library "$content_root" <affected-source.yaml> [<another-source.yaml>...]
+heavy npm run figure:render -- --library "$content_root" --entry "$compound_id" --out <proof-directory>
+heavy npm run figure:render -- --library "$content_root" --entry <affected-figure-id> --out <proof-directory>
+npm run figure:lint -- <single.yaml> <affected-source.yaml> [<another-source.yaml>...]
+```
+
+Inspect the changed-entry list from recompilation and render each affected figure with `--entry`.
+For page-specific variants, numbers or focus, save those references as a JSON array and render with `--references <references.json>`.
+The default proof is 1366px wide; add `--width 390` for a phone proof.
+Inspect the resulting PNGs and diagnostics, and publish the requested side-by-side comparison through Artifact.
+Whole-library rendering requires explicit `--all`; `--prepare` and `--inventory` are separate operations.
+
 ## Skeletal and conformation templates
 
 For a registered skeleton, add `drawing: perspective` or `drawing: flat` to a SMILES structure or mechanism frame. The compiler matches the largest registered substructure and constrains its core to the saved view; an explicit drawing request with no match fails. Omit `drawing` for the ordinary layout. Perspective uses saved depth for bond weight and gaps at crossings; the chemical graph and stereochemistry stay with the SMILES. Inspect every wedge, substituent and crossing in both views.

@@ -8,6 +8,7 @@ import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import { prepareFigure } from "../src/ui/library/prepare.ts";
 import { geometrySvg } from "../src/ui/library/geometry-tree.ts";
 import { diagnoseFigure } from "./figure-diagnostics.ts";
+import { isObject } from "../shared/json.ts";
 import type {
   Diagnostic,
   FigureReference,
@@ -53,8 +54,19 @@ export async function* drawFigure(
 }
 
 export async function compileFigureFile(source: string) {
+  const value: unknown = parse(await readFile(source, "utf8"));
+  const single =
+    typeof value === "string"
+      ? { smiles: value }
+      : isObject(value) &&
+          value.kind === undefined &&
+          ("smiles" in value || "template" in value)
+        ? value
+        : undefined;
   return compileFigure(
-    parse(await readFile(source, "utf8")),
+    single
+      ? { kind: "gallery", compounds: { single: { label: "", ...single } } }
+      : value,
     {},
     figureKey(resolve(source)),
   );
