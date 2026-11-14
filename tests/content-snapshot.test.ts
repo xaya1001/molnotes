@@ -819,3 +819,48 @@ test("content publish uses the configured Python when PATH selects one without P
     ),
   );
 });
+
+test("page compilation reuses unchanged inputs and rebuilds changed content", async (t) => {
+  const root = await temporary(t);
+  const source = join(root, "content");
+  const directory = join(source, "notes", "example");
+  await mkdir(directory, { recursive: true });
+  await writeFile(join(source, "glossary.json"), "[]");
+  await writeFile(
+    join(directory, "directory.json"),
+    JSON.stringify({
+      title: "Example",
+      intro: "Read the example.",
+      order: 1,
+    }),
+  );
+  const path = join(directory, "first.md");
+  const note =
+    "---\ntitle: Example\nsummary: Example summary\ndate: 2026-01-01\norder: 1\n---\n\nFirst paragraph.\n";
+  await writeFile(path, note);
+  const logs = t.mock.method(console, "log", () => {});
+  const build = async (cached: boolean) => {
+    logs.mock.resetCalls();
+    const built = await buildSnapshot(
+      source,
+      cached ? { figureCache: join(root, "cache") } : {},
+    );
+    t.after(built.dispose);
+    return {
+      bytes: JSON.stringify({ ...built.snapshot, builtAt: "" }),
+      cached: logs.mock.calls.some(
+        (call) => call.arguments[0] === "Content pages: cached",
+      ),
+    };
+  };
+  const first = await build(true);
+  assert.equal(first.cached, false);
+  const unchanged = await build(true);
+  assert.equal(unchanged.cached, true);
+  assert.equal(unchanged.bytes, first.bytes);
+  await writeFile(path, note + "\nChanged paragraph.\n");
+  const changed = await build(true);
+  assert.equal(changed.cached, false);
+  assert.notEqual(changed.bytes, first.bytes);
+  assert.equal(changed.bytes, (await build(false)).bytes);
+});

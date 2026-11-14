@@ -15,6 +15,7 @@ import {
   type PreparedFigure,
 } from "./figure-proof-cache.ts";
 import type { AssetStage } from "./asset-stage.ts";
+import { logTiming } from "../../shared/stage-timing.ts";
 
 export interface ProofRunner {
   prepareBatch?(): Promise<void>;
@@ -42,6 +43,7 @@ export interface ProofOptions {
   renderer: string;
   diagnostics: string;
   processRenderer: string;
+  templates: Record<string, string>;
   stage?: AssetStage;
   createRunner(): Promise<ProofRunner>;
   onStats?(stats: ProofStats): void;
@@ -63,6 +65,10 @@ export async function verifyFigureProofs(
         sha256(
           stableFigureValue({
             entry: library[id],
+            template:
+              library[id].kind === "conformation"
+                ? options.templates[library[id].template]
+                : undefined,
             dependencies: [...new Set(libraryDependencies(library[id]))]
               .sort()
               .map((dependency) => [dependency, digest(dependency)]),
@@ -79,6 +85,19 @@ export async function verifyFigureProofs(
     thumbnails: 0,
     total: 0,
   };
+  // Worker times are accumulated across the two slots, rather than wall time.
+  const durations = { prepare: 0, proof: 0, thumbnail: 0 };
+  async function timed<T>(
+    kind: keyof typeof durations,
+    operation: () => Promise<T>,
+  ) {
+    const start = performance.now();
+    try {
+      return await operation();
+    } finally {
+      durations[kind] += performance.now() - start;
+    }
+  }
   const unique = figureProofReferences(library, references),
     thumbnailRefs = new Set<string>(),
     failures: string[] = [];
@@ -136,7 +155,9 @@ export async function verifyFigureProofs(
               stats.prepared++;
               const result = await cache.savePreparation(
                 job.key,
-                await (await active()).prepare(job.reference, slot),
+                await timed("prepare", async () =>
+                  (await active()).prepare(job.reference, slot),
+                ),
               );
               geometry = result.geometry;
               return result;
@@ -170,7 +191,9 @@ export async function verifyFigureProofs(
                     "Chemical preparation did not produce geometry",
                   );
                 stats.diagnosed++;
-                diagnostics = await (await active()).diagnose(geometry, slot);
+                diagnostics = await timed("proof", async () =>
+                  (await active()).diagnose(geometry!, slot),
+                );
               } else diagnostics = [];
               await cache.saveProof(proofKey, diagnostics);
             }
@@ -180,19 +203,19 @@ export async function verifyFigureProofs(
               if (!bytes) {
                 const { meta, svg } = prepared;
                 stats.thumbnails++;
-                bytes = await (
-                  await active()
-                ).thumbnail(
-                  job.reference,
-                  meta.kind === "chemical"
-                    ? {
-                        svg: svg!.toString(),
-                        width: meta.width,
-                        height: meta.height,
-                        minimumScale: meta.minimumScale,
-                      }
-                    : undefined,
-                  slot,
+                bytes = await timed("thumbnail", async () =>
+                  (await active()).thumbnail(
+                    job.reference,
+                    meta.kind === "chemical"
+                      ? {
+                          svg: svg!.toString(),
+                          width: meta.width,
+                          height: meta.height,
+                          minimumScale: meta.minimumScale,
+                        }
+                      : undefined,
+                    slot,
+                  ),
                 );
                 await cache.saveThumbnail(meta.geometryKey, bytes);
               }
@@ -226,6 +249,12 @@ export async function verifyFigureProofs(
       }
     }
   } finally {
+    for (const [stage, durationMs] of Object.entries(durations))
+      logTiming({
+        stage: `figure.${stage}`,
+        result: failures.length ? "failed" : "success",
+        durationMs: Math.round(durationMs * 100) / 100,
+      });
     options.onStats?.(stats);
     if (runner)
       await runner.then(

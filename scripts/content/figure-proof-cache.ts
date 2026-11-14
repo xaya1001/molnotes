@@ -9,6 +9,34 @@ import {
 } from "../../src/ui/library/geometry-contract.ts";
 import type { FigureGeometry } from "../../shared/chemical-library/geometry.ts";
 import type { Diagnostic } from "../../shared/chemical-library/types.ts";
+import type { compileNotes } from "../../shared/notes-index.ts";
+
+type CompiledPages = Awaited<ReturnType<typeof compileNotes>>;
+function compiledPages(value: unknown): value is CompiledPages {
+  return (
+    isObject(value) &&
+    isObject(value.terms) &&
+    Array.isArray(value.directories) &&
+    value.directories.every(
+      (row) =>
+        isObject(row) &&
+        typeof row.slug === "string" &&
+        typeof row.html === "string",
+    ) &&
+    Array.isArray(value.notes) &&
+    value.notes.every(
+      (row) =>
+        isObject(row) &&
+        typeof row.slug === "string" &&
+        typeof row.directory === "string" &&
+        typeof row.html === "string" &&
+        typeof row.text === "string" &&
+        Array.isArray(row.sections) &&
+        Array.isArray(row.molecules) &&
+        Array.isArray(row.diagrams),
+    )
+  );
+}
 
 export const stableFigureValue = (value: unknown): string =>
   JSON.stringify(value, (_key, item) =>
@@ -100,6 +128,12 @@ export function figureProofCache(directory: string) {
     }
   };
   return {
+    async pages(key: string): Promise<CompiledPages | undefined> {
+      const value = await read(join(directory, "pages", key + ".json"), key);
+      return compiledPages(value) ? value : undefined;
+    },
+    savePages: (key: string, pages: CompiledPages) =>
+      store(join(directory, "pages", key + ".json"), key, pages),
     async preparation(
       key: string,
     ): Promise<{ meta: PreparationMeta; svg?: Buffer } | undefined> {

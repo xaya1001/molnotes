@@ -19,8 +19,15 @@ if (!valid) {
   process.exit(1);
 }
 try {
+  const figureCache = join(
+    process.env.XDG_CACHE_HOME || join(homedir(), ".cache"),
+    "molnotes",
+    "figure-proofs",
+  );
   if (command === "build") {
-    const built = await buildSnapshot(setting("MOLNOTES_CONTENT_DIR"));
+    const built = await buildSnapshot(setting("MOLNOTES_CONTENT_DIR"), {
+      figureCache,
+    });
     await writeSnapshot(resolve(args[0]), built);
     console.log(`${args[0]}: built`);
   } else if (args.length) {
@@ -34,11 +41,7 @@ try {
       setting("MOLNOTES_CONTENT_DIR"),
       setting("MOLNOTES_CONTENT_RELEASES"),
       {
-        figureCache: join(
-          process.env.XDG_CACHE_HOME || join(homedir(), ".cache"),
-          "molnotes",
-          "figure-proofs",
-        ),
+        figureCache,
       },
     );
     console.log(`current: ${name}`);

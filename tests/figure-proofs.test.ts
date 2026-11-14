@@ -86,6 +86,7 @@ async function fixture(t: TestContext) {
     renderer: "renderer-one",
     diagnostics: "diagnostics-one",
     processRenderer: "process-one",
+    templates: {},
     async createRunner() {
       starts++;
       return {
@@ -355,4 +356,38 @@ test("unselected mechanism frames retain local numbering and focus in every publ
     pinned.filter((view) => view.ref === local.ref && view.numbers),
     [{ ...local, frame: "second" }],
   );
+});
+
+test("template changes rebuild only the views that consume that template", async (t) => {
+  const f = await fixture(t);
+  f.library.cnf_first = {
+    kind: "conformation",
+    id: "cnf_first",
+    title: "First template",
+    sources: [],
+    template: "chair",
+  };
+  f.library.cnf_second = {
+    ...f.library.cnf_first,
+    id: "cnf_second",
+    template: "boat",
+  };
+  const options: ProofOptions = {
+    ...f.options,
+    templates: { chair: "chair-one", boat: "boat-one" },
+  };
+  const run = () => verifyFigureProofs(f.library, [], options);
+  await run();
+  f.calls.length = 0;
+  options.templates.chair = "chair-two";
+  await run();
+  assert.deepEqual(
+    f.calls.map((call) => call.ref),
+    ["cnf_first"],
+  );
+  f.calls.length = 0;
+  options.templates["unused"] = "new-template";
+  const cached = await run();
+  assert.equal(f.calls.length, 0);
+  assert.equal(cached.stats.inputHits, 6);
 });

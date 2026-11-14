@@ -1,4 +1,4 @@
-import { templateDataFiles } from "../figure-template-data.ts";
+import { conformations } from "../figure-template-data.ts";
 import { readFile, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -110,13 +110,12 @@ export async function figureBuildVersions(css: string) {
   ] = await Promise.all([
     figureRendererFingerprint(root, [
       "src/ui/library/prepare.ts",
-      "scripts/content/figure-build.ts",
+      "src/ui/library/geometry-tree.ts",
       "shared/molecule-toolkit.ts",
       "scripts/figure-fonts.ts",
       "scripts/chemical-toolkit.py",
       "scripts/chemical-toolkit-io.ts",
       "scripts/requirements-material.txt",
-      ...templateDataFiles(),
     ]),
     figureRendererFingerprint(root, ["scripts/figure-diagnostics.ts"]),
     figureDependencyFingerprint(root, [
@@ -133,6 +132,12 @@ export async function figureBuildVersions(css: string) {
     figureDependencyFingerprint(root, ["vue"]),
   ]);
   return {
+    templates: Object.fromEntries(
+      [...conformations].map(([id, data]) => [
+        id,
+        sha256(stableFigureValue(data)),
+      ]),
+    ),
     renderer: sha256(
       stableFigureValue({
         preparation,

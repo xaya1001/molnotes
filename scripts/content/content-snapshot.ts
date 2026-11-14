@@ -17,6 +17,7 @@ import { buildSnapshot, type BuiltSnapshot } from "./content-publish.ts";
 import { committedSource } from "./content-files.ts";
 import type { Shelf } from "./citations.ts";
 import type { Snapshot } from "../../shared/snapshot.ts";
+import { measureStage } from "../../shared/stage-timing.ts";
 
 const errorCode = (error: unknown) => (error as NodeJS.ErrnoException).code;
 
@@ -73,22 +74,29 @@ export async function writeSnapshot(
       snapshot.assets.map((a) => [`${a.scope}/${a.path}`, a.sha256]),
     );
     await mkdir(temporary, { recursive: true });
-    for (const [path, bytes] of files) {
-      const file = join(temporary, "files", path);
-      await mkdir(dirname(file), { recursive: true });
-      if (earlier.get(path) && earlier.get(path) === hashes.get(path))
-        await link(join(previous!, "files", path), file);
-      else if (Buffer.isBuffer(bytes)) await writeFile(file, bytes);
-      else
-        try {
-          await link(bytes.file, file);
-        } catch (error) {
-          if (errorCode(error) !== "EXDEV") throw error;
-          await copyFile(bytes.file, file);
-        }
-    }
-    await writeFile(join(temporary, "snapshot.json"), JSON.stringify(snapshot));
-    await rename(temporary, output);
+    await measureStage("publish.assets", async () => {
+      for (const [path, bytes] of files) {
+        const file = join(temporary, "files", path);
+        await mkdir(dirname(file), { recursive: true });
+        if (earlier.get(path) && earlier.get(path) === hashes.get(path))
+          await link(join(previous!, "files", path), file);
+        else if (Buffer.isBuffer(bytes)) await writeFile(file, bytes);
+        else
+          try {
+            await link(bytes.file, file);
+          } catch (error) {
+            if (errorCode(error) !== "EXDEV") throw error;
+            await copyFile(bytes.file, file);
+          }
+      }
+    });
+    await measureStage("publish.snapshot", async () => {
+      await writeFile(
+        join(temporary, "snapshot.json"),
+        JSON.stringify(snapshot),
+      );
+      await rename(temporary, output);
+    });
   } catch (error) {
     await rm(temporary, { recursive: true, force: true });
     if (errorCode(error) === "ENOTEMPTY" || errorCode(error) === "EEXIST")
