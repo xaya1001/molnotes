@@ -32,6 +32,27 @@ const outward = (p: number[], others: number[][]) =>
     (_, i) =>
       -others.reduce((s, q) => s + (q[i] - p[i]) / norm(minus(q, p)), 0),
   );
+function nativeWedges(mol: Mol) {
+  return mol
+    .get_v3Kmolblock()
+    .split("M  V30 BEGIN BOND\n")[1]
+    .split("M  V30 END BOND")[0]
+    .trim()
+    .split("\n")
+    .flatMap((line) => {
+      const fields = line.trim().split(/\s+/),
+        cfg = line.match(/\bCFG=([13])\b/);
+      return cfg
+        ? [
+            {
+              a: Number(fields[4]) - 1,
+              b: Number(fields[5]) - 1,
+              style: cfg[1] === "1" ? ("solid" as const) : ("hashed" as const),
+            },
+          ]
+        : [];
+    });
+}
 export function matchingScaffold(rd: MainModule, mol: Mol) {
   for (const data of scaffolds) {
     const query = rd.get_qmol(data.smarts)!;
@@ -129,10 +150,99 @@ function extend(mol: Mol, points: XY[], core: Set<number>) {
       points[k] = points[k].map((p, a) => p + v[a] * factor) as XY;
   }
 }
+function placeFlatBranches(
+  mol: Mol,
+  points: XY[],
+  match: number[],
+  directions: Record<string, XY> = {},
+) {
+  const core = new Set(match),
+    adj = neighbours(mol),
+    graph = graphOf(mol);
+  for (const a of match) {
+    const outside = adj[a]
+      .filter((n) => !core.has(n))
+      .sort(
+        (i, j) =>
+          (graph.atoms[i].z === 1 ? 100 : (graph.atoms[i].z ?? 6)) -
+          (graph.atoms[j].z === 1 ? 100 : (graph.atoms[j].z ?? 6)),
+      );
+    const direction =
+      directions[String(match.indexOf(a))] ??
+      outward(
+        points[a],
+        adj[a].filter((n) => core.has(n)).map((n) => points[n]),
+      );
+    if (norm(direction) < 0.01) continue;
+    for (const [index, first] of outside.entries()) {
+      const component = new Set([first]),
+        todo = [first];
+      let bridges = false;
+      while (todo.length) {
+        const i = todo.pop()!;
+        for (const j of adj[i]) {
+          if (core.has(j)) {
+            if (j !== a) bridges = true;
+          } else if (!component.has(j)) {
+            component.add(j);
+            todo.push(j);
+          }
+        }
+      }
+      if (bridges) continue;
+      const axis =
+        component.size > 2
+          ? [0, 1].map(
+              (k) =>
+                [...component].reduce(
+                  (s, i) => s + points[i][k] - points[a][k],
+                  0,
+                ) / component.size,
+            )
+          : minus(points[first], points[a]);
+      const spread =
+          outside.length === 2 ? ((index === 0 ? 30 : -30) * Math.PI) / 180 : 0,
+        angle =
+          Math.atan2(direction[1], direction[0]) +
+          spread -
+          Math.atan2(axis[1], axis[0]),
+        scale = 1.5 / norm(minus(points[first], points[a]));
+      for (const i of component) {
+        const [x, y] = minus(points[i], points[a]);
+        points[i] = [
+          points[a][0] + scale * (x * Math.cos(angle) - y * Math.sin(angle)),
+          points[a][1] + scale * (x * Math.sin(angle) + y * Math.cos(angle)),
+        ];
+      }
+      const triple = graph.bonds.find(
+        (b) => b.bo === 3 && b.atoms.includes(first),
+      );
+      if (component.size === 2 && triple) {
+        const last = triple.atoms.find((i) => i !== first)!,
+          ray = Math.atan2(direction[1], direction[0]) + spread;
+        points[first] = [
+          points[a][0] + 1.5 * Math.cos(ray),
+          points[a][1] + 1.5 * Math.sin(ray),
+        ];
+        points[last] = [
+          points[a][0] + 3 * Math.cos(ray),
+          points[a][1] + 3 * Math.sin(ray),
+        ];
+      }
+    }
+  }
+}
 function tidy(mol: Mol, p: XY[], core: Set<number>) {
   const graph = graphOf(mol),
     adj = neighbours(mol),
-    terms = adj.flatMap((n, i) => (n.length === 1 && !core.has(i) ? [i] : []));
+    terms = adj.flatMap((n, i) =>
+      n.length === 1 &&
+      !core.has(i) &&
+      !core.has(n[0]) &&
+      !graph.bonds.some((b) => b.bo === 3 && b.atoms.includes(i))
+        ? [i]
+        : [],
+    );
   const cross = (a: XY, b: XY, c: XY, d: XY) => {
     const side = (p: XY, q: XY, r: XY) =>
       (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
@@ -306,8 +416,6 @@ export function ringHydrogens(rd: MainModule, source: Mol) {
   let mol = add(source, need);
   mol.set_new_coords(false);
   const probeGraph = graphOf(mol),
-    atomCount = mol.get_num_atoms(),
-    lines = mol.get_v2Kmolblock().split("\n"),
     fused = new Set(
       rings
         .filter((r, i) =>
@@ -316,15 +424,8 @@ export function ringHydrogens(rd: MainModule, source: Mol) {
         .flat(),
     ),
     more = new Set<number>();
-  for (const line of lines.slice(
-    4 + atomCount,
-    4 + atomCount + probeGraph.bonds.length,
-  )) {
-    const a = Number(line.slice(0, 3)) - 1,
-      b = Number(line.slice(3, 6)) - 1,
-      style = Number(line.slice(9, 12));
+  for (const { a, b } of nativeWedges(mol)) {
     if (
-      [1, 6].includes(style) &&
       edges.has([a, b].sort((a, b) => a - b).join("/")) &&
       fused.has(a) &&
       probeGraph.atoms[a].impHs === 1
@@ -428,8 +529,6 @@ export function scaffoldLayout(
               xyz[match.indexOf(a)],
               inside.map((n) => xyz![match.indexOf(n)]),
             ).slice(0, 2);
-          else if (!xyz && data.views.flat.outward?.[String(match.indexOf(a))])
-            v = data.views.flat.outward[String(match.indexOf(a))];
           if (v)
             for (const n of outside)
               positions.set(
@@ -441,6 +540,7 @@ export function scaffoldLayout(
         }
         points = constrain(rd, mol, positions);
         if (xyz) extend(mol, points, new Set(match));
+        else placeFlatBranches(mol, points, match, data.views.flat.outward);
       }
       if (drawing === "flat") {
         const lengths = graphOf(mol)
@@ -495,23 +595,40 @@ export function scaffoldLayout(
       }
       const drawn = coordinateMolecule(rd, mol, points);
       try {
-        const lines = drawn.get_v2Kmolblock().split("\n");
-        for (const line of lines.slice(
-          4 + mol.get_num_atoms(),
-          4 + mol.get_num_atoms() + g.bonds.length,
-        )) {
-          const a = Number(line.slice(0, 3)) - 1,
-            b = Number(line.slice(3, 6)) - 1,
-            style = Number(line.slice(9, 12));
-          if (style === 1 || style === 6)
-            wedgeBonds.push({
-              from: compound.atomIds[a],
-              to: b >= count ? "H" : compound.atomIds[b],
-              style: style === 1 ? "solid" : "hashed",
-            });
+        for (const { a, b, style } of nativeWedges(drawn)) {
+          wedgeBonds.push({
+            from: compound.atomIds[a],
+            to: b >= count ? "H" : compound.atomIds[b],
+            style,
+          });
         }
       } finally {
         drawn.delete();
+      }
+      if (drawing === "flat") {
+        const adj = neighbours(mol),
+          coreAtoms = new Set(match);
+        for (const a of match) {
+          const outside = adj[a].filter((i) => !coreAtoms.has(i) && i < count);
+          if (outside.length !== 2) continue;
+          const wedge = wedgeBonds.find(
+            (b) =>
+              b.from === compound.atomIds[a] &&
+              outside.some((i) => b.to === compound.atomIds[i]),
+          );
+          if (!wedge) continue;
+          const other = outside.find((i) => compound.atomIds[i] !== wedge.to)!;
+          if (
+            !wedgeBonds.some(
+              (b) => b.from === wedge.from && b.to === compound.atomIds[other],
+            )
+          )
+            wedgeBonds.push({
+              from: wedge.from,
+              to: compound.atomIds[other],
+              style: wedge.style === "solid" ? "hashed" : "solid",
+            });
+        }
       }
       return {
         ...structuredClone(compound.layout),

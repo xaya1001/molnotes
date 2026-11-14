@@ -352,3 +352,62 @@ test("ring hydrogen defaults and structure overrides are saved per depiction", a
   }
   assert.ok(counts[1] > counts[0]);
 });
+
+test("flat skeletal views separate external groups and keep linear branches straight", () => {
+  for (const stereoGroup of ["", " |&1:2|"]) {
+    const c = prepareCompound(toolkit, {
+      id: "cmp_example",
+      title: "Example",
+      sources,
+      smiles: "C#C[C@]1(O)CCC2C3CCC4CCCCC4C3CCC12C" + stereoGroup,
+    });
+    c.layout = scaffoldLayout(toolkit, c, "flat");
+    const root = c.layout.coords[c.atomIds[2]],
+      hydroxyl = c.layout.coords[c.atomIds[3]],
+      first = c.layout.coords[c.atomIds[1]],
+      last = c.layout.coords[c.atomIds[0]];
+    assert.ok(Math.hypot(first.x - hydroxyl.x, first.y - hydroxyl.y) > 0.8);
+    assert.ok(first.x < root.x && hydroxyl.x > root.x);
+    const a = [first.x - root.x, first.y - root.y],
+      b = [last.x - first.x, last.y - first.y];
+    assert.ok(Math.abs(a[0] * b[1] - a[1] * b[0]) < 0.01);
+    assert.ok(a[0] * b[0] + a[1] * b[1] > 0.9);
+    const angular = c.layout.coords[c.atomIds.at(-1)!],
+      junction = c.layout.coords[c.atomIds.at(-2)!];
+    assert.ok(
+      Math.abs(angular.x - junction.x) < 0.001 && angular.y < junction.y - 0.99,
+    );
+    assert.equal(
+      c.layout.wedgeBonds!.filter((b) => b.from === c.atomIds[2]).length,
+      2,
+    );
+    validateCompound(toolkit, c);
+    const drawn = drawingMolecule(
+      toolkit,
+      c,
+      placedCoordinates(toolkit, c, c.layout),
+      c.layout,
+    );
+    try {
+      assert.equal(graphSignature(toolkit, drawn), c.graph);
+    } finally {
+      drawn.delete();
+    }
+  }
+});
+
+test("flat skeletal side chains grow away from their attachment along the outward ray", () => {
+  const c = prepareCompound(toolkit, {
+    id: "cmp_example",
+    title: "Example",
+    sources,
+    smiles: "C1(CCCCCCCC)CCC2C(C1)CCC1C2CCC2C1CCC2",
+  });
+  c.layout = scaffoldLayout(toolkit, c, "flat");
+  const root = c.layout.coords[c.atomIds[0]],
+    end = c.layout.coords[c.atomIds[8]],
+    dx = end.x - root.x,
+    dy = end.y - root.y;
+  assert.ok(dx < -3);
+  assert.ok((dx * -0.866025 + dy * 0.5) / Math.hypot(dx, dy) > 0.95);
+});
