@@ -15,12 +15,6 @@ import {
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { measureStage } from "../../shared/stage-timing.ts";
-import { figureProofCache, stableFigureValue } from "./figure-proof-cache.ts";
-import {
-  figureRendererFingerprint,
-  figureDependencyFingerprint,
-} from "./figure-renderer-fingerprint.ts";
-import { sha256 } from "../../shared/assets.ts";
 import { moleculeToolkit } from "../../shared/molecule-toolkit.ts";
 import { patentRoutePaths } from "../../shared/patent-contract.ts";
 import { validatePatentAssets } from "./patent-assets.ts";
@@ -359,41 +353,7 @@ async function build(
     assets: [...inputs.flatMap((input) => input.assets), ...library.assets],
     glossary,
   };
-  const compiled = await measureStage("publish.compile", async () => {
-    const cache = figureCache ? figureProofCache(figureCache) : undefined;
-    let key: string | undefined;
-    if (cache) {
-      const root = join(import.meta.dirname, "../..");
-      const [sources, dependencies] = await Promise.all([
-        figureRendererFingerprint(root, ["scripts/content/content-publish.ts"]),
-        figureDependencyFingerprint(root, [
-          "markdown-it",
-          "markdown-it-cjk-friendly",
-          "katex",
-          "yaml",
-        ]),
-      ]);
-      key = sha256(
-        stableFigureValue({
-          sources,
-          dependencies,
-          data: {
-            ...data,
-            assets: data.assets.map(({ bytes: _bytes, ...asset }) => asset),
-          },
-        }),
-      );
-      const pages = await cache.pages(key);
-      if (pages) {
-        console.log("Content pages: cached");
-        return pages;
-      }
-    }
-    const pages = await compile(data);
-    if (cache && key) await cache.savePages(key, pages);
-    console.log("Content pages: compiled");
-    return pages;
-  });
+  const compiled = await measureStage("publish.compile", () => compile(data));
   const usage = libraryUsage(library.entries, [
     ...sites.map((s) => ({
       value: [s.content, ...s.compoundReferences],

@@ -258,7 +258,7 @@ Diagnostic sources have a separate version, so a diagnostic change rechecks cach
 Missing or damaged cache records are recomputed.
 Browser pages are opened only for missing thumbnails and process or image screenshots, and restart after bounded batches.
 All views finish before failures are reported together; successful views remain cached when another view fails.
-Chemical entry and figure-reference validation runs on every build.
+Chemical, reference and asset validation runs on every build.
 Geometry diagnostics remain available on published renders; only failures to prepare or render a view stop publication.
 
 The library snapshot stores each chemical view under its canonical reference key in `renders`, with an SVG asset URL, `width`, `height`, `minimumScale` and diagnostics.
@@ -271,8 +271,6 @@ A caller that only inspects `buildSnapshot` must call its result’s `dispose()`
 Calls to `buildSnapshot` without `figureCache` use an isolated temporary proof cache.
 
 The `build` and `publish` commands share the persistent figure proof cache.
-Compiled pages also reuse this cache when the complete compilation inputs and compiler source and dependency fingerprints match.
-Changed inputs rerun compilation and its validation; cache hits retain the compiled output and validation result.
 
 For aromatic electron flow, save a named variant with `coords` and a mapped `molblock` containing explicit Kekulé single/double bonds. Its atom order and maps must match `atomIds`; its aromatized graph, stereochemistry and isotopes must match the compound identity. Scene placements select it with `variant`. Rendering retains its explicit bond orders and saved coordinates, and π anchors require a multiple bond in that selected variant.
 
