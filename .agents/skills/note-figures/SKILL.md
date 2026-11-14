@@ -9,7 +9,7 @@ description: 笔记或专题配图时使用：先选写数据还是出图，再�
 
 先看下面的“选画法”：时间线、方框加箭头的流程直接在正文写数据（`toolbox/recipes/figures.md`、`docs/content.md`），不出图。其余的图按本页出图。
 
-一张图一个 prompt 文件，画图的 Agent 自己出图：位图（示意图、历史插画）用 `image-gen generate`，数据图自己写 matplotlib / PIL 代码。绘图依赖用 `heavy uv run --no-project --with`，不用 `pip install`。图需要的上下文全部写在 prompt 里。读者只看到图；prompt 随图发布到内容库，网站不提供（契约见 `docs/content.md` 的图片段落）。
+一张图一个 prompt 文件，画图的 Agent 自己出图：位图（示意图、历史插画）用 `image-gen generate`，数据图自己写 matplotlib / PIL 代码。小型绘图脚本的依赖用 `uv run --no-project --with`，不用 `pip install`。图需要的上下文全部写在 prompt 里。读者只看到图；prompt 随图发布到内容库，网站不提供（契约见 `docs/content.md` 的图片段落）。
 
 ## 选画法
 

@@ -10,13 +10,13 @@ Use this as the authoring entrypoint. Read the current [content contract](../../
 ## Render and review
 
 1. Check the source, graph, stereochemistry and electron direction. Reuse saved compound IDs and atom IDs.
-2. For a direct drawing, write YAML and run `npm run figure:draw -- figure.yaml --out <directory|file.svg>`. It compiles in memory without a library or permanent identity. Each frame produces an SVG; diagnostics go to stderr and do not block drawing. Parse, chemistry and renderer failures exit nonzero. To save a reusable figure, run `npm run figure:compile -- --source figure.yaml --library <content-root>`. Edit and recompile the saved `library/sources/<id>.yaml` to retain the figure ID. Read the [compilation contract](../../../docs/content.md#figure-yaml-compilation) for route and mechanism fields.
-3. Run the website renderer, following the workspace heavy-command policy:
+2. For a direct drawing, write YAML and run `npm run figure:draw -- figure.yaml --out <directory|file.svg>` directly. It compiles in memory without a library or permanent identity. Each frame produces an SVG; diagnostics go to stderr and do not block drawing. Parse, chemistry and renderer failures exit nonzero. To save a reusable figure, run `heavy npm run figure:compile -- --source figure.yaml --library <content-root>`. Edit and recompile the saved `library/sources/<id>.yaml` to retain the figure ID. Read the [compilation contract](../../../docs/content.md#figure-yaml-compilation) for route and mechanism fields.
+3. Run the website renderer with `heavy`:
    ```sh
-   npm run figure:render -- --library <content-root> --entry <id> --out <output>
+   heavy npm run figure:render -- --library <content-root> --entry <id> --out <output>
    ```
    The default renders width 1366; add `--width 390` for a phone proof. Inspect the PNG and JSON diagnostics; a clean diagnostic report does not establish chemical correctness.
-   `content:preview` collects topic `figure-ref` blocks and every mechanism frame, including tabs, and reports the website renderer's diagnostics. Use `npm run figure:lint -- [<figure.yaml>... | --library <content-root>]` to list diagnostics with files or entries, frames and totals. No arguments checks the configured content library. Lint exits nonzero for issues and remains an independent inspection tool. Content publication retains diagnostics and prints their total; drawing failures stop publication.
+   `content:preview` collects topic `figure-ref` blocks and every mechanism frame, including tabs, and reports the website renderer's diagnostics. Use `npm run figure:lint -- [<figure.yaml>... | --library <content-root>]` to list diagnostics with files or entries, frames and totals. Run lint for a single YAML directly; use `heavy` for the library, including when no arguments are given. Lint exits nonzero for issues and remains an independent inspection tool. Content publication retains diagnostics and prints their total; drawing failures stop publication.
 4. Adjust `rot`, `flip` or common-core `align` in source and recompile; routes compute their arrow geometry. For a saved scene, adjust coordinates and semantic endpoint placement, then render and inspect again. Check normal-size labels, visible gaps, arrow origins and heads, and mobile scrolling.
 5. Make the requested comparison HTML, publish it with `artifact publish --task <task> --name <name> <directory>`, run `artifact shot <published-index>`, and inspect that screenshot before returning `artifact url <published-index>`. Artifact review and product/content publication follow the task's separate permissions.
 
@@ -35,7 +35,7 @@ For process diagrams, save a `kind: process` entry in `library/processes/prc_<id
 
 ## Recompile saved figures
 
-Run `npm run figure:recompile -- --library <content-root>` after compiler or drawing changes to regenerate every entry with a saved `sourceFile`. With no `--library`, it uses `MOLNOTES_CONTENT_DIR`. To limit the run, append one or more source YAML paths, for example `npm run figure:recompile -- --library <content-root> <content-root>/library/sources/<id>.yaml`.
+Run `heavy npm run figure:recompile -- --library <content-root>` after compiler or drawing changes to regenerate every entry with a saved `sourceFile`. With no `--library`, it uses `MOLNOTES_CONTENT_DIR`. To limit the run, append one or more source YAML paths, for example `heavy npm run figure:recompile -- --library <content-root> <content-root>/library/sources/<id>.yaml`.
 
 The command uses the same compiler and save rules as `figure:compile`, retaining figure, compound, atom and participant IDs and page references. Shared source files are compiled once; figures without a source cannot be recompiled directly. It prints each changed entry and totals for added, modified and deleted entries; obsolete owned reactions are removed. A failed source prints its reason, leaves that compiled figure as saved and allows the remaining sources to run; any failed source makes the final exit status nonzero. Review the changed figures with `figure:render` and compare their visible geometry before accepting the content revision. Recompilation writes the library; publication follows the content workflow.
 
@@ -49,7 +49,7 @@ A route or gallery structure, or a mechanism frame, can use the same `template` 
 
 Set figure-level `ring_h: false` to retain ring-bond wedges in SMILES structures; structure or frame `ring_h` overrides the figure setting. The default is `true`: ring stereocentres use explicit H wedges where the native drawing requires them. The option also applies to registered skeletal views and leaves the chemical identity unchanged.
 
-Template data lives in `shared/chemical-templates/`: one JSON file per skeleton or ring conformation. Skeleton files retain SMILES/SMARTS, atom order, conformer provenance and both views. Conformation files retain normal/flipped coordinates, bonds, default labels and named slot directions. Newman, Fischer and sawhorse are generated in code. After adding or revising a data file, run `heavy npm run figure:templates -- --out <temporary-directory>` to regenerate the complete overview and examples with substituents. Review the overview, render the affected entries with `figure:render`, and compare with the source geometry before accepting a new template.
+Template data lives in `shared/chemical-templates/`: one JSON file per skeleton or ring conformation. Skeleton files retain SMILES/SMARTS, atom order, conformer provenance and both views. Conformation files retain normal/flipped coordinates, bonds, default labels and named slot directions. Newman, Fischer and sawhorse are generated in code. After adding or revising a data file, run `npm run figure:templates -- --out <temporary-directory>` to regenerate the complete overview and examples with substituents. Review the overview, render the affected entries with `figure:render`, and compare with the source geometry before accepting a new template.
 
 ## Route authoring
 
