@@ -306,7 +306,9 @@ async function build(
   stage: AssetStage,
 ): Promise<{ snapshot: Snapshot; files: Map<string, AssetBytes> }> {
   const inputs: Resolved<ContentUnit>[] = [];
-  const library = await readChemicalLibrary(root, stage);
+  const library = await measureStage("publish.library", () =>
+    readChemicalLibrary(root, stage),
+  );
   await measureStage("publish.read", async () => {
     for (const unit of await contentUnits(root))
       inputs.push({
@@ -370,12 +372,14 @@ async function build(
     for (const evidence of entry.sources)
       if (evidence.source !== "unknown" && !registry?.[evidence.source])
         throw new Error(`${entry.id}: unknown source ${evidence.source}`);
-  const proofs = await verifyLibraryFigures(
-    library.entries,
-    usage.references,
-    root,
-    figureCache,
-    stage,
+  const proofs = await measureStage("publish.figures", () =>
+    verifyLibraryFigures(
+      library.entries,
+      usage.references,
+      root,
+      figureCache,
+      stage,
+    ),
   );
   const diagnosticCount = Object.values(proofs.renders).reduce(
     (total, render) => total + render.diagnostics.length,
