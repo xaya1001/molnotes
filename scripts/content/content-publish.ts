@@ -130,6 +130,11 @@ async function validateTopics(data: PublishData, ctx: BuildContext) {
         return;
       }
       if (!value || typeof value !== "object") return;
+      const flowEdge =
+        parent &&
+        Array.isArray(parent.nodes) &&
+        Array.isArray(parent.edges) &&
+        parent.edges.includes(value);
       for (const [key, item] of Object.entries(value)) {
         const location = `${path}.${key}`;
         if (
@@ -172,7 +177,8 @@ async function validateTopics(data: PublishData, ctx: BuildContext) {
         }
         if (
           typeof item === "string" &&
-          ["src", "url", "href", "to", "image"].includes(key)
+          ["src", "url", "href", "to", "image"].includes(key) &&
+          !(key === "to" && flowEdge)
         ) {
           if (
             item &&

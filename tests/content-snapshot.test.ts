@@ -347,6 +347,31 @@ const json =
     return JSON.stringify(change(value) ?? value);
   };
 
+test("publication treats flow edge destinations as node identifiers", async (t) => {
+  const { build, edit } = await editableContent(t, [
+    "sites/sample",
+    "notes/reader-test",
+  ]);
+  await edit([
+    [
+      "sites/sample/content.json",
+      json((content) => {
+        content.chapters[0].blocks.push({
+          type: "flow",
+          flow: {
+            nodes: [
+              { id: "n0", text: "Input" },
+              { id: "n1", text: "Output" },
+            ],
+            edges: [{ from: "n0", to: "n1" }],
+          },
+        });
+      }),
+    ],
+  ]);
+  await build();
+});
+
 test("a build rejects notes, topics and glossaries that do not resolve", async (t) => {
   const { rejects, edit, build, directory } = await editableContent(t, [
     "sites/sample",
