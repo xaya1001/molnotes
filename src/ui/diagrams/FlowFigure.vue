@@ -15,6 +15,8 @@ import {
   flowStepMarkers,
   flowEdgeSegment,
   chainOrder,
+  normalizeFlowChain,
+  restoreFlowDirections,
   analyzeFlow,
   flowReadingOrder,
   layoutBranches,
@@ -30,6 +32,8 @@ import {
 } from "./flow.ts";
 
 const props = defineProps<{ flow: Flow; caption?: string }>();
+const chain = computed(() => normalizeFlowChain(props.flow));
+const layoutInput = computed(() => chain.value?.flow ?? props.flow);
 
 // Chain box widths in em: run right when the text reads well, otherwise
 // use the direction with wider boxes or wrap into rows. Branches use the
@@ -105,7 +109,8 @@ function sizesAt(w: number) {
 function fit(direction: FlowDirection) {
   const labels = props.flow.edges.map((_, i) => labelSizes.value[i] ?? null);
   const across = (w: number) =>
-    layoutFlow(props.flow, direction, sizesAt(w), labels, space.value).width;
+    layoutFlow(layoutInput.value, direction, sizesAt(w), labels, space.value)
+      .width;
   let hi = widest[direction] * em.value;
   if (across(hi) <= width.value) return hi;
   let lo = 2 * em.value;
@@ -149,10 +154,8 @@ function readable(w: number) {
     );
   });
 }
-const branched = computed(
-  () => chainOrder(props.flow) === null && analysis.value.shape !== "rank",
-);
-const analysis = computed(() => analyzeFlow(props.flow));
+const branched = computed(() => chainOrder(layoutInput.value) === null);
+const analysis = computed(() => analyzeFlow(layoutInput.value));
 const branchLayout = ref<BranchLayout>();
 const readingOrder = computed(() =>
   flowReadingOrder(props.flow, analysis.value),
@@ -175,7 +178,7 @@ const direction = computed<FlowDirection>(() => {
 /** The box width (px) of a chain wrapped `columns` to a row. */
 function wrapWidth(columns: number) {
   const labels = props.flow.edges.map((_, i) => labelSizes.value[i] ?? null);
-  const room = wrapRoom(props.flow, columns, labels, space.value);
+  const room = wrapRoom(layoutInput.value, columns, labels, space.value);
   return Math.min(widest.right * em.value, (width.value - room) / columns);
 }
 /**
@@ -183,9 +186,10 @@ function wrapWidth(columns: number) {
  * as few rows as keep every box readable. 0 when it does not wrap.
  */
 const columns = computed(() => {
-  const count = chainOrder(props.flow)?.length ?? 0;
+  const count = chainOrder(layoutInput.value)?.length ?? 0;
   if (!count || !width.value || fixed.value || direction.value === "right")
     return 0;
+  if (chain.value && width.value < fixedFromEm * em.value) return 0;
   for (let rows = 2; Math.ceil(count / rows) >= 2; rows++) {
     const across = Math.ceil(count / rows);
     if (across === Math.ceil(count / (rows - 1))) continue;
@@ -213,16 +217,25 @@ const layout = computed<FlowLayout>(() => {
   if (branched.value && branchLayout.value) return branchLayout.value;
   const labels = props.flow.edges.map((_, i) => labelSizes.value[i] ?? null);
   const sizes = sizesAt(boxWidth.value);
-  if (columns.value)
-    return wrapFlow(
-      props.flow,
-      columns.value,
-      boxWidth.value,
-      sizes,
-      labels,
-      space.value,
-    );
-  return layoutFlow(props.flow, direction.value, sizes, labels, space.value);
+  const result = columns.value
+    ? wrapFlow(
+        layoutInput.value,
+        columns.value,
+        boxWidth.value,
+        sizes,
+        labels,
+        space.value,
+      )
+    : layoutFlow(
+        layoutInput.value,
+        direction.value,
+        sizes,
+        labels,
+        space.value,
+      );
+  return chain.value
+    ? restoreFlowDirections(result, chain.value.reversed)
+    : result;
 });
 
 async function measure() {

@@ -11,6 +11,8 @@ import {
   type Point,
   flowText,
   chainOrder,
+  normalizeFlowChain,
+  restoreFlowDirections,
   foldFlow,
   foldable,
   layoutFlow,
@@ -606,7 +608,7 @@ test("flow steps resolve node and edge locations and index their explanations", 
     assert.throws(() => defineFlow({ ...input, steps: [step] }), error);
 });
 
-test("a merging input can also feed a separate output through the ranked layout", () => {
+test("a reversed chain uses the ordinary chain layout and preserves its arrow directions", () => {
   const flow = defineFlow({
     nodes: ["input", "receptor", "kinase", "signal", "output"].map((id) =>
       node(id),
@@ -640,8 +642,9 @@ test("a merging input can also feed a separate output through the ranked layout"
       },
     ],
   });
-  const analysis = analyzeFlow(flow);
-  assert.equal(analysis.shape, "rank");
+  const chain = normalizeFlowChain(flow)!;
+  assert.equal(analyzeFlow(flow).shape, "spine");
+  assert.deepEqual(chainOrder(chain.flow), [0, 1, 2, 3, 4]);
   for (const direction of ["right", "down"] as const) {
     const sizes = sized(flow);
     const layout = layoutFlow(
@@ -688,4 +691,28 @@ test("a merging input can also feed a separate output through the ranked layout"
       Math.hypot(markers[2].x - markers[3].x, markers[2].y - markers[3].y) > 22,
     );
   }
+  const sizes = sized(flow);
+  const ordinary = wrapFlow(
+    chain.flow,
+    3,
+    100,
+    sizes,
+    flow.edges.map(() => null),
+    { ...space, rank: 98 },
+  );
+  const wrapped = restoreFlowDirections(ordinary, chain.reversed);
+  assert.deepEqual(wrapped.nodes, ordinary.nodes);
+  assert.equal(
+    wrapped.nodes[0].y + sizes[0].h / 2,
+    wrapped.nodes[1].y + sizes[1].h / 2,
+  );
+  assert.ok(wrapped.nodes[3].y > wrapped.nodes[2].y);
+  wrapped.edges.forEach((edge, i) =>
+    assert.deepEqual(
+      edge.points,
+      i === 1
+        ? [...ordinary.edges[i].points].reverse()
+        : ordinary.edges[i].points,
+    ),
+  );
 });

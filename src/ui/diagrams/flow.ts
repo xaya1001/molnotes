@@ -415,6 +415,33 @@ function isFlowSequence(flow: Flow) {
   );
 }
 
+/** Lay out a declared sequence as a chain while retaining its real edge directions. */
+export function normalizeFlowChain(flow: Flow) {
+  if (chainOrder(flow) !== null || !isFlowSequence(flow)) return null;
+  const index = new Map(flow.nodes.map((node, index) => [node.id, index]));
+  const reversed = flow.edges.map(
+    (edge) => index.get(edge.from)! > index.get(edge.to)!,
+  );
+  return {
+    flow: {
+      ...flow,
+      edges: flow.edges.map((edge, i) =>
+        reversed[i] ? { ...edge, from: edge.to, to: edge.from } : edge,
+      ),
+    },
+    reversed,
+  };
+}
+
+export function restoreFlowDirections(layout: FlowLayout, reversed: boolean[]) {
+  return {
+    ...layout,
+    edges: layout.edges.map((edge, i) =>
+      reversed[i] ? { ...edge, points: [...edge.points].reverse() } : edge,
+    ),
+  };
+}
+
 export function layoutFlow(
   flow: Flow,
   direction: FlowDirection,
@@ -422,25 +449,12 @@ export function layoutFlow(
   labels: ({ w: number; h: number } | null)[],
   space: FlowSpacing,
 ): FlowLayout {
-  if (chainOrder(flow) === null && isFlowSequence(flow)) {
-    const index = new Map(flow.nodes.map((node, index) => [node.id, index]));
-    const reverse = flow.edges.map(
-      (edge) => index.get(edge.from)! > index.get(edge.to)!,
+  const chain = normalizeFlowChain(flow);
+  if (chain)
+    return restoreFlowDirections(
+      layoutFlow(chain.flow, direction, sizes, labels, space),
+      chain.reversed,
     );
-    const ordered = {
-      ...flow,
-      edges: flow.edges.map((edge, i) =>
-        reverse[i] ? { ...edge, from: edge.to, to: edge.from } : edge,
-      ),
-    };
-    const layout = layoutFlow(ordered, direction, sizes, labels, space);
-    return {
-      ...layout,
-      edges: layout.edges.map((edge, i) =>
-        reverse[i] ? { ...edge, points: [...edge.points].reverse() } : edge,
-      ),
-    };
-  }
   const right = direction === "right";
   // Sizes on the main and cross axes, and where the box starts on each.
   const main = (i: number) => (right ? sizes[i].w : sizes[i].h);
@@ -1063,7 +1077,7 @@ interface BranchItem {
   joinEnds: BranchEnd[] | null;
 }
 export interface FlowAnalysis {
-  shape: "spine" | "tree" | "merge" | "rank";
+  shape: "spine" | "tree" | "merge";
   seqs: BranchSeq[];
   mOut: (i: number) => BranchEdge[];
   all: (i: number) => BranchEdge[];
@@ -1071,6 +1085,8 @@ export interface FlowAnalysis {
   hasJoin: boolean;
 }
 export function analyzeFlow(flow: Flow): FlowAnalysis {
+  const chain = normalizeFlowChain(flow);
+  if (chain) return analyzeFlow(chain.flow);
   const nodes = flow.nodes;
   const index = new Map(nodes.map((n, i) => [n.id, i]));
   const edges: BranchEdge[] = flow.edges.map((e, i) => ({
@@ -1120,7 +1136,6 @@ export function analyzeFlow(flow: Flow): FlowAnalysis {
     return shared.sort((x, y) => order.get(x)! - order.get(y)!)[0];
   };
   const visited = new Set<number>();
-  let ranked = false;
   let deepest = 0;
   function buildSeq(
     start: number,
@@ -1131,14 +1146,10 @@ export function analyzeFlow(flow: Flow): FlowAnalysis {
     let ends: BranchEnd[] = [];
     let u = start;
     for (;;) {
-      if (visited.has(u)) {
-        if (!isFlowSequence(flow))
-          fail(
-            `flow node ${nodes[u].id} is reached from two branches that do not start at one fork; join branches only where they split, or split the figure`,
-          );
-        ranked = true;
-        break;
-      }
+      if (visited.has(u))
+        fail(
+          `flow node ${nodes[u].id} is reached from two branches that do not start at one fork; join branches only where they split, or split the figure`,
+        );
       visited.add(u);
       deepest = Math.max(deepest, depth);
       for (const e of sOut(u)) {
@@ -1221,7 +1232,7 @@ export function analyzeFlow(flow: Flow): FlowAnalysis {
     }
   }
   return {
-    shape: ranked ? "rank" : shape,
+    shape,
     seqs,
     mOut,
     all: (i: number) => out(i),
@@ -2085,9 +2096,7 @@ export function layoutBranches(
 /** Nodes in outline reading order, with each incoming edge's text immediately before its box. */
 export function flowReadingOrder(flow: Flow, analysis = analyzeFlow(flow)) {
   const order: number[] = [];
-  if (analysis.shape === "rank")
-    order.push(...flow.nodes.map((_, index) => index));
-  else if (analysis.shape === "spine" && analysis.seqs.length > 1) {
+  if (analysis.shape === "spine" && analysis.seqs.length > 1) {
     const line = mainLine(flow)!;
     const onLine = new Set(line);
     const { rank, satellite, sideEdges } = structure(flow);
