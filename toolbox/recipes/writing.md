@@ -64,7 +64,8 @@ events:
 
 `flow` 的 `nodes` 写唯一 `id` 和短句 `text`，`edges` 用 `a > b > c` 连成链。
 节点可用 `kind: end` 表示起止、`kind: ask` 表示判断；分支边写 `{from: a, to: b, text: 是}`。
-判断节点的终点出口写 `side: true`，主干才能在手机上折叠。
+`side` 可省略：节点未显式标记侧出口、且恰有一条出边继续到非叶子时，其余单入边叶子自动作为侧出口。
+多层分支在窄屏按大纲缩进排列，同一分支里的连续步骤保持同一缩进。
 详见[流程图契约](../../docs/content.md#内容工作目录)与[更多模板](figures.md#模板)。
 
 ```flow
@@ -75,6 +76,24 @@ nodes:
   - { id: finish, text: 整理观察结果, kind: end }
 edges:
   - start > compare > finish
+```
+
+```flow
+caption: 样本分类流程
+nodes:
+  - { id: start, text: 样本数量够吗, kind: ask }
+  - { id: check, text: 记录完整吗, kind: ask }
+  - { id: collect, text: 补充样本 }
+  - { id: record, text: 填写记录 }
+  - { id: review, text: 核对来源 }
+  - { id: ready, text: 开始比较, kind: end }
+  - { id: fill, text: 补充记录, kind: end }
+edges:
+  - { from: start, to: check, text: 是 }
+  - { from: start, to: collect, text: 否 }
+  - collect > record > review
+  - { from: check, to: ready, text: 是 }
+  - { from: check, to: fill, text: 否 }
 ```
 
 ## 能量图

@@ -237,7 +237,9 @@ function flowWarnings(root: HTMLElement): string[] {
   const svg = root.querySelector("svg.flow-lines");
   if (!svg) return warnings;
   const origin = rect(svg);
-  for (const path of root.querySelectorAll(".flow-edge")) {
+  for (const [edgeIndex, path] of root
+    .querySelectorAll(".flow-edge")
+    .entries()) {
     const points = [
       ...(path.getAttribute("d") ?? "").matchAll(/(-?[\d.]+) (-?[\d.]+)/g),
     ].map(
@@ -250,7 +252,13 @@ function flowWarnings(root: HTMLElement): string[] {
       if (segments.some(([a, b]) => crosses(a, b, inset(rect(box), 2))))
         warnings.push(`连线穿过框「${short(box)}」`);
     for (const label of labels)
-      if (segments.some(([a, b]) => crosses(a, b, inset(rect(label), 1))))
+      if (
+        !(
+          label.classList.contains("flow-label--on") &&
+          Number(label.dataset.edge) === edgeIndex
+        ) &&
+        segments.some(([a, b]) => crosses(a, b, inset(rect(label), 1)))
+      )
         warnings.push(`连线穿过连线文字「${short(label)}」`);
     // A tag's box may reach past its words, over the arrow beside it.
     for (const tag of root.querySelectorAll(".flow-tag")) {
