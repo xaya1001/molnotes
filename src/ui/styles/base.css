@@ -457,3 +457,19 @@ input[type="range"] {
   font-weight: 500;
   padding-block: var(--space-4);
 }
+
+.step-number {
+  display: inline-flex;
+  width: var(--figure-step-size);
+  height: var(--figure-step-size);
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--surface);
+  font: 500 var(--text-xs)/1 var(--font-mono);
+}
+.step-number--blocked {
+  background: var(--danger);
+}

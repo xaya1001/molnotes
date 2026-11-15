@@ -1,7 +1,6 @@
 import { validateMarkushFigure } from "./markush.ts";
 import { validateConformationSpec } from "../chemical-templates/conformation.ts";
 import { isObject } from "../json.ts";
-import { validateProcess } from "../process.ts";
 import type {
   Library,
   LibraryEntry,
@@ -360,7 +359,6 @@ export function validateLibraryEntry(
     route: "rte",
     mechanism: "mec",
     image: "img",
-    process: "prc",
     markush: "mku",
     conformation: "cnf",
   };
@@ -543,8 +541,6 @@ export function validateLibraryEntry(
       "overview",
       "footnote",
     ]);
-  } else if (v.kind === "process") {
-    validateProcess(v, w);
   } else {
     for (const field of ["author", "prompt"])
       if (v[field] !== undefined) text(v[field], w);

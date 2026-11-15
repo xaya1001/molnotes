@@ -217,9 +217,14 @@ export async function compilePracticeChapter(
         }
         continue;
       }
-      if (kind === "figure-ref") {
+      if (kind === "figure-ref" || kind === "panels") {
+        add({ ...yaml(token.content, file, line + 1), type: kind }, where);
+        continue;
+      }
+      if (kind === "flow") {
+        const { caption, ...flow } = yaml(token.content, file, line + 1);
         add(
-          { ...yaml(token.content, file, line + 1), type: "figure-ref" },
+          { type: kind, flow, ...(caption === undefined ? {} : { caption }) },
           where,
         );
         continue;

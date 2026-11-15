@@ -210,7 +210,6 @@ test("a blocks chapter passes when every block fits the catalogue", () => {
         columns: ["x", "y"],
         rows: "rows",
       },
-      { type: "mechanism", frames: "frames" },
       {
         type: "lab",
         model: "plate-capacity",
@@ -238,14 +237,6 @@ test("a blocks chapter passes when every block fits the catalogue", () => {
     {
       data: {
         rows: [["1", "2"]],
-        frames: [
-          {
-            name: "m",
-            smiles: "CC",
-            explanation: "e",
-            arrows: [{ from: { atom: 0 }, to: { bond: 0 }, electrons: 2 }],
-          },
-        ],
       },
     },
   );
@@ -285,26 +276,6 @@ test("blocks are checked against the catalogue and their references", () => {
     [[{ type: "quiz", questions: ["nope"] }], /unknown quiz question nope/],
     [[{ type: "excerpt", excerpt: "nope" }], /unknown excerpt nope/],
     [[{ type: "callout", text: "x", tone: "loud" }], /tone must be one of/],
-    [
-      [{ type: "scene", label: "l", frames: [{ title: "t" }] }],
-      /frame 1 text must be text/,
-    ],
-    [
-      [
-        {
-          type: "mechanism",
-          frames: [
-            {
-              name: "m",
-              smiles: "CC",
-              explanation: "e",
-              arrows: [{ from: {}, to: { atom: 0 }, electrons: 2 }],
-            },
-          ],
-        },
-      ],
-      /arrow from must name an atom or a bond/,
-    ],
   ];
   for (const [blocks, message] of cases)
     assert.throws(() => validateTopicContent(blocksContent(blocks)), message);
@@ -853,11 +824,18 @@ test("timeline and flow blocks are checked, may keep their value in data and are
   );
 });
 
-test("search text reads scene frames, table cells and tab contents kept in data", () => {
+test("search text reads panels, table cells and tab contents kept in data", () => {
   assert.deepEqual(
     blockSearchText(
       [
-        { type: "scene", label: "l", frames: "frames" },
+        {
+          type: "panels",
+          mode: "compare",
+          items: [
+            { title: "t", text: "x", ref: "img_first" },
+            { title: "u", text: "y", ref: "img_second" },
+          ],
+        },
         { type: "heading", text: "h" },
         { type: "table", caption: "表", columns: ["靶点", "值"], rows: "rows" },
         {
@@ -873,11 +851,24 @@ test("search text reads scene frames, table cells and tab contents kept in data"
         },
       ],
       {
-        frames: [{ title: "t", text: "x" }],
         rows: [["TGT1", { text: "240", href: "https://example.org" }]],
       },
     ),
-    ["t", "x", "h", "表", "靶点", "值", "TGT1", "240", "Example 1", "内"],
+    [
+      "",
+      "t",
+      "x",
+      "u",
+      "y",
+      "h",
+      "表",
+      "靶点",
+      "值",
+      "TGT1",
+      "240",
+      "Example 1",
+      "内",
+    ],
   );
 });
 
@@ -1194,120 +1185,69 @@ test("the topic home cannot be used as a chapter path", () => {
   assert.throws(() => validateTopicContent(value), /cannot be \//);
 });
 
-test("process blocks validate scene relations, quantities and search text", () => {
-  const process = {
-    title: "Sample path",
-    label: "Two nodes",
-    nodes: [{ name: "A" }, { name: "B" }],
-    total: { amount: 10, unit: "g", label: "Sample" },
-    scenarios: [
+test("panels group adjacent steps and select columns at their readable widths", async () => {
+  const { definePanels, panelGroups, panelColumns } =
+    await import("../shared/panels.ts");
+  const items = [
+    { title: "First", text: "Input", ref: "img_one" },
+    { title: "Second", text: "Continue", ref: "img_one" },
+    { title: "Third", text: "Result", ref: "img_two" },
+    { title: "Fourth", text: "Return", ref: "img_one", frame: "detail" },
+  ];
+  const steps = definePanels({ mode: "steps", items });
+  assert.deepEqual(
+    panelGroups(steps).map((group) => group.indices),
+    [[0, 1], [2], [3]],
+  );
+  assert.equal(panelGroups(definePanels({ mode: "compare", items })).length, 4);
+  assert.equal(panelColumns(2, 680, 330), 2);
+  assert.equal(panelColumns(3, 680, 608), 1);
+  assert.equal(panelColumns(4, 1000, 200), 2);
+  assert.equal(panelColumns(6, 680, 280), 2);
+  assert.equal(panelColumns(3, 1000, 280), 3);
+  assert.equal(panelColumns(2, 358, 330), 1);
+  validateTopicContent(
+    blocksContent([{ type: "panels", mode: "steps", items }]),
+    "sample",
+  );
+  for (const [input, error] of [
+    [{ mode: "compare", items: items.slice(0, 1) }, /只有 1 项/],
+    [{ mode: "other", items }, /mode/],
+    [
       {
-        name: "Open",
-        steps: [
+        mode: "compare",
+        items: [items[0], { title: "Missing", text: "Description" }],
+      },
+      /第 2 项.*ref 或 flow/,
+    ],
+    [
+      {
+        mode: "compare",
+        items: [
+          items[0],
           {
-            title: "Move",
-            text: "Transfer sample",
-            state: "Ready",
-            kind: "transfer",
-            from: 0,
-            to: 1,
-            amounts: [0, 10],
-          },
-          {
-            title: "Change",
-            text: "Local change",
-            state: "Changed",
-            kind: "local",
-            from: 1,
-            to: 1,
-            amounts: [0, 10],
-          },
-          {
-            title: "Leave",
-            text: "Sample leaves",
-            state: "Eight left",
-            kind: "exit",
-            from: 1,
-            to: 1,
-            amounts: [0, 8],
-            loss: { node: 1, label: "Waste", amount: 2 },
+            title: "Flow",
+            text: "Description",
+            flow: {
+              nodes: [
+                { id: "a", text: "A" },
+                { id: "b", text: "B" },
+              ],
+              edges: ["a > b"],
+              steps: [],
+            },
           },
         ],
       },
+      /第 2 项.*不能写 steps/,
     ],
-  };
-  const fixture = () =>
-    content({
-      chapters: [
-        {
-          id: "a",
-          title: "Chapter",
-          refs: [1],
-          blocks: [{ type: "process", process: "path" }],
-        },
-      ],
-      data: { path: structuredClone(process) },
-    });
-  const valid = fixture();
-  validateTopicContent(valid, "sample");
-  assert.ok(
-    blockSearchText(
-      [{ type: "process", process: "path" }],
-      valid.data,
-    ).includes("Transfer sample"),
-  );
-  const rejects = [
-    [
-      (p: typeof process) => {
-        p.scenarios[0].steps[0].kind = "unknown";
-      },
-      /unknown relation/,
-    ],
-    [
-      (p: typeof process) => {
-        p.scenarios[0].steps[0].to = 9;
-      },
-      /unknown node/,
-    ],
-    [
-      (p: typeof process) => {
-        p.scenarios[0].steps[1].to = 0;
-      },
-      /same node/,
-    ],
-    [
-      (p: typeof process) => {
-        p.scenarios.push(p.scenarios[0], p.scenarios[0]);
-      },
-      /one or two/,
-    ],
-    [
-      (p: typeof process) => {
-        p.scenarios[0].steps[0].to = 0;
-      },
-      /different nodes/,
-    ],
-    [
-      (p: typeof process) => {
-        Reflect.deleteProperty(p.scenarios[0].steps[2].loss!, "amount");
-      },
-      /loss amount/,
-    ],
-  ] as const;
-  for (const [mutate, reason] of rejects) {
-    const value = fixture();
-    mutate(value.data!.path as typeof process);
+  ] as const)
     assert.throws(
-      () => validateTopicContent(value, "sample"),
-      (error) => {
-        assert.match(String(error), /sample.*a.*process/);
-        assert.match(String(error), reason);
-        return true;
-      },
+      () =>
+        validateTopicContent(
+          blocksContent([{ type: "panels", ...input }]),
+          "sample",
+        ),
+      error,
     );
-  }
-  const withoutTotal = fixture();
-  const path = withoutTotal.data!.path as Partial<typeof process>;
-  delete path.total;
-  validateTopicContent(withoutTotal, "sample");
 });

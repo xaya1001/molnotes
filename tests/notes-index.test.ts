@@ -400,7 +400,7 @@ test("render headings, molecules, glossary, links, escaped HTML, table and formu
 test("timeline and flow fences become figures their text is searchable in", async (t) => {
   const root = fixture(
     t,
-    "## Section\n```timeline\ncaption: 两件事\nevents:\n  - {date: 1999-05-20, text: 获批}\n  - {between: [2000, 2004], text: 继续卖}\n```\n\n```flow\nnodes:\n  - {id: a, text: 鸦片}\n  - {id: b, text: 母液, tone: accent}\nedges: [a > b]\n```",
+    "## Section\n```timeline\ncaption: 两件事\nevents:\n  - {date: 1999-05-20, text: 获批}\n  - {between: [2000, 2004], text: 继续卖}\n```\n\n```flow\nnodes:\n  - {id: a, text: 鸦片}\n  - {id: b, text: 母液, tone: accent}\nedges: [a > b]\nsteps: [{at: a > b, title: 转移, text: 完整说明}]\n```\n\n```panels\nmode: compare\nitems:\n  - {title: 输入, text: 初始, ref: img_first}\n  - {title: 输出, text: 完成, ref: img_second}\n```",
   );
   const [note] = (await compile(root)).notes;
   assert.deepEqual(
@@ -408,6 +408,7 @@ test("timeline and flow fences become figures their text is searchable in", asyn
     [
       ["note-diagram-0", "timeline", "两件事"],
       ["note-diagram-1", "flow", ""],
+      ["note-diagram-2", "panels", ""],
     ],
   );
   assert.match(note.html, /<div id="note-diagram-0" class="note-diagram">/);
@@ -421,6 +422,8 @@ test("timeline and flow fences become figures their text is searchable in", asyn
   const flow = note.diagrams![1];
   assert.ok(flow.kind === "flow");
   assert.equal(flow.flow.nodes[1].tone, "accent");
+  assert.equal(flow.flow.steps?.[0].at, "a > b");
+  assert.match(note.text, /转移.*完整说明.*输入.*初始.*输出.*完成/);
   assert.match(note.text, /两件事.*获批.*继续卖.*鸦片 母液/);
 });
 test("an image shows its description as a caption under it", async (t) => {

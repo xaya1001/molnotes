@@ -172,7 +172,7 @@ export async function prepareFigure(
     "aria-label": entry.title,
     "data-figure": entry.id,
   });
-  if (entry.kind === "image" || entry.kind === "process")
+  if (entry.kind === "image")
     throw new Error(`Expected a chemical figure: ${entry.id}`);
   const B = token("--chemical-bond");
   const toolkit = options.toolkit;
@@ -1936,8 +1936,6 @@ export async function prepareFigure(
       (node) => ctx.data(node, "reactionArrow") === prefix + id,
     )) {
       ctx.setData(path, "reactionId", id);
-      ctx.set(path, "role", "button");
-      ctx.set(path, "tabindex", "0");
       ctx.set(path, "aria-label", r.title);
       ctx.set(path, "pointer-events", "bounding-box");
     }

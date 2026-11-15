@@ -8,10 +8,15 @@ import {
   watch,
 } from "vue";
 import DiagramText from "./DiagramText.vue";
+import StepDescriptions from "../StepDescriptions.vue";
 import { readsWell } from "./check.ts";
 import { phrases } from "./model.ts";
 import {
+  flowStepMarkers,
+  flowEdgeSegment,
   chainOrder,
+  normalizeFlowChain,
+  restoreFlowDirections,
   analyzeFlow,
   flowReadingOrder,
   layoutBranches,
@@ -27,6 +32,8 @@ import {
 } from "./flow.ts";
 
 const props = defineProps<{ flow: Flow; caption?: string }>();
+const chain = computed(() => normalizeFlowChain(props.flow));
+const layoutInput = computed(() => chain.value?.flow ?? props.flow);
 
 // Chain box widths in em: run right when the text reads well, otherwise
 // use the direction with wider boxes or wrap into rows. Branches use the
@@ -44,22 +51,42 @@ const width = ref(0);
 const em = ref(14);
 let pen: CanvasRenderingContext2D | null = null;
 let observer: ResizeObserver | undefined;
+let measureFrame = 0;
 onMounted(() => {
   if (!root.value) return;
   em.value = parseFloat(getComputedStyle(root.value).fontSize) || 14;
   pen = document.createElement("canvas").getContext("2d");
   if (pen) pen.font = getComputedStyle(root.value).font;
   observer = new ResizeObserver(([entry]) => {
-    width.value = entry.contentRect.width;
+    cancelAnimationFrame(measureFrame);
+    measureFrame = requestAnimationFrame(() => {
+      width.value = entry.contentRect.width;
+    });
   });
   observer.observe(root.value);
 });
-onBeforeUnmount(() => observer?.disconnect());
+onBeforeUnmount(() => {
+  observer?.disconnect();
+  cancelAnimationFrame(measureFrame);
+});
 
+const mostEdgeSteps = computed(() =>
+  Math.max(
+    1,
+    ...props.flow.edges.map(
+      (edge) =>
+        (props.flow.steps ?? []).filter(
+          (step) => step.at === `${edge.from} > ${edge.to}`,
+        ).length,
+    ),
+  ),
+);
 const space = computed<FlowSpacing>(() => ({
-  rank: 2 * em.value,
-  cross: 1.2 * em.value,
-  side: 1.6 * em.value,
+  rank:
+    (props.flow.steps?.length ? 5 + 2 * (mostEdgeSteps.value - 1) : 2) *
+    em.value,
+  cross: (props.flow.steps?.some((step) => step.block) ? 3 : 1.2) * em.value,
+  side: (props.flow.steps?.length ? 4 : 1.6) * em.value,
   pad: 0.4 * em.value,
   thread: 0.8 * em.value,
 }));
@@ -82,7 +109,8 @@ function sizesAt(w: number) {
 function fit(direction: FlowDirection) {
   const labels = props.flow.edges.map((_, i) => labelSizes.value[i] ?? null);
   const across = (w: number) =>
-    layoutFlow(props.flow, direction, sizesAt(w), labels, space.value).width;
+    layoutFlow(layoutInput.value, direction, sizesAt(w), labels, space.value)
+      .width;
   let hi = widest[direction] * em.value;
   if (across(hi) <= width.value) return hi;
   let lo = 2 * em.value;
@@ -126,8 +154,8 @@ function readable(w: number) {
     );
   });
 }
-const branched = computed(() => chainOrder(props.flow) === null);
-const analysis = computed(() => analyzeFlow(props.flow));
+const branched = computed(() => chainOrder(layoutInput.value) === null);
+const analysis = computed(() => analyzeFlow(layoutInput.value));
 const branchLayout = ref<BranchLayout>();
 const readingOrder = computed(() =>
   flowReadingOrder(props.flow, analysis.value),
@@ -150,7 +178,7 @@ const direction = computed<FlowDirection>(() => {
 /** The box width (px) of a chain wrapped `columns` to a row. */
 function wrapWidth(columns: number) {
   const labels = props.flow.edges.map((_, i) => labelSizes.value[i] ?? null);
-  const room = wrapRoom(props.flow, columns, labels, space.value);
+  const room = wrapRoom(layoutInput.value, columns, labels, space.value);
   return Math.min(widest.right * em.value, (width.value - room) / columns);
 }
 /**
@@ -158,13 +186,19 @@ function wrapWidth(columns: number) {
  * as few rows as keep every box readable. 0 when it does not wrap.
  */
 const columns = computed(() => {
-  const count = chainOrder(props.flow)?.length ?? 0;
+  const count = chainOrder(layoutInput.value)?.length ?? 0;
   if (!count || !width.value || fixed.value || direction.value === "right")
     return 0;
+  if (chain.value && width.value < fixedFromEm * em.value) return 0;
   for (let rows = 2; Math.ceil(count / rows) >= 2; rows++) {
     const across = Math.ceil(count / rows);
     if (across === Math.ceil(count / (rows - 1))) continue;
-    if (readable(wrapWidth(across))) return across;
+    if (
+      (!props.flow.steps?.length ||
+        wrapWidth(across) >= narrowest * em.value) &&
+      readable(wrapWidth(across))
+    )
+      return across;
   }
   return 0;
 });
@@ -183,16 +217,25 @@ const layout = computed<FlowLayout>(() => {
   if (branched.value && branchLayout.value) return branchLayout.value;
   const labels = props.flow.edges.map((_, i) => labelSizes.value[i] ?? null);
   const sizes = sizesAt(boxWidth.value);
-  if (columns.value)
-    return wrapFlow(
-      props.flow,
-      columns.value,
-      boxWidth.value,
-      sizes,
-      labels,
-      space.value,
-    );
-  return layoutFlow(props.flow, direction.value, sizes, labels, space.value);
+  const result = columns.value
+    ? wrapFlow(
+        layoutInput.value,
+        columns.value,
+        boxWidth.value,
+        sizes,
+        labels,
+        space.value,
+      )
+    : layoutFlow(
+        layoutInput.value,
+        direction.value,
+        sizes,
+        labels,
+        space.value,
+      );
+  return chain.value
+    ? restoreFlowDirections(result, chain.value.reversed)
+    : result;
 });
 
 async function measure() {
@@ -355,9 +398,22 @@ function shape(i: number) {
 function labelStyle(i: number) {
   const label = layout.value.edges[i].label;
   const measured = branchLayout.value?.edges[i].label;
+  const edge = props.flow.edges[i];
+  const hasStep = props.flow.steps?.some(
+    (step) => step.at === `${edge.from} > ${edge.to}`,
+  );
+  const segment = flowEdgeSegment(layout.value, i);
+  const horizontal =
+    Math.abs(segment.b[0] - segment.a[0]) >
+    Math.abs(segment.b[1] - segment.a[1]);
+  const blocked = props.flow.steps?.some(
+    (step) => step.at === `${edge.from} > ${edge.to}` && step.block,
+  );
+  const shift =
+    hasStep && mode.value !== "outline" ? (horizontal && blocked ? 33 : 16) : 0;
   return {
-    left: `${label?.x ?? 0}px`,
-    top: `${label?.y ?? 0}px`,
+    left: `${(label?.x ?? 0) + (!horizontal ? shift : 0)}px`,
+    top: `${(label?.y ?? 0) - (horizontal ? shift : 0)}px`,
     maxWidth:
       branched.value && measured
         ? mode.value === "outline"
@@ -381,9 +437,56 @@ function draw(points: Point[], arrowhead = true) {
   const head = `M${tx} ${ty} L${bx - dy * 3.5} ${by + dx * 3.5} L${bx + dy * 3.5} ${by - dx * 3.5} Z`;
   return { line, head: arrowhead ? head : "" };
 }
+const canvasHeight = computed(
+  () =>
+    layout.value.height +
+    (props.flow.steps?.some((step) => step.block)
+      ? 14 *
+        (2 +
+          Math.max(
+            0,
+            ...stepMarkers.value.map((marker) =>
+              marker.block ? marker.sibling : 0,
+            ),
+          ))
+      : 0),
+);
 const lines = computed(() =>
   layout.value.edges.map((e) => draw(e.points, e.arrow !== false)),
 );
+
+const stepMarkers = computed(() =>
+  flowStepMarkers(
+    props.flow,
+    layout.value,
+    props.flow.nodes.map(
+      (_, index) =>
+        branchLayout.value?.nodes[index]?.tag ?? heights.value[index]?.tag ?? 0,
+    ),
+    22,
+    mode.value === "outline",
+  ),
+);
+function blockLabelStyle(marker: {
+  sibling?: number;
+  x: number;
+  y: number;
+  vertical: boolean;
+}) {
+  const room = (width.value - layout.value.width) / 2;
+  return marker.vertical
+    ? {
+        left: `${marker.x + 18}px`,
+        top: `${marker.y - 7}px`,
+        maxWidth: `${Math.max(50, layout.value.width + room - marker.x - 20)}px`,
+      }
+    : {
+        left: `${marker.x}px`,
+        top: `${marker.y + 18 + (marker.sibling ?? 0) * 18}px`,
+        transform: "translateX(-50%)",
+        maxWidth: `${Math.max(50, Math.min(marker.x + room, layout.value.width + room - marker.x) * 2 - 4)}px`,
+      };
+}
 </script>
 
 <template>
@@ -396,7 +499,7 @@ const lines = computed(() =>
       <p v-if="flow.over" class="flow-over">
         <DiagramText :text="flow.over" />
       </p>
-      <div class="flow-canvas" :style="{ height: `${layout.height}px` }">
+      <div class="flow-canvas" :style="{ height: `${canvasHeight}px` }">
         <svg
           class="flow-lines"
           :width="layout.width"
@@ -435,7 +538,12 @@ const lines = computed(() =>
             :class="[
               `flow-node--${flow.nodes[i].kind}`,
               `flow-node--${flow.nodes[i].tone}`,
-              { 'flow-node--from-above': fromAbove[i] },
+              {
+                'flow-node--from-above': fromAbove[i],
+                'flow-node--stepped': flow.steps?.some(
+                  (step) => step.at === flow.nodes[i].id,
+                ),
+              },
             ]"
             :style="{
               left: `${layout.nodes[i].x}px`,
@@ -465,8 +573,40 @@ const lines = computed(() =>
             </div>
           </div>
         </template>
+        <template v-for="marker in stepMarkers" :key="`step-${marker.index}`">
+          <span
+            v-if="marker.block"
+            class="flow-block"
+            :class="{ 'flow-block--vertical': marker.vertical }"
+            :style="{ left: `${marker.x}px`, top: `${marker.y}px` }"
+            aria-hidden="true"
+          />
+          <span
+            class="flow-step-number step-number"
+            :class="{ 'step-number--blocked': marker.block }"
+            :data-step="marker.index"
+            :data-node="marker.node"
+            :style="{
+              left: `${marker.x + (marker.block && marker.vertical ? -19 : 0)}px`,
+              top: `${marker.y + (marker.block ? (marker.vertical ? 0 : -19) : 0)}px`,
+            }"
+            >{{ marker.index + 1 }}</span
+          >
+          <span
+            v-if="marker.block"
+            class="flow-block-label"
+            :style="blockLabelStyle(marker)"
+            >{{ marker.block }}</span
+          >
+        </template>
       </div>
     </div>
+    <StepDescriptions
+      v-if="flow.steps?.length"
+      :items="flow.steps"
+      numbered
+      columns
+    />
     <p v-if="flow.note" class="flow-note">
       <DiagramText :text="flow.note" />
     </p>
@@ -634,5 +774,36 @@ const lines = computed(() =>
 figcaption {
   margin-top: var(--space-3);
   color: var(--ink-soft);
+}
+.flow-step-number {
+  position: absolute;
+  transform: translate(-50%, -50%);
+}
+.flow-block {
+  position: absolute;
+  width: var(--figure-block-line);
+  height: var(--figure-block-length);
+  background: var(--danger);
+  transform: translate(-50%, -50%);
+}
+.flow-block--vertical {
+  width: var(--figure-block-length);
+  height: var(--figure-block-line);
+}
+.flow-block-label {
+  position: absolute;
+  width: max-content;
+  color: var(--danger);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1.35;
+}
+.flow:has(.flow-step-number) .flow-frame {
+  padding-top: var(--space-4);
+  padding-bottom: var(--space-4);
+}
+.flow-node--stepped .flow-tag {
+  padding-right: var(--figure-step-size);
+  text-align: left;
 }
 </style>

@@ -85,7 +85,6 @@ async function fixture(t: TestContext) {
     directory,
     renderer: "renderer-one",
     diagnostics: "diagnostics-one",
-    processRenderer: "process-one",
     templates: {},
     async createRunner() {
       starts++;

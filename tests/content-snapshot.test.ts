@@ -712,20 +712,6 @@ test("publication rejects invalid abbreviations and references to collapsed atom
     }),
     /answer/,
   );
-  for (const from of [{ atom: 11 }, { bond: 10 }])
-    await rejects(
-      update({
-        type: "mechanism",
-        frames: [
-          {
-            ...molecule,
-            explanation: "Sample",
-            arrows: [{ from, to: { atom: 8 }, electrons: 2 }],
-          },
-        ],
-      }),
-      /arrows\[0\].from.*abbreviated/,
-    );
   const restore = await edit(
     update({
       type: "prediction",
@@ -751,9 +737,11 @@ test("publication rejects a substrate row that differs from its instantiated pro
   });
   const file = join(root, "sites/minimal/content.json");
   const content = JSON.parse(await readFile(file, "utf8"));
-  const scope = content.chapters.find(
-    (chapter: { id: string }) => chapter.id === "schemes",
-  ).blocks[1].scope;
+  const scope = content.chapters
+    .find((chapter: { id: string }) => chapter.id === "schemes")
+    .blocks.find(
+      (block: { type: string }) => block.type === "substrate-scope",
+    ).scope;
   scope.rows[1].product.smiles = "COC(=O)c1ccccc1";
   await writeFile(file, JSON.stringify(content));
   await assert.rejects(buildSnapshot(root), /rows\[1\].*2b.*differs/);

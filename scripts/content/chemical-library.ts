@@ -1,3 +1,4 @@
+import { definePanels, panelReferences } from "../../shared/panels.ts";
 import { readFile, readdir, lstat } from "node:fs/promises";
 import { join, extname } from "node:path";
 import { parse as parseYaml } from "yaml";
@@ -34,7 +35,6 @@ export async function readChemicalLibrary(root: string, stage?: AssetStage) {
     "routes",
     "mechanisms",
     "images",
-    "processes",
     "markush",
     "conformations",
   ]) {
@@ -62,7 +62,6 @@ export async function readChemicalLibrary(root: string, stage?: AssetStage) {
           route: "routes",
           mechanism: "mechanisms",
           image: "images",
-          process: "processes",
           markush: "markush",
           conformation: "conformations",
         }[value.kind] !== dir
@@ -126,11 +125,20 @@ export function libraryUsage(
       return;
     }
     if (!value || typeof value !== "object") return;
+    if ("type" in value && value.type === "panels") {
+      const input = Object.fromEntries(
+        Object.entries(value).filter(([key]) => key !== "type" && key !== "id"),
+      );
+      panelReferences(definePanels(input)).forEach((reference) =>
+        visit(reference, path, title),
+      );
+      return;
+    }
     if (
       ("type" in value && value.type === "figure-ref") ||
       ("ref" in value &&
         typeof value.ref === "string" &&
-        /^(cmp|rxn|rte|mec|img|prc|cnf|mku)_/.test(value.ref))
+        /^(cmp|rxn|rte|mec|img|cnf|mku)_/.test(value.ref))
     ) {
       validateFigureReference(value);
       if (!entries[value.ref])

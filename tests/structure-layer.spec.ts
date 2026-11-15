@@ -34,10 +34,6 @@ test("molecule selection supports mouse and keyboard; result is absent until sub
   await variants.getByRole("combobox").selectOption("1");
   await expect(variants).toContainText("94.11");
   await expect(variants).toContainText("20.23");
-  const mechanism = page.getByRole("region", { name: "分步机理" });
-  await expect(mechanism.locator(".electron-arrow")).toHaveCount(1);
-  await mechanism.getByRole("button", { name: "下一步" }).click();
-  await expect(mechanism.locator(".electron-arrow")).toHaveCount(2);
 });
 test("structures label specified stereocentres", async ({ page }) => {
   await page.goto("/showcase/molecule");
@@ -76,48 +72,6 @@ test("pages without molecular content do not request RDKit or WASM", async ({
   expect(
     resources.filter((url) => /RDKit_minimal|\.wasm(?:\?|$)/.test(url)),
   ).toEqual([]);
-});
-
-test("molecule canvases crop whitespace without enlarging small molecules on desktop and mobile", async ({
-  page,
-}) => {
-  for (const width of [1280, 390]) {
-    await page.setViewportSize({ width, height: 900 });
-    await page.goto("/showcase/molecule");
-    const route = page.getByRole("region", { name: "合成方案" });
-    await route
-      .getByRole("button", { name: "乙酰化示意", exact: true })
-      .click();
-    const small = route.getByRole("img", { name: "乙酸二维结构", exact: true });
-    const large = route.getByRole("img", {
-      name: "阿司匹林二维结构",
-      exact: true,
-    });
-    await expect(small).toBeVisible({ timeout: 45_000 });
-    await expect(large).toBeVisible({ timeout: 45_000 });
-    const measure = async (svg: typeof small) =>
-      svg.evaluate((node: SVGSVGElement) => {
-        const box = node.getBBox();
-        const view = node.viewBox.baseVal;
-        return {
-          spareWidth: view.width - box.width,
-          spareHeight: view.height - box.height,
-          scale: node.getBoundingClientRect().width / view.width,
-        };
-      });
-    await expect
-      .poll(async () => (await measure(small)).spareWidth)
-      .toBeLessThan(30);
-    const a = await measure(small),
-      b = await measure(large);
-    expect(a.spareHeight).toBeLessThan(30);
-    expect(a.spareWidth).toBeGreaterThanOrEqual(20);
-    expect(a.spareHeight).toBeGreaterThanOrEqual(20);
-    expect(Math.abs(a.scale - b.scale)).toBeLessThan(0.01);
-    await route.screenshot({
-      path: test.info().outputPath(`cropped-route-${width}.png`),
-    });
-  }
 });
 
 test("journal structures keep monochrome labels, equal screen bonds and only declared abbreviations", async ({
@@ -260,24 +214,6 @@ test("journal structures keep monochrome labels, equal screen bonds and only dec
       }),
     );
     expect(Math.min(...gaps)).toBeGreaterThan(1.2);
-    const arrow = page.locator(".electron-arrow").first();
-    const arrowSize = await arrow.evaluate((el: SVGPathElement) => {
-      const scale =
-        el.ownerSVGElement!.getBoundingClientRect().width /
-        el.ownerSVGElement!.viewBox.baseVal.width;
-      const stroke = parseFloat(getComputedStyle(el).strokeWidth);
-      const marker =
-        el.ownerSVGElement!.querySelector<SVGMarkerElement>(
-          "marker[id$='-2']",
-        )!;
-      return {
-        stroke: stroke * scale,
-        head: marker.markerWidth.baseVal.value * stroke * scale,
-      };
-    });
-    expect(arrowSize.stroke).toBeCloseTo((2 * 28) / 42, 1);
-    expect(arrowSize.head).toBeCloseTo((14 * 28) / 42, 1);
-
     const oversized = page.getByRole("img", {
       name: "长链样品二维结构",
       exact: true,

@@ -92,10 +92,7 @@ test("complete library previews share one saved layout and preserve local scroll
   ).toHaveCount(3);
   const after = await signatures();
   expect(after).toEqual(before);
-  const arrow = page.locator('[data-reaction-id="rxn_example"]');
-  await arrow.focus();
-  await page.keyboard.press("Enter");
-  await expect(page.locator("#rxn_example .library-figure > p")).toHaveCount(1);
+  await expect(page.locator("#rxn_example .step-description")).toHaveCount(1);
   await page.setViewportSize({ width: 390, height: 844 });
   const canvas = page.locator("#rxn_example .library-canvas");
   await expect
@@ -611,10 +608,10 @@ test("mechanism references show the complete overview or one pinned frame", asyn
   await expect(overview.locator('[data-figure="mec_example"]')).toBeVisible();
   await expect(overview.locator("[data-frame]")).toHaveCount(2);
   await expect(overview.getByRole("button")).toHaveCount(0);
-  await expect(overview.locator("p")).toHaveText([
-    "1. first：Explanation for first",
-    "2. second：Explanation for second",
-  ]);
+  await expect(overview.locator(".step-description")).toHaveCount(2);
+  await expect(overview.locator(".step-number")).toHaveText(["1", "2"]);
+  await expect(overview.getByRole("heading", { level: 4 })).toHaveCount(2);
+  await expect(overview.locator(".step-description p")).toHaveCount(2);
   for (const id of ["first", "second"])
     await expect(
       overview.locator(`[data-label="${id}/structure:number:0"]`),
@@ -623,7 +620,8 @@ test("mechanism references show the complete overview or one pinned frame", asyn
   await expect(
     pinned.locator('[data-label="structure:number:0"]'),
   ).toHaveAttribute("data-text", "7");
-  await expect(pinned.locator("p")).toHaveText(["Explanation for second"]);
+  await expect(pinned.locator(".step-description")).toHaveCount(1);
+  await expect(pinned.locator(".step-number")).toHaveCount(0);
   for (const width of [1366, 390]) {
     await page.setViewportSize({ width, height: width === 1366 ? 900 : 844 });
     expect(
@@ -715,80 +713,6 @@ test("adjacent bond transfers use a readable arc when space is available", async
     );
   });
   expect(height).toBeGreaterThanOrEqual(0.35);
-});
-
-test("a saved process reuses scenario controls and keyboard steps at both widths", async ({
-  page,
-}) => {
-  const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(error.message));
-  const process = {
-    kind: "process",
-    id: "prc_transfer",
-    title: "Transfer process",
-    sources: [{ source: "handbook", locator: "Example" }],
-    label: "Transfer steps",
-    nodes: [{ name: "Input" }, { name: "Output" }],
-    scenarios: [
-      {
-        name: "Transfer",
-        steps: [
-          {
-            title: "Prepare",
-            text: "Prepare input",
-            state: "Ready",
-            kind: "local",
-            from: 0,
-            to: 0,
-          },
-          {
-            title: "Move",
-            text: "Transfer input",
-            state: "At output",
-            kind: "transfer",
-            from: 0,
-            to: 1,
-          },
-        ],
-      },
-      {
-        name: "Blocked",
-        steps: [
-          {
-            title: "Wait",
-            text: "Blocked transfer",
-            state: "At input",
-            kind: "blocked",
-            from: 0,
-            to: 1,
-          },
-        ],
-      },
-    ],
-  };
-  await page.route("**/api/library", (route) =>
-    route.fulfill({
-      json: { entries: { [process.id]: process }, uses: { [process.id]: [] } },
-    }),
-  );
-  for (const width of [1366, 390]) {
-    await page.setViewportSize({ width, height: 900 });
-    await page.goto("/library/");
-    const player = page.getByRole("region", { name: process.title });
-    await expect(
-      player.getByRole("heading", { name: process.title, exact: true }),
-    ).toBeVisible();
-    await player.press("ArrowRight");
-    await expect(player.locator(".step-caption")).toContainText("Move");
-    await player.getByRole("button", { name: "Blocked", exact: true }).click();
-    await expect(player.locator(".step-caption")).toContainText("Wait");
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth,
-      ),
-    ).toBe(true);
-  }
-  expect(errors).toEqual([]);
 });
 
 test("saved product separators are rendered once", async () => {

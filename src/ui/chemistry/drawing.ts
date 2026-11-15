@@ -4,8 +4,6 @@ import type { MoleculeHandle } from "./rdkit.ts";
 // This is the one screen-size setting; all ACS proportions follow it.
 export const moleculeBondLength = 28;
 export const moleculeScreenScale = moleculeBondLength / 14.4;
-// Retain the previous arrow-to-bond ratio in the new drawing coordinates.
-export const electronArrowLineWidth = 2 * (14.4 / 42);
 export const moleculeDrawingOptions = {
   fixedBondLength: 14.4 / 1.5,
   scalingFactor: 14.4 / 1.5,

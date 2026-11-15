@@ -104,7 +104,7 @@ if (input) {
       "utf8",
     ),
     style = parseFigureStyle(css);
-  const runner = figureBuildRunner(entries, resolve(root), css, "preview");
+  const runner = figureBuildRunner(entries, resolve(root), css);
   let browser: Awaited<ReturnType<typeof figureBrowser>> | undefined;
   let failed = false;
   try {

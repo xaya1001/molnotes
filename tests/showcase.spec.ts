@@ -3,7 +3,7 @@ import { expect, test, type Page } from "./helpers/test.ts";
 const pages = [
   ["/showcase/", "工具箱示例"],
   ["/showcase/elements", "正文元素"],
-  ["/showcase/steps", "分步图示"],
+  ["/showcase/steps", "组合图示"],
   ["/showcase/curves", "公式与曲线"],
   ["/showcase/molecule", "二维分子结构"],
   ["/showcase/data", "数据表与散点"],
@@ -38,10 +38,10 @@ test("the pager moves through sections, focuses the new heading and keeps histor
   page,
 }) => {
   await page.goto("/showcase/elements");
-  await page.getByRole("link", { name: /下一节\s*分步图示/ }).click();
+  await page.getByRole("link", { name: /下一节\s*组合图示/ }).click();
   await expect(page).toHaveURL(/\/showcase\/steps$/);
-  await expect(pageHeading(page, "分步图示")).toBeFocused();
-  await expect(page.getByRole("status").last()).toHaveText("已打开：分步图示");
+  await expect(pageHeading(page, "组合图示")).toBeFocused();
+  await expect(page.getByRole("status").last()).toHaveText("已打开：组合图示");
   await page.goBack();
   await expect(pageHeading(page, "正文元素")).toBeFocused();
   await page.getByRole("link", { name: /上一节\s*概览/ }).click();

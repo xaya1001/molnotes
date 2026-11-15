@@ -14,7 +14,6 @@ import {
 import {
   validateLibrary,
   validateFigureReference,
-  validateLibraryEntry,
 } from "../shared/chemical-library/contract.ts";
 import { routeMetrics } from "../shared/chemical-library/routes.ts";
 import type {
@@ -273,6 +272,20 @@ test("a convergent route validates graph edges and counts the longest path", asy
   library[route.id] = route;
   validateLibrary(library);
   assert.equal(routeMetrics(route, library).longestLinearSteps, 2);
+  const { figureDescriptions } =
+    await import("../src/ui/library/descriptions.ts");
+  assert.deepEqual(
+    figureDescriptions(library, route),
+    route.steps.map((step, index) => {
+      const reaction = library[step.reaction];
+      assert.equal(reaction.kind, "reaction");
+      return {
+        title: reaction.title,
+        text: reaction.explanation,
+        number: index + 1,
+      };
+    }),
+  );
   assert.throws(
     () =>
       routeMetrics(
@@ -418,8 +431,27 @@ test("library dependencies include scene participants and report reverse referen
       path: "/notes/example/first",
       title: "Note",
     },
+    {
+      value: {
+        type: "panels",
+        mode: "steps",
+        items: [
+          { title: "First", text: "Input", ref: compound.id },
+          {
+            title: "Second",
+            text: "Result",
+            ref: compound.id,
+            numbers: { compound: "2" },
+          },
+        ],
+      },
+      path: "/sites/second/",
+      title: "Panels",
+    },
   ]);
-  assert.equal(usage.snapshot.uses[compound.id].length, 2);
+  assert.equal(usage.snapshot.uses[compound.id].length, 4);
+  assert.equal(usage.references.length, 4);
+  assert.deepEqual(usage.references[3].numbers, { compound: "2" });
   assert.equal(usage.snapshot.entries[compound.id], compound);
   assert.throws(
     () =>
@@ -505,66 +537,6 @@ test("content reads compiled YAML figures with shared compound identity", async 
     mechanism.frames[1].scene.molecules[0].compound,
   );
   assert.equal(mechanism.frames[1].scene.molecules[0].rotate, -90);
-});
-
-test("process entries load once and accept reusable references while validating node boundaries", async () => {
-  const { mkdtemp, mkdir, writeFile, rm } = await import("node:fs/promises");
-  const { tmpdir } = await import("node:os");
-  const { join } = await import("node:path");
-  const { readChemicalLibrary, libraryUsage } =
-    await import("../scripts/content/chemical-library.ts");
-  const entry = {
-    kind: "process",
-    id: "prc_transfer",
-    title: "Transfer",
-    sources,
-    label: "Transfer steps",
-    nodes: [{ name: "Input" }, { name: "Output" }],
-    scenarios: [
-      {
-        name: "Default",
-        steps: [
-          {
-            title: "Move",
-            text: "Transfer the input",
-            state: "At output",
-            kind: "transfer",
-            from: 0,
-            to: 1,
-          },
-        ],
-      },
-    ],
-  };
-  validateLibraryEntry(entry);
-  const invalid = structuredClone(entry);
-  invalid.scenarios[0].steps[0].to = 2;
-  assert.throws(() => validateLibraryEntry(invalid), /unknown node/);
-  assert.throws(
-    () => validateLibraryEntry({ ...entry, id: "img_transfer" }),
-    /kind mismatch/,
-  );
-  const root = await mkdtemp(join(tmpdir(), "process-library-"));
-  try {
-    await mkdir(join(root, "library/processes"), { recursive: true });
-    await writeFile(
-      join(root, "library/processes/prc_transfer.json"),
-      JSON.stringify(entry),
-    );
-    const { entries } = await readChemicalLibrary(root);
-    const usage = libraryUsage(
-      entries,
-      ["first", "second"].map((name) => ({
-        value: { type: "figure-ref", ref: entry.id },
-        path: `/sites/${name}/`,
-        title: name,
-      })),
-    );
-    assert.deepEqual(entries[entry.id], entry);
-    assert.equal(usage.snapshot.uses[entry.id].length, 2);
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
 });
 
 test("compound identity preserves relative stereo groups as well as isotopes", async () => {

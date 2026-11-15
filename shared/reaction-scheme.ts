@@ -105,33 +105,6 @@ export function validateReactionStep(
     }
   }
 }
-export function validateSynthesisRoutes(
-  value: unknown,
-  at: string,
-): asserts value is SynthesisRoute[] {
-  requireValue(Array.isArray(value) && value.length, `${at} needs routes`);
-  const ids = new Set<string>();
-  for (const route of value) {
-    requireValue(isObject(route), `${at} needs route objects`);
-    text(route.id, `${at}.id`);
-    text(route.title, `${at}.title`);
-    requireValue(!ids.has(route.id), `${at} duplicate route ${route.id}`);
-    ids.add(route.id);
-    if (route.core !== undefined) text(route.core, `${at}.${route.id}.core`);
-    requireValue(
-      route.direction === undefined ||
-        ["forward", "retro"].includes(String(route.direction)),
-      `${at}.${route.id}.direction is invalid`,
-    );
-    requireValue(
-      Array.isArray(route.steps) && route.steps.length,
-      `${at}.${route.id} needs steps`,
-    );
-    route.steps.forEach((step, i) =>
-      validateReactionStep(step, `${at}.${route.id}.steps[${i}]`),
-    );
-  }
-}
 function textCells(
   value: unknown,
   expected: readonly string[],

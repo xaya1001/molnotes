@@ -33,8 +33,6 @@ export { default as MolecularProperties } from "./MolecularProperties.vue";
 export { default as SubstituentExplorer } from "./SubstituentExplorer.vue";
 export { default as ReactionStep } from "./ReactionStep.vue";
 export { default as SubstrateScope } from "./SubstrateScope.vue";
-export { default as SynthesisRoute } from "./SynthesisRoute.vue";
-export { default as MechanismViewer } from "./MechanismViewer.vue";
 export { default as PredictionExercise } from "./PredictionExercise.vue";
 export { default as DataScatterExplorer } from "./data/DataScatterExplorer.vue";
 export {
@@ -73,11 +71,7 @@ export { default as SourceExcerpt } from "./SourceExcerpt.vue";
 export { default as ReadingGuide } from "./ReadingGuide.vue";
 export type {
   MoleculeData,
-  ElectronArrow,
-  StructureAnchor,
   ReactionStep as ReactionStepData,
-  SynthesisRoute as SynthesisRouteData,
-  MechanismFrame,
 } from "./chemistry/types.ts";
 export {
   validateEvidence,

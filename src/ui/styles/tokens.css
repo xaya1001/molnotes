@@ -118,3 +118,9 @@
   --chemical-plus-font: 26.35px;
   --chemical-atom-note-scale: 0.62;
 }
+
+:root {
+  --figure-step-size: 1.375rem;
+  --figure-block-length: 18px;
+  --figure-block-line: 3px;
+}

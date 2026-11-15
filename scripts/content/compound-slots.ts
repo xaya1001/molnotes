@@ -19,7 +19,12 @@ export function resolveCompoundSlots(
   function visit(value: unknown, path: string): unknown {
     if (Array.isArray(value))
       return value.map((v, i) => visit(v, `${path}[${i}]`));
-    if (!isObject(value) || value.type === "figure-ref") return value;
+    if (
+      !isObject(value) ||
+      value.type === "figure-ref" ||
+      value.type === "panels"
+    )
+      return value;
     if (typeof value.ref === "string" && value.ref.startsWith("cmp_")) {
       const { ref, variant, ...local } = value;
       const reference = { ref, ...(variant !== undefined ? { variant } : {}) };

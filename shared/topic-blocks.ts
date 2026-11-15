@@ -2,12 +2,9 @@ import {
   validateFigureReference,
   validateImageReference,
 } from "./chemical-library/contract.ts";
-import {
-  validateSynthesisRoutes,
-  validateSubstrateScope,
-} from "./reaction-scheme.ts";
+import { validateSubstrateScope } from "./reaction-scheme.ts";
 import { validateAbbreviations } from "./molecule-abbreviations.ts";
-import { validateProcess } from "./process.ts";
+import { definePanels, panelsText } from "./panels.ts";
 import type {
   StructureSetInput,
   StructureSet,
@@ -22,11 +19,7 @@ import { labModels } from "../src/ui/models/catalog.ts";
 import { defineStructureSet } from "../src/ui/structure/model.ts";
 import { defineFlow, flowText } from "../src/ui/diagrams/flow.ts";
 import { defineTimeline, timelineText } from "../src/ui/diagrams/model.ts";
-import type {
-  MechanismFrame,
-  MoleculeData,
-  StructureAnchor,
-} from "../src/ui/chemistry/types.ts";
+import type { MoleculeData } from "../src/ui/chemistry/types.ts";
 import type {
   TableCell,
   TableRow,
@@ -124,44 +117,6 @@ function labels(
       ),
     `${where} labels must map atom indices to text`,
   );
-}
-
-function anchor(
-  value: unknown,
-  where: string,
-): asserts value is StructureAnchor {
-  assert(
-    isObject(value) &&
-      ((isInteger(value.atom) && value.atom >= 0) ||
-        (isInteger(value.bond) && value.bond >= 0)),
-    `${where} must name an atom or a bond`,
-  );
-}
-
-export function validateMechanismFrames(
-  frames: unknown,
-  where: string,
-): asserts frames is MechanismFrame[] {
-  assert(
-    isList(frames) && frames.length > 0,
-    `${where} needs at least one frame`,
-  );
-  frames.forEach((frame, index) => {
-    const at = `${where} frame ${index + 1}`;
-    molecule(frame, at);
-    optionalText(frame.title, `${at} title`);
-    text(frame.explanation, `${at} explanation`);
-    assert(isList(frame.arrows), `${at} arrows must be an array`);
-    for (const arrow of frame.arrows) {
-      assert(isObject(arrow), `${at} arrows must be objects`);
-      anchor(arrow.from, `${at} arrow from`);
-      anchor(arrow.to, `${at} arrow to`);
-      assert(
-        arrow.electrons === 1 || arrow.electrons === 2,
-        `${at} arrow electrons must be 1 or 2`,
-      );
-    }
-  });
 }
 
 /** Published cells contain text, a link or a resolved compound drawing. */
@@ -522,7 +477,7 @@ export function chapterPredictions(
   return found;
 }
 
-/** The prose of a chapter's blocks, for the search index; `data` resolves scene frames kept there. */
+/** The prose of a chapter's blocks, for the search index; `data` resolves values kept there. */
 export function blockSearchText(
   blocks: readonly TopicBlock[],
   data?: Record<string, unknown>,
@@ -561,25 +516,13 @@ export function blockSearchText(
         return block.caption === undefined ? [] : [block.caption];
       case "figure":
         return [block.caption];
-      case "process": {
-        const process = resolveData(block.process, data, "process");
-        return [
-          process.title,
-          ...process.nodes.flatMap((node) => [node.name, node.detail]),
-          ...process.scenarios.flatMap((scenario) => [
-            scenario.name,
-            ...scenario.steps.flatMap((step) => [
-              step.title,
-              step.text,
-              step.state,
-              step.loss?.label,
-            ]),
-          ]),
-        ];
-      }
-      case "scene":
-        return resolveData(block.frames, data, "scene frames").flatMap(
-          (frame) => [frame.title, frame.text],
+      case "panels":
+        return panelsText(
+          definePanels({
+            mode: block.mode,
+            caption: block.caption,
+            items: block.items,
+          }),
         );
       case "lab":
         return [block.title, block.intro];
@@ -644,9 +587,7 @@ const blockFields: Record<string, string[]> = {
   "molecule-compare": "items left right highlightLabel".split(" "),
   molecules: "items caption".split(" "),
   substituents: "site variants".split(" "),
-  route: "routes".split(" "),
   "substrate-scope": ["scope"],
-  mechanism: "title frames".split(" "),
   table: "caption columns spans rows note rowHeader".split(" "),
   spectrum: "molecule peaks caption assignAfter".split(" "),
   "data-table":
@@ -659,8 +600,7 @@ const blockFields: Record<string, string[]> = {
   flow: "flow caption".split(" "),
   "path-picker": "title".split(" "),
   "diagnostic-summary": "title".split(" "),
-  scene: "label title frames".split(" "),
-  process: ["process"],
+  panels: ["mode", "caption", "items"],
   problem: "lang label source task prompt parts answer evidence".split(" "),
   prediction:
     "kind question source context explanation molecules excerpt reset options answer alsoCorrect optionExplanations molecule labels minSelections maxSelections match optionAnswer gradeAtoms groups atomExplanation image points input tolerance readout activity chapter data evidence inputExcerpt mode quizId refs result sourceContext title".split(
@@ -841,15 +781,8 @@ export function validateBlocks(
           for (const item of variants) molecule(item, w);
         });
         break;
-      case "route":
-        field("routes", validateSynthesisRoutes);
-        break;
       case "substrate-scope":
         field("scope", validateSubstrateScope);
-        break;
-      case "mechanism":
-        optionalText(block.title, `${here} title`);
-        field("frames", validateMechanismFrames);
         break;
       case "table": {
         text(block.caption, `${here} caption`);
@@ -1023,38 +956,12 @@ export function validateBlocks(
         );
         break;
       }
-      case "process":
-        field("process", validateProcess);
-        break;
-      case "scene":
-        text(block.label, `${here} label`);
-        optionalText(block.title, `${here} title`);
-        field("frames", (frames, w) => {
-          assert(
-            isList(frames) && frames.length > 0,
-            `${w} needs at least one frame`,
-          );
-          frames.forEach((frame, i) => {
-            assert(isObject(frame), `${w} frame ${i + 1} must be an object`);
-            optionalText(frame.title, `${w} frame ${i + 1} title`);
-            text(frame.text, `${w} frame ${i + 1} text`);
-            if (frame.image !== undefined) {
-              assert(
-                isObject(frame.image),
-                `${w} frame ${i + 1} image must be { src, alt }`,
-              );
-              if ("ref" in frame.image)
-                validateImageReference(
-                  frame.image,
-                  `${w} frame ${i + 1} image`,
-                );
-              else {
-                text(frame.image.src, `${w} frame ${i + 1} image src`);
-                text(frame.image.alt, `${w} frame ${i + 1} image alt`);
-              }
-            }
-          });
-        });
+      case "panels":
+        defined(
+          definePanels,
+          { mode: block.mode, caption: block.caption, items: block.items },
+          here,
+        );
         break;
       case "problem": {
         text(block.id, `${here} id`);

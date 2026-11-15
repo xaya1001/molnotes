@@ -10,7 +10,6 @@ import SarCases from "./SarCases.vue";
 import { computed } from "vue";
 import Formula from "../Formula.vue";
 import LineChart from "../LineChart.vue";
-import MechanismViewer from "../MechanismViewer.vue";
 import MoleculeCompare from "./MoleculeCompare.vue";
 import MolecularProperties from "../MolecularProperties.vue";
 import MoleculeView from "../MoleculeView.vue";
@@ -18,7 +17,6 @@ import ReadingGuide from "../ReadingGuide.vue";
 import SourceExcerpt from "../SourceExcerpt.vue";
 import SubstituentExplorer from "../SubstituentExplorer.vue";
 import SubstrateScope from "../SubstrateScope.vue";
-import SynthesisRoute from "../SynthesisRoute.vue";
 import UiFigure from "../UiFigure.vue";
 import DataScatterExplorer from "../data/DataScatterExplorer.vue";
 import { defineDataTable } from "../data/values.ts";
@@ -39,8 +37,7 @@ import QuizQuestion from "./QuizQuestion.vue";
 import DiagnosticSummary from "./DiagnosticSummary.vue";
 import PathPicker from "./PathPicker.vue";
 import TabsBlock from "./TabsBlock.vue";
-import ProcessViewer from "./ProcessViewer.vue";
-import SceneViewer from "./SceneViewer.vue";
+import PanelsFigure from "../PanelsFigure.vue";
 import SpectrumBlock from "./SpectrumBlock.vue";
 import TopicRefs from "./TopicRefs.vue";
 import TopicTable from "./TopicTable.vue";
@@ -221,18 +218,10 @@ const toneClass = (tone?: string) =>
       :site="block.site"
       :variants="content.dataOf(block.variants)"
     />
-    <SynthesisRoute
-      v-else-if="block.type === 'route'"
-      :routes="content.dataOf(block.routes)"
-    />
     <SubstrateScope
       v-else-if="block.type === 'substrate-scope'"
       :scope="content.dataOf(block.scope)"
     />
-    <template v-else-if="block.type === 'mechanism'">
-      <h3 v-if="block.title">{{ block.title }}</h3>
-      <MechanismViewer :frames="content.dataOf(block.frames)" />
-    </template>
     <TopicTable
       v-else-if="block.type === 'table'"
       :caption="block.caption"
@@ -312,16 +301,7 @@ const toneClass = (tone?: string) =>
       :block="block"
       :chapter="chapter"
     />
-    <ProcessViewer
-      v-else-if="block.type === 'process'"
-      :data="content.dataOf(block.process)"
-    />
-    <SceneViewer
-      v-else-if="block.type === 'scene'"
-      :label="block.label"
-      :title="block.title"
-      :frames="content.dataOf(block.frames)"
-    />
+    <PanelsFigure v-else-if="block.type === 'panels'" :panels="block" />
     <ProblemBlock
       v-else-if="block.type === 'problem'"
       :block="block"

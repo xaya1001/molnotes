@@ -42,7 +42,7 @@ if (args.length && args[0] !== "--library") {
     new URL("../src/ui/styles/tokens.css", import.meta.url),
     "utf8",
   );
-  const runner = figureBuildRunner(entries, root, css, "lint"),
+  const runner = figureBuildRunner(entries, root, css),
     style = await loadFigureStyle();
   try {
     for (const reference of figureProofReferences(entries, [])) {

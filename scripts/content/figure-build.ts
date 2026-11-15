@@ -29,7 +29,6 @@ export function figureBuildRunner(
   library: Library,
   root: string,
   css: string,
-  processRenderer: string,
   stage?: AssetStage,
 ): ProofRunner {
   const pool = figureWorkerPool(css);
@@ -49,16 +48,6 @@ export function figureBuildRunner(
               width: entry.width,
               height: entry.height,
               crop: entry.crop,
-            }),
-          ),
-        };
-      if (entry.kind === "process")
-        return {
-          kind: "illustration",
-          geometryKey: sha256(
-            stableFigureValue({
-              entry: { ...entry, sources: undefined },
-              processRenderer,
             }),
           ),
         };
@@ -100,37 +89,26 @@ export async function figureBuildVersions(css: string) {
       .update(file)
       .update(await readFile(new URL(import.meta.resolve(file))));
   fonts.update(await readFile(await nativeFigureFontFile()));
-  const [
-    preparation,
-    diagnostics,
-    dependencies,
-    diagnosticDependencies,
-    processSources,
-    processDependencies,
-  ] = await Promise.all([
-    figureRendererFingerprint(root, [
-      "src/ui/library/prepare.ts",
-      "src/ui/library/geometry-tree.ts",
-      "shared/molecule-toolkit.ts",
-      "scripts/figure-fonts.ts",
-      "scripts/chemical-toolkit.py",
-      "scripts/chemical-toolkit-io.ts",
-      "scripts/requirements-material.txt",
-    ]),
-    figureRendererFingerprint(root, ["scripts/figure-diagnostics.ts"]),
-    figureDependencyFingerprint(root, [
-      "fontkit",
-      "svg-parser",
-      "svgpath",
-      "svg-path-properties",
-    ]),
-    figureDependencyFingerprint(root, ["svgpath", "svg-path-properties"]),
-    figureRendererFingerprint(root, [
-      "src/ui/topic/ProcessViewer.vue",
-      "src/ui/styles/index.css",
-    ]),
-    figureDependencyFingerprint(root, ["vue"]),
-  ]);
+  const [preparation, diagnostics, dependencies, diagnosticDependencies] =
+    await Promise.all([
+      figureRendererFingerprint(root, [
+        "src/ui/library/prepare.ts",
+        "src/ui/library/geometry-tree.ts",
+        "shared/molecule-toolkit.ts",
+        "scripts/figure-fonts.ts",
+        "scripts/chemical-toolkit.py",
+        "scripts/chemical-toolkit-io.ts",
+        "scripts/requirements-material.txt",
+      ]),
+      figureRendererFingerprint(root, ["scripts/figure-diagnostics.ts"]),
+      figureDependencyFingerprint(root, [
+        "fontkit",
+        "svg-parser",
+        "svgpath",
+        "svg-path-properties",
+      ]),
+      figureDependencyFingerprint(root, ["svgpath", "svg-path-properties"]),
+    ]);
   return {
     templates: Object.fromEntries(
       [...conformations].map(([id, data]) => [
@@ -151,12 +129,6 @@ export async function figureBuildVersions(css: string) {
         diagnostics,
         dependencies: diagnosticDependencies,
         style,
-      }),
-    ),
-    processRenderer: sha256(
-      stableFigureValue({
-        sources: processSources,
-        dependencies: processDependencies,
       }),
     ),
   };
@@ -183,8 +155,7 @@ export async function verifyLibraryFigures(
       directory: cacheDirectory ?? temporary!,
       stage,
       ...versions,
-      createRunner: async () =>
-        figureBuildRunner(library, root, css, versions.processRenderer, stage),
+      createRunner: async () => figureBuildRunner(library, root, css, stage),
       onStats: (stats) =>
         console.log(
           `Figure proofs: ${stats.inputHits} inputs cached, ${stats.proofHits} proofs cached, ${stats.prepared} prepared, ${stats.diagnosed} diagnosed, ${stats.thumbnails} thumbnails, ${stats.total} total`,
@@ -205,7 +176,7 @@ export async function prepareFigureViews(
     new URL("../../src/ui/styles/tokens.css", import.meta.url),
     "utf8",
   );
-  const runner = figureBuildRunner(library, root, css, "preview");
+  const runner = figureBuildRunner(library, root, css);
   const renders: Record<string, LibraryFigureRender> = {};
   const assets = new Map<string, UnitAsset & { bytes: Buffer }>();
   try {

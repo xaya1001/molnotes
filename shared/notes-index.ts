@@ -1,3 +1,4 @@
+import { definePanels, panelsText, type Panels } from "./panels.ts";
 import { validateFigureReference } from "./chemical-library/contract.ts";
 import { isInteger } from "./json.ts";
 import MarkdownIt from "markdown-it";
@@ -47,6 +48,7 @@ export type NoteDiagram =
     }
   | { id: string; kind: "timeline"; timeline: Timeline; caption: string }
   | { id: string; kind: "flow"; flow: Flow; caption: string }
+  | { id: string; kind: "panels"; panels: Panels; caption: string }
   | { id: string; kind: "energy"; energy: Energy; caption: string };
 export interface Note {
   slug: string;
@@ -372,6 +374,29 @@ export async function compileNotes({
       env.text.push(caption ?? "", ...rendered.words);
       return `<div id="${id}" class="note-diagram"></div>`;
     }
+    if (kind === "panels") {
+      const parsed = parseDocument(token.content);
+      if (parsed.errors.length)
+        fail(env.file, env.line, parsed.errors[0].message);
+      try {
+        const panels = definePanels(parsed.toJS());
+        const id = `note-diagram-${env.diagrams.length}`;
+        env.diagrams.push({
+          id,
+          kind: "panels",
+          panels,
+          caption: panels.caption ?? "",
+        });
+        env.text.push(...panelsText(panels));
+        return `<div id="${id}" class="note-diagram"></div>`;
+      } catch (error) {
+        fail(
+          env.file,
+          env.line,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
     if (kind === "figure-ref") {
       const parsed = parseDocument(token.content);
       if (parsed.errors.length)
@@ -528,6 +553,7 @@ export async function compileNotes({
               ...Object.keys(diagramKinds),
               "molecule",
               "figure-ref",
+              "panels",
               "request",
             ].includes(token.info.trim()))
         )
