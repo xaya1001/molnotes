@@ -608,10 +608,10 @@ test("mechanism references show the complete overview or one pinned frame", asyn
   await expect(overview.locator('[data-figure="mec_example"]')).toBeVisible();
   await expect(overview.locator("[data-frame]")).toHaveCount(2);
   await expect(overview.getByRole("button")).toHaveCount(0);
-  await expect(overview.locator("p")).toHaveText([
-    "1. first：Explanation for first",
-    "2. second：Explanation for second",
-  ]);
+  await expect(overview.locator(".step-description")).toHaveCount(2);
+  await expect(overview.locator(".step-number")).toHaveText(["1", "2"]);
+  await expect(overview.getByRole("heading", { level: 4 })).toHaveCount(2);
+  await expect(overview.locator(".step-description p")).toHaveCount(2);
   for (const id of ["first", "second"])
     await expect(
       overview.locator(`[data-label="${id}/structure:number:0"]`),
@@ -620,7 +620,8 @@ test("mechanism references show the complete overview or one pinned frame", asyn
   await expect(
     pinned.locator('[data-label="structure:number:0"]'),
   ).toHaveAttribute("data-text", "7");
-  await expect(pinned.locator("p")).toHaveText(["Explanation for second"]);
+  await expect(pinned.locator(".step-description")).toHaveCount(1);
+  await expect(pinned.locator(".step-number")).toHaveCount(0);
   for (const width of [1366, 390]) {
     await page.setViewportSize({ width, height: width === 1366 ? 900 : 844 });
     expect(
