@@ -100,7 +100,7 @@ test("published content, records and HTTP assets", async () => {
     );
     assert.deepEqual(
       catalog.sites.find((site) => site.slug === "sample")!.chapterIds,
-      ["start", "next"],
+      ["start", "next", "written"],
     );
     assert.equal(catalog.groups.at(-1), "练习");
     assert.ok(
