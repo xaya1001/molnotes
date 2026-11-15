@@ -14,6 +14,7 @@ import type { PreviewNote } from "../../shared/content-preview.ts";
 import { readUnit, readGlossary, readRegistry } from "./content-files.ts";
 import { resolveCitations } from "./citations.ts";
 import { inspectRequest } from "./requests.ts";
+import { readPracticeChapters } from "./practice-markdown.ts";
 
 async function names(root: string) {
   try {
@@ -49,6 +50,13 @@ async function previewRoutes(root: string) {
     );
     const content: TopicContent = JSON.parse(
       await readFile(join(root, "sites", slug, "content.json"), "utf8"),
+    );
+    await readPracticeChapters(
+      root,
+      `sites/${slug}`,
+      content,
+      site.group,
+      () => {},
     );
     const base = topicBasePath(site);
     routes.add(`${base}/`);

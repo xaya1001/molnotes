@@ -10,6 +10,13 @@ import {
   type BlockReferences,
 } from "../../shared/topic-blocks.ts";
 import type { TopicBlock } from "../../src/ui/topic/blocks.ts";
+import { parseRequest } from "./requests.ts";
+
+type RequestHandler = (
+  source: string,
+  file: string,
+  line: number,
+) => void | Promise<void>;
 
 const markdown = new MarkdownIt("commonmark", { html: false });
 const slug = "[a-z0-9]+(?:-[a-z0-9]+)*";
@@ -145,6 +152,7 @@ export async function compilePracticeChapter(
   source: string,
   file: string,
   ids = new Map<string, string>(),
+  onRequest?: RequestHandler,
 ) {
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(source);
   if (!match) fail(`${file}:1`, "Missing YAML front matter");
@@ -192,6 +200,14 @@ export async function compilePracticeChapter(
     const where = `${file}:${line}`;
     if (token.type === "fence") {
       const kind = token.info.trim();
+      if (kind === "request") {
+        if (onRequest) await onRequest(token.content, file, line);
+        else {
+          const request = await parseRequest(token.content, file, line);
+          fail(where, `Unresolved ${request.kind} request (${request.skill})`);
+        }
+        continue;
+      }
       if (kind !== "question") fail(where, `Unknown fence ${kind}`);
       const value = yaml(token.content, file, line + 1);
       if (typeof value.id !== "string" || !value.id.trim())
@@ -255,6 +271,7 @@ export async function readPracticeChapters(
   unit: string,
   authored: unknown,
   group: string,
+  onRequest?: RequestHandler,
 ) {
   if (
     !isObject(authored) ||
@@ -308,6 +325,7 @@ export async function readPracticeChapters(
         await readFile(join(root, file), "utf8"),
         file,
         ids,
+        onRequest,
       ),
     );
   }

@@ -69,7 +69,7 @@ edges:
 
 图片写 `![说明](assets/<file>)`，说明显示在图下方作为图注（可带图号，如"图 1　……"），为空时不显示图注；文件名使用字母、数字、下划线、点和连字符。源文件放 `notes/<dir>/assets/`，网站以 `/notes/<dir>/assets/<file>` 提供；缺图拒绝发布。生成的图在 `notes/<dir>/prompts/<file>.md` 保存生成它的 prompt，`<file>` 与 `assets/` 中的图片文件名相同；prompt 随资源记录进入快照，网站不提供，没有对应图片或内容为空时拒绝发布。资源原样复制进快照，快照记录路径、SHA-256、大小与内容类型。
 
-正文与 `author/` 可以写 `request` 围栏，围栏内为 YAML。
+笔记正文、`author/` 与 Markdown 练习章可以写 `request` 围栏，围栏内为 YAML。
 `image` 必填 `kind: image`、`file`（资源文件名）、`caption`（图注）与 `prompt`（生图要求）；`figure` 必填 `kind: figure`、`caption` 与 `figure`（与 `figure:compile` 相同的化学图 YAML 文档）；`chart` 必填 `kind: chart`、`file`、`caption`、`data`（数据）、`axes`（坐标轴与刻度）与 `point`（读者应看到的结论）。
 未知 kind、未知字段、缺字段、化学图输入错误与无法解析的 SMILES 在预览和构建时报出文件与行号。
 
@@ -84,7 +84,7 @@ prompt: Draw two boxes connected by an arrow.
 
 `content:preview` 在笔记正文原位置显示请求的类型、图注与摘要，同时预览其余正文。
 出错请求显示字段路径、笔记源行号与出错位置摘录，预览命令仍以非零状态退出；化学图 YAML 可展开查看，较长的说明与数据表可折叠。
-`npm run content -- todo [<单元>]` 列出文件、行号、kind、图注与补全 skill；可指定 `notes/<dir>` 或 `notes/<dir>/[author/]<slug>`，省略时扫描所有笔记与作者资料，无请求时输出为空并退出 0。
+`npm run content -- todo [<单元>]` 列出文件、行号、kind、图注与补全 skill；可指定 `notes/<dir>`、`notes/<dir>/[author/]<slug>` 或 `sites/<slug>`，省略时扫描所有笔记、作者资料与 `content.json` 引用的 Markdown 练习章，无请求时输出为空并退出 0。
 `image` 与 `chart` 使用 `note-figures`，`figure` 使用 `chemical-figures`。
 补全后将请求替换成图片或 `figure-ref` 正式引用。
 `content build` 与 `content publish` 遇到未补全请求时失败，列出所有请求的位置；快照只包含补全后的内容。

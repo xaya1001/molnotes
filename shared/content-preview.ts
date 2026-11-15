@@ -61,6 +61,7 @@ export interface PreviewFigure {
   kind:
     | "timeline"
     | "note"
+    | "request"
     | "flow"
     | "process"
     | "molecule"

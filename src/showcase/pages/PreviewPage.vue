@@ -29,12 +29,16 @@ import { validateMechanismFrames } from "../../../shared/topic-blocks.ts";
 import LibraryFigure from "../../ui/library/LibraryFigure.vue";
 import MechanismViewer from "../../ui/MechanismViewer.vue";
 import CompiledProse from "../../ui/CompiledProse.vue";
-import type { PreviewNote } from "../../../shared/content-preview.ts";
+import type {
+  PreviewNote,
+  PreviewRequest,
+} from "../../../shared/content-preview.ts";
 import RequestPlaceholder from "../RequestPlaceholder.vue";
 
 // The content preview command injects the figures of one unit and reads the
 // warnings back; the page is not linked from the showcase.
 type Shown =
+  | { where: string; kind: "request"; request: PreviewRequest; caption: string }
   | { where: string; kind: "note"; preview: PreviewNote; caption: string }
   | {
       where: string;
@@ -98,23 +102,25 @@ function chemicalFigure(f: Injected): Shown {
   return { ...f, kind: "mechanism", frames: f.value };
 }
 const shown: Shown[] = (window.__previewFigures ?? []).map((f) =>
-  f.kind === "note"
-    ? { ...f, kind: "note", preview: f.value as PreviewNote }
-    : f.kind === "library" || f.kind === "mechanism"
-      ? chemicalFigure(f)
-      : f.kind === "route" || f.kind === "substrate-scope"
-        ? schemeFigure(f)
-        : f.kind === "timeline"
-          ? { ...f, kind: "timeline", timeline: defineTimeline(f.value) }
-          : f.kind === "flow"
-            ? { ...f, kind: "flow", flow: defineFlow(f.value) }
-            : f.kind === "process"
-              ? processFigure(f)
-              : {
-                  ...f,
-                  kind: "molecule",
-                  molecules: f.value as NoteMolecules["molecules"],
-                },
+  f.kind === "request"
+    ? { ...f, kind: "request", request: f.value as PreviewRequest }
+    : f.kind === "note"
+      ? { ...f, kind: "note", preview: f.value as PreviewNote }
+      : f.kind === "library" || f.kind === "mechanism"
+        ? chemicalFigure(f)
+        : f.kind === "route" || f.kind === "substrate-scope"
+          ? schemeFigure(f)
+          : f.kind === "timeline"
+            ? { ...f, kind: "timeline", timeline: defineTimeline(f.value) }
+            : f.kind === "flow"
+              ? { ...f, kind: "flow", flow: defineFlow(f.value) }
+              : f.kind === "process"
+                ? processFigure(f)
+                : {
+                    ...f,
+                    kind: "molecule",
+                    molecules: f.value as NoteMolecules["molecules"],
+                  },
 );
 const figures = ref<HTMLElement[]>([]);
 const library = window.__previewLibrary ?? { entries: {}, uses: {} };
@@ -153,6 +159,15 @@ onMounted(async () => {
     const errors = [...host.querySelectorAll('[role="alert"]')].map(
       (node) => node.textContent?.trim() ?? "Render failed",
     );
+    if (figure.kind === "request")
+      return {
+        where: figure.where,
+        warnings: [],
+        errors: figure.request.errors.map(
+          (error) =>
+            `${figure.request.file}:${error.line}: ${error.path}: ${error.message}`,
+        ),
+      };
     if (figure.kind === "note") {
       for (const img of host.querySelectorAll<HTMLImageElement>("img"))
         if (!img.complete || !img.naturalWidth)
@@ -236,10 +251,17 @@ onMounted(async () => {
         :data-preview="i"
         class="preview-figure"
       >
-        <template v-if="figure.kind === 'note'">
+        <RequestPlaceholder
+          v-if="figure.kind === 'request'"
+          :request="figure.request"
+        />
+        <template v-else-if="figure.kind === 'note'">
           <h1>{{ figure.preview.note.title }}</h1>
           <CompiledProse
-            v-bind="figure.preview.note"
+            :html="figure.preview.note.html"
+            :molecules="figure.preview.note.molecules"
+            :diagrams="figure.preview.note.diagrams"
+            :citations="figure.preview.note.citations"
             :terms="figure.preview.terms"
             @ready="readyNotes++"
           />

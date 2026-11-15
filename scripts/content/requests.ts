@@ -267,51 +267,78 @@ export async function markdownRequests(body: string, file: string, offset = 0) {
   return requests;
 }
 
-/** Notes and their author material participate; prompts and JSON do not. */
+/** Scan note bodies, author material and referenced Markdown practice chapters. */
 export async function contentRequests(root: string, unit?: string) {
-  if (unit && /^sites\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(unit)) return [];
   if (
     unit &&
-    !/^notes\/[a-z0-9]+(?:-[a-z0-9]+)*(?:\/(?:author\/)?[a-z0-9]+(?:-[a-z0-9]+)*)?$/.test(
+    !/^(?:notes\/[a-z0-9]+(?:-[a-z0-9]+)*(?:\/(?:author\/)?[a-z0-9]+(?:-[a-z0-9]+)*)?|sites\/[a-z0-9]+(?:-[a-z0-9]+)*)$/.test(
       unit,
     )
   )
-    throw new Error(`${unit}: expected notes/<dir>[/[author/]<slug>]`);
+    throw new Error(
+      `${unit}: expected notes/<dir>[/[author/]<slug>] or sites/<slug>`,
+    );
   const requests: ResourceRequest[] = [];
-  async function scan(path: string, author = false) {
+  async function scanFile(file: string, note: boolean) {
+    const source = await readFile(join(root, file), "utf8");
+    if (note) {
+      const { body, offset } = parseNote(source, file);
+      requests.push(...(await markdownRequests(body, file, offset)));
+    } else {
+      const match = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.exec(source);
+      if (!match) throw new Error(`${file}:1: Missing YAML front matter`);
+      requests.push(
+        ...(await markdownRequests(
+          source.slice(match[0].length),
+          file,
+          match[0].split("\n").length - 1,
+        )),
+      );
+    }
+  }
+  async function scanNotes(path: string, author = false) {
     for (const entry of (
       await readdir(join(root, path), { withFileTypes: true })
     ).sort((a, b) => a.name.localeCompare(b.name))) {
       const file = `${path}/${entry.name}`;
-      if (entry.isFile() && entry.name.endsWith(".md")) {
-        const { body, offset } = parseNote(
-          await readFile(join(root, file), "utf8"),
-          file,
-        );
-        requests.push(...(await markdownRequests(body, file, offset)));
-      } else if (!author && entry.isDirectory() && entry.name === "author")
-        await scan(file, true);
+      if (entry.isFile() && entry.name.endsWith(".md"))
+        await scanFile(file, true);
+      else if (!author && entry.isDirectory() && entry.name === "author")
+        await scanNotes(file, true);
     }
   }
-  if (unit?.split("/")[2]) {
-    const file = `${unit}.md`;
-    const { body, offset } = parseNote(
-      await readFile(join(root, file), "utf8"),
-      file,
+  async function scanPractice(unit: string) {
+    const authored = JSON.parse(
+      await readFile(join(root, unit, "content.json"), "utf8"),
     );
-    requests.push(...(await markdownRequests(body, file, offset)));
-  } else if (unit) await scan(unit);
-  else {
-    let directories;
-    try {
-      directories = await readdir(join(root, "notes"), { withFileTypes: true });
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return requests;
-      throw error;
+    for (const entry of authored.chapters ?? []) {
+      if (typeof entry !== "string") continue;
+      if (!/^chapters\/[a-z0-9]+(?:-[a-z0-9]+)*\.md$/.test(entry))
+        throw new Error(`${unit}/content.json:1: Expected chapters/<id>.md`);
+      await scanFile(`${unit}/${entry}`, false);
     }
-    for (const dir of directories.sort((a, b) => a.name.localeCompare(b.name)))
-      if (dir.isDirectory()) await scan(`notes/${dir.name}`);
   }
+  if (unit?.startsWith("sites/")) await scanPractice(unit);
+  else if (unit?.split("/")[2]) await scanFile(`${unit}.md`, true);
+  else if (unit) await scanNotes(unit);
+  else
+    for (const kind of ["notes", "sites"]) {
+      let directories;
+      try {
+        directories = await readdir(join(root, kind), { withFileTypes: true });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+        throw error;
+      }
+      for (const dir of directories.sort((a, b) =>
+        a.name.localeCompare(b.name),
+      ))
+        if (dir.isDirectory()) {
+          const unit = `${kind}/${dir.name}`;
+          if (kind === "notes") await scanNotes(unit);
+          else await scanPractice(unit);
+        }
+    }
   return requests;
 }
 

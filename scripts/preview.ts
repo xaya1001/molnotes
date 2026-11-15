@@ -15,6 +15,7 @@ import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import {
   topicFigures,
   type PreviewNote,
+  type PreviewRequest,
   type PreviewFigure as Figure,
 } from "../shared/content-preview.ts";
 import { prepareFigureViews } from "./content/figure-build.ts";
@@ -26,6 +27,7 @@ import { previewNotes } from "./content/notes-preview.ts";
 import { readChemicalLibrary } from "./content/chemical-library.ts";
 import { resolveCompoundSlots } from "./content/compound-slots.ts";
 import { readPracticeChapters } from "./content/practice-markdown.ts";
+import { inspectRequest } from "./content/requests.ts";
 import { parseSiteManifest } from "../shared/site-catalog.ts";
 import { validateTopicContent } from "../shared/topic-content.ts";
 import { layoutProblems } from "../shared/molecule-layout.ts";
@@ -54,13 +56,34 @@ async function unitFigures(unit: string, errors: string[]) {
       slug,
       JSON.parse(await readFile(join(content, unit, "site.json"), "utf8")),
     );
-    await readPracticeChapters(content, unit, resolved.value, site.group);
-    return topicFigures(
-      validateTopicContent(resolved.value, file),
-      file,
-      errors,
-      library.entries,
+    const requests: Figure[] = [];
+    await readPracticeChapters(
+      content,
+      unit,
+      resolved.value,
+      site.group,
+      async (source, file, line) => {
+        const value: PreviewRequest = {
+          ...(await inspectRequest(source, file, line)),
+          id: `preview-${file.replaceAll("/", "--").replace(".md", "")}-${line}`,
+        };
+        requests.push({
+          kind: "request",
+          where: `${file}:${line}`,
+          value,
+          caption: value.caption,
+        });
+      },
     );
+    return [
+      ...topicFigures(
+        validateTopicContent(resolved.value, file),
+        file,
+        errors,
+        library.entries,
+      ),
+      ...requests,
+    ];
   }
   if (kind === "notes" && slug) {
     const { previews, assets } = await previewNotes(
