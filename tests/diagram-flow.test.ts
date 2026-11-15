@@ -23,7 +23,6 @@ test("a flow reads chains, joins and side exits into one edge each", () => {
     nodes: ["a", "b", "c", "d", "goal", "out"].map((id) => node(id)),
     edges: [
       "a > b > c",
-      "a > d",
       { from: ["a", "d"], to: "goal" },
       { from: "c", to: "goal", text: "是", dashed: true },
       { from: "b", to: "out", side: true },
@@ -34,7 +33,6 @@ test("a flow reads chains, joins and side exits into one edge each", () => {
     [
       ["a", "b", "", false, false],
       ["b", "c", "", false, false],
-      ["a", "d", "", false, false],
       ["a", "goal", "", false, false],
       ["d", "goal", "", false, false],
       ["c", "goal", "是", true, false],
@@ -95,8 +93,11 @@ test("a malformed flow is rejected with what to change", () => {
     ],
     [{ steps: [{ text: "a" }] }, /flow unknown field steps/],
     [
-      { nodes, edges: ["a > c", "b > c"] },
-      /flow node c is reached from two branches that do not start at one fork/,
+      {
+        nodes: ["a", "b", "c", "d", "e", "f"].map((id) => node(id)),
+        edges: ["a > b > f", "a > c > e > f", "a > d > e"],
+      },
+      /flow node f is reached from two branches that do not start at one fork/,
     ],
     [
       {
@@ -198,26 +199,15 @@ test("a laid-out flow moves forward along every edge and no two boxes overlap", 
 
 test("a chain lines up and joining edges meet their target's centre", () => {
   const flow = defineFlow({
-    nodes: ["a", "b", "c", "goal", "root"].map((id) => node(id)),
-    edges: [
-      "root > a",
-      "root > b",
-      "root > c",
-      { from: ["a", "b", "c"], to: "goal" },
-    ],
+    nodes: ["a", "b", "c", "goal"].map((id) => node(id)),
+    edges: [{ from: ["a", "b", "c"], to: "goal" }],
   });
   const sizes = flow.nodes.map(() => ({ w: 100, h: 40, tag: 0 }));
-  const layout = layoutFlow(
-    flow,
-    "right",
-    sizes,
-    flow.edges.map(() => null),
-    space,
-  );
+  const layout = layoutFlow(flow, "right", sizes, [null, null, null], space);
   const centre = (i: number) => layout.nodes[i].y + 20;
   assert.equal(centre(3), centre(1));
   assert.ok(centre(0) < centre(1) && centre(1) < centre(2));
-  for (const edge of layout.edges.slice(3))
+  for (const edge of layout.edges)
     assert.deepEqual(edge.points.at(-1), [layout.nodes[3].x, centre(3)]);
 
   const chain = defineFlow({

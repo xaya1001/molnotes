@@ -972,6 +972,7 @@ interface BranchEnd {
 interface BranchSeq {
   items: BranchItem[];
   ends: BranchEnd[];
+  roots?: { branches: BranchSeq[]; ends: BranchEnd[] };
 }
 interface BranchItem {
   n: number;
@@ -1032,10 +1033,10 @@ export function analyzeFlow(flow: Flow): FlowAnalysis {
     }
     return seen;
   };
-  const findJoin = (outs: BranchEdge[], stop: number | null) => {
+  const findJoin = (starts: number[], stop: number | null) => {
     const count = new Map<number, number>();
-    for (const e of outs)
-      for (const n of reach(e.b, stop)) count.set(n, (count.get(n) || 0) + 1);
+    for (const start of starts)
+      for (const n of reach(start, stop)) count.set(n, (count.get(n) || 0) + 1);
     const shared = [...count].filter(([, c]) => c >= 2).map(([n]) => n);
     if (!shared.length) return null;
     return shared.sort((x, y) => order.get(x)! - order.get(y)!)[0];
@@ -1080,7 +1081,10 @@ export function analyzeFlow(flow: Flow): FlowAnalysis {
         u = o[0].b;
         continue;
       }
-      const join = findJoin(o, stop);
+      const join = findJoin(
+        o.map((e) => e.b),
+        stop,
+      );
       const branches = o.map((e) => {
         if (e.b === join)
           return { edge: e, direct: true, seq: { items: [], ends: [] } };
@@ -1101,7 +1105,38 @@ export function analyzeFlow(flow: Flow): FlowAnalysis {
     return { items, ends };
   }
   const roots = ids.filter((i: number) => !sat.has(i) && !mIn(i).length);
-  const seqs = roots.map((r) => buildSeq(r, null, 0));
+  const seqs: BranchSeq[] = [];
+  const remaining = new Set(roots);
+  for (const root of roots) {
+    if (!remaining.has(root)) continue;
+    // Roots in the same connected component share an invisible fork. Separate
+    // components keep their aligned-column semantics.
+    const component = new Set([root]);
+    const queue = [root];
+    while (queue.length) {
+      const n = queue.shift()!;
+      for (const e of main) {
+        const other = e.a === n ? e.b : e.b === n ? e.a : null;
+        if (other !== null && !component.has(other)) {
+          component.add(other);
+          queue.push(other);
+        }
+      }
+    }
+    const inputs = roots.filter((n) => component.has(n));
+    inputs.forEach((n) => remaining.delete(n));
+    if (inputs.length === 1) seqs.push(buildSeq(root, null, 0));
+    else {
+      const join = findJoin(inputs, null)!;
+      const branches = inputs.map((n) => buildSeq(n, join, 0));
+      const continuation = buildSeq(join, null, 0);
+      continuation.roots = {
+        branches,
+        ends: branches.flatMap((seq) => seq.ends),
+      };
+      seqs.push(continuation);
+    }
+  }
   return {
     shape,
     seqs,
@@ -1388,12 +1423,38 @@ export function layoutBranches(
         joinEnds: BranchEnd[] | null;
         bottom: number;
       } | null = null;
+      if (seq.roots) {
+        const blocks = seq.roots.branches.map(blockSeq);
+        const positions = [0];
+        for (let k = 1; k < blocks.length; k++)
+          positions.push(
+            positions[k - 1] + blocks[k - 1].r + S.cross + blocks[k].l,
+          );
+        const centre = (positions[0] + positions.at(-1)!) / 2;
+        blocks.forEach((B, k) => {
+          const x = positions[k] - centre;
+          shift(B, x, -B.y0);
+          absorb(R, B);
+          R.l = Math.max(R.l, B.l - x);
+          R.r = Math.max(R.r, B.r + x);
+          R.y1 = Math.max(R.y1, B.y1 - B.y0);
+        });
+        prev = { next: null, joinEnds: seq.roots.ends, bottom: R.y1 };
+      }
       seq.items.forEach((it, k) => {
         const B = it.fork ? forkItem(it) : nodeItem(it);
         let dy = 0;
-        if (k) {
-          if (prev!.joinEnds) {
-            const barY = R.y1 + S.rank / 2;
+        if (prev) {
+          if (prev.joinEnds) {
+            const labelRoom = Math.max(
+              0,
+              ...prev.joinEnds.map((end) =>
+                end.edge.text
+                  ? M.label(end.edge.i, "beside").h + 2 * S.pad + 4
+                  : 0,
+              ),
+            );
+            const barY = R.y1 + Math.max(S.rank / 2, labelRoom);
             dy = Math.max(barY + S.rank / 2 + S.arrow, R.y1 + S.rank - B.y0);
             R.joins.push({
               ends: prev!.joinEnds,
@@ -1433,7 +1494,7 @@ export function layoutBranches(
         absorb(R, B);
         R.l = Math.max(R.l, B.l);
         R.r = Math.max(R.r, B.r);
-        if (!k) R.y0 = B.y0 + dy;
+        if (!k && !seq.roots) R.y0 = B.y0 + dy;
         R.y1 = Math.max(R.y1, B.y1 + dy);
         prev = { next: it.next, joinEnds: it.joinEnds, bottom: mainBottom };
       });
@@ -1464,6 +1525,19 @@ export function layoutBranches(
         if (mode === "down") {
           const departure = R.departures.find((d) => d.e === end.edge.i)?.pts;
           const cx = departure?.at(-1)![0] ?? n.x + n.w / 2;
+          if (
+            end.edge.text &&
+            !R.labels.some((label) => label.e === end.edge.i)
+          ) {
+            const label = M.label(end.edge.i, "beside");
+            R.labels.push({
+              e: end.edge.i,
+              x: cx + 6,
+              y: b.bottom + S.pad,
+              ...label,
+              on: false,
+            });
+          }
           R.lines.push({
             e: end.edge.i,
             arrow: k === 0,
@@ -1665,7 +1739,17 @@ export function layoutBranches(
               w - (inc.kind === "cont" ? S.step / 2 + 7.5 : 0),
             )
           : null;
-      const strip = lab ? lab.h + 4 : 0;
+      const joinLabels =
+        inc?.kind === "rail"
+          ? inc.ends.flatMap((end) =>
+              end.edge.text
+                ? [{ edge: end.edge, ...M.label(end.edge.i, "strip", w) }]
+                : [],
+            )
+          : [];
+      const strip = lab
+        ? lab.h + 4
+        : joinLabels.reduce((sum, label) => sum + label.h + 4, 0);
       let gap = 0;
       if (inc)
         gap =
@@ -1715,11 +1799,30 @@ export function layoutBranches(
           });
       } else if (inc && inc.kind === "rail") {
         R.joins.push({ ends: inc.ends, to: n, x: 0, barY: 0, toY: 0 });
+        let labelY = node.y - strip - 3;
+        for (const label of joinLabels) {
+          R.labels.push({
+            e: label.edge.i,
+            x,
+            y: labelY,
+            w: label.w,
+            h: label.h,
+            on: false,
+          });
+          labelY += label.h + 4;
+        }
       }
       y = node.y + node.h;
       return node;
     }
     function walk(seq: BranchSeq, depth: number, inc: Incoming | null) {
+      if (seq.roots) {
+        for (const branch of seq.roots.branches) {
+          if (R.nodes.length) y += S.contGap;
+          walk(branch, depth, null);
+        }
+        inc = { kind: "rail", ends: seq.roots.ends };
+      }
       seq.items.forEach((it) => {
         const node = place(it.n, depth, inc);
         const from = box(node).bottom;
@@ -1902,6 +2005,7 @@ export function flowReadingOrder(flow: Flow, analysis = analyzeFlow(flow)) {
     }
   } else {
     const walk = (seq: BranchSeq) => {
+      seq.roots?.branches.forEach(walk);
       for (const item of seq.items) {
         order.push(item.n, ...item.exits.map((e) => e.b));
         for (const branch of item.fork?.branches ?? []) walk(branch.seq);
