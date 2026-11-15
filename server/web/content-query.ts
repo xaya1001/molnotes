@@ -149,6 +149,8 @@ export function contentCatalog(snapshot: LoadedSnapshot) {
   const linked = new Map<string, Set<string>>();
   for (const { dir, compiled } of readerNotes(snapshot)) {
     const slugs = linked.get(dir) ?? new Set();
+    const paired = compiled.practice?.match(/^\/practice\/([a-z0-9-]+)\//);
+    if (paired) slugs.add(paired[1]);
     for (const [, slug] of compiled.html.matchAll(
       /href="\/practice\/([a-z0-9-]+)\//g,
     ))

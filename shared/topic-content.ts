@@ -89,6 +89,14 @@ function checkTopicContent(
     chapterIds.add(chapter.id);
     const where = `${name}: chapter ${chapter.id}`;
     text(chapter.title, `${where} title`);
+    if (chapter.note !== undefined)
+      assert(
+        typeof chapter.note === "string" &&
+          /^notes\/[a-z0-9]+(?:-[a-z0-9]+)*\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(
+            chapter.note,
+          ),
+        `${where} note must name notes/<dir>/<slug>`,
+      );
     assert(
       chapter.path === undefined ||
         (typeof chapter.path === "string" && chapter.path.startsWith("/")),

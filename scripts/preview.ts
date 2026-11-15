@@ -26,6 +26,8 @@ import type {
 } from "../shared/chemical-library/types.ts";
 import { readChemicalLibrary } from "./content/chemical-library.ts";
 import { resolveCompoundSlots } from "./content/compound-slots.ts";
+import { readPracticeChapters } from "./content/practice-markdown.ts";
+import { parseSiteManifest } from "../shared/site-catalog.ts";
 import { validateTopicContent } from "../shared/topic-content.ts";
 import { layoutProblems } from "../shared/molecule-layout.ts";
 import { setting } from "../shared/settings.ts";
@@ -93,10 +95,15 @@ async function unitFigures(unit: string, errors: string[]) {
     const file = `sites/${slug}/content.json`;
     const source = JSON.parse(await readFile(join(content, file), "utf8"));
     const resolved = resolveCompoundSlots(source, library.entries, file);
+    const site = parseSiteManifest(
+      slug,
+      JSON.parse(await readFile(join(content, unit, "site.json"), "utf8")),
+    );
+    await readPracticeChapters(content, unit, resolved.value, site.group);
     return topicFigures(
       resolved.references.length
         ? validateTopicContent(resolved.value, file)
-        : source,
+        : resolved.value,
       file,
       errors,
       library.entries,

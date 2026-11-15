@@ -116,7 +116,8 @@
           "reset": true
         }
       ]
-    }
+    },
+    "chapters/written.md"
   ],
   "quiz": [
     {

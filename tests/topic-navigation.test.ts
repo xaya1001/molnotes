@@ -1,17 +1,14 @@
 import { validateTopicContent } from "../shared/topic-content.ts";
-import type FixtureContent from "./fixtures/content/sites/sample/content.json";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { readUnit } from "../scripts/content/content-files.ts";
 import { topicRecordsCodec } from "../server/web/records.ts";
 import { buildTopicIndex } from "../shared/topic-index.ts";
 import { mergeRecords } from "../src/ui/record-sync.ts";
-const content: typeof FixtureContent = JSON.parse(
-  readFileSync(
-    new URL("./fixtures/content/sites/sample/content.json", import.meta.url),
-    "utf8",
-  ),
-);
+const unit = await readUnit(resolve("tests/fixtures/content"), "sites/sample");
+assert.ok(unit.kind === "sites");
+const content = unit.content;
 test("recent chapters are validated and retained with slug records", () => {
   const codec = topicRecordsCodec(validateTopicContent(content));
   const base = { version: 1, ...codec.empty() };

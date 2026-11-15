@@ -13,6 +13,7 @@ import { validateGlossary } from "../../shared/glossary.ts";
 import { parseSiteManifest } from "../../shared/site-catalog.ts";
 import { validateTopicContent } from "../../shared/topic-content.ts";
 import { compileTableStructures } from "./table-structures.ts";
+import { readPracticeChapters } from "./practice-markdown.ts";
 import { resolveCompoundSlots } from "./compound-slots.ts";
 import type {
   Library,
@@ -158,6 +159,7 @@ export async function readUnit(
       library,
       `${unit}/content.json`,
     );
+    await readPracticeChapters(root, unit, resolved.value, site.group);
     const content = validateTopicContent(
       resolved.value,
       `${unit}/content.json`,
