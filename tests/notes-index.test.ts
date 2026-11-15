@@ -121,6 +121,29 @@ test("resource request validation rejects invalid fields and figure inputs at th
         frames: [{ id: "a", smiles: "invalid-smiles" }],
       },
     },
+    {
+      kind: "figure",
+      caption: "Example",
+      figure: {
+        kind: "markush",
+        core: "C[*:1]",
+        groups: {
+          1: {
+            label: "R",
+            alternatives: [
+              {
+                type: "repeat",
+                label: "Chain",
+                unit: "invalid-smiles",
+                end: "C[*:2]",
+                min: 1,
+                max: 2,
+              },
+            ],
+          },
+        },
+      },
+    },
   ])
     await assert.rejects(
       markdownRequests("\n" + requestFence(value), "example.md", 6),

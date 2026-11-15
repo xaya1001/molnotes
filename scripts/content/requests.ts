@@ -38,7 +38,12 @@ async function figure(value: unknown) {
     if (Array.isArray(value)) value.forEach((v) => visit(v));
     else if (isObject(value))
       for (const [key, item] of Object.entries(value)) {
-        if ((key === "smiles" || key === "core") && typeof item === "string")
+        if (
+          (key === "smiles" ||
+            key === "core" ||
+            (value.type === "repeat" && (key === "unit" || key === "end"))) &&
+          typeof item === "string"
+        )
           smiles(item);
         else if (parent === "compounds" && typeof item === "string")
           smiles(item);
