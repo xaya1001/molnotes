@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import notoUnicode from "@fontsource/noto-sans-sc/unicode.json" with { type: "json" };
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import { decodeFigureFont } from "../src/ui/library/font-geometry.ts";
 import type {
@@ -17,16 +18,9 @@ const arimoSubsets = [
   "hebrew",
   "vietnamese",
 ];
-const notoSubsets = [
-  "chinese-simplified",
-  "latin",
-  "latin-ext",
-  "cyrillic",
-  "vietnamese",
-  "30",
-  "109",
-  "91",
-];
+const notoSubsets = Object.keys(notoUnicode).map((subset) =>
+  subset.replace(/^\[(\d+)\]$/, "$1"),
+);
 let pending: Promise<FigureFontResolver> | undefined;
 
 /** Load pinned build dependencies once. Font files never enter a reader bundle. */
