@@ -712,14 +712,12 @@ export function validateFigureInstance(
     ];
   if (entry.kind === "reaction") scenes = [{ scene: entry.scene, prefix: "" }];
   if (entry.kind === "mechanism")
-    scenes = [
-      {
-        scene: (
-          entry.frames.find((f) => f.id === reference.frame) ?? entry.frames[0]
-        ).scene,
+    scenes = entry.frames
+      .filter((frame) => !reference.frame || frame.id === reference.frame)
+      .map((frame) => ({
+        scene: frame.scene,
         prefix: "",
-      },
-    ];
+      }));
   if (entry.kind === "route")
     scenes = entry.steps.map((s) => {
       const reaction = library[s.reaction];

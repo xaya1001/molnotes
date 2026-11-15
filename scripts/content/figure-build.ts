@@ -209,12 +209,7 @@ export async function prepareFigureViews(
   const renders: Record<string, LibraryFigureRender> = {};
   const assets = new Map<string, UnitAsset & { bytes: Buffer }>();
   try {
-    for (const reference of references.flatMap((reference) => {
-      const entry = library[reference.ref];
-      return entry?.kind === "mechanism" && !reference.frame
-        ? entry.frames.map((frame) => ({ ...reference, frame: frame.id }))
-        : [reference];
-    })) {
+    for (const reference of references) {
       const key = figureViewKey(reference);
       if (renders[key]) continue;
       const prepared = await runner.prepare(reference, 0);

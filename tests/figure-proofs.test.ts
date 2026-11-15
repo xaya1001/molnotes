@@ -317,7 +317,7 @@ test("diagnostic code changes reuse geometry and thumbnails but recompute proofs
   );
 });
 
-test("unselected mechanism frames retain local numbering and focus in every published view", async (t) => {
+test("mechanism overview and pinned views retain local numbering and focus", async (t) => {
   const f = await fixture(t);
   f.library.mec_example = {
     kind: "mechanism",
@@ -344,10 +344,7 @@ test("unselected mechanism frames retain local numbering and focus in every publ
   const views = figureProofReferences(f.library, [local]);
   assert.deepEqual(
     views.filter((view) => view.ref === local.ref && view.numbers),
-    [
-      { ...local, frame: "first" },
-      { ...local, frame: "second" },
-    ],
+    [local],
   );
   const pinned = figureProofReferences(f.library, [
     { ...local, frame: "second" },

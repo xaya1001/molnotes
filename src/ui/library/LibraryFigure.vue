@@ -19,24 +19,14 @@ const emit = defineEmits<{
   ];
 }>();
 const entry = computed(() => props.library.entries[props.reference.ref]);
-const selectedFrame = ref("");
 const viewing = ref(false);
 const explanation = ref("");
-const displayed = computed(() =>
-  entry.value?.kind === "mechanism" && !props.reference.frame
-    ? {
-        ...props.reference,
-        frame:
-          entry.value.frames.find((f) => f.id === selectedFrame.value)?.id ??
-          entry.value.frames[0].id,
-      }
-    : props.reference,
-);
-const frameExplanation = computed(() =>
+const frames = computed(() =>
   entry.value?.kind === "mechanism"
-    ? entry.value.frames.find((frame) => frame.id === displayed.value.frame)
-        ?.explanation
-    : undefined,
+    ? entry.value.frames.filter(
+        (frame) => !props.reference.frame || frame.id === props.reference.frame,
+      )
+    : [],
 );
 const host = ref<HTMLElement>();
 const root = ref<HTMLElement>();
@@ -44,7 +34,7 @@ const error = ref("");
 let generation = 0;
 let observer: ResizeObserver | undefined;
 watch(
-  [root, () => props.library, () => JSON.stringify(displayed.value)],
+  [root, () => props.library, () => JSON.stringify(props.reference)],
   async () => {
     const current = ++generation;
     observer?.disconnect();
@@ -53,7 +43,7 @@ watch(
       const result =
         entry.value?.kind === "image"
           ? { ...(await imageSvg(entry.value)), diagnostics: [] }
-          : await snapshotSvg(props.library, displayed.value);
+          : await snapshotSvg(props.library, props.reference);
       if (current !== generation) return;
       root.value.replaceChildren(result.svg);
       error.value = "";
@@ -94,7 +84,9 @@ watch(
         if (
           host.value &&
           boundary &&
-          (entry.value?.kind === "reaction" || entry.value?.kind === "route")
+          (entry.value?.kind === "reaction" ||
+            entry.value?.kind === "route" ||
+            entry.value?.kind === "mechanism")
         ) {
           const parent = host.value.parentElement!;
           const padding = getComputedStyle(boundary);
@@ -175,26 +167,6 @@ onBeforeUnmount(() => {
     />
   </template>
   <figure v-else ref="host" class="library-figure">
-    <nav
-      v-if="
-        entry?.kind === 'mechanism' &&
-        !reference.frame &&
-        entry.frames.length > 1
-      "
-      aria-label="图示步骤"
-      class="frames"
-    >
-      <button
-        v-for="frame in entry.frames"
-        :key="frame.id"
-        class="button button--quiet"
-        type="button"
-        :aria-pressed="displayed.frame === frame.id"
-        @click="selectedFrame = frame.id"
-      >
-        {{ frame.title }}
-      </button>
-    </nav>
     <div
       ref="root"
       class="library-canvas"
@@ -203,7 +175,12 @@ onBeforeUnmount(() => {
       :aria-label="library.entries[reference.ref]?.title"
     />
     <p v-if="entry?.overview">{{ entry.overview }}</p>
-    <p v-if="frameExplanation">{{ frameExplanation }}</p>
+    <p v-if="reference.frame">{{ frames[0]?.explanation }}</p>
+    <template v-else>
+      <p v-for="(frame, index) in frames" :key="frame.id">
+        {{ index + 1 }}. {{ frame.title }}：{{ frame.explanation }}
+      </p>
+    </template>
     <p v-if="explanation">{{ explanation }}</p>
     <ImageViewer
       v-if="entry?.kind === 'image'"
@@ -236,19 +213,6 @@ figcaption,
   color: var(--ink-muted);
   font-size: var(--text-sm);
   margin-top: var(--space-2);
-}
-</style>
-
-<style scoped>
-.frames {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-bottom: var(--space-3);
-}
-.frames button[aria-pressed="true"] {
-  font-weight: 600;
-  color: var(--chemical-focus);
 }
 .library-canvas :deep([data-reaction-id]) {
   cursor: pointer;

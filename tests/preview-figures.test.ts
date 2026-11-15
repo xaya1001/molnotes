@@ -86,7 +86,7 @@ test("topic preview collects library references and every mechanism frame inside
   );
 });
 
-test("library mechanism previews collect all frames or the explicitly selected frame", async () => {
+test("library mechanism previews collect the overview or the explicitly selected frame", async () => {
   const compound = await compoundFixture();
   const mechanism: Mechanism = {
     id: "mec_example",
@@ -134,16 +134,14 @@ test("library mechanism previews collect all frames or the explicitly selected f
   assert.deepEqual(
     figures.map((f) => f.value),
     [
-      { ref: mechanism.id, frame: "first", numbers: { input: "7" } },
-      { ref: mechanism.id, frame: "second", numbers: { input: "7" } },
+      { ref: mechanism.id, numbers: { input: "7" } },
       { ref: mechanism.id, frame: "second" },
     ],
   );
   assert.deepEqual(
     figures.map((f) => f.title),
-    ["first", "second", "second"],
+    [undefined, "second"],
   );
-  assert.ok(figures[0].where.includes("[first]"));
   assert.ok(figures[1].where.includes("[second]"));
   topic.chapters[0].blocks = [
     { type: "figure-ref", ref: mechanism.id, frame: "missing" },

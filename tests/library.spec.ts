@@ -555,7 +555,7 @@ test("wrapped route connections clear quantities and reaction heads at every row
   }
 });
 
-test("mechanism step selection keeps the explanation with its drawing", async ({
+test("mechanism references show the complete overview or one pinned frame", async ({
   page,
 }) => {
   const library = await fixture();
@@ -588,45 +588,48 @@ test("mechanism step selection keeps the explanation with its drawing", async ({
     numbers: { structure: "7" },
     focus: { primary: { atoms: [{ molecule: "structure", atom: "a3" }] } },
   };
-  await serveFigureViews(page, library, [reference]);
+  await serveFigureViews(page, library, [
+    reference,
+    { ...reference, frame: "second" },
+  ]);
   await page.route("**/api/library", (route) =>
     route.fulfill({ json: library }),
   );
   await page.route("**/api/topics/minimal", async (route) => {
     const response = await route.fetch();
     const topic = await response.json();
-    topic.content.chapters[0].blocks = [{ type: "figure-ref", ...reference }];
+    topic.content.chapters[0].blocks = [
+      { type: "figure-ref", ...reference },
+      { type: "figure-ref", ...reference, frame: "second" },
+    ];
     await route.fulfill({ json: topic });
   });
   await page.goto("/sites/minimal/start");
-  const figure = page.locator(".library-figure");
-  await expect(figure.locator('[data-figure="mec_example"]')).toBeVisible();
+  const figures = page.locator(".library-figure");
+  const overview = figures.nth(0),
+    pinned = figures.nth(1);
+  await expect(overview.locator('[data-figure="mec_example"]')).toBeVisible();
+  await expect(overview.locator("[data-frame]")).toHaveCount(2);
+  await expect(overview.getByRole("button")).toHaveCount(0);
+  await expect(overview.locator("p")).toHaveText([
+    "1. first：Explanation for first",
+    "2. second：Explanation for second",
+  ]);
+  for (const id of ["first", "second"])
+    await expect(
+      overview.locator(`[data-label="${id}/structure:number:0"]`),
+    ).toHaveAttribute("data-text", "7");
+  await expect(pinned.locator("[data-molecule]")).toHaveCount(1);
   await expect(
-    figure.getByText("Explanation for first", { exact: true }),
-  ).toBeVisible();
-  const first = await figure.locator("svg").innerHTML();
-  await expect(
-    figure.locator('[data-label="structure:number:0"]'),
+    pinned.locator('[data-label="structure:number:0"]'),
   ).toHaveAttribute("data-text", "7");
-  await figure.getByRole("button", { name: "second", exact: true }).click();
-  await expect(
-    figure.getByText("Explanation for second", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    figure.getByText("Explanation for first", { exact: true }),
-  ).toHaveCount(0);
-  await expect(
-    figure.locator('[data-label="structure:number:0"]'),
-  ).toHaveAttribute("data-text", "7");
-  await expect.poll(() => figure.locator("svg").innerHTML()).not.toBe(first);
-  if (process.env.MOLNOTES_FIGURE_SCREENS)
-    for (const width of [1366, 390]) {
-      await page.setViewportSize({ width, height: width === 1366 ? 900 : 844 });
-      await figure.scrollIntoViewIfNeeded();
-      await page.screenshot({
-        path: `${process.env.MOLNOTES_FIGURE_SCREENS}/snapshot-frames-${width}.png`,
-      });
-    }
+  await expect(pinned.locator("p")).toHaveText(["Explanation for second"]);
+  for (const width of [1366, 390]) {
+    await page.setViewportSize({ width, height: width === 1366 ? 900 : 844 });
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(width);
+  }
 });
 
 test("deuterium uses one full-size native D glyph without changing identity", async ({
