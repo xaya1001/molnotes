@@ -72,6 +72,20 @@ const fence = (yaml: string) => `\`\`\`question\n${yaml}\n\`\`\``;
 const prediction = (type: string, fields: string) =>
   `type: ${type}\nid: ${type}\nquestion: Compare the observations.\nexplanation: Use the given values.\n${fields}`;
 
+test("practice figure references compile to existing topic blocks", async () => {
+  const reference = {
+    ref: "img_example",
+    caption: "Neutral observation",
+    alt: "Two samples",
+    presentation: "figure",
+  };
+  const result = await compilePracticeChapter(
+    chapter("```figure-ref\n" + JSON.stringify(reference) + "\n```"),
+    file,
+  );
+  assert.deepEqual(result.blocks.at(-1), { ...reference, type: "figure-ref" });
+});
+
 test("each question type compiles to the existing block and answer contract", async () => {
   const result = await compilePracticeChapter(
     chapter(

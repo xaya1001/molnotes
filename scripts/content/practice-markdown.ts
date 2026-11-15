@@ -183,6 +183,14 @@ export async function compilePracticeChapter(
     fail(`${file}:2`, "note must name notes/<dir>/<slug>");
   const offset = match[0].split("\n").length - 1;
   const tokens = markdown.parse(source.slice(match[0].length), {});
+  const image = tokens.find((token) =>
+    token.children?.some((child) => child.type === "image"),
+  );
+  if (image)
+    fail(
+      `${file}:${offset + (image.map?.[0] ?? 0) + 1}`,
+      "Markdown images are not supported in practice chapters; use figure-ref",
+    );
   const blocks: TopicBlock[] = [];
   function add(block: unknown, where: string) {
     const chapter = { id, blocks: [block] };
@@ -206,6 +214,13 @@ export async function compilePracticeChapter(
           const request = await parseRequest(token.content, file, line);
           fail(where, `Unresolved ${request.kind} request (${request.skill})`);
         }
+        continue;
+      }
+      if (kind === "figure-ref") {
+        add(
+          { ...yaml(token.content, file, line + 1), type: "figure-ref" },
+          where,
+        );
         continue;
       }
       if (kind !== "question") fail(where, `Unknown fence ${kind}`);

@@ -123,6 +123,17 @@ JSON 章也可用 `note` 建立同样的对应关系。
 下面是 `chapters/observe.md` 的最小例子，专题的 `chapters` 可写为 `["chapters/observe.md", { …JSON 章… }]`。
 `title`、`note`、`refs` 必填；其他字段与 JSON 章一致，`refs` 可以为空。
 正文用普通段落、`##`、`###` 和单层有序或无序列表，文字交给现有专题块显示。
+补全后的图片与化学图使用 `figure-ref` 围栏，字段与笔记的图库引用相同，编译成现有专题的 `figure-ref` 块。
+练习章的 `image`、`chart` 请求出图后先用下文 `figure:image` 登记进图库，再写引用。
+练习章中的 Markdown 图片语法会报错并提示使用 `figure-ref`。
+
+````markdown
+```figure-ref
+ref: img_example
+caption: 样本观察
+presentation: figure
+```
+````
 
 ````markdown
 ---
@@ -446,6 +457,25 @@ Skeletal templates produce saved compound layouts during authoring; publication 
 Process entries use `kind: "process"` and a `prc_…` ID. Their `title`, `label`, `nodes`, optional `total` and `scenarios` follow the [ProcessData contract](../shared/process.ts). Pages reference the entry with `figure-ref`; the existing process player, scenario controls, trace and budget are reused without a separate layout. Process previews and PNGs use that same player; SVG export applies to static figures.
 
 Image entries save `asset`, `mime`, original `width`/`height`, `purpose`, `rights`, `alt`, and an optional pixel `crop: {x,y,width,height}`. Source images remain original bytes. Crop bounds and decoded dimensions are verified. Images fit the reading width and open in the shared image viewer. For uncropped images, `presentation: "figure"` uses the ordinary framed image with caption, and `presentation: "note"` keeps the centered note illustration and caption. Without it, the existing library SVG presentation remains in use. Image slots in scenes and picture questions accept `{ref:"img_…"}` in place of `{src,alt}`. Original-page sources may use `images: [{ref:"img_…"}, …]`, one per PDF page, instead of a path pattern; page references keep their page number and highlight rectangle.
+
+Register a PNG, JPEG, WebP or GIF with `npm run figure:image -- <image> --library <content-root> --metadata <metadata.yaml> [--prompt-file <prompt.md>]`.
+The metadata YAML supplies the existing `title`, `sources`, `purpose`, `rights` and `alt` fields, with optional `author`.
+For generated images, supply the complete final prompt using `--prompt-file`; it is saved in the entry's `prompt` field.
+The command reads the original dimensions, stores unchanged bytes at `library/assets/<sha256>.<extension>`, writes the `img_` entry under `library/images/`, and prints its ID.
+Registering identical bytes returns the existing image ID and retains its metadata.
+
+```yaml
+title: Sample observation
+sources:
+  - {
+      source: unknown,
+      locator: Authored example,
+      note: Generated from the supplied sample counts.,
+    }
+purpose: Compare two sample counts
+rights: Generated illustration
+alt: Two points in group A and one in group B
+```
 
 ### Markush formulas and coverage maps
 
