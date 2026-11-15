@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { rGroupLabel } from "../../shared/reaction-scheme.ts";
 import { mappedDummies } from "../../shared/reaction-chemistry.ts";
-import { computed, nextTick, ref, useId, watch } from "vue";
+import { nextTick, ref, watch } from "vue";
 import { loadChemistry, molecule } from "./chemistry/rdkit.ts";
 import {
   abbreviatedGroups,
@@ -13,9 +13,7 @@ import {
   moleculeSvg,
   labelAbbreviations,
   padAtomLabels,
-  electronArrowLineWidth,
 } from "./chemistry/drawing.ts";
-import type { ElectronArrow, StructureAnchor } from "./chemistry/types.ts";
 const props = withDefaults(
   defineProps<{
     smiles: string;
@@ -29,7 +27,6 @@ const props = withDefaults(
     highlightAtoms?: readonly number[];
     highlightBonds?: readonly number[];
     labels?: Record<number, string>;
-    arrows?: readonly ElectronArrow[];
     disabled?: boolean;
   }>(),
   {
@@ -39,7 +36,6 @@ const props = withDefaults(
     highlightAtoms: () => [],
     highlightBonds: () => [],
     labels: () => ({}),
-    arrows: () => [],
   },
 );
 const emit = defineEmits<{ "update:selected": [value: number[]] }>();
@@ -55,7 +51,6 @@ watch(
     () => props.highlightAtoms,
     () => props.highlightBonds,
     () => props.labels,
-    () => props.arrows,
     () => props.selectable,
   ],
   async () => {
@@ -77,7 +72,6 @@ const bonds = ref<[number, number][]>([]);
 const foldedAtoms = ref(new Set<number>());
 const error = ref("");
 const retry = ref(0);
-const marker = useId();
 watch(
   [() => props.smiles, () => props.abbreviations, retry],
   async (_, __, cleanup) => {
@@ -238,32 +232,6 @@ watch(
   },
   { immediate: true },
 );
-function anchor(at: StructureAnchor): Point {
-  if ("atom" in at) {
-    const point = atoms.value[at.atom];
-    if (!point) throw new Error(`Unknown atom index: ${at.atom}`);
-    return point;
-  }
-  const edge = bonds.value[at.bond];
-  if (!edge) throw new Error(`Unknown bond index: ${at.bond}`);
-  const [a, b] = edge.map((i) => atoms.value[i]);
-  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-}
-const arrows = computed(() =>
-  !svg.value
-    ? []
-    : props.arrows.map((arrow) => {
-        const a = anchor(arrow.from),
-          b = anchor(arrow.to),
-          bend = arrow.bend ?? 0.45;
-        const x = (a.x + b.x) / 2 - (b.y - a.y) * bend;
-        const y = (a.y + b.y) / 2 + (b.x - a.x) * bend;
-        return {
-          path: `M ${a.x} ${a.y} Q ${x} ${y} ${b.x} ${b.y}`,
-          electrons: arrow.electrons,
-        };
-      }),
-);
 function toggle(index: number) {
   if (props.disabled) return;
   emit(
@@ -292,30 +260,6 @@ function toggle(index: number) {
       :aria-label="`${name}二维结构`"
     >
       <g aria-hidden="true" v-html="svg" />
-      <defs>
-        <marker
-          :id="`${marker}-2`"
-          viewBox="0 0 10 10"
-          refX="9"
-          refY="5"
-          markerWidth="7"
-          markerHeight="7"
-          orient="auto-start-reverse"
-        >
-          <path d="M 0 0 L 9 5 L 0 10" class="arrow-head" />
-        </marker>
-        <marker
-          :id="`${marker}-1`"
-          viewBox="0 0 10 10"
-          refX="9"
-          refY="5"
-          markerWidth="7"
-          markerHeight="7"
-          orient="auto-start-reverse"
-        >
-          <path d="M 0 0 L 9 5" class="arrow-head" />
-        </marker>
-      </defs>
       <g v-for="(bond, i) in bonds" :key="`b${i}`">
         <line
           v-if="
@@ -410,16 +354,6 @@ function toggle(index: number) {
           {{ labels[i] }}
         </text>
       </g>
-      <path
-        v-for="(arrow, i) in arrows"
-        :key="`arrow${i}`"
-        :d="arrow.path"
-        class="electron-arrow"
-        :style="{ strokeWidth: electronArrowLineWidth }"
-        :marker-end="`url(#${marker}-${arrow.electrons})`"
-      >
-        <title>{{ arrow.electrons === 2 ? "电子对" : "单电子" }}转移</title>
-      </path>
     </svg>
     <figcaption>
       <slot name="caption">{{ name }}</slot>
@@ -490,13 +424,6 @@ function toggle(index: number) {
   font: var(--text-sm) var(--font-sans);
   fill: var(--ink);
   text-anchor: middle;
-}
-.electron-arrow,
-.arrow-head {
-  fill: none;
-  stroke: var(--evidence);
-  stroke-width: 2;
-  pointer-events: none;
 }
 .selection,
 figcaption {

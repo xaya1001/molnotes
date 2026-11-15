@@ -9,7 +9,15 @@ export type FlowKind = "box" | "ask" | "end" | "note";
 export type FlowTone = "plain" | "accent" | "muted";
 export type FlowDirection = "right" | "down";
 
+export interface FlowStep {
+  at: string;
+  title: string;
+  text: string;
+  block?: string;
+}
+
 export interface FlowInput {
+  steps?: FlowStep[];
   nodes: {
     id: string;
     text: string;
@@ -53,6 +61,7 @@ export interface FlowEdge {
   inferred?: boolean;
 }
 export interface Flow {
+  steps?: FlowStep[];
   nodes: FlowNode[];
   edges: FlowEdge[];
   /** Fixed direction, or "auto": right when the boxes fit across, else down. */
@@ -83,7 +92,7 @@ function oneOf<T extends string>(
 export function defineFlow(value: unknown): Flow {
   const input = only(
     value,
-    ["nodes", "edges", "direction", "over", "note"],
+    ["nodes", "edges", "direction", "over", "note", "steps"],
     "flow",
   );
   const nodeItems = list(input.nodes, "flow nodes");
@@ -195,10 +204,43 @@ export function defineFlow(value: unknown): Flow {
       `flow edges run in a circle: ${cycle.join(" > ")}; a flow runs one way, so drop or reverse one of these edges`,
     );
 
+  const steps =
+    input.steps === undefined
+      ? undefined
+      : list(input.steps, "flow steps").map((value, index): FlowStep => {
+          const where = `flow steps 第 ${index + 1} 项`;
+          const step = only(value, ["at", "title", "text", "block"], where);
+          const at = text(step.at, `${where} at`)
+            .split(">")
+            .map((part) => part.trim())
+            .join(" > ");
+          const edge = edges.some((edge) => `${edge.from} > ${edge.to}` === at);
+          if (!firstUse.has(at) && !edge)
+            fail(
+              `${where} at ${at} 找不到；节点：${known}；边：${[...seen].join(", ")}`,
+            );
+          if (step.block !== undefined && !edge)
+            fail(`${where} block 只能写在边上`);
+          const block =
+            step.block === undefined
+              ? undefined
+              : text(step.block, `${where} block`);
+          if (block && [...block].length > 16)
+            fail(`${where} block 最多 16 字`);
+          return {
+            at,
+            title: text(step.title, `${where} title`),
+            text: text(step.text, `${where} text`),
+            ...(block ? { block } : {}),
+          };
+        });
+  if (steps && (!steps.length || steps.length > 12))
+    fail("flow steps 需要 1–12 步");
   inferFlowSides(nodes, edges);
   const flow: Flow = {
     nodes,
     edges,
+    ...(steps ? { steps } : {}),
     direction:
       oneOf(input.direction, ["right", "down"], "flow direction") ?? "auto",
     over: input.over === undefined ? "" : text(input.over, "flow over"),
@@ -252,6 +294,11 @@ export function flowText(flow: Flow): string[] {
     ...flow.nodes.flatMap((n) => [n.tag, n.text]),
     ...flow.edges.map((e) => e.text),
     flow.note,
+    ...(flow.steps ?? []).flatMap((step) => [
+      step.title,
+      step.text,
+      step.block ?? "",
+    ]),
   ].filter(Boolean);
 }
 
@@ -356,6 +403,18 @@ function packInOrder(want: number[], gap: number[]): number[] {
     .map((y, i) => y + offset[i]);
 }
 
+function isFlowSequence(flow: Flow) {
+  const index = new Map(flow.nodes.map((node, index) => [node.id, index]));
+  return (
+    flow.edges.length === flow.nodes.length - 1 &&
+    flow.edges.every(
+      (edge) =>
+        !edge.side &&
+        Math.abs(index.get(edge.from)! - index.get(edge.to)!) === 1,
+    )
+  );
+}
+
 export function layoutFlow(
   flow: Flow,
   direction: FlowDirection,
@@ -363,6 +422,25 @@ export function layoutFlow(
   labels: ({ w: number; h: number } | null)[],
   space: FlowSpacing,
 ): FlowLayout {
+  if (chainOrder(flow) === null && isFlowSequence(flow)) {
+    const index = new Map(flow.nodes.map((node, index) => [node.id, index]));
+    const reverse = flow.edges.map(
+      (edge) => index.get(edge.from)! > index.get(edge.to)!,
+    );
+    const ordered = {
+      ...flow,
+      edges: flow.edges.map((edge, i) =>
+        reverse[i] ? { ...edge, from: edge.to, to: edge.from } : edge,
+      ),
+    };
+    const layout = layoutFlow(ordered, direction, sizes, labels, space);
+    return {
+      ...layout,
+      edges: layout.edges.map((edge, i) =>
+        reverse[i] ? { ...edge, points: [...edge.points].reverse() } : edge,
+      ),
+    };
+  }
   const right = direction === "right";
   // Sizes on the main and cross axes, and where the box starts on each.
   const main = (i: number) => (right ? sizes[i].w : sizes[i].h);
@@ -985,7 +1063,7 @@ interface BranchItem {
   joinEnds: BranchEnd[] | null;
 }
 export interface FlowAnalysis {
-  shape: "spine" | "tree" | "merge";
+  shape: "spine" | "tree" | "merge" | "rank";
   seqs: BranchSeq[];
   mOut: (i: number) => BranchEdge[];
   all: (i: number) => BranchEdge[];
@@ -1042,6 +1120,7 @@ export function analyzeFlow(flow: Flow): FlowAnalysis {
     return shared.sort((x, y) => order.get(x)! - order.get(y)!)[0];
   };
   const visited = new Set<number>();
+  let ranked = false;
   let deepest = 0;
   function buildSeq(
     start: number,
@@ -1052,10 +1131,14 @@ export function analyzeFlow(flow: Flow): FlowAnalysis {
     let ends: BranchEnd[] = [];
     let u = start;
     for (;;) {
-      if (visited.has(u))
-        fail(
-          `flow node ${nodes[u].id} is reached from two branches that do not start at one fork; join branches only where they split, or split the figure`,
-        );
+      if (visited.has(u)) {
+        if (!isFlowSequence(flow))
+          fail(
+            `flow node ${nodes[u].id} is reached from two branches that do not start at one fork; join branches only where they split, or split the figure`,
+          );
+        ranked = true;
+        break;
+      }
       visited.add(u);
       deepest = Math.max(deepest, depth);
       for (const e of sOut(u)) {
@@ -1138,7 +1221,7 @@ export function analyzeFlow(flow: Flow): FlowAnalysis {
     }
   }
   return {
-    shape,
+    shape: ranked ? "rank" : shape,
     seqs,
     mOut,
     all: (i: number) => out(i),
@@ -1212,9 +1295,23 @@ export function layoutBranches(
 ): BranchLayout {
   const EM = em;
   const S = {
-    rank: 2 * em,
-    cross: 1.4 * em,
-    side: 1.6 * em,
+    rank:
+      (flow.steps?.length
+        ? 5 +
+          2 *
+            (Math.max(
+              1,
+              ...flow.edges.map(
+                (edge) =>
+                  (flow.steps ?? []).filter(
+                    (step) => step.at === `${edge.from} > ${edge.to}`,
+                  ).length,
+              ),
+            ) -
+              1)
+        : 2) * em,
+    cross: (flow.steps?.some((step) => step.block) ? 3 : 1.4) * em,
+    side: (flow.steps?.length ? 4 : 1.6) * em,
     pad: 0.4 * em,
     arrow: 6,
     bus: em,
@@ -1222,8 +1319,8 @@ export function layoutBranches(
     groupGap: 1.2 * em,
     step: 1.75 * em,
     rail: 1.25 * em,
-    contGap: 1.6 * em,
-    elbowGap: 0.55 * em,
+    contGap: (flow.steps?.length ? 2.5 : 1.6) * em,
+    elbowGap: (flow.steps?.length ? 2.5 : 0.55) * em,
     narrow: 34 * em,
   };
   const WIDE = {
@@ -1988,7 +2085,9 @@ export function layoutBranches(
 /** Nodes in outline reading order, with each incoming edge's text immediately before its box. */
 export function flowReadingOrder(flow: Flow, analysis = analyzeFlow(flow)) {
   const order: number[] = [];
-  if (analysis.shape === "spine" && analysis.seqs.length > 1) {
+  if (analysis.shape === "rank")
+    order.push(...flow.nodes.map((_, index) => index));
+  else if (analysis.shape === "spine" && analysis.seqs.length > 1) {
     const line = mainLine(flow)!;
     const onLine = new Set(line);
     const { rank, satellite, sideEdges } = structure(flow);
@@ -2019,4 +2118,105 @@ export function flowReadingOrder(flow: Flow, analysis = analyzeFlow(flow)) {
       e.to === flow.nodes[n].id && e.text ? [i] : [],
     ),
   }));
+}
+
+/** The longest straight run, with adjacent collinear pieces joined. */
+export function flowEdgeSegment(layout: FlowLayout, edge: number) {
+  const vertices: Point[] = [];
+  for (const p of layout.edges[edge].points) {
+    if (vertices.length > 1) {
+      const a = vertices.at(-2)!,
+        b = vertices.at(-1)!;
+      const dx = b[0] - a[0],
+        dy = b[1] - a[1],
+        ex = p[0] - b[0],
+        ey = p[1] - b[1];
+      if (Math.abs(dx * ey - dy * ex) < 0.01 && dx * ex + dy * ey >= 0)
+        vertices.pop();
+    }
+    vertices.push(p);
+  }
+  return vertices
+    .slice(1)
+    .map((b, i) => ({
+      a: vertices[i],
+      b,
+      length: Math.hypot(b[0] - vertices[i][0], b[1] - vertices[i][1]),
+    }))
+    .reduce((best, segment) => (segment.length > best.length ? segment : best));
+}
+
+/** Step badges follow the final node and connector geometry. */
+export function flowStepMarkers(
+  flow: Flow,
+  layout: FlowLayout,
+  tags: number[],
+  diameter: number,
+  outline = false,
+) {
+  return (flow.steps ?? []).map((step, index) => {
+    const node = flow.nodes.findIndex((node) => node.id === step.at);
+    const siblings = (flow.steps ?? [])
+      .slice(0, index)
+      .filter(
+        (other) =>
+          other.at === step.at && Boolean(other.block) === Boolean(step.block),
+      ).length;
+    if (node >= 0) {
+      const placed = layout.nodes[node];
+      const tag = tags[node] ?? 0;
+      return {
+        index,
+        sibling: siblings,
+        x: placed.x + placed.w - diameter / 2 - siblings * (diameter + 4),
+        y: placed.y + tag - diameter / 5,
+        node,
+        vertical: false,
+        block: step.block,
+      };
+    }
+    const edge = flow.edges.findIndex(
+      (edge) => `${edge.from} > ${edge.to}` === step.at,
+    );
+    if (outline) {
+      const target = flow.nodes.findIndex(
+        (node) => node.id === flow.edges[edge].to,
+      );
+      const placed = layout.nodes[target];
+      const slot = (flow.steps ?? [])
+        .slice(0, index)
+        .filter((other) => other.at === step.at).length;
+      return {
+        index,
+        sibling: siblings,
+        x: placed.x + diameter / 2 + slot * (diameter + 4),
+        y: placed.y - diameter / 2 - 2,
+        node: undefined,
+        vertical: false,
+        block: step.block,
+      };
+    }
+    const mixed = (flow.steps ?? []).some(
+      (other) =>
+        other.at === step.at && Boolean(other.block) !== Boolean(step.block),
+    );
+    const fraction = mixed ? (step.block ? 2 / 3 : 1 / 3) : 0.5;
+    const segment = flowEdgeSegment(layout, edge);
+    const vertical =
+      Math.abs(segment.b[1] - segment.a[1]) >
+      Math.abs(segment.b[0] - segment.a[0]);
+    const t =
+      fraction + (siblings * (diameter + 4)) / Math.max(segment.length, 1);
+    const x = segment.a[0] + (segment.b[0] - segment.a[0]) * t;
+    const y = segment.a[1] + (segment.b[1] - segment.a[1]) * t;
+    return {
+      index,
+      sibling: siblings,
+      x,
+      y,
+      node: undefined,
+      vertical,
+      block: step.block,
+    };
+  });
 }

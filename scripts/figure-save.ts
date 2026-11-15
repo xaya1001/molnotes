@@ -32,7 +32,6 @@ export async function saveFigureSource(
     route: "routes",
     mechanism: "mechanisms",
     image: "images",
-    process: "processes",
     markush: "markush",
     conformation: "conformations",
   };

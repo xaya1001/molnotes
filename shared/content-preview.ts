@@ -1,14 +1,11 @@
 import type { TopicContent } from "../src/ui/topic/content.ts";
 import type { TopicBlock } from "../src/ui/topic/blocks.ts";
 import type { MoleculeData } from "../src/ui/chemistry/types.ts";
-import {
-  validateSynthesisRoutes,
-  validateSubstrateScope,
-} from "./reaction-scheme.ts";
-import { validateProcess } from "./process.ts";
+import { validateSubstrateScope } from "./reaction-scheme.ts";
+import { definePanels, panelReferences } from "./panels.ts";
 import { defineFlow } from "../src/ui/diagrams/flow.ts";
 import { defineTimeline } from "../src/ui/diagrams/model.ts";
-import { resolveData, validateMechanismFrames } from "./topic-blocks.ts";
+import { resolveData } from "./topic-blocks.ts";
 import {
   validateFigureReference,
   validateFigureInstance,
@@ -63,22 +60,16 @@ export interface PreviewFigure {
     | "note"
     | "request"
     | "flow"
-    | "process"
+    | "panels"
     | "molecule"
-    | "route"
     | "substrate-scope"
-    | "library"
-    | "mechanism";
+    | "library";
   value: unknown;
   caption: string;
 }
 const define = {
   timeline: defineTimeline,
   flow: defineFlow,
-  process: (value: unknown) => {
-    validateProcess(value, "process");
-    return value;
-  },
 };
 /** The figures of a topic's blocks, tabs included. */
 // `topic` is a content.json the preview reads as written; it is not validated.
@@ -96,53 +87,49 @@ export function topicFigures(
         block.items.forEach((item) =>
           visit(item.blocks, `${at}「${item.label}」`),
         );
-      if (block.type === "figure-ref" || block.type === "mechanism") {
+      if (block.type === "panels") {
         try {
-          if (block.type === "figure-ref") {
-            const { type, ...reference } = block;
-            validateFigureReference(reference, at);
-            const entry = library[reference.ref];
-            validateFigureInstance(library, reference);
-            const frame =
-              entry?.kind === "mechanism"
-                ? entry.frames.find((frame) => frame.id === reference.frame)
-                : undefined;
-            figures.push({
-              where: frame ? `${at} [${frame.id}]` : at,
-              ...(frame ? { title: frame.title } : {}),
-              kind: "library",
-              value: reference,
-              caption: reference.caption ?? "",
-            });
-          } else {
-            const frames = resolveData(block.frames, topic.data, at);
-            validateMechanismFrames(frames, at);
-            frames.forEach((frame, index) =>
-              figures.push({
-                where: `${at} frame ${index + 1}`,
-                kind: "mechanism",
-                value: [frame],
-                caption: block.title ?? "",
-              }),
-            );
-          }
+          const { type, id, ...input } = block;
+          const panels = definePanels(input);
+          panelReferences(panels).forEach((reference) =>
+            validateFigureInstance(library, reference),
+          );
+          figures.push({
+            where: at,
+            kind: "panels",
+            value: panels,
+            caption: panels.caption ?? "",
+          });
         } catch (error) {
           errors.push(`${at}: ${(error as Error).message}`);
         }
       }
-      if (
-        block.type === "timeline" ||
-        block.type === "flow" ||
-        block.type === "process"
-      ) {
+      if (block.type === "figure-ref") {
+        try {
+          const { type, ...reference } = block;
+          validateFigureReference(reference, at);
+          validateFigureInstance(library, reference);
+          const entry = library[reference.ref];
+          const frame =
+            entry?.kind === "mechanism"
+              ? entry.frames.find((frame) => frame.id === reference.frame)
+              : undefined;
+          figures.push({
+            where: frame ? `${at} [${frame.id}]` : at,
+            ...(frame ? { title: frame.title } : {}),
+            kind: "library",
+            value: reference,
+            caption: reference.caption ?? "",
+          });
+        } catch (error) {
+          errors.push(`${at}: ${(error as Error).message}`);
+        }
+      }
+      if (block.type === "timeline" || block.type === "flow") {
         try {
           const kind = block.type;
           const value = resolveData(
-            block.type === "timeline"
-              ? block.timeline
-              : block.type === "flow"
-                ? block.flow
-                : block.process,
+            block.type === "timeline" ? block.timeline : block.flow,
             topic.data,
             at,
           );
@@ -157,14 +144,9 @@ export function topicFigures(
           errors.push(`${at}: ${(error as Error).message}`);
         }
       }
-      if (block.type === "route" || block.type === "substrate-scope") {
-        const value = resolveData(
-          block.type === "route" ? block.routes : block.scope,
-          topic.data,
-          at,
-        );
-        if (block.type === "route") validateSynthesisRoutes(value, at);
-        else validateSubstrateScope(value, at);
+      if (block.type === "substrate-scope") {
+        const value = resolveData(block.scope, topic.data, at);
+        validateSubstrateScope(value, at);
         figures.push({ where: at, kind: block.type, value, caption: "" });
       }
       if (block.type === "molecule")

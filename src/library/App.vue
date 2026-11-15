@@ -17,7 +17,6 @@ const names = {
   route: "路线",
   mechanism: "机理与比较",
   image: "图片",
-  process: "过程图",
   markush: "通式与覆盖地图",
   conformation: "构象与投影式",
 };

@@ -42,7 +42,6 @@ export interface ProofOptions {
   directory: string;
   renderer: string;
   diagnostics: string;
-  processRenderer: string;
   templates: Record<string, string>;
   stage?: AssetStage;
   createRunner(): Promise<ProofRunner>;
@@ -111,12 +110,7 @@ export async function verifyFigureProofs(
       key: sha256(
         stableFigureValue({
           format: 2,
-          renderer:
-            kind === "image"
-              ? "image"
-              : kind === "process"
-                ? options.processRenderer
-                : options.renderer,
+          renderer: kind === "image" ? "image" : options.renderer,
           entry: digest(reference.ref),
           reference,
         }),
@@ -299,7 +293,7 @@ export function figureProofReferences(
         const entry = library[reference.ref];
         const kind = entry?.kind;
         const instance: FigureReference = { ref: reference.ref };
-        if (kind !== "image" && kind !== "process") {
+        if (kind !== "image") {
           if (kind === "compound") instance.variant = reference.variant;
           if (entry?.kind === "mechanism" && reference.frame)
             instance.frame = reference.frame;

@@ -28,7 +28,7 @@ const sections: { label: string; pages: ShowcasePage[] }[] = [
     pages: [
       {
         path: "/steps",
-        label: "分步图示",
+        label: "组合图示",
         component: () => import("./pages/StepsPage.vue"),
       },
       {

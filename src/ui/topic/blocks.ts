@@ -1,13 +1,9 @@
 import type { SubstrateScope } from "../../../shared/reaction-scheme.ts";
-import type { ProcessData } from "../../../shared/process.ts";
+import type { Panels } from "../../../shared/panels.ts";
 // The block catalogue as the runtime reads it. shared/topic-blocks.ts is
 // the definition and checks every topic's content.json against it; these
 // types mirror it so the renderer and the pages read checked data.
-import type {
-  MechanismFrame,
-  MoleculeData,
-  SynthesisRoute,
-} from "../chemistry/types.ts";
+import type { MoleculeData } from "../chemistry/types.ts";
 import type { DataTableInput } from "../data/values.ts";
 import type { FlowInput } from "../diagrams/flow.ts";
 import type { TimelineInput } from "../diagrams/model.ts";
@@ -79,18 +75,9 @@ export interface SubstituentsBlock extends BlockBase {
   site: string;
   variants: DataRef<MoleculeData[]>;
 }
-export interface RouteBlock extends BlockBase {
-  type: "route";
-  routes: DataRef<SynthesisRoute[]>;
-}
 export interface SubstrateScopeBlock extends BlockBase {
   type: "substrate-scope";
   scope: DataRef<SubstrateScope>;
-}
-export interface MechanismBlock extends BlockBase {
-  type: "mechanism";
-  title?: string;
-  frames: DataRef<MechanismFrame[]>;
 }
 export type TableCell =
   | string
@@ -186,22 +173,8 @@ export interface DiagnosticSummaryBlock extends BlockBase {
   type: "diagnostic-summary";
   title?: string;
 }
-export interface SceneFrame {
-  title?: string;
-  text: string;
-  image?:
-    | { src: string; alt: string }
-    | import("../../../shared/chemical-library/types.ts").FigureReference;
-}
-export interface ProcessBlock extends BlockBase {
-  type: "process";
-  process: DataRef<ProcessData>;
-}
-export interface SceneBlock extends BlockBase {
-  type: "scene";
-  label: string;
-  title?: string;
-  frames: DataRef<SceneFrame[]>;
+export interface PanelsBlock extends BlockBase, Panels {
+  type: "panels";
 }
 export interface ProblemBlock extends BlockBase {
   type: "problem";
@@ -289,9 +262,7 @@ export type TopicBlock =
   | MoleculeCompareBlock
   | PropertiesBlock
   | SubstituentsBlock
-  | RouteBlock
   | SubstrateScopeBlock
-  | MechanismBlock
   | TableBlock
   | SpectrumBlock
   | DataTableBlock
@@ -304,8 +275,7 @@ export type TopicBlock =
   | DiagnosticSummaryBlock
   | PathPickerBlock
   | TabsBlock
-  | ProcessBlock
-  | SceneBlock
+  | PanelsBlock
   | ProblemBlock
   | PredictionBlock
   | MatrixBlock

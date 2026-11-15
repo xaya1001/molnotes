@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { schemeRoutes, scopeExample } from "../data/reactions.ts";
+import { scopeExample } from "../data/reactions.ts";
 import { ref } from "vue";
 import {
   PageHeading,
@@ -7,13 +7,10 @@ import {
   MoleculeView,
   MolecularProperties,
   SubstituentExplorer,
-  SynthesisRoute,
   SubstrateScope,
-  MechanismViewer,
   PredictionExercise,
   SourceExcerpt,
   ReadingGuide,
-  type MechanismFrame,
 } from "@ui";
 const selected = ref<number[]>([]),
   cut = ref<number[]>([]),
@@ -27,25 +24,6 @@ const excerpt = {
   text: "CCO",
   guide: "两个碳连接一个氧。此处只演示数据、结构与导读如何一起呈现。",
 };
-const frames: MechanismFrame[] = [
-  {
-    name: "羰基的电子对位移",
-    smiles: "CC=O",
-    arrows: [{ from: { bond: 1 }, to: { atom: 2 }, electrons: 2 }],
-    explanation:
-      "双钩箭头从 C=O 键指向氧，仅表示羰基 π 电子对位移这一局部步骤。",
-  },
-  {
-    name: "氯分子的均裂",
-    smiles: "ClCl",
-    arrows: [
-      { from: { bond: 0 }, to: { atom: 0 }, electrons: 1 },
-      { from: { bond: 0 }, to: { atom: 1 }, electrons: 1 },
-    ],
-    explanation:
-      "两个鱼钩箭头各表示一个电子；此帧独立演示 Cl–Cl 的均裂，不是上一帧的后续反应。",
-  },
-];
 </script>
 <template>
   <article class="page-reading">
@@ -163,12 +141,8 @@ const frames: MechanismFrame[] = [
           { name: '甲基 · 甲苯', smiles: 'Cc1ccccc1' },
         ]"
       />
-      <h2>反应与路线</h2>
-      <SynthesisRoute :routes="schemeRoutes" />
       <h2>底物范围</h2>
       <SubstrateScope :scope="scopeExample" />
-      <h2>电子流的关键帧</h2>
-      <MechanismViewer :frames="frames" />
       <h2>原页与图片</h2>
       <UiFigure
         src="/showcase/ethanol.svg"

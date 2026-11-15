@@ -10,7 +10,7 @@ import type { TopicContent } from "../src/ui/topic/content.ts";
 test.setTimeout(60_000);
 
 for (const width of [1366, 390]) {
-  test(`content preview checks library overviews and mechanism block frames at ${width}px`, async ({
+  test(`content preview checks library overviews and grouped figures at ${width}px`, async ({
     page,
   }) => {
     const sources = [
@@ -84,22 +84,11 @@ for (const width of [1366, 390]) {
             { type: "figure-ref", ref: c.id },
             { type: "figure-ref", ref: "mec_example" },
             {
-              type: "mechanism",
-              frames: [
-                {
-                  name: "First",
-                  smiles: "CC(=O)C",
-                  explanation: "First",
-                  arrows: [
-                    { from: { bond: 1 }, to: { atom: 2 }, electrons: 2 },
-                  ],
-                },
-                {
-                  name: "Second",
-                  smiles: "CCO",
-                  explanation: "Second",
-                  arrows: [],
-                },
+              type: "panels",
+              mode: "compare",
+              items: [
+                { title: "First", text: "Input", ref: c.id },
+                { title: "Second", text: "Result", ref: "img_example" },
               ],
             },
             { type: "figure-ref", ref: bad.id },
@@ -123,7 +112,7 @@ for (const width of [1366, 390]) {
         response,
         body: html.replace(
           "</head>",
-          '<style>[data-preview="5"]{margin-top:8000px}</style></head>',
+          '<style>[data-preview="4"]{margin-top:8000px}</style></head>',
         ),
       });
     });
@@ -140,23 +129,19 @@ for (const width of [1366, 390]) {
     );
     await page.goto("/showcase/preview");
     await page.waitForFunction(() => window.__previewResult);
-    await expect(page.locator("[data-preview]")).toHaveCount(6);
-    await expect(page.locator(".library-canvas svg")).toHaveCount(3);
-    await expect(page.locator("figure.molecule svg")).toHaveCount(2);
-    await expect(page.locator("figure.molecule .electron-arrow")).toHaveCount(
-      1,
-    );
+    await expect(page.locator("[data-preview]")).toHaveCount(5);
+    await expect(page.locator(".library-canvas svg")).toHaveCount(4);
     const result = (await page.evaluate(() => window.__previewResult))!;
     await expect(page.locator('[data-frame="first"]')).toBeVisible();
     await expect(page.locator('[data-frame="second"]')).toBeVisible();
     expect(
-      result.slice(0, 4).flatMap((r) => [...r.warnings, ...(r.errors ?? [])]),
+      result.slice(0, 3).flatMap((r) => [...r.warnings, ...(r.errors ?? [])]),
     ).toEqual([]);
-    expect(result[4].errors?.some((e) => e.startsWith("LABEL_OVERLAP:"))).toBe(
+    expect(result[3].errors?.some((e) => e.startsWith("LABEL_OVERLAP:"))).toBe(
       true,
     );
-    expect(result[5].errors ?? []).toEqual([]);
-    await expect(page.locator('[data-preview="5"] img')).toHaveJSProperty(
+    expect(result[4].errors ?? []).toEqual([]);
+    await expect(page.locator('[data-preview="4"] img')).toHaveJSProperty(
       "naturalWidth",
       120,
     );

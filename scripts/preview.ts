@@ -1,5 +1,6 @@
+import { panelReferences, type Panels } from "../shared/panels.ts";
 // Renders the figures of content units as a reader will see them, without
-// publishing: timelines, flows, processes and structures from the content directory,
+// publishing: timelines, flows, panels and structures from the content directory,
 // drawn by this checkout's components at desktop and phone width. Prints
 // where each screenshot went, the layout warnings the page found and the
 // structures whose drawing stacks atoms or bonds.
@@ -210,7 +211,7 @@ const figures: Figure[] = [];
 for (const unit of units) figures.push(...(await unitFigures(unit, errors)));
 for (const error of errors) console.error(error);
 if (!figures.length) {
-  console.log("没有可预览的时间线、流程图、过程图或结构式。");
+  console.log("没有可预览的时间线、流程图、分格图或结构式。");
   process.exit(errors.length ? 1 : 0);
 }
 const out =
@@ -223,12 +224,18 @@ const prepared = await prepareFigureViews(
   figures.flatMap((figure) =>
     figure.kind === "library"
       ? [figure.value as FigureReference]
-      : figure.kind === "note"
-        ? ((figure.value as PreviewNote).note.diagrams ?? []).flatMap(
-            (diagram) =>
-              diagram.kind === "library" ? [diagram.reference] : [],
-          )
-        : [],
+      : figure.kind === "panels"
+        ? panelReferences(figure.value as Panels)
+        : figure.kind === "note"
+          ? ((figure.value as PreviewNote).note.diagrams ?? []).flatMap(
+              (diagram) =>
+                diagram.kind === "library"
+                  ? [diagram.reference]
+                  : diagram.kind === "panels"
+                    ? panelReferences(diagram.panels)
+                    : [],
+            )
+          : [],
   ),
   content,
 );
@@ -296,7 +303,7 @@ for (const entry of report) {
       ? (entry.value as PreviewNote).note.molecules.flatMap(
           (row) => row.molecules,
         )
-      : entry.kind === "molecule" || entry.kind === "mechanism"
+      : entry.kind === "molecule"
         ? (entry.value as { smiles: string }[])
         : [];
   molecules.forEach(({ smiles }: { smiles: string }, k: number) => {

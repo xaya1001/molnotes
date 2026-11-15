@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PanelsFigure from "./PanelsFigure.vue";
 import LibraryReference from "./library/LibraryReference.vue";
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import MoleculeView from "./MoleculeView.vue";
@@ -179,6 +180,7 @@ defineExpose({ showMatch });
         :energy="row.energy"
         :caption="row.caption"
       />
+      <PanelsFigure v-else-if="row.kind === 'panels'" :panels="row.panels" />
       <LibraryReference v-else :reference="row.reference" />
     </Teleport>
   </template>

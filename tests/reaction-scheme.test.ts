@@ -13,24 +13,24 @@ import {
   substituentDisplay,
   rGroupLabel,
   validateSubstrateScope,
-  validateSynthesisRoutes,
+  validateReactionStep,
 } from "../shared/reaction-scheme.ts";
 import { schemeRoutes, scopeExample } from "../src/showcase/data/reactions.ts";
 import { validateTopicContent } from "../shared/topic-content.ts";
 const toolkit = await moleculeToolkit();
 test("schemes require content numbers and explicit reagent and condition lines", () => {
-  validateSynthesisRoutes(schemeRoutes, "route");
+  validateSubstrateScope(scopeExample, "scope");
   for (const change of [
-    (r: typeof schemeRoutes) =>
-      Reflect.deleteProperty(r[0].steps[0].reactants[0], "number"),
-    (r: typeof schemeRoutes) =>
-      Reflect.set(r[0].steps[0], "reagents", "oxidant"),
-    (r: typeof schemeRoutes) =>
-      Reflect.set(r[0].steps[0], "conditions", "water"),
+    (scope: typeof scopeExample) =>
+      Reflect.deleteProperty(scope.scheme.reactants[0], "number"),
+    (scope: typeof scopeExample) =>
+      Reflect.set(scope.scheme, "reagents", "oxidant"),
+    (scope: typeof scopeExample) =>
+      Reflect.set(scope.scheme, "conditions", "water"),
   ]) {
-    const routes = structuredClone(schemeRoutes);
-    change(routes);
-    assert.throws(() => validateSynthesisRoutes(routes, "route"));
+    const scope = structuredClone(scopeExample);
+    change(scope);
+    assert.throws(() => validateSubstrateScope(scope, "scope"));
   }
   const content = JSON.parse(
     readFileSync("tests/fixtures/content/sites/minimal/content.json", "utf8"),
@@ -192,7 +192,9 @@ test("a constrained acyl-urea scheme falls back when chlorine and oxygen labels 
   const routes = JSON.parse(
     readFileSync("tests/fixtures/reaction-collision.json", "utf8"),
   );
-  validateSynthesisRoutes(routes, "collision");
+  routes[0].steps.forEach((step: unknown) =>
+    validateReactionStep(step, "collision"),
+  );
   const route = routes[0];
   const aligned = alignScheme(toolkit, route);
   assert.deepEqual(layoutProblems(toolkit, aligned.smiles["3"]), []);

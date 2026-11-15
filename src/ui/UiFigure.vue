@@ -18,18 +18,18 @@ const viewing = ref(false);
     <button
       class="ui-figure-open"
       type="button"
-      :aria-label="`放大查看：${caption}`"
+      :aria-label="`放大查看：${caption || alt}`"
       @click="viewing = true"
     >
       <img v-if="image.src" :src="image.src" :alt="alt" loading="lazy" />
     </button>
     <p v-if="error" role="alert">{{ error }}</p>
-    <figcaption>{{ caption }}</figcaption>
+    <figcaption v-if="caption">{{ caption }}</figcaption>
     <ImageViewer
       v-model:open="viewing"
       :src="image.src"
       :alt="alt"
-      :title="caption"
+      :title="caption || alt"
     />
   </figure>
 </template>

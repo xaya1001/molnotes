@@ -272,33 +272,73 @@ function flowWarnings(root: HTMLElement): string[] {
         warnings.push(`连线穿过框上的小字「${short(tag)}」`);
     }
   }
-  return warnings;
-}
+  const numbers = [...root.querySelectorAll<HTMLElement>(".flow-step-number")];
+  const blockLabels = [
+    ...root.querySelectorAll<HTMLElement>(".flow-block-label"),
+  ];
+  const text = [
+    ...root.querySelectorAll<HTMLElement>(".flow-text, .flow-tag, .flow-label"),
+    ...blockLabels,
+  ];
+  numbers.forEach((number, index) => {
+    for (const label of text)
+      if (
+        overlap(
+          rect(number),
+          (() => {
+            const range = document.createRange();
+            range.selectNodeContents(label);
+            return range.getBoundingClientRect();
+          })(),
+        )
+      )
+        warnings.push(`编号 ${short(number)} 与文字「${short(label)}」重叠`);
+    for (const other of numbers.slice(index + 1)) {
+      const a = rect(number),
+        b = rect(other);
+      if (
+        Math.hypot(
+          (a.left + a.right - b.left - b.right) / 2,
+          (a.top + a.bottom - b.top - b.bottom) / 2,
+        ) <
+        (a.width + b.width) / 2 - 1
+      )
+        warnings.push(`编号 ${short(number)} 与编号 ${short(other)} 重叠`);
+    }
+    for (const box of boxes) {
+      const own =
+        number.dataset.node === undefined
+          ? undefined
+          : root.querySelector(
+              `.flow-node[data-node="${number.dataset.node}"]`,
+            );
+      if (box.closest(".flow-node") !== own && overlap(rect(number), rect(box)))
+        warnings.push(`编号 ${short(number)} 与框「${short(box)}」重叠`);
+    }
+  });
+  const canvas = root.querySelector(".flow-canvas");
+  if (canvas)
+    for (const label of blockLabels) {
+      const outer = rect(root),
+        box = rect(label);
+      if (
+        box.left < outer.left - 1 ||
+        box.right > outer.right + 1 ||
+        box.bottom > rect(canvas).bottom + 1
+      )
+        warnings.push(`block 标签「${short(label)}」溢出画布`);
+      for (const other of text.filter((other) => other !== label))
+        if (overlap(box, rect(other)))
+          warnings.push(
+            `block 标签「${short(label)}」与「${short(other)}」重叠`,
+          );
+      for (const box of boxes)
+        if (overlap(rect(label), rect(box)))
+          warnings.push(
+            `block 标签「${short(label)}」与框「${short(box)}」重叠`,
+          );
+    }
 
-function processWarnings(root: HTMLElement): string[] {
-  const warnings: string[] = [];
-  const labels = [
-    ...root.querySelectorAll<SVGTextElement>(".stage svg text"),
-  ].filter((label) => {
-    const loss = label.closest(".loss");
-    return (
-      label.textContent?.trim() &&
-      (!loss || Number(getComputedStyle(loss).opacity) > 0)
-    );
-  });
-  labels.forEach((label, i) => {
-    const scale = label.getScreenCTM()!;
-    const size =
-      parseFloat(getComputedStyle(label).fontSize) *
-      Math.hypot(scale.a, scale.b);
-    if (size < smallestText)
-      warnings.push(
-        `「${short(label)}」字号 ${size}px，小于 ${smallestText}px`,
-      );
-    for (const other of labels.slice(i + 1))
-      if (overlap(rect(label), rect(other)))
-        warnings.push(`文字「${short(label)}」与「${short(other)}」重叠`);
-  });
   return warnings;
 }
 
@@ -307,7 +347,10 @@ export function figureWarnings(root: HTMLElement): string[] {
   const warnings = textWarnings(root);
   if (root.matches(".timeline")) warnings.push(...timelineWarnings(root));
   if (root.matches(".flow")) warnings.push(...flowWarnings(root));
-  if (root.matches(".player")) warnings.push(...processWarnings(root));
+  if (root.matches(".panels-figure"))
+    for (const flow of root.querySelectorAll<HTMLElement>(".flow"))
+      warnings.push(...flowWarnings(flow));
+
   if (root.querySelector('[role="alert"]'))
     warnings.push(`渲染失败：${short(root.querySelector('[role="alert"]')!)}`);
   return [...new Set(warnings)];

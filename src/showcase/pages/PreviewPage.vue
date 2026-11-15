@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import {
-  validateSynthesisRoutes,
   validateSubstrateScope,
-  type SynthesisRoute as RouteData,
   type SubstrateScope as ScopeData,
 } from "../../../shared/reaction-scheme.ts";
-import SynthesisRoute from "../../ui/SynthesisRoute.vue";
 import SubstrateScope from "../../ui/SubstrateScope.vue";
 import type { NoteMolecules } from "../../../shared/notes-index.ts";
 import { nextTick, onMounted, ref } from "vue";
-import { validateProcess, type ProcessData } from "../../../shared/process.ts";
-import ProcessViewer from "../../ui/topic/ProcessViewer.vue";
+import {
+  definePanels,
+  panelReferences,
+  type Panels,
+} from "../../../shared/panels.ts";
+import PanelsFigure from "../../ui/PanelsFigure.vue";
 import MoleculeView from "../../ui/MoleculeView.vue";
 import FlowFigure from "../../ui/diagrams/FlowFigure.vue";
 import TimelineFigure from "../../ui/diagrams/TimelineFigure.vue";
@@ -21,13 +22,10 @@ import type { PreviewFigure as Injected } from "../../../shared/content-preview.
 import type {
   LibrarySnapshot,
   FigureReference,
-  Diagnostic,
 } from "../../../shared/chemical-library/types.ts";
-import type { MechanismFrame } from "../../ui/chemistry/types.ts";
 import { validateFigureReference } from "../../../shared/chemical-library/contract.ts";
-import { validateMechanismFrames } from "../../../shared/topic-blocks.ts";
+import { figureViewKey } from "../../../shared/chemical-library/views.ts";
 import LibraryFigure from "../../ui/library/LibraryFigure.vue";
-import MechanismViewer from "../../ui/MechanismViewer.vue";
 import CompiledProse from "../../ui/CompiledProse.vue";
 import type {
   PreviewNote,
@@ -49,20 +47,13 @@ type Shown =
     }
   | {
       where: string;
-      kind: "mechanism";
-      frames: MechanismFrame[];
-      caption: string;
-    }
-  | { where: string; kind: "route"; routes: RouteData[]; caption: string }
-  | {
-      where: string;
       kind: "substrate-scope";
       scope: ScopeData;
       caption: string;
     }
   | { where: string; kind: "timeline"; timeline: Timeline; caption: string }
   | { where: string; kind: "flow"; flow: Flow; caption: string }
-  | { where: string; kind: "process"; process: ProcessData; caption: string }
+  | { where: string; kind: "panels"; panels: Panels; caption: string }
   | {
       where: string;
       kind: "molecule";
@@ -81,41 +72,29 @@ declare global {
   }
 }
 
-function processFigure(f: Injected): Shown {
-  validateProcess(f.value, f.where);
-  return { ...f, kind: "process", process: f.value };
-}
 function schemeFigure(f: Injected): Shown {
-  if (f.kind === "route") {
-    validateSynthesisRoutes(f.value, f.where);
-    return { ...f, kind: "route", routes: f.value };
-  }
   validateSubstrateScope(f.value, f.where);
   return { ...f, kind: "substrate-scope", scope: f.value };
 }
 function chemicalFigure(f: Injected): Shown {
-  if (f.kind === "library") {
-    validateFigureReference(f.value, f.where);
-    return { ...f, kind: "library", reference: f.value };
-  }
-  validateMechanismFrames(f.value, f.where);
-  return { ...f, kind: "mechanism", frames: f.value };
+  validateFigureReference(f.value, f.where);
+  return { ...f, kind: "library", reference: f.value };
 }
 const shown: Shown[] = (window.__previewFigures ?? []).map((f) =>
   f.kind === "request"
     ? { ...f, kind: "request", request: f.value as PreviewRequest }
     : f.kind === "note"
       ? { ...f, kind: "note", preview: f.value as PreviewNote }
-      : f.kind === "library" || f.kind === "mechanism"
+      : f.kind === "library"
         ? chemicalFigure(f)
-        : f.kind === "route" || f.kind === "substrate-scope"
+        : f.kind === "substrate-scope"
           ? schemeFigure(f)
           : f.kind === "timeline"
             ? { ...f, kind: "timeline", timeline: defineTimeline(f.value) }
             : f.kind === "flow"
               ? { ...f, kind: "flow", flow: defineFlow(f.value) }
-              : f.kind === "process"
-                ? processFigure(f)
+              : f.kind === "panels"
+                ? { ...f, kind: "panels", panels: definePanels(f.value) }
                 : {
                     ...f,
                     kind: "molecule",
@@ -124,7 +103,26 @@ const shown: Shown[] = (window.__previewFigures ?? []).map((f) =>
 );
 const figures = ref<HTMLElement[]>([]);
 const library = window.__previewLibrary ?? { entries: {}, uses: {} };
-const diagnostics = ref<Record<number, Diagnostic[]>>({});
+function figureDiagnostics(figure: Shown) {
+  const references =
+    figure.kind === "library"
+      ? [figure.reference]
+      : figure.kind === "panels"
+        ? panelReferences(figure.panels)
+        : figure.kind === "note"
+          ? (figure.preview.note.diagrams ?? []).flatMap((diagram) =>
+              diagram.kind === "library"
+                ? [diagram.reference]
+                : diagram.kind === "panels"
+                  ? panelReferences(diagram.panels)
+                  : [],
+            )
+          : [];
+  return references.flatMap(
+    (reference) =>
+      library.renders?.[figureViewKey(reference)]?.diagnostics ?? [],
+  );
+}
 const readyNotes = ref(0);
 
 const settle = () =>
@@ -145,12 +143,15 @@ onMounted(async () => {
       document.querySelector(".molecule [role='status']") ||
       [...document.querySelectorAll(".library-canvas")].some(
         (node) =>
-          !node.childElementCount &&
+          !node.querySelector("svg") &&
           !node.closest("figure")?.querySelector('[role="alert"]'),
       ) ||
       [
         ...document.querySelectorAll<HTMLImageElement>(".preview-figure img"),
-      ].some((img) => !img.complete))
+      ].some((img) => {
+        img.loading = "eager";
+        return !img.complete;
+      }))
   )
     await new Promise((done) => setTimeout(done, 100));
   for (let i = 0; i < 3; i++) await settle();
@@ -159,6 +160,8 @@ onMounted(async () => {
     const errors = [...host.querySelectorAll('[role="alert"]')].map(
       (node) => node.textContent?.trim() ?? "Render failed",
     );
+    const found = figureDiagnostics(figure);
+    errors.push(...found.map((d) => `${d.code}: ${d.elements.join(", ")}`));
     if (figure.kind === "request")
       return {
         where: figure.where,
@@ -184,10 +187,13 @@ onMounted(async () => {
           ),
         ],
         warnings: [
-          ...host.querySelectorAll<HTMLElement>(
-            "figure.timeline, figure.flow, figure.energy, figure.molecule, .player",
-          ),
-        ].flatMap(figureWarnings),
+          ...found.map((d) => `${d.code}: ${d.elements.join(", ")}`),
+          ...[
+            ...host.querySelectorAll<HTMLElement>(
+              "figure.timeline, figure.flow, figure.energy, figure.molecule, .panels-figure",
+            ),
+          ].flatMap(figureWarnings),
+        ],
       };
     }
     if (figure.kind === "library") {
@@ -197,28 +203,21 @@ onMounted(async () => {
       for (const img of host.querySelectorAll<HTMLImageElement>("img"))
         if (!img.complete || !img.naturalWidth)
           errors.push("Image did not load");
-      const found = diagnostics.value[i] ?? [];
-      errors.push(...found.map((d) => `${d.code}: ${d.elements.join(", ")}`));
-      const process = host.querySelector<HTMLElement>(".player");
       return {
         where: figure.where,
-        warnings: [
-          ...found.map((d) => `${d.code}: ${d.elements.join(", ")}`),
-          ...(process ? figureWarnings(process) : []),
-        ],
+        warnings: [...found.map((d) => `${d.code}: ${d.elements.join(", ")}`)],
         errors,
       };
     }
     const root = figures.value[i]?.querySelector<HTMLElement>(
-      figure.kind === "mechanism"
-        ? "figure.molecule"
-        : ".reaction-scheme, .substrate-scope, figure.timeline, figure.flow, figure.energy, figure.molecule, .player",
+      ".panels-figure, .substrate-scope, figure.timeline, figure.flow, figure.energy, figure.molecule",
     );
     return {
       where: figure.where,
       ...(errors.length ? { errors } : {}),
       warnings: root
         ? [
+            ...found.map((d) => `${d.code}: ${d.elements.join(", ")}`),
             ...figureWarnings(root),
             ...[
               ...figures.value[i].querySelectorAll<HTMLElement>(
@@ -283,11 +282,6 @@ onMounted(async () => {
             v-if="figure.kind === 'library'"
             :library="library"
             :reference="figure.reference"
-            @diagnostics="diagnostics[i] = $event"
-          />
-          <MechanismViewer
-            v-else-if="figure.kind === 'mechanism'"
-            :frames="figure.frames"
           />
           <TimelineFigure
             v-else-if="figure.kind === 'timeline'"
@@ -299,13 +293,10 @@ onMounted(async () => {
             :flow="figure.flow"
             :caption="figure.caption"
           />
-          <ProcessViewer
-            v-else-if="figure.kind === 'process'"
-            :data="figure.process"
-          />
-          <SynthesisRoute
-            v-else-if="figure.kind === 'route'"
-            :routes="figure.routes"
+          <PanelsFigure
+            v-else-if="figure.kind === 'panels'"
+            :panels="figure.panels"
+            :library="library"
           />
           <SubstrateScope
             v-else-if="figure.kind === 'substrate-scope'"

@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { readsWell } from "../src/ui/diagrams/check.ts";
 import {
   defineFlow,
+  flowStepMarkers,
   analyzeFlow,
   layoutBranches,
   type FlowInput,
@@ -91,7 +92,6 @@ test("a malformed flow is rejected with what to change", () => {
       { nodes: [node("a", { kind: "diamond" }), node("b")], edges: ["a > b"] },
       /flow node 1 kind must be one of box, ask, end, note/,
     ],
-    [{ steps: [{ text: "a" }] }, /flow unknown field steps/],
     [
       {
         nodes: ["a", "b", "c", "d", "e", "f"].map((id) => node(id)),
@@ -562,4 +562,130 @@ test("branch layouts fit narrow through wide pages with clear text, boxes and ar
     }
   }
   assert.deepEqual([...modes].sort(), ["down", "outline", "right"]);
+});
+
+test("flow steps resolve node and edge locations and index their explanations", () => {
+  const input = {
+    nodes: [node("a"), node("b")],
+    edges: ["a > b"],
+    steps: [
+      { at: "a", title: "Input", text: "Prepare" },
+      { at: "a>b", title: "Move", text: "Transfer" },
+      { at: "a > b", title: "Inhibit", text: "Pause", block: "Inhibitor" },
+    ],
+  };
+  const flow = defineFlow(input);
+  assert.deepEqual(
+    flow.steps?.map((step) => step.at),
+    ["a", "a > b", "a > b"],
+  );
+  assert.ok(flowText(flow).includes("Inhibitor"));
+  assert.ok(flowText(flow).includes("Transfer"));
+  const layout = layoutFlow(
+    flow,
+    "right",
+    flow.nodes.map(() => ({ w: 100, h: 40, tag: 0 })),
+    flow.edges.map(() => null),
+    { ...space, rank: 120 },
+  );
+  const markers = flowStepMarkers(flow, layout, [0, 0], 22);
+  assert.equal(markers[0].node, 0);
+  assert.equal(markers[0].x, layout.nodes[0].x + 89);
+  assert.ok(markers[0].y < layout.nodes[0].y);
+  assert.ok(markers[1].x < markers[2].x);
+  assert.equal(markers[1].y, markers[2].y);
+  assert.deepEqual(
+    markers.map((marker) => marker.index),
+    [0, 1, 2],
+  );
+  for (const [step, error] of [
+    [{ ...input.steps[0], at: "missing" }, /第 1 项.*节点：a, b.*边：a > b/],
+    [{ ...input.steps[2], at: "b" }, /block 只能写在边上/],
+    [{ ...input.steps[2], block: "x".repeat(17) }, /最多 16 字/],
+  ] as const)
+    assert.throws(() => defineFlow({ ...input, steps: [step] }), error);
+});
+
+test("a merging input can also feed a separate output through the ranked layout", () => {
+  const flow = defineFlow({
+    nodes: ["input", "receptor", "kinase", "signal", "output"].map((id) =>
+      node(id),
+    ),
+    edges: [
+      "input > receptor",
+      "kinase > receptor",
+      "kinase > signal > output",
+    ],
+    steps: [
+      {
+        at: "input > receptor",
+        title: "Input",
+        text: "The input reaches the receptor",
+      },
+      {
+        at: "input > receptor",
+        title: "Block",
+        text: "The input is blocked",
+        block: "Blocker",
+      },
+      {
+        at: "kinase > receptor",
+        title: "Activate",
+        text: "The kinase modifies the receptor",
+      },
+      {
+        at: "kinase > signal",
+        title: "Signal",
+        text: "The kinase feeds another output",
+      },
+    ],
+  });
+  const analysis = analyzeFlow(flow);
+  assert.equal(analysis.shape, "rank");
+  for (const direction of ["right", "down"] as const) {
+    const sizes = sized(flow);
+    const layout = layoutFlow(
+      flow,
+      direction,
+      sizes,
+      flow.edges.map(() => null),
+      { ...space, rank: 70 },
+    );
+    assert.equal(layout.edges.length, 4);
+    const axis = direction === "down" ? "y" : "x";
+    assert.ok(layout.nodes[2][axis] > layout.nodes[1][axis]);
+    const back = layout.edges[1].points;
+    assert.ok(
+      back[0][direction === "down" ? 1 : 0] >
+        back.at(-1)![direction === "down" ? 1 : 0],
+    );
+    layout.nodes.forEach((a, i) =>
+      layout.nodes
+        .slice(i + 1)
+        .forEach((b, j) =>
+          assert.ok(
+            !overlaps({ ...a, h: sizes[i].h }, { ...b, h: sizes[i + j + 1].h }),
+          ),
+        ),
+    );
+    assert.deepEqual(
+      flow.edges.map((edge) => `${edge.from} > ${edge.to}`),
+      [
+        "input > receptor",
+        "kinase > receptor",
+        "kinase > signal",
+        "signal > output",
+      ],
+    );
+    const markers = flowStepMarkers(
+      flow,
+      layout,
+      sizes.map((size) => size.tag),
+      22,
+    );
+    assert.equal(markers.length, 4);
+    assert.ok(
+      Math.hypot(markers[2].x - markers[3].x, markers[2].y - markers[3].y) > 22,
+    );
+  }
 });

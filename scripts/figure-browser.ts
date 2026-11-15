@@ -46,22 +46,13 @@ export async function figureBrowser(
 <link rel="stylesheet" href="/src/ui/styles/tokens.css"><link rel="stylesheet" href="/src/ui/styles/base.css">
 <style>body{margin:24px;background:#faf9f6;font:16px Arial,sans-serif}#canvas{overflow:auto}#canvas>svg{display:block;margin:auto;max-width:none}h1{font-size:20px}</style>
 </head><body><h1 id="title"></h1><div id="canvas"></div><script type="module">
-import {createApp,nextTick} from '/node_modules/vue/dist/vue.runtime.esm-bundler.js';
-import ProcessViewer from '/src/ui/topic/ProcessViewer.vue';
 import {imageSvg} from '/src/ui/library/image-svg.ts';
-let app;
-const reset=()=>{app?.unmount();app=undefined;const canvas=document.getElementById('canvas');canvas.style.cssText='';canvas.replaceChildren();return canvas;};
+const reset=()=>{const canvas=document.getElementById('canvas');canvas.style.cssText='';canvas.replaceChildren();return canvas;};
 const scaleSvg=(svg,render)=>{const scale=Math.max(render.minimumScale,Math.min(1,(innerWidth-48)/render.width));svg.style.width=render.width*scale+'px';svg.style.height=render.height*scale+'px';};
 window.frozen=(render)=>{const canvas=reset();canvas.innerHTML=render.svg;document.getElementById('title').textContent='';scaleSvg(canvas.querySelector('svg'),render);};
 window.proof=async(library,ref)=>{
   const canvas=reset(),entry=library[ref.ref];
   document.getElementById('title').textContent=entry.title;
-  if(entry.kind==='process'){
-    app=createApp(ProcessViewer,{data:entry});app.mount(canvas);
-    await nextTick();await document.fonts.ready;await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);
-    const box=canvas.getBoundingClientRect();
-    return {svg:null,diagnostics:[],width:box.width,height:box.height,minimumScale:0,atoms:{}};
-  }
   if(entry.kind!=='image')throw new Error('Chemical figures require prepared SVG');
   const result=await imageSvg(entry);canvas.replaceChildren(result.svg);scaleSvg(result.svg,result);
   return {...result,svg:result.svg.outerHTML,diagnostics:[],atoms:{}};

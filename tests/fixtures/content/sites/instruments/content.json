@@ -207,24 +207,6 @@
           }
         },
         {
-          "type": "scene",
-          "label": "步骤",
-          "frames": [
-            {
-              "title": "开始",
-              "text": "初始状态",
-              "image": {
-                "src": "/sites/instruments/static/sample.svg",
-                "alt": "线段"
-              }
-            },
-            {
-              "title": "完成",
-              "text": "观察完成"
-            }
-          ]
-        },
-        {
           "type": "lab",
           "model": "first-order-elimination",
           "label": "预设消除模型",

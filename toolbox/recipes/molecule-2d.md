@@ -23,9 +23,7 @@
 ## 反应与机理
 
 - `ReactionStep` renders one complete journal-style step. Its compounds require `{ name, smiles, number }`; `reagents` and `conditions` are arrays of source-ordered lines, with optional `yield` last below the arrow. Numbering belongs to content.
-- `SynthesisRoute` takes `{ id, title, core?, direction?, steps }[]`. It displays the whole route, wraps at arrows and runs vertically on phones. Selecting an arrow changes the explanation below. `core` declares SMARTS/SMILES for alignment; otherwise the common substructure is computed. Preview reports alignment failures and keeps the default layout.
-- `SubstrateScope` takes a generic step, R columns, source reading columns and numbered rows with verified products. Publication checks each product against the template after R substitution. See [the content contract](../../docs/content.md#reaction-schemes-and-substrate-scope) and the neutral showcase for the full data shape.
-- `MechanismViewer` 的 `frames` 为 `{ name, smiles, explanation, arrows }[]`。每个箭头 `{ from, to, electrons: 1 | 2, bend? }` 的端点是 `{ atom: index }` 或 `{ bond: index }`，不是像素；`bend` 为有符号曲率比例。双钩表示电子对，鱼钩表示单电子。多个分子用同一 SMILES 的点号分隔，索引在该整体图内编号；帧内键中心和原子坐标由 RDKit 绘图取得。每帧需独立核对电子流、电荷与产物，绘图库不证明机理成立。
+- `SubstrateScope` takes a generic step, R columns, source reading columns and numbered rows with verified products. Publication checks each product against the template after R substitution. See [the content contract](../../docs/content.md#substrate-scope) and the neutral showcase for the full data shape.
 
 ## 先预测再揭晓
 
@@ -42,3 +40,6 @@
 不需要运行时交互的固定插图可使用 `toolbox/molecule-2d/render.py`：按其 `requirements.txt` 安装 Python RDKit，传 `--smiles` 与 `--output` 生成 SVG。实时高亮、原子选择和性质计算使用上述组件。完整 API 演示见 `/showcase/molecule`。
 
 参考：[RDKit.js](https://rdkitjs.com/)、[RDKit 二维绘图](https://www.rdkit.org/docs/GettingStartedInPython.html)。
+
+多帧机理与合成路线通过图库 `figure-ref` 展示静态全貌及图下说明。
+多步路线的箭头标步骤编号，单步反应直接显示说明。

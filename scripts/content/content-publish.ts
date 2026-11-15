@@ -2,10 +2,7 @@ import { readChemicalLibrary, libraryUsage } from "./chemical-library.ts";
 import { verifyLibraryFigures } from "./figure-build.ts";
 import { rejectContentRequests } from "./requests.ts";
 import { assetStage, type AssetStage, type AssetBytes } from "./asset-stage.ts";
-import {
-  validateSchemeCompounds,
-  validateScopeProducts,
-} from "../../shared/reaction-chemistry.ts";
+import { validateScopeProducts } from "../../shared/reaction-chemistry.ts";
 import { resolveData } from "../../shared/topic-blocks.ts";
 import type { TopicBlock } from "../../src/ui/topic/blocks.ts";
 import {
@@ -109,15 +106,6 @@ async function validateTopics(data: PublishData, ctx: BuildContext) {
       for (const block of blocks) {
         if (block.type === "tabs")
           for (const item of block.items) await schemes(item.blocks);
-        if (block.type === "route") {
-          toolkit ??= await moleculeToolkit();
-          for (const route of resolveData(
-            block.routes,
-            topic.content.data,
-            where,
-          ))
-            validateSchemeCompounds(toolkit, route, where);
-        }
         if (block.type === "substrate-scope") {
           toolkit ??= await moleculeToolkit();
           validateScopeProducts(
@@ -416,9 +404,13 @@ async function build(
       title: s.site.title,
     })),
     ...compiled.notes.map((n) => ({
-      value: n.diagrams
-        ?.filter((d) => d.kind === "library")
-        .map((d) => ({ type: "figure-ref", ...d.reference })),
+      value: n.diagrams?.flatMap<unknown>((d) =>
+        d.kind === "library"
+          ? [{ type: "figure-ref", ...d.reference }]
+          : d.kind === "panels"
+            ? [{ type: "panels", ...d.panels }]
+            : [],
+      ),
       path: n.path,
       title: n.title,
     })),

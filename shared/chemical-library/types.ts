@@ -1,7 +1,6 @@
 import type { MarkushFigureData } from "./markush.ts";
 import type { MoleculeAbbreviation } from "../molecule-abbreviations.ts";
 import type { ConformationSpec } from "../chemical-templates/conformation.ts";
-import type { ProcessData } from "../process.ts";
 
 export type Point = { x: number; y: number };
 export type Evidence = { source: string; locator: string; note?: string };
@@ -238,9 +237,6 @@ export interface LibraryImage extends EntryBase {
   derivedFrom?: string[];
   crop?: { x: number; y: number; width: number; height: number };
 }
-export interface LibraryProcess extends EntryBase, ProcessData {
-  kind: "process";
-}
 export interface LibraryMarkush extends EntryBase, MarkushFigureData {
   kind: "markush";
 }
@@ -253,7 +249,6 @@ export type LibraryEntry =
   | Route
   | Mechanism
   | LibraryImage
-  | LibraryProcess
   | LibraryMarkush
   | Conformation;
 export type Library = Record<string, LibraryEntry>;
