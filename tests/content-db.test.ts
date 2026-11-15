@@ -61,6 +61,12 @@ test("published content, records and HTTP assets", async () => {
     "sites/instruments",
     "notes/reader-test",
   ]);
+  const sampleFile = join(content, "sites/sample/content.json");
+  const sample = JSON.parse(await readFile(sampleFile, "utf8"));
+  sample.chapters[0].note = "notes/reader-test/first";
+  sample.quiz.push({ ...sample.quiz[0], id: "placed", chapter: undefined });
+  sample.chapters[0].blocks.push({ type: "quiz", questions: ["q1", "placed"] });
+  await writeFile(sampleFile, JSON.stringify(sample));
   const releases = join(root, "releases");
   const server = createWebServer({
     records,
@@ -117,6 +123,29 @@ test("published content, records and HTTP assets", async () => {
       headers: { "Accept-Encoding": "gzip, br" },
     });
     assert.equal(index.status, 200);
+    assert.equal(
+      snapshot.notes.find((row) => row.slug === "first" && !row.author)!
+        .compiled.practice!.count,
+      3,
+    );
+    assert.deepEqual(
+      snapshot.notes.find((row) => row.slug === "second")!.compiled.practice,
+      {
+        href: "/practice/sample/written",
+        title: "书面观察",
+        label: "第 3 章",
+        count: 3,
+      },
+    );
+    assert.deepEqual(
+      snapshot.topics.find((topic) => topic.slug === "sample")!.content
+        .chapters[2].note,
+      {
+        href: "/notes/reader-test/second",
+        title: "第二篇观察",
+      },
+    );
+
     assert.equal(
       (
         await call("/api/notes", {

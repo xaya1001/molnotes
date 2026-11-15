@@ -10,6 +10,7 @@ import {
   type BlockReferences,
 } from "../../shared/topic-blocks.ts";
 import type { TopicBlock } from "../../src/ui/topic/blocks.ts";
+import { parseNote } from "../../shared/notes-index.ts";
 import { parseRequest } from "./requests.ts";
 
 type RequestHandler = (
@@ -288,19 +289,17 @@ export async function readPracticeChapters(
   group: string,
   onRequest?: RequestHandler,
 ) {
-  if (
-    !isObject(authored) ||
-    !Array.isArray(authored.chapters) ||
-    !authored.chapters.some((entry) => typeof entry === "string")
-  )
-    return;
+  if (!isObject(authored) || !Array.isArray(authored.chapters)) return;
+  const hasMarkdown = authored.chapters.some(
+    (entry) => typeof entry === "string",
+  );
   const ids = new Map<string, string>();
   for (const questions of [authored.quiz, authored.placement])
     if (Array.isArray(questions))
       for (const question of questions)
         if (isObject(question) && typeof question.id === "string")
           ids.set(question.id, `${unit}/content.json:1`);
-  for (const chapter of authored.chapters) {
+  for (const chapter of hasMarkdown ? authored.chapters : []) {
     if (!isObject(chapter)) continue;
     // Existing JSON chapters keep their implicit prediction ids.
     if (typeof chapter.id !== "string" || !Array.isArray(chapter.blocks))
@@ -343,6 +342,17 @@ export async function readPracticeChapters(
         onRequest,
       ),
     );
+  }
+  for (const chapter of chapters) {
+    if (!isObject(chapter) || chapter.note === undefined) continue;
+    if (
+      typeof chapter.note !== "string" ||
+      !new RegExp(`^notes/${slug}/${slug}$`).test(chapter.note)
+    )
+      fail(`${unit}/content.json:1`, "note must name notes/<dir>/<slug>");
+    const file = `${chapter.note}.md`;
+    const note = parseNote(await readFile(join(root, file), "utf8"), file);
+    chapter.note = { href: `/${chapter.note}`, title: note.title };
   }
   authored.chapters = chapters;
 }

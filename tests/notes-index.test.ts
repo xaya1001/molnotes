@@ -524,3 +524,53 @@ test("library fences preserve references, local numbering and searchable caption
   );
   await assert.rejects(compile(invalid), /unknown reference field smiles/);
 });
+
+test("energy fences compile with searchable labels and fence-line diagnostics", async (t) => {
+  const root = fixture(
+    t,
+    "## Plot\n\n```energy\npoints: [0 A, 90 TS1, -25 B]\nmarks: [{from: A, to: B}]\ncaption: Sample path\n```",
+  );
+  const [note] = (await compile(root)).notes;
+  assert.equal(note.diagrams![0].kind, "energy");
+  assert.match(note.html, /class="note-diagram"/);
+  assert.match(note.text, /Sample path.*A.*TS1.*B.*ΔG°/);
+  writeFileSync(
+    join(root, "notes/demo/first.md"),
+    head + "## Plot\n\n```energy\npoints: [0 A, 90 TS1]\n```",
+  );
+  await assert.rejects(
+    compile(root),
+    new RegExp(`notes/demo/first\\.md:${head.split("\n").length + 2}: 路径`),
+  );
+});
+
+test("note callouts render both types with inline content, lists and ordinary quotes", async (t) => {
+  const root = fixture(
+    t,
+    "> [!要点] **Conclusion**\n> Use [[Term]] and $x^2$.\n>\n> - First\n> - Second\n>\n> Final paragraph.\n\n> [!易错]\n> Compare observations.\n\n> Ordinary quote.",
+  );
+  const [note] = (await compile(root)).notes;
+  assert.match(note.html, /<aside class="callout note-callout" role="note">/);
+  assert.match(
+    note.html,
+    /<span class="callout-kind">要点<\/span><strong>Conclusion<\/strong>/,
+  );
+  assert.match(note.html, /<ul>/);
+  assert.match(note.html, /class="term"/);
+  assert.match(note.html, /class="katex"/);
+  assert.match(note.html, /<p>\s*Final paragraph\.<\/p>/);
+  assert.match(note.html, /callout--caution/);
+  assert.match(note.html, /<blockquote>\n<p>\s*Ordinary quote\.<\/p>/);
+  assert.doesNotMatch(note.text, /\[!要点\]/);
+});
+for (const body of [
+  "> [!提示]\n> Body",
+  "> [!要点]\n> ## Heading",
+  "> [!要点]\n> ![image](assets/a.svg)",
+  "> [!要点]\n> > [!易错]\n> > Body",
+  "> [!要点]\n> | A | B |\n> | --- | --- |\n> | 1 | 2 |",
+])
+  test(`reject unsupported callout content ${body.split("\n")[0]}`, async (t) => {
+    const root = fixture(t, body);
+    await assert.rejects(compile(root), /notes\/demo\/first\.md:\d+: 提示块/);
+  });

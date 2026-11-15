@@ -19,7 +19,11 @@ import { measureStage } from "../../shared/stage-timing.ts";
 import { moleculeToolkit } from "../../shared/molecule-toolkit.ts";
 import { patentRoutePaths } from "../../shared/patent-contract.ts";
 import { validatePatentAssets } from "./patent-assets.ts";
-import { compileNotes, parseNote } from "../../shared/notes-index.ts";
+import {
+  compileNotes,
+  parseNote,
+  type Note,
+} from "../../shared/notes-index.ts";
 import { sortSites } from "../../shared/site-catalog.ts";
 import {
   chapterRoutePath,
@@ -228,7 +232,7 @@ async function validateTopics(data: PublishData, ctx: BuildContext) {
   }
 }
 function notebookSources(data: PublishData) {
-  const practice = new Map<string, string>();
+  const practice = new Map<string, NonNullable<Note["practice"]>>();
   const notebooks = new Map<string, string>();
   for (const topic of data.topics)
     for (const chapter of topic.content.chapters) {
@@ -236,26 +240,43 @@ function notebookSources(data: PublishData) {
       const where = `sites/${topic.slug}: chapter ${chapter.id}`;
       if (topic.group !== "练习")
         throw new Error(`${where}: note associations require a practice topic`);
-      const [, directory, slug] = chapter.note.split("/");
+      const notePath = chapter.note.href.slice(1);
+      const [, directory, slug] = notePath.split("/");
       if (
         !data.notes.some(
           (n) => n.dir === directory && n.slug === slug && !n.author,
         )
       )
-        throw new Error(`${where}: unknown reader note ${chapter.note}`);
-      if (practice.has(chapter.note))
-        throw new Error(
-          `${where}: duplicate practice chapter for ${chapter.note}`,
-        );
+        throw new Error(`${where}: unknown reader note ${notePath}`);
+      if (practice.has(notePath))
+        throw new Error(`${where}: duplicate practice chapter for ${notePath}`);
       if (notebooks.has(directory) && notebooks.get(directory) !== topic.slug)
         throw new Error(
           `${where}: notebook ${directory} already has a practice topic`,
         );
       notebooks.set(directory, topic.slug);
-      practice.set(
-        chapter.note,
-        topicBasePath(topic) + chapterRoutePath(topic.content, chapter),
+      const quizIds = new Set(
+        (topic.content.quiz ?? [])
+          .filter((q) => q.chapter === chapter.id)
+          .map((q) => q.id),
       );
+      let count = 0;
+      const visit = (blocks: TopicBlock[]) => {
+        for (const block of blocks) {
+          if (block.type === "tabs")
+            block.items.forEach((item) => visit(item.blocks));
+          if (block.type === "quiz")
+            block.questions.forEach((id) => quizIds.add(id));
+          if (["prediction", "problem", "matrix"].includes(block.type)) count++;
+        }
+      };
+      visit(chapter.blocks ?? []);
+      practice.set(notePath, {
+        href: topicBasePath(topic) + chapterRoutePath(topic.content, chapter),
+        title: chapter.title,
+        label: `第 ${chapter.number} 章`,
+        count: count + quizIds.size,
+      });
     }
   const directories = data.directories
     .map((row) => ({
