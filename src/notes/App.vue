@@ -380,9 +380,20 @@ const bodyHits = computed(() =>
           @current="matchIndex = $event"
           @ready="ready"
         />
-        <p v-if="detail?.practice">
-          <a :href="detail.practice">去练一练</a>
-        </p>
+        <a
+          v-if="detail?.practice"
+          class="practice-next"
+          :href="detail.practice.href"
+        >
+          <span>
+            <span class="eyebrow">练习 · {{ detail.practice.label }}</span>
+            <span class="practice-next-title">{{ detail.practice.title }}</span>
+            <span class="practice-next-meta"
+              >{{ detail.practice.count }} 题</span
+            >
+          </span>
+          <span class="button button--primary">去练一练</span>
+        </a>
         <nav class="pager" aria-label="篇目导航">
           <RouterLink v-if="previous" :to="local(previous.path)"
             >上一篇 · {{ previous.title }}</RouterLink
@@ -621,6 +632,46 @@ mark {
   }
   .notes-head.is-hidden {
     transform: translateY(-100%);
+  }
+}
+.practice-next {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--space-5);
+  margin-top: var(--space-7);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+}
+.practice-next-title {
+  display: block;
+  margin-top: var(--space-1);
+  font: 600 var(--text-lg) / var(--leading-tight) var(--font-serif);
+}
+.practice-next-meta {
+  display: block;
+  margin-top: var(--space-2);
+  color: var(--ink-muted);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+.practice-next:hover {
+  border-color: var(--accent);
+}
+.practice-next:hover .button {
+  background: var(--accent-strong);
+}
+@media (max-width: 520px) {
+  .practice-next {
+    grid-template-columns: 1fr;
+  }
+  .practice-next .button {
+    width: 100%;
+    min-height: 2.75rem;
   }
 }
 </style>

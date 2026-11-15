@@ -89,14 +89,17 @@ function checkTopicContent(
     chapterIds.add(chapter.id);
     const where = `${name}: chapter ${chapter.id}`;
     text(chapter.title, `${where} title`);
-    if (chapter.note !== undefined)
+    if (chapter.note !== undefined) {
+      assert(isObject(chapter.note), `${where} note must be an object`);
       assert(
-        typeof chapter.note === "string" &&
-          /^notes\/[a-z0-9]+(?:-[a-z0-9]+)*\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(
-            chapter.note,
+        typeof chapter.note.href === "string" &&
+          /^\/notes\/[a-z0-9]+(?:-[a-z0-9]+)*\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(
+            chapter.note.href,
           ),
-        `${where} note must name notes/<dir>/<slug>`,
+        `${where} note href must name /notes/<dir>/<slug>`,
       );
+      text(chapter.note.title, `${where} note title`);
+    }
     assert(
       chapter.path === undefined ||
         (typeof chapter.path === "string" && chapter.path.startsWith("/")),

@@ -59,7 +59,11 @@ const excerpts = computed(() =>
 </script>
 
 <template>
-  <p v-if="chapter.note"><a :href="`/${chapter.note}`">阅读对应笔记</a></p>
+  <a v-if="chapter.note" class="chapter-note" :href="chapter.note.href">
+    <span class="chapter-note-kind">对应笔记</span>
+    <span class="chapter-note-title">{{ chapter.note.title }}</span>
+    <span class="chapter-note-go">阅读 →</span>
+  </a>
   <ChapterBlocks :chapter="id" :blocks="blocks" />
   <template v-if="questions.length">
     <h2>判断练习</h2>
@@ -82,3 +86,32 @@ const excerpts = computed(() =>
   <ChapterRecords :id="id" />
   <ChapterSources :id="id" />
 </template>
+
+<style scoped>
+.chapter-note {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius);
+  background: var(--paper-deep);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--ink);
+  text-decoration: none;
+}
+.chapter-note-kind {
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+}
+.chapter-note-go {
+  margin-left: auto;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.chapter-note:hover {
+  background: var(--accent-soft);
+}
+</style>

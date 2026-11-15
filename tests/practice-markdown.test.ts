@@ -238,7 +238,10 @@ test("Markdown and JSON chapters keep their authored order in one topic", async 
     topic.content.chapters.map((c) => c.id),
     ["start", "next", "written"],
   );
-  assert.equal(topic.content.chapters[2].note, "notes/reader-test/second");
+  assert.deepEqual(topic.content.chapters[2].note, {
+    href: "/notes/reader-test/second",
+    title: "第二篇观察",
+  });
   const authored = {
     chapters: [topic.content.chapters[2], "chapters/written.md"],
   };

@@ -44,11 +44,27 @@ for (const width of [1366, 390]) {
     await page.goto("/notes/reader-test/second");
     const link = page.locator('a[href="/practice/sample/written"]');
     await expect(link).toBeVisible();
+    await expect(link.locator(".practice-next-title")).toHaveCount(1);
+    const energy = page.locator("figure.energy");
+    await expect(energy).toHaveCount(4);
+    await expect(energy.first().locator(".energy-tick")).not.toHaveCount(0);
+    await expect(energy.nth(1).locator(".energy-tick")).toHaveCount(0);
+    await expect(page.locator("aside.note-callout[role=note]")).toHaveCount(2);
+    expect(
+      await page
+        .locator(".note-callout .callout-title")
+        .first()
+        .evaluate((el) => getComputedStyle(el).fontWeight),
+    ).toBe("500");
     await screenshot("note");
     await link.click();
     await expect(
       page.locator('article a[href="/notes/reader-test/second"]'),
     ).toBeVisible();
+    await page.locator(".chapter-note").click();
+    await expect(page).toHaveURL(/\/notes\/reader-test\/second$/);
+    await page.locator(".practice-next").click();
+    await expect(page).toHaveURL(/\/practice\/sample\/written$/);
     const choice = page.getByTestId("prediction-written-choice");
     const open = page.getByTestId("problem-written-open");
     const atom = page.getByTestId("prediction-written-atom");

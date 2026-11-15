@@ -172,8 +172,8 @@ export interface LearningPath {
 
 export interface TopicChapter {
   id: string;
-  /** Reader note paired with this practice chapter, as notes/<dir>/<slug>. */
-  note?: string;
+  /** Reader note resolved by the content build. */
+  note?: { href: string; title: string };
   /** The chapter's content, in order; see `blocks.ts`. */
   blocks: TopicBlock[];
   /** The chapter's own route, overriding `chapterRoute` and the default; e.g. "/map" for a map chapter. */

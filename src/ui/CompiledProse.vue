@@ -2,6 +2,7 @@
 import LibraryReference from "./library/LibraryReference.vue";
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import MoleculeView from "./MoleculeView.vue";
+import EnergyFigure from "./diagrams/EnergyFigure.vue";
 import FlowFigure from "./diagrams/FlowFigure.vue";
 import TimelineFigure from "./diagrams/TimelineFigure.vue";
 import ImageViewer from "./ImageViewer.vue";
@@ -173,6 +174,11 @@ defineExpose({ showMatch });
         :flow="row.flow"
         :caption="row.caption"
       />
+      <EnergyFigure
+        v-else-if="row.kind === 'energy'"
+        :energy="row.energy"
+        :caption="row.caption"
+      />
       <LibraryReference v-else :reference="row.reference" />
     </Teleport>
   </template>
@@ -238,5 +244,33 @@ defineExpose({ showMatch });
 }
 .compiled-prose :deep([id]) {
   scroll-margin-top: var(--space-8);
+}
+.compiled-prose :deep(.note-callout) {
+  margin-block: var(--space-5);
+}
+.compiled-prose :deep(.note-callout .callout-title) {
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--ink);
+}
+.compiled-prose :deep(.note-callout .callout-kind) {
+  margin-right: 0.6em;
+  color: var(--accent);
+  letter-spacing: 0.04em;
+}
+.compiled-prose :deep(.note-callout.callout--caution .callout-kind) {
+  color: var(--danger);
+}
+.compiled-prose :deep(.note-callout p) {
+  margin: 0;
+}
+.compiled-prose :deep(.note-callout p + p),
+.compiled-prose :deep(.note-callout p + ul),
+.compiled-prose :deep(.note-callout ul + p) {
+  margin-top: var(--space-2);
+}
+.compiled-prose :deep(.note-callout ul) {
+  margin: var(--space-2) 0 0;
+  padding-left: 1.3em;
 }
 </style>

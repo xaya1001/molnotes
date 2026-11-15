@@ -308,7 +308,7 @@ figcaption,
 .callout-title {
   display: block;
   margin-bottom: var(--space-1);
-  font: 600 var(--text-sm) / 1.5 var(--font-sans);
+  font: 500 var(--text-sm) / 1.5 var(--font-sans);
   letter-spacing: 0.04em;
 }
 

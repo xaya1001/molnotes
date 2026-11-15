@@ -11,6 +11,11 @@ import {
   type MoleculeAbbreviation,
 } from "./molecule-abbreviations.ts";
 import { moleculeToolkit } from "./molecule-toolkit.ts";
+import {
+  defineEnergy,
+  energyText,
+  type Energy,
+} from "../src/ui/diagrams/energy.ts";
 import { defineFlow, flowText, type Flow } from "../src/ui/diagrams/flow.ts";
 import {
   defineTimeline,
@@ -41,7 +46,8 @@ export type NoteDiagram =
       caption: string;
     }
   | { id: string; kind: "timeline"; timeline: Timeline; caption: string }
-  | { id: string; kind: "flow"; flow: Flow; caption: string };
+  | { id: string; kind: "flow"; flow: Flow; caption: string }
+  | { id: string; kind: "energy"; energy: Energy; caption: string };
 export interface Note {
   slug: string;
   directory: string;
@@ -61,7 +67,7 @@ export interface Note {
   /** Resolved citations by href (absent until the note is published again). */
   citations?: Record<string, Citation>;
   /** Practice chapter generated from the chapter's note association. */
-  practice?: string;
+  practice?: { href: string; title: string; label: string; count: number };
 }
 export interface NoteDirectory {
   slug: string;
@@ -123,8 +129,19 @@ const noteEnv = (env: Env | undefined) => env as NoteEnv;
 // Fences drawn as figures: the YAML inside is the block's value plus a caption.
 const diagramKinds: Record<
   string,
-  { render: (value: unknown) => { model: Timeline | Flow; words: string[] } }
+  {
+    render: (value: unknown) => {
+      model: Timeline | Flow | Energy;
+      words: string[];
+    };
+  }
 > = {
+  energy: {
+    render(value) {
+      const model = defineEnergy(value);
+      return { model, words: energyText(model) };
+    },
+  },
   timeline: {
     render(value) {
       const model = defineTimeline(value);
@@ -338,12 +355,19 @@ export async function compileNotes({
               timeline: rendered.model as Timeline,
               caption: caption ?? "",
             }
-          : {
-              id,
-              kind: "flow",
-              flow: rendered.model as Flow,
-              caption: caption ?? "",
-            },
+          : kind === "energy"
+            ? {
+                id,
+                kind,
+                energy: rendered.model as Energy,
+                caption: caption ?? "",
+              }
+            : {
+                id,
+                kind: "flow",
+                flow: rendered.model as Flow,
+                caption: caption ?? "",
+              },
       );
       env.text.push(caption ?? "", ...rendered.words);
       return `<div id="${id}" class="note-diagram"></div>`;
@@ -466,9 +490,68 @@ export async function compileNotes({
   md.renderer.rules.table_close = () => "</table></div>";
   md.renderer.rules.note_display_math = (tokens, i) =>
     `<div class="table-scroll">${katex.renderToString(tokens[i].content, { displayMode: true, throwOnError: true })}</div>`;
+  md.renderer.rules.note_callout_open = (tokens, i) =>
+    `<aside class="callout note-callout${tokens[i].meta?.kind === "易错" ? " callout--caution" : ""}" role="note">`;
+  md.renderer.rules.note_callout_close = () => "</aside>";
+  md.renderer.rules.note_callout_title = (tokens, i, options, env, self) =>
+    `<p class="callout-title"><span class="callout-kind">${tokens[i].meta?.kind}</span>${self.renderInline(tokens[i].children ?? [], options, env)}</p>`;
   async function compile(body: string, start: Omit<NoteEnv, "line" | "text">) {
     const env: NoteEnv = { ...start, line: 0, text: [] };
     const tokens = md.parse(body, env);
+    for (let i = 0; i < tokens.length; i++) {
+      const open = tokens[i];
+      if (open.type !== "blockquote_open") continue;
+      const title = tokens[i + 2];
+      const marker =
+        title?.type === "inline" &&
+        /^\[!([^\]]+)\](?:[ \t]*(.*))$/.exec(title.content.split("\n")[0]);
+      if (!marker) continue;
+      const line = (open.map?.[0] ?? 0) + 1 + env.offset;
+      if (!["要点", "易错"].includes(marker[1]))
+        fail(env.file, line, "提示块只有 [!要点] 和 [!易错] 两种");
+      let depth = 1,
+        end = i;
+      while (++end < tokens.length) {
+        const token = tokens[end];
+        if (token.type === "blockquote_open") {
+          depth++;
+          if (/^\[!/.test(tokens[end + 2]?.content ?? ""))
+            fail(env.file, line, "提示块不允许嵌套提示块、标题、图或表格");
+        }
+        if (token.type === "blockquote_close" && --depth === 0) break;
+        if (
+          token.type === "heading_open" ||
+          token.type === "table_open" ||
+          token.children?.some((c) => c.type === "image") ||
+          (token.type === "fence" &&
+            [
+              ...Object.keys(diagramKinds),
+              "molecule",
+              "figure-ref",
+              "request",
+            ].includes(token.info.trim()))
+        )
+          fail(env.file, line, "提示块不允许嵌套提示块、标题、图或表格");
+      }
+      open.type = "note_callout_open";
+      open.meta = { kind: marker[1] };
+      tokens[end].type = "note_callout_close";
+      tokens[i + 1].hidden = true;
+      // The first line is the title; a following soft break begins the body.
+      const newline = title.content.indexOf("\n");
+      const heading = marker[2] ?? "";
+      const rest = newline < 0 ? "" : title.content.slice(newline + 1);
+      title.type = "note_callout_title";
+      title.meta = { kind: marker[1] };
+      title.content = heading;
+      title.children = md.parseInline(heading, env)[0].children;
+      if (!rest) tokens[i + 3].hidden = true;
+      else {
+        const bodyTokens = md.parse(rest, env);
+        tokens.splice(i + 3, 0, ...bodyTokens.slice(0, -1));
+      }
+    }
+
     if (
       tokens.some(
         (token) => token.type === "fence" && token.info.trim() === "molecule",
@@ -508,7 +591,7 @@ export async function compileNotes({
           continue;
         }
       }
-      if (token.type === "inline")
+      if (token.type === "inline" || token.type === "note_callout_title")
         text.push(
           (token.children ?? [])
             .filter((c) =>

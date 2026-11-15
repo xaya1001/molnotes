@@ -185,7 +185,7 @@ onMounted(async () => {
         ],
         warnings: [
           ...host.querySelectorAll<HTMLElement>(
-            "figure.timeline, figure.flow, figure.molecule, .player",
+            "figure.timeline, figure.flow, figure.energy, figure.molecule, .player",
           ),
         ].flatMap(figureWarnings),
       };
@@ -212,7 +212,7 @@ onMounted(async () => {
     const root = figures.value[i]?.querySelector<HTMLElement>(
       figure.kind === "mechanism"
         ? "figure.molecule"
-        : ".reaction-scheme, .substrate-scope, figure.timeline, figure.flow, figure.molecule, .player",
+        : ".reaction-scheme, .substrate-scope, figure.timeline, figure.flow, figure.energy, figure.molecule, .player",
     );
     return {
       where: figure.where,
