@@ -85,14 +85,24 @@ test("each question type compiles to the existing block and answer contract", as
     labels: { 2: "oxygen" },
   });
   assert.equal(blocks[1].type === "problem" && blocks[1].answer.origin, "ai");
-  assert.deepEqual(blocks[3].type === "prediction" && blocks[3].answer, [1]);
+  assert.deepEqual(
+    blocks[3].type === "prediction" &&
+      blocks[3].kind === "bonds" &&
+      blocks[3].answer,
+    [1],
+  );
   assert.deepEqual(
     blocks[4].type === "prediction" &&
       blocks[4].kind === "atom-set" &&
       blocks[4].molecules.map((m) => m.answer),
     [[0, 2], [0]],
   );
-  assert.equal(blocks[5].type === "prediction" && blocks[5].answer, 1);
+  assert.equal(
+    blocks[5].type === "prediction" &&
+      blocks[5].kind === "ranking" &&
+      blocks[5].answer,
+    1,
+  );
   assert.equal(
     blocks[6].type === "prediction" &&
       blocks[6].kind === "number" &&

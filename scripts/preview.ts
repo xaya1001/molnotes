@@ -101,9 +101,7 @@ async function unitFigures(unit: string, errors: string[]) {
     );
     await readPracticeChapters(content, unit, resolved.value, site.group);
     return topicFigures(
-      resolved.references.length
-        ? validateTopicContent(resolved.value, file)
-        : resolved.value,
+      validateTopicContent(resolved.value, file),
       file,
       errors,
       library.entries,
