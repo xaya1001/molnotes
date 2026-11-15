@@ -60,6 +60,8 @@ export interface Note {
   diagrams?: NoteDiagram[];
   /** Resolved citations by href (absent until the note is published again). */
   citations?: Record<string, Citation>;
+  /** Practice chapter generated from the chapter's note association. */
+  practice?: string;
 }
 export interface NoteDirectory {
   slug: string;

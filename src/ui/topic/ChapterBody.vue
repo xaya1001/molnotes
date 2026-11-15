@@ -59,6 +59,7 @@ const excerpts = computed(() =>
 </script>
 
 <template>
+  <p v-if="chapter.note"><a :href="`/${chapter.note}`">阅读对应笔记</a></p>
   <ChapterBlocks :chapter="id" :blocks="blocks" />
   <template v-if="questions.length">
     <h2>判断练习</h2>

@@ -166,7 +166,7 @@ test("with records the home page resumes the last note and sums progress", async
   await expect(
     notebook.getByRole("link", { name: "实验观察" }),
   ).toHaveAttribute("href", "/practice/sample/");
-  await expect(notebook).toContainText("1 / 2 章 · 错题 1");
+  await expect(notebook).toContainText("1 / 3 章 · 错题 1");
   await expect(
     page.getByRole("main").getByRole("link", { name: /^复习/ }),
   ).toContainText("错题 1 · 书签 1");

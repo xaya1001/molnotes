@@ -228,6 +228,35 @@ async function validateTopics(data: PublishData, ctx: BuildContext) {
   }
 }
 function notebookSources(data: PublishData) {
+  const practice = new Map<string, string>();
+  const notebooks = new Map<string, string>();
+  for (const topic of data.topics)
+    for (const chapter of topic.content.chapters) {
+      if (!chapter.note) continue;
+      const where = `sites/${topic.slug}: chapter ${chapter.id}`;
+      if (topic.group !== "练习")
+        throw new Error(`${where}: note associations require a practice topic`);
+      const [, directory, slug] = chapter.note.split("/");
+      if (
+        !data.notes.some(
+          (n) => n.dir === directory && n.slug === slug && !n.author,
+        )
+      )
+        throw new Error(`${where}: unknown reader note ${chapter.note}`);
+      if (practice.has(chapter.note))
+        throw new Error(
+          `${where}: duplicate practice chapter for ${chapter.note}`,
+        );
+      if (notebooks.has(directory) && notebooks.get(directory) !== topic.slug)
+        throw new Error(
+          `${where}: notebook ${directory} already has a practice topic`,
+        );
+      notebooks.set(directory, topic.slug);
+      practice.set(
+        chapter.note,
+        topicBasePath(topic) + chapterRoutePath(topic.content, chapter),
+      );
+    }
   const directories = data.directories
     .map((row) => ({
       ...row.metadata,
@@ -249,6 +278,9 @@ function notebookSources(data: PublishData) {
         path,
         file,
         author: row.author,
+        ...(!row.author && practice.has(path.slice(1))
+          ? { practice: practice.get(path.slice(1)) }
+          : {}),
       };
     })
     .sort(

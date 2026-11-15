@@ -155,7 +155,7 @@ for (const viewport of [
     await expect(shelf.locator(".shelf-book")).toHaveCount(1);
     await expect(
       shelf.locator('[aria-current="true"] .shelf-progress'),
-    ).toHaveText("1/2 · 错 0");
+    ).toHaveText("1/3 · 错 0");
     if (viewport.width < 960) await page.keyboard.press("Escape");
     const read = page
       .getByRole("region", { name: "本章记录" })
@@ -166,7 +166,7 @@ for (const viewport of [
     await open();
     await expect(
       shelf.locator('[aria-current="true"] .shelf-progress'),
-    ).toHaveText("0/2 · 错 0");
+    ).toHaveText("0/3 · 错 0");
     if (viewport.width < 960) await page.keyboard.press("Escape");
     await read.click();
     await open();
