@@ -131,7 +131,16 @@ async function build() {
   if (!ready || dirty)
     execFileSync(
       join(repo, "node_modules/.bin/vite"),
-      ["build", "--outDir", out, "--emptyOutDir", "--logLevel", "warn"],
+      [
+        "build",
+        "--configLoader",
+        "runner",
+        "--outDir",
+        out,
+        "--emptyOutDir",
+        "--logLevel",
+        "warn",
+      ],
       { cwd: repo, stdio: "inherit" },
     );
   return out;
