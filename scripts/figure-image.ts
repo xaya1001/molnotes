@@ -40,12 +40,13 @@ export async function registerImage(
   );
   if (mime !== contentType(file))
     throw new Error("Image MIME differs from extension");
+  const asset = `${hash}${extension}`;
   const entry: unknown = {
     ...metadata,
     ...(prompt === undefined ? {} : { prompt }),
     kind: "image",
     id: `img_${hash}`,
-    asset: `${hash}${extension}`,
+    asset,
     mime,
     width,
     height,
@@ -53,7 +54,7 @@ export async function registerImage(
   validateLibraryEntry(entry, file);
   await mkdir(join(root, "library/assets"), { recursive: true });
   await mkdir(join(root, "library/images"), { recursive: true });
-  await writeFile(join(root, "library/assets", entry.asset), bytes);
+  await writeFile(join(root, "library/assets", asset), bytes);
   await writeFile(
     join(root, "library/images", `${entry.id}.json`),
     JSON.stringify(entry, null, 2) + "\n",
