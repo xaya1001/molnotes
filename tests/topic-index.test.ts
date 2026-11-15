@@ -23,7 +23,14 @@ function topic(overrides = {}) {
         blocks: [
           { type: "heading", text: "节一" },
           { type: "paragraph", text: "溶解度决定吸收" },
-          { type: "scene", label: "图", frames: "frames" },
+          {
+            type: "panels",
+            mode: "compare",
+            items: [
+              { ref: "img_0000000001", title: "图一", text: "揭晓段" },
+              { ref: "img_0000000002", title: "图二", text: "比较段" },
+            ],
+          },
         ],
       }),
       chapter("b", 2, { blocks: [{ type: "paragraph", text: "膜通透性" }] }),
@@ -47,7 +54,6 @@ function topic(overrides = {}) {
       },
     ],
     sources: [],
-    data: { frames: [{ title: "帧", text: "揭晓段" }] },
     ...overrides,
   };
 }
@@ -95,7 +101,7 @@ test("chapter text joins the lead with the blocks' prose, never quiz text", (t) 
     {
       slug: "plain",
       chapterId: "a",
-      text: "a 的问题 节一 溶解度决定吸收 帧 揭晓段",
+      text: "a 的问题 节一 溶解度决定吸收 图一 揭晓段 图二 比较段",
     },
     { slug: "plain", chapterId: "b", text: "b 的问题 膜通透性" },
   ]);
