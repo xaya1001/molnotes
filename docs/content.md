@@ -83,6 +83,7 @@ prompt: Draw two boxes connected by an arrow.
 ````
 
 `content:preview` 在笔记正文原位置显示请求的类型、图注与摘要，同时预览其余正文。
+出错请求显示字段路径、笔记源行号与出错位置摘录，预览命令仍以非零状态退出；化学图 YAML 可展开查看，较长的说明与数据表可折叠。
 `npm run content -- todo [<单元>]` 列出文件、行号、kind、图注与补全 skill；可指定 `notes/<dir>` 或 `notes/<dir>/[author/]<slug>`，省略时扫描所有笔记与作者资料，无请求时输出为空并退出 0。
 `image` 与 `chart` 使用 `note-figures`，`figure` 使用 `chemical-figures`。
 补全后将请求替换成图片或 `figure-ref` 正式引用。

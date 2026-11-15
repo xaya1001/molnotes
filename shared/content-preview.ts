@@ -24,9 +24,35 @@ export interface ResourceRequest {
   skill: string;
   fields: Record<string, unknown>;
 }
+export interface RequestIssue {
+  line: number;
+  path: string;
+  message: string;
+}
+export interface RequestDisplay {
+  label: string;
+  icon: string;
+  meta?: string;
+  filename?: boolean;
+  prompt?: string;
+  yaml?: boolean;
+  frames?: { title: string; smiles: string; note?: string }[];
+  chart?: {
+    columns: string[];
+    rows: (string | number)[][];
+    axes: { label: string; text: string }[];
+    point: string;
+  };
+}
+export interface PreviewRequest extends ResourceRequest {
+  id: string;
+  source: string;
+  errors: RequestIssue[];
+  display: RequestDisplay;
+}
 export interface PreviewNote {
   note: Note;
-  requests: (ResourceRequest & { id: string })[];
+  requests: PreviewRequest[];
   terms: Record<string, GlossaryTerm>;
 }
 export interface PreviewFigure {

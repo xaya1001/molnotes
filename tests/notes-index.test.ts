@@ -10,6 +10,7 @@ import { stringify } from "yaml";
 import {
   contentRequests,
   markdownRequests,
+  inspectRequest,
 } from "../scripts/content/requests.ts";
 import { buildSnapshot } from "../scripts/content/content-publish.ts";
 import { readUnit, type NotesUnit } from "../scripts/content/content-files.ts";
@@ -85,6 +86,12 @@ test("resource requests retain source positions and completion skills in Markdow
     )[0].line,
     1,
   );
+  const preview = await inspectRequest(
+    requestFence(values[1]).split("\n").slice(1, -2).join("\n"),
+    "example.md",
+    14,
+  );
+  assert.equal(preview.display.meta, "路线");
 });
 
 test("resource request validation rejects invalid fields and figure inputs at the source fence", async () => {
@@ -147,11 +154,50 @@ test("resource request validation rejects invalid fields and figure inputs at th
   ])
     await assert.rejects(
       markdownRequests("\n" + requestFence(value), "example.md", 6),
-      /example\.md:8: request:/,
+      /example\.md:\d+: request:/,
     );
   await assert.rejects(
     markdownRequests("```request\nkind: [\n```", "example.md"),
-    /example\.md:1: request:/,
+    /example\.md:\d+: request:/,
+  );
+  const source =
+    "kind: figure\ncaption: Example\nfigure:\n  kind: mechanism\n  frames:\n    - id: first\n      title: First\n      smiles: invalid-smiles\n    - id: second\n      title: Second\n      smiles: invalid-smiles\n";
+  const invalid = await inspectRequest(source, "example.md", 10);
+  assert.deepEqual(
+    invalid.errors.map(({ line, path }) => ({ line, path })),
+    [
+      { line: 18, path: "figure.frames[0].smiles" },
+      { line: 21, path: "figure.frames[1].smiles" },
+    ],
+  );
+  assert.equal(invalid.display.frames, undefined);
+  const valid = await inspectRequest(
+    source.replaceAll("invalid-smiles", "CCO"),
+    "example.md",
+    10,
+  );
+  assert.deepEqual(
+    valid.display.frames?.map((frame) => [frame.title, frame.smiles]),
+    [
+      ["First", "CCO"],
+      ["Second", "CCO"],
+    ],
+  );
+  const syntax = await inspectRequest(
+    "kind: figure\ncaption: Example\nfigure: [\n",
+    "example.md",
+    10,
+  );
+  assert.equal(syntax.errors.length, 1);
+  const missing = await inspectRequest(
+    source.replace("caption: Example\n", ""),
+    "example.md",
+    10,
+  );
+  assert.equal(missing.caption, "");
+  assert.equal(
+    missing.errors.some((error) => error.path === "caption"),
+    true,
   );
 });
 

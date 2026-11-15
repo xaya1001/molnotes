@@ -65,7 +65,9 @@ function highlight() {
   if (query) {
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
       acceptNode: (node) =>
-        node.parentElement?.closest(".katex,svg,.note-molecules,.note-diagram")
+        node.parentElement?.closest(
+          ".katex,svg,.note-molecules,.note-diagram,.request",
+        )
           ? NodeFilter.FILTER_REJECT
           : NodeFilter.FILTER_ACCEPT,
     });

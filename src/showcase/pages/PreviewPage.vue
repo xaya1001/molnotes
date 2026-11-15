@@ -159,7 +159,15 @@ onMounted(async () => {
           errors.push("Image did not load");
       return {
         where: figure.where,
-        errors,
+        errors: [
+          ...errors,
+          ...figure.preview.requests.flatMap((request) =>
+            request.errors.map(
+              (error) =>
+                `${request.file}:${error.line}: ${error.path}: ${error.message}`,
+            ),
+          ),
+        ],
         warnings: [
           ...host.querySelectorAll<HTMLElement>(
             "figure.timeline, figure.flow, figure.molecule, .player",

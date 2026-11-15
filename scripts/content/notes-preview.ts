@@ -13,7 +13,7 @@ import type { Library } from "../../shared/chemical-library/types.ts";
 import type { PreviewNote } from "../../shared/content-preview.ts";
 import { readUnit, readGlossary, readRegistry } from "./content-files.ts";
 import { resolveCitations } from "./citations.ts";
-import { parseRequest } from "./requests.ts";
+import { inspectRequest } from "./requests.ts";
 
 async function names(root: string) {
   try {
@@ -109,7 +109,7 @@ export async function previewNotes(
       assetExists: (_dir, path) => assets.some((asset) => asset.path === path),
       citations: { [dir]: resolved.citations },
       renderRequest: async (source, file, line) => {
-        const request = await parseRequest(source, file, line);
+        const request = await inspectRequest(source, file, line);
         const id = `${prefix}-request-${requests.length}`;
         requests.push({ ...request, id });
         return `<div id="${id}" class="resource-request-mount"></div>`;
