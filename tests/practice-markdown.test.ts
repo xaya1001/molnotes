@@ -5,7 +5,55 @@ import {
   readPracticeChapters,
 } from "../scripts/content/practice-markdown.ts";
 import { readUnit } from "../scripts/content/content-files.ts";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import {
+  contentRequests,
+  inspectRequest,
+} from "../scripts/content/requests.ts";
+import { buildSnapshot } from "../scripts/content/content-publish.ts";
+
+test("practice requests share validation, preview positions, todo and the snapshot gate", async (t) => {
+  const source = chapter(
+    "```request\nkind: image\nfile: sample.png\ncaption: Neutral observation\nprompt: Draw two boxes.\n```\n\nContinue the observation.",
+  );
+  await assert.rejects(
+    compilePracticeChapter(source, file),
+    /check\.md:12: Unresolved image request/,
+  );
+  const requests: { file: string; line: number; kind: string }[] = [];
+  const compiled = await compilePracticeChapter(
+    source,
+    file,
+    new Map(),
+    async (body, file, line) => {
+      requests.push(await inspectRequest(body, file, line));
+    },
+  );
+  assert.equal(compiled.blocks.at(-1)?.type, "paragraph");
+  assert.deepEqual(
+    requests.map(({ file, line, kind }) => ({ file, line, kind })),
+    [{ file, line: 12, kind: "image" }],
+  );
+  const root = mkdtempSync(join(tmpdir(), "practice-requests-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, "sites/practice/chapters"), { recursive: true });
+  writeFileSync(join(root, file), source);
+  writeFileSync(
+    join(root, "sites/practice/content.json"),
+    JSON.stringify({ chapters: ["chapters/check.md"] }),
+  );
+  assert.deepEqual(
+    await contentRequests(root, "sites/practice"),
+    await contentRequests(root),
+  );
+  assert.equal((await contentRequests(root))[0].caption, "Neutral observation");
+  await assert.rejects(
+    buildSnapshot(root),
+    /sites\/practice\/chapters\/check\.md:12: unresolved image request/,
+  );
+});
 
 const file = "sites/practice/chapters/check.md";
 const chapter = (questions: string) => `---

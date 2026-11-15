@@ -28,10 +28,18 @@ import { validateFigureReference } from "../../../shared/chemical-library/contra
 import { validateMechanismFrames } from "../../../shared/topic-blocks.ts";
 import LibraryFigure from "../../ui/library/LibraryFigure.vue";
 import MechanismViewer from "../../ui/MechanismViewer.vue";
+import CompiledProse from "../../ui/CompiledProse.vue";
+import type {
+  PreviewNote,
+  PreviewRequest,
+} from "../../../shared/content-preview.ts";
+import RequestPlaceholder from "../RequestPlaceholder.vue";
 
 // The content preview command injects the figures of one unit and reads the
 // warnings back; the page is not linked from the showcase.
 type Shown =
+  | { where: string; kind: "request"; request: PreviewRequest; caption: string }
+  | { where: string; kind: "note"; preview: PreviewNote; caption: string }
   | {
       where: string;
       kind: "library";
@@ -94,25 +102,30 @@ function chemicalFigure(f: Injected): Shown {
   return { ...f, kind: "mechanism", frames: f.value };
 }
 const shown: Shown[] = (window.__previewFigures ?? []).map((f) =>
-  f.kind === "library" || f.kind === "mechanism"
-    ? chemicalFigure(f)
-    : f.kind === "route" || f.kind === "substrate-scope"
-      ? schemeFigure(f)
-      : f.kind === "timeline"
-        ? { ...f, kind: "timeline", timeline: defineTimeline(f.value) }
-        : f.kind === "flow"
-          ? { ...f, kind: "flow", flow: defineFlow(f.value) }
-          : f.kind === "process"
-            ? processFigure(f)
-            : {
-                ...f,
-                kind: "molecule",
-                molecules: f.value as NoteMolecules["molecules"],
-              },
+  f.kind === "request"
+    ? { ...f, kind: "request", request: f.value as PreviewRequest }
+    : f.kind === "note"
+      ? { ...f, kind: "note", preview: f.value as PreviewNote }
+      : f.kind === "library" || f.kind === "mechanism"
+        ? chemicalFigure(f)
+        : f.kind === "route" || f.kind === "substrate-scope"
+          ? schemeFigure(f)
+          : f.kind === "timeline"
+            ? { ...f, kind: "timeline", timeline: defineTimeline(f.value) }
+            : f.kind === "flow"
+              ? { ...f, kind: "flow", flow: defineFlow(f.value) }
+              : f.kind === "process"
+                ? processFigure(f)
+                : {
+                    ...f,
+                    kind: "molecule",
+                    molecules: f.value as NoteMolecules["molecules"],
+                  },
 );
 const figures = ref<HTMLElement[]>([]);
 const library = window.__previewLibrary ?? { entries: {}, uses: {} };
 const diagnostics = ref<Record<number, Diagnostic[]>>({});
+const readyNotes = ref(0);
 
 const settle = () =>
   new Promise((done) =>
@@ -128,7 +141,8 @@ onMounted(async () => {
   const deadline = Date.now() + 30_000;
   while (
     Date.now() < deadline &&
-    (document.querySelector(".molecule [role='status']") ||
+    (readyNotes.value < shown.filter((f) => f.kind === "note").length ||
+      document.querySelector(".molecule [role='status']") ||
       [...document.querySelectorAll(".library-canvas")].some(
         (node) =>
           !node.childElementCount &&
@@ -145,6 +159,37 @@ onMounted(async () => {
     const errors = [...host.querySelectorAll('[role="alert"]')].map(
       (node) => node.textContent?.trim() ?? "Render failed",
     );
+    if (figure.kind === "request")
+      return {
+        where: figure.where,
+        warnings: [],
+        errors: figure.request.errors.map(
+          (error) =>
+            `${figure.request.file}:${error.line}: ${error.path}: ${error.message}`,
+        ),
+      };
+    if (figure.kind === "note") {
+      for (const img of host.querySelectorAll<HTMLImageElement>("img"))
+        if (!img.complete || !img.naturalWidth)
+          errors.push("Image did not load");
+      return {
+        where: figure.where,
+        errors: [
+          ...errors,
+          ...figure.preview.requests.flatMap((request) =>
+            request.errors.map(
+              (error) =>
+                `${request.file}:${error.line}: ${error.path}: ${error.message}`,
+            ),
+          ),
+        ],
+        warnings: [
+          ...host.querySelectorAll<HTMLElement>(
+            "figure.timeline, figure.flow, figure.molecule, .player",
+          ),
+        ].flatMap(figureWarnings),
+      };
+    }
     if (figure.kind === "library") {
       const canvas = host.querySelector(".library-canvas");
       if (canvas && !canvas.querySelector("svg"))
@@ -206,50 +251,76 @@ onMounted(async () => {
         :data-preview="i"
         class="preview-figure"
       >
-        <h3 v-if="figure.kind === 'library' && figure.title">
-          {{ figure.title }}
-        </h3>
-        <LibraryFigure
-          v-if="figure.kind === 'library'"
-          :library="library"
-          :reference="figure.reference"
-          @diagnostics="diagnostics[i] = $event"
+        <RequestPlaceholder
+          v-if="figure.kind === 'request'"
+          :request="figure.request"
         />
-        <MechanismViewer
-          v-else-if="figure.kind === 'mechanism'"
-          :frames="figure.frames"
-        />
-        <TimelineFigure
-          v-else-if="figure.kind === 'timeline'"
-          :timeline="figure.timeline"
-          :caption="figure.caption"
-        />
-        <FlowFigure
-          v-else-if="figure.kind === 'flow'"
-          :flow="figure.flow"
-          :caption="figure.caption"
-        />
-        <ProcessViewer
-          v-else-if="figure.kind === 'process'"
-          :data="figure.process"
-        />
-        <SynthesisRoute
-          v-else-if="figure.kind === 'route'"
-          :routes="figure.routes"
-        />
-        <SubstrateScope
-          v-else-if="figure.kind === 'substrate-scope'"
-          :scope="figure.scope"
-        />
-        <div v-else class="preview-molecules">
-          <MoleculeView
-            v-for="(m, j) in figure.molecules"
-            :key="j"
-            :smiles="m.smiles"
-            :abbreviations="m.abbreviations"
-            :name="m.caption"
+        <template v-else-if="figure.kind === 'note'">
+          <h1>{{ figure.preview.note.title }}</h1>
+          <CompiledProse
+            :html="figure.preview.note.html"
+            :molecules="figure.preview.note.molecules"
+            :diagrams="figure.preview.note.diagrams"
+            :citations="figure.preview.note.citations"
+            :terms="figure.preview.terms"
+            @ready="readyNotes++"
           />
-        </div>
+          <template v-if="readyNotes">
+            <Teleport
+              v-for="request in figure.preview.requests"
+              :key="request.id"
+              :to="`#${request.id}`"
+            >
+              <RequestPlaceholder :request="request" />
+            </Teleport>
+          </template>
+        </template>
+        <template v-else>
+          <h3 v-if="figure.kind === 'library' && figure.title">
+            {{ figure.title }}
+          </h3>
+          <LibraryFigure
+            v-if="figure.kind === 'library'"
+            :library="library"
+            :reference="figure.reference"
+            @diagnostics="diagnostics[i] = $event"
+          />
+          <MechanismViewer
+            v-else-if="figure.kind === 'mechanism'"
+            :frames="figure.frames"
+          />
+          <TimelineFigure
+            v-else-if="figure.kind === 'timeline'"
+            :timeline="figure.timeline"
+            :caption="figure.caption"
+          />
+          <FlowFigure
+            v-else-if="figure.kind === 'flow'"
+            :flow="figure.flow"
+            :caption="figure.caption"
+          />
+          <ProcessViewer
+            v-else-if="figure.kind === 'process'"
+            :data="figure.process"
+          />
+          <SynthesisRoute
+            v-else-if="figure.kind === 'route'"
+            :routes="figure.routes"
+          />
+          <SubstrateScope
+            v-else-if="figure.kind === 'substrate-scope'"
+            :scope="figure.scope"
+          />
+          <div v-else class="preview-molecules">
+            <MoleculeView
+              v-for="(m, j) in figure.molecules"
+              :key="j"
+              :smiles="m.smiles"
+              :abbreviations="m.abbreviations"
+              :name="m.caption"
+            />
+          </div>
+        </template>
       </section>
     </div>
   </article>

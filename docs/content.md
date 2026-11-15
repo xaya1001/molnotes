@@ -69,6 +69,26 @@ edges:
 
 图片写 `![说明](assets/<file>)`，说明显示在图下方作为图注（可带图号，如"图 1　……"），为空时不显示图注；文件名使用字母、数字、下划线、点和连字符。源文件放 `notes/<dir>/assets/`，网站以 `/notes/<dir>/assets/<file>` 提供；缺图拒绝发布。生成的图在 `notes/<dir>/prompts/<file>.md` 保存生成它的 prompt，`<file>` 与 `assets/` 中的图片文件名相同；prompt 随资源记录进入快照，网站不提供，没有对应图片或内容为空时拒绝发布。资源原样复制进快照，快照记录路径、SHA-256、大小与内容类型。
 
+笔记正文、`author/` 与 Markdown 练习章可以写 `request` 围栏，围栏内为 YAML。
+`image` 必填 `kind: image`、`file`（资源文件名）、`caption`（图注）与 `prompt`（生图要求）；`figure` 必填 `kind: figure`、`caption` 与 `figure`（与 `figure:compile` 相同的化学图 YAML 文档）；`chart` 必填 `kind: chart`、`file`、`caption`、`data`（数据）、`axes`（坐标轴与刻度）与 `point`（读者应看到的结论）。
+未知 kind、未知字段、缺字段、化学图输入错误与无法解析的 SMILES 在预览和构建时报出文件与行号。
+
+````markdown
+```request
+kind: image
+file: overview.png
+caption: Example overview
+prompt: Draw two boxes connected by an arrow.
+```
+````
+
+`content:preview` 在笔记正文原位置显示请求的类型、图注与摘要，同时预览其余正文。
+出错请求显示字段路径、笔记源行号与出错位置摘录，预览命令仍以非零状态退出；化学图 YAML 可展开查看，较长的说明与数据表可折叠。
+`npm run content -- todo [<单元>]` 列出文件、行号、kind、图注与补全 skill；可指定 `notes/<dir>`、`notes/<dir>/[author/]<slug>` 或 `sites/<slug>`，省略时扫描所有笔记、作者资料与 `content.json` 引用的 Markdown 练习章，无请求时输出为空并退出 0。
+`image` 与 `chart` 使用 `note-figures`，`figure` 使用 `chemical-figures`。
+补全后将请求替换成图片或 `figure-ref` 正式引用。
+`content build` 与 `content publish` 遇到未补全请求时失败，列出所有请求的位置；快照只包含补全后的内容。
+
 ## 来源与引用
 
 内容工作目录根部的 `sources.json` 是全站唯一的来源登记表，键为来源 id（与 slug 同样的写法），值为 `{ file, title, kind, author?, edition? }`：`file` 是 `materials/` 下的相对路径，只能是 `.pdf`、`.epub` 或存档网页 `.html`；`title` 是页面上显示的书名（如 `示例手册`），`kind` 是类型（如 教材、手册、网页）。同一个文件只登记一次，未知字段报错。书架集合有 `manifest.json` 时，原始网址、下载日期和哈希从清单读取，不写进登记表。页面只显示书名与位置，不显示书架路径或文件名。
@@ -249,7 +269,7 @@ explanation: 两个加一个是三个。
 
 引用素材的 Python 解释器默认使用 `~/miniconda3/bin/python3`，与调用终端的 PATH 无关。其他安装方式通过 `MOLNOTES_PYTHON`（或 `MOLNOTES_PYTHON_FILE`）指定已安装 `scripts/requirements-material.txt` 依赖的解释器绝对路径；CI 使用其创建的虚拟环境。
 
-`MOLNOTES_CONTENT_DIR` 指定内容目录，未设置时内容命令报错。内容命令每次读取内容目录里的全部单元，校验整站的站内链接、术语、SMILES、引用与资源完整性并编译笔记；校验错误给出文件与位置。删除单元就是在内容仓库删除并提交它，仍有内容引用它时发布拒绝并指出引用文件与位置。
+`MOLNOTES_CONTENT_DIR` 指定内容目录，未设置时内容命令报错。构建与发布每次读取内容目录里的全部单元，校验整站的站内链接、术语、SMILES、引用与资源完整性并编译笔记；校验错误给出文件与位置。删除单元就是在内容仓库删除并提交它，仍有内容引用它时发布拒绝并指出引用文件与位置。
 
 `npm run content -- build <输出目录>` 读取内容目录里的全部单元、`sources.json` 与 `glossary.json`，校验、解析引用并编译，把结果写成快照：`snapshot.json`（`format: 1`、`commit`、`builtAt`，以及 `topics`、`directories`、`notes`、`glossary`、`registry`、`assets`）和 `files/<单元>/<路径>`（内容资源原样复制，被引页渲染在 `<单元>/cited/`）。输出目录不能已存在；任何校验失败都不写出。`build` 不检查提交，`commit` 为 `null`。
 

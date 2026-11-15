@@ -7,16 +7,15 @@
 //   npm run content:preview -- notes/<dir>[/<slug>] | sites/<slug> ...
 import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
-import { mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
+import { mkdir, readFile, rm, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { extname, join, resolve } from "node:path";
-import { parseDocument } from "yaml";
 import { chromium } from "playwright";
-import { defineFlow } from "../src/ui/diagrams/flow.ts";
-import { defineTimeline } from "../src/ui/diagrams/model.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import {
   topicFigures,
+  type PreviewNote,
+  type PreviewRequest,
   type PreviewFigure as Figure,
 } from "../shared/content-preview.ts";
 import { prepareFigureViews } from "./content/figure-build.ts";
@@ -24,9 +23,11 @@ import type {
   FigureReference,
   LibrarySnapshot,
 } from "../shared/chemical-library/types.ts";
+import { previewNotes } from "./content/notes-preview.ts";
 import { readChemicalLibrary } from "./content/chemical-library.ts";
 import { resolveCompoundSlots } from "./content/compound-slots.ts";
 import { readPracticeChapters } from "./content/practice-markdown.ts";
+import { inspectRequest } from "./content/requests.ts";
 import { parseSiteManifest } from "../shared/site-catalog.ts";
 import { validateTopicContent } from "../shared/topic-content.ts";
 import { layoutProblems } from "../shared/molecule-layout.ts";
@@ -37,58 +38,14 @@ import type { Server } from "node:http";
 const repo = resolve(import.meta.dirname, "..");
 const content = setting("MOLNOTES_CONTENT_DIR");
 const library = await readChemicalLibrary(content);
-const cache = join(homedir(), ".cache/molnotes");
+const cache = join(
+  process.env.XDG_CACHE_HOME || join(homedir(), ".cache"),
+  "molnotes",
+);
 const widths = [
   [1366, 900],
   [390, 844],
 ];
-const define: Record<"timeline" | "flow", (value: unknown) => unknown> = {
-  timeline: defineTimeline,
-  flow: defineFlow,
-};
-
-/** The figures of one note: fenced timeline, flow and molecule blocks. */
-function noteFigures(source: string, file: string, errors: string[]) {
-  const figures: Figure[] = [];
-  const lines = source.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    const kind = /^```(timeline|flow|molecule)\s*$/.exec(lines[i])?.[1] as
-      "timeline" | "flow" | "molecule" | undefined;
-    if (!kind) continue;
-    const start = i + 1;
-    let end = start;
-    while (end < lines.length && !lines[end].startsWith("```")) end++;
-    const body = lines.slice(start, end).join("\n");
-    const where = `${file}:${start}`;
-    i = end;
-    if (kind === "molecule") {
-      const molecules: { smiles: string; caption: string }[] = [];
-      for (const line of body.split("\n")) {
-        const [, key, value] = /^(smiles|caption):\s*(.+)$/.exec(line) ?? [];
-        if (key === "smiles") molecules.push({ smiles: value, caption: "" });
-        else if (key === "caption" && molecules.length)
-          molecules[molecules.length - 1].caption = value;
-      }
-      figures.push({ where, kind, value: molecules, caption: "" });
-      continue;
-    }
-    const document = parseDocument(body);
-    if (document.errors.length) {
-      errors.push(`${where}: ${kind}: ${document.errors[0].message}`);
-      continue;
-    }
-    const { caption = "", ...value } = document.toJS() ?? {};
-    try {
-      define[kind](value);
-    } catch (error) {
-      errors.push(`${where}: ${(error as Error).message}`);
-      continue;
-    }
-    figures.push({ where, kind, value, caption });
-  }
-  return figures;
-}
-
 async function unitFigures(unit: string, errors: string[]) {
   const [kind, slug, note] = unit.split("/");
   if (kind === "sites" && slug && !note) {
@@ -99,32 +56,53 @@ async function unitFigures(unit: string, errors: string[]) {
       slug,
       JSON.parse(await readFile(join(content, unit, "site.json"), "utf8")),
     );
-    await readPracticeChapters(content, unit, resolved.value, site.group);
-    return topicFigures(
-      validateTopicContent(resolved.value, file),
-      file,
-      errors,
-      library.entries,
+    const requests: Figure[] = [];
+    await readPracticeChapters(
+      content,
+      unit,
+      resolved.value,
+      site.group,
+      async (source, file, line) => {
+        const value: PreviewRequest = {
+          ...(await inspectRequest(source, file, line)),
+          id: `preview-${file.replaceAll("/", "--").replace(".md", "")}-${line}`,
+        };
+        requests.push({
+          kind: "request",
+          where: `${file}:${line}`,
+          value,
+          caption: value.caption,
+        });
+      },
     );
+    return [
+      ...topicFigures(
+        validateTopicContent(resolved.value, file),
+        file,
+        errors,
+        library.entries,
+      ),
+      ...requests,
+    ];
   }
   if (kind === "notes" && slug) {
-    const files = note
-      ? [`${note}.md`]
-      : (await readdir(join(content, "notes", slug))).filter((f) =>
-          f.endsWith(".md"),
-        );
-    const figures: Figure[] = [];
-    for (const name of files.sort()) {
-      const file = `notes/${slug}/${name}`;
-      figures.push(
-        ...noteFigures(
-          await readFile(join(content, file), "utf8"),
-          file,
-          errors,
-        ),
-      );
+    const { previews, assets } = await previewNotes(
+      content,
+      unit,
+      library.entries,
+    );
+    for (const asset of assets) {
+      const bytes = Buffer.isBuffer(asset.bytes)
+        ? asset.bytes
+        : await readFile(asset.bytes.file);
+      library.assets.push({ ...asset, bytes });
     }
-    return figures;
+    return previews.map((value): Figure => ({
+      kind: "note",
+      where: `${value.note.path.slice(1)}.md`,
+      value,
+      caption: "",
+    }));
   }
   throw new Error(
     `${unit}: expected notes/<dir>, notes/<dir>/<slug> or sites/<slug>`,
@@ -139,7 +117,7 @@ async function build() {
   }).trim();
   const dirty = execFileSync(
     "git",
-    ["status", "--porcelain", "src", "index.html"],
+    ["status", "--porcelain", "src", "shared", "index.html"],
     {
       cwd: repo,
       encoding: "utf8",
@@ -172,12 +150,17 @@ const emptyApi: Record<string, unknown> = {
   "/api/catalog": { groups: [], sites: [], directories: [] },
   "/api/records": {},
 };
-function serve(root: string) {
+function serve(root: string, snapshot: LibrarySnapshot) {
   const server = createServer(async (request, response) => {
     const path = new URL(request.url!, "http://local").pathname;
     if (Object.hasOwn(emptyApi, path)) {
       response.writeHead(200, { "content-type": "application/json" });
       response.end(JSON.stringify(emptyApi[path]));
+      return;
+    }
+    if (path === "/api/library") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify(snapshot));
       return;
     }
     const asset = library.assets.find(
@@ -228,9 +211,16 @@ await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });
 const prepared = await prepareFigureViews(
   library.entries,
-  figures
-    .filter((figure) => figure.kind === "library")
-    .map((figure) => figure.value as FigureReference),
+  figures.flatMap((figure) =>
+    figure.kind === "library"
+      ? [figure.value as FigureReference]
+      : figure.kind === "note"
+        ? ((figure.value as PreviewNote).note.diagrams ?? []).flatMap(
+            (diagram) =>
+              diagram.kind === "library" ? [diagram.reference] : [],
+          )
+        : [],
+  ),
   content,
 );
 library.assets.push(...prepared.assets);
@@ -239,7 +229,7 @@ const snapshot: LibrarySnapshot = {
   uses: {},
   renders: prepared.renders,
 };
-const server = await serve(await build());
+const server = await serve(await build(), snapshot);
 const browser = await chromium.launch();
 const report = figures.map((figure) => ({
   ...figure,
@@ -279,6 +269,11 @@ try {
         console.error(message);
       }
     }
+    if (figures.some((figure) => figure.kind === "note")) {
+      const shot = join(out, `page-${width}.png`);
+      await page.screenshot({ path: shot, fullPage: true });
+      console.log(shot);
+    }
     await page.close();
   }
 } finally {
@@ -286,21 +281,27 @@ try {
   server.close();
 }
 const toolkit = await moleculeToolkit();
-for (const entry of report)
-  if (entry.kind === "molecule" || entry.kind === "mechanism")
-    (entry.value as { smiles: string }[]).forEach(
-      ({ smiles }: { smiles: string }, k: number) => {
-        // A SMILES RDKit cannot read already shows as a render failure above.
-        const mol = toolkit.get_mol(smiles);
-        if (!mol) return;
-        mol.delete();
-        const problems = layoutProblems(toolkit, smiles);
-        if (problems.length)
-          entry.warnings.push(
-            `第 ${k + 1} 个结构：${problems.join("，")}；用 npm run molecule:layout 生成坐标`,
-          );
-      },
-    );
+for (const entry of report) {
+  const molecules =
+    entry.kind === "note"
+      ? (entry.value as PreviewNote).note.molecules.flatMap(
+          (row) => row.molecules,
+        )
+      : entry.kind === "molecule" || entry.kind === "mechanism"
+        ? (entry.value as { smiles: string }[])
+        : [];
+  molecules.forEach(({ smiles }: { smiles: string }, k: number) => {
+    // A SMILES RDKit cannot read already shows as a render failure above.
+    const mol = toolkit.get_mol(smiles);
+    if (!mol) return;
+    mol.delete();
+    const problems = layoutProblems(toolkit, smiles);
+    if (problems.length)
+      entry.warnings.push(
+        `第 ${k + 1} 个结构：${problems.join("，")}；用 npm run molecule:layout 生成坐标`,
+      );
+  });
+}
 let warned = 0;
 for (const [i, entry] of report.entries()) {
   console.log(`\n${i + 1}. ${entry.kind}  ${entry.where}`);

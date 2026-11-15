@@ -6,6 +6,13 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { stringify } from "yaml";
+import {
+  contentRequests,
+  markdownRequests,
+  inspectRequest,
+} from "../scripts/content/requests.ts";
+import { buildSnapshot } from "../scripts/content/content-publish.ts";
 import { readUnit, type NotesUnit } from "../scripts/content/content-files.ts";
 import {
   compileNotes,
@@ -15,6 +22,213 @@ import {
 
 const head =
   "---\ntitle: Test\nsummary: Summary\ndate: 2026-10-16\norder: 0\n---\n";
+const requestFence = (value: unknown) =>
+  "```request\n" + stringify(value) + "```\n";
+
+test("resource requests retain source positions and completion skills in Markdown order", async () => {
+  const values = [
+    {
+      kind: "image",
+      file: "example.png",
+      caption: "Overview",
+      prompt: "Draw two boxes",
+    },
+    {
+      kind: "figure",
+      caption: "Example route",
+      figure: {
+        compounds: { a: "CCO", b: "CC=O" },
+        steps: [{ from: "a", to: "b" }],
+      },
+    },
+    {
+      kind: "chart",
+      file: "series.svg",
+      caption: "Series",
+      data: [
+        [0, 1],
+        [1, 2],
+      ],
+      axes: { x: "Time", y: "Value" },
+      point: "Values increase",
+    },
+  ];
+  const body = values.map(requestFence).join("\n");
+  const requests = await markdownRequests(body, "example.md", 6);
+  assert.deepEqual(
+    requests.map(({ kind, skill, file, line }) => ({
+      kind,
+      skill,
+      file,
+      line,
+    })),
+    [
+      { kind: "image", skill: "note-figures", file: "example.md", line: 7 },
+      {
+        kind: "figure",
+        skill: "chemical-figures",
+        file: "example.md",
+        line: 14,
+      },
+      { kind: "chart", skill: "note-figures", file: "example.md", line: 26 },
+    ],
+  );
+  assert.deepEqual(
+    await markdownRequests("````markdown\n" + body + "````\n", "example.md"),
+    [],
+  );
+  assert.equal(
+    (
+      await markdownRequests(
+        "> ~~~request\n> kind: image\n> file: example.png\n> caption: Example\n> prompt: Draw a box\n> ~~~",
+        "example.md",
+      )
+    )[0].line,
+    1,
+  );
+  const preview = await inspectRequest(
+    requestFence(values[1]).split("\n").slice(1, -2).join("\n"),
+    "example.md",
+    14,
+  );
+  assert.equal(preview.display.meta, "路线");
+});
+
+test("resource request validation rejects invalid fields and figure inputs at the source fence", async () => {
+  const image = {
+    kind: "image",
+    file: "example.png",
+    caption: "Example",
+    prompt: "Draw a box",
+  };
+  for (const value of [
+    { ...image, kind: "unknown" },
+    { ...image, prompt: undefined },
+    { ...image, extra: true },
+    { ...image, caption: [] },
+    {
+      kind: "chart",
+      file: "example.svg",
+      caption: "Example",
+      data: null,
+      axes: "Time and value",
+      point: "Growth",
+    },
+    { kind: "figure", caption: "Example", figure: { unexpected: true } },
+    {
+      kind: "figure",
+      caption: "Example",
+      figure: { kind: "gallery", compounds: { a: "invalid-smiles" } },
+    },
+    {
+      kind: "figure",
+      caption: "Example",
+      figure: {
+        kind: "mechanism",
+        frames: [{ id: "a", smiles: "invalid-smiles" }],
+      },
+    },
+    {
+      kind: "figure",
+      caption: "Example",
+      figure: {
+        kind: "markush",
+        core: "C[*:1]",
+        groups: {
+          1: {
+            label: "R",
+            alternatives: [
+              {
+                type: "repeat",
+                label: "Chain",
+                unit: "invalid-smiles",
+                end: "C[*:2]",
+                min: 1,
+                max: 2,
+              },
+            ],
+          },
+        },
+      },
+    },
+  ])
+    await assert.rejects(
+      markdownRequests("\n" + requestFence(value), "example.md", 6),
+      /example\.md:\d+: request:/,
+    );
+  await assert.rejects(
+    markdownRequests("```request\nkind: [\n```", "example.md"),
+    /example\.md:\d+: request:/,
+  );
+  const source =
+    "kind: figure\ncaption: Example\nfigure:\n  kind: mechanism\n  frames:\n    - id: first\n      title: First\n      smiles: invalid-smiles\n    - id: second\n      title: Second\n      smiles: invalid-smiles\n";
+  const invalid = await inspectRequest(source, "example.md", 10);
+  assert.deepEqual(
+    invalid.errors.map(({ line, path }) => ({ line, path })),
+    [
+      { line: 18, path: "figure.frames[0].smiles" },
+      { line: 21, path: "figure.frames[1].smiles" },
+    ],
+  );
+  assert.equal(invalid.display.frames, undefined);
+  const valid = await inspectRequest(
+    source.replaceAll("invalid-smiles", "CCO"),
+    "example.md",
+    10,
+  );
+  assert.deepEqual(
+    valid.display.frames?.map((frame) => [frame.title, frame.smiles]),
+    [
+      ["First", "CCO"],
+      ["Second", "CCO"],
+    ],
+  );
+  const syntax = await inspectRequest(
+    "kind: figure\ncaption: Example\nfigure: [\n",
+    "example.md",
+    10,
+  );
+  assert.equal(syntax.errors.length, 1);
+  const missing = await inspectRequest(
+    source.replace("caption: Example\n", ""),
+    "example.md",
+    10,
+  );
+  assert.equal(missing.caption, "");
+  assert.equal(
+    missing.errors.some((error) => error.path === "caption"),
+    true,
+  );
+});
+
+test("todo scans reader notes and author material and build lists every pending request", async (t) => {
+  const body = requestFence({
+    kind: "image",
+    file: "example.png",
+    caption: "Example",
+    prompt: "Draw a box",
+  });
+  const root = fixture(t, body);
+  mkdirSync(join(root, "notes/demo/author"));
+  writeFileSync(join(root, "notes/demo/author/plan.md"), head + body);
+  const requests = await contentRequests(root);
+  assert.deepEqual(
+    requests.map(({ file, line }) => [file, line]),
+    [
+      ["notes/demo/author/plan.md", 7],
+      ["notes/demo/first.md", 7],
+    ],
+  );
+  assert.equal((await contentRequests(root, "notes/demo/first")).length, 1);
+  await assert.rejects(buildSnapshot(root), (error: Error) =>
+    requests.every(({ file, line }) =>
+      error.message.includes(`${file}:${line}:`),
+    ),
+  );
+  writeFileSync(join(root, "notes/demo/first.md"), head + "Completed");
+  writeFileSync(join(root, "notes/demo/author/plan.md"), head + "Completed");
+  assert.deepEqual(await contentRequests(root), []);
+});
 function fixture(t: TestContext, body = "## Section\nText") {
   const root = mkdtempSync(join(tmpdir(), "notes-index-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));

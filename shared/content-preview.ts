@@ -14,11 +14,54 @@ import {
   validateFigureInstance,
 } from "./chemical-library/contract.ts";
 import type { Library } from "./chemical-library/types.ts";
+import type { Note } from "./notes-index.ts";
+import type { GlossaryTerm } from "./glossary.ts";
+export interface ResourceRequest {
+  file: string;
+  line: number;
+  kind: string;
+  caption: string;
+  skill: string;
+  fields: Record<string, unknown>;
+}
+export interface RequestIssue {
+  line: number;
+  path: string;
+  message: string;
+}
+export interface RequestDisplay {
+  label: string;
+  icon: string;
+  meta?: string;
+  filename?: boolean;
+  prompt?: string;
+  yaml?: boolean;
+  frames?: { title: string; smiles: string; note?: string }[];
+  chart?: {
+    columns: string[];
+    rows: (string | number)[][];
+    axes: { label: string; text: string }[];
+    point: string;
+  };
+}
+export interface PreviewRequest extends ResourceRequest {
+  id: string;
+  source: string;
+  errors: RequestIssue[];
+  display: RequestDisplay;
+}
+export interface PreviewNote {
+  note: Note;
+  requests: PreviewRequest[];
+  terms: Record<string, GlossaryTerm>;
+}
 export interface PreviewFigure {
   where: string;
   title?: string;
   kind:
     | "timeline"
+    | "note"
+    | "request"
     | "flow"
     | "process"
     | "molecule"

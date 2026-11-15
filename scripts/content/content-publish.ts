@@ -1,5 +1,6 @@
 import { readChemicalLibrary, libraryUsage } from "./chemical-library.ts";
 import { verifyLibraryFigures } from "./figure-build.ts";
+import { rejectContentRequests } from "./requests.ts";
 import { assetStage, type AssetStage, type AssetBytes } from "./asset-stage.ts";
 import {
   validateSchemeCompounds,
@@ -337,6 +338,7 @@ async function build(
   }: { shelf?: Shelf; commit?: string | null; figureCache?: string },
   stage: AssetStage,
 ): Promise<{ snapshot: Snapshot; files: Map<string, AssetBytes> }> {
+  await rejectContentRequests(root);
   const inputs: Resolved<ContentUnit>[] = [];
   const library = await measureStage("publish.library", () =>
     readChemicalLibrary(root, stage),
