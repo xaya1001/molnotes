@@ -102,27 +102,18 @@ export function topicFigures(
             const { type, ...reference } = block;
             validateFigureReference(reference, at);
             const entry = library[reference.ref];
-            const references =
-              entry?.kind === "mechanism" && !reference.frame
-                ? entry.frames.map((frame) => ({
-                    ...reference,
-                    frame: frame.id,
-                  }))
-                : [reference];
-            for (const ref of references) {
-              validateFigureInstance(library, ref);
-              const frame =
-                entry?.kind === "mechanism"
-                  ? entry.frames.find((frame) => frame.id === ref.frame)
-                  : undefined;
-              figures.push({
-                where: frame ? `${at} [${frame.id}]` : at,
-                ...(frame ? { title: frame.title } : {}),
-                kind: "library",
-                value: ref,
-                caption: reference.caption ?? "",
-              });
-            }
+            validateFigureInstance(library, reference);
+            const frame =
+              entry?.kind === "mechanism"
+                ? entry.frames.find((frame) => frame.id === reference.frame)
+                : undefined;
+            figures.push({
+              where: frame ? `${at} [${frame.id}]` : at,
+              ...(frame ? { title: frame.title } : {}),
+              kind: "library",
+              value: reference,
+              caption: reference.caption ?? "",
+            });
           } else {
             const frames = resolveData(block.frames, topic.data, at);
             validateMechanismFrames(frames, at);

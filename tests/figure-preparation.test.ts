@@ -97,6 +97,80 @@ test("rendering keeps the compiled contact placement of oppositely charged fragm
   );
 });
 
+test("mechanism overviews retain saved frame geometry and use declared step arrows", async () => {
+  const compiled = await compileFigure({
+    kind: "mechanism",
+    width: 420,
+    frames: (
+      ["forward", "equilibrium", "resonance", "none", "forward"] as const
+    ).map((arrow, index) => ({
+      id: `frame-${index}`,
+      title: `Step ${index + 1}`,
+      smiles: "[O-:1][CH2:2][CH3:3]",
+      bracket: index === 1 ? ("ts" as const) : false,
+      arrow,
+      arrows: [{ from: "lp(1)", to: "bond(1,2)" }],
+    })),
+  });
+  const saved = structuredClone(compiled.entries);
+  const overview = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit,
+    fonts,
+    style,
+  });
+  const groups: string[] = [],
+    arrows: string[] = [],
+    electrons: string[] = [];
+  walkGeometry(overview.root, (node) => {
+    if (node.attributes["data-frame"])
+      groups.push(node.attributes["data-frame"]);
+    if (node.attributes["data-reaction-arrow"])
+      arrows.push(node.attributes["data-reaction-arrow"]);
+    if (node.attributes["data-electron-arrow"])
+      electrons.push(node.attributes["data-electron-arrow"]);
+  });
+  assert.equal(groups.length, 5);
+  assert.equal(electrons.length, 5);
+  assert.deepEqual(arrows, [
+    "next-frame-0",
+    "next-frame-1",
+    "next-frame-1",
+    "next-frame-2",
+    "next-frame-2",
+  ]);
+  assert.deepEqual(compiled.entries, saved);
+  for (const frame of groups) {
+    const single = await prepareFigure(
+      compiled.entries,
+      { ...compiled.reference, frame },
+      { toolkit, fonts, style },
+    );
+    const points = Object.keys(single.atomPoints);
+    const start = points[0];
+    for (const point of points) {
+      assert.ok(
+        Math.abs(
+          overview.atomPoints[`${frame}/${point}`].x -
+            overview.atomPoints[`${frame}/${start}`].x -
+            (single.atomPoints[point].x - single.atomPoints[start].x),
+        ) < 1e-6,
+      );
+      assert.ok(
+        Math.abs(
+          overview.atomPoints[`${frame}/${point}`].y -
+            overview.atomPoints[`${frame}/${start}`].y -
+            (single.atomPoints[point].y - single.atomPoints[start].y),
+        ) < 1e-6,
+      );
+    }
+  }
+  assert.ok(
+    new Set(
+      groups.map((frame) => overview.atomPoints[`${frame}/structure:a1`].y),
+    ).size > 1,
+  );
+});
+
 test("structure scale enlarges rendered bonds while preserving label size", async () => {
   const render = async (scale: number) => {
     const compiled = await compileFigure({

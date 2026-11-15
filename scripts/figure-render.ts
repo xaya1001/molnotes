@@ -116,7 +116,10 @@ if (input) {
       const refs = refsFile
         ? references.filter((r) => r.ref === entry.id)
         : entry.kind === "mechanism"
-          ? entry.frames.map((f) => ({ ref: entry.id, frame: f.id }))
+          ? [
+              { ref: entry.id },
+              ...entry.frames.map((f) => ({ ref: entry.id, frame: f.id })),
+            ]
           : [{ ref: entry.id }];
       for (const ref of refs)
         for (const width of value("--width")

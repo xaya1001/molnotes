@@ -10,7 +10,7 @@ import type { TopicContent } from "../src/ui/topic/content.ts";
 test.setTimeout(60_000);
 
 for (const width of [1366, 390]) {
-  test(`content preview checks library figures and every mechanism frame at ${width}px`, async ({
+  test(`content preview checks library overviews and mechanism block frames at ${width}px`, async ({
     page,
   }) => {
     const sources = [
@@ -123,7 +123,7 @@ for (const width of [1366, 390]) {
         response,
         body: html.replace(
           "</head>",
-          '<style>[data-preview="6"]{margin-top:8000px}</style></head>',
+          '<style>[data-preview="5"]{margin-top:8000px}</style></head>',
         ),
       });
     });
@@ -140,25 +140,23 @@ for (const width of [1366, 390]) {
     );
     await page.goto("/showcase/preview");
     await page.waitForFunction(() => window.__previewResult);
-    await expect(page.locator("[data-preview]")).toHaveCount(7);
-    await expect(page.locator(".library-canvas svg")).toHaveCount(4);
+    await expect(page.locator("[data-preview]")).toHaveCount(6);
+    await expect(page.locator(".library-canvas svg")).toHaveCount(3);
     await expect(page.locator("figure.molecule svg")).toHaveCount(2);
     await expect(page.locator("figure.molecule .electron-arrow")).toHaveCount(
       1,
     );
     const result = (await page.evaluate(() => window.__previewResult))!;
-    for (const title of ["first", "second"])
-      await expect(
-        page.getByRole("heading", { name: title, exact: true }),
-      ).toBeVisible();
+    await expect(page.locator('[data-frame="first"]')).toBeVisible();
+    await expect(page.locator('[data-frame="second"]')).toBeVisible();
     expect(
-      result.slice(0, 5).flatMap((r) => [...r.warnings, ...(r.errors ?? [])]),
+      result.slice(0, 4).flatMap((r) => [...r.warnings, ...(r.errors ?? [])]),
     ).toEqual([]);
-    expect(result[5].errors?.some((e) => e.startsWith("LABEL_OVERLAP:"))).toBe(
+    expect(result[4].errors?.some((e) => e.startsWith("LABEL_OVERLAP:"))).toBe(
       true,
     );
-    expect(result[6].errors ?? []).toEqual([]);
-    await expect(page.locator('[data-preview="6"] img')).toHaveJSProperty(
+    expect(result[5].errors ?? []).toEqual([]);
+    await expect(page.locator('[data-preview="5"] img')).toHaveJSProperty(
       "naturalWidth",
       120,
     );

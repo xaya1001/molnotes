@@ -9,12 +9,7 @@ export async function snapshotSvg(
   library: LibrarySnapshot,
   reference: FigureReference,
 ) {
-  const entry = library.entries[reference.ref];
-  const view =
-    entry?.kind === "mechanism" && !reference.frame
-      ? { ...reference, frame: entry.frames[0].id }
-      : reference;
-  const render = library.renders?.[figureViewKey(view)];
+  const render = library.renders?.[figureViewKey(reference)];
   if (!render) throw new Error(`Missing published figure ${reference.ref}`);
   const response = await fetch(render.asset);
   if (!response.ok)

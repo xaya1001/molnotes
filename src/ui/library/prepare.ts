@@ -32,6 +32,7 @@ import {
 import { refreshGeometry } from "./geometry-tree.ts";
 import { wrapFigureText, figureLabelLines } from "./text-runs.ts";
 import { solidArrow } from "./arrow-layout.ts";
+import { layoutRoute, type RouteMolecule } from "./route-layout.ts";
 
 import {
   bondTraces,
@@ -2130,13 +2131,134 @@ export async function prepareFigure(
     height = entry.scene.height * B;
     await reaction(entry.id);
   } else if (entry.kind === "mechanism") {
-    const frame = reference.frame
-      ? entry.frames.find((f) => f.id === reference.frame)
-      : entry.frames[0];
-    if (!frame) throw new Error("Unknown frame");
-    width = frame.scene.width * B;
-    height = frame.scene.height * B;
-    await scene(frame.scene, "", svg, reference.focus);
+    if (reference.frame || entry.frames.length === 1) {
+      const frame = reference.frame
+        ? entry.frames.find((f) => f.id === reference.frame)
+        : entry.frames[0];
+      if (!frame) throw new Error("Unknown frame");
+      width = frame.scene.width * B;
+      height = frame.scene.height * B;
+      await scene(frame.scene, "", svg, reference.focus);
+    } else {
+      const panels = new Map<string, { group: FigureGroup; box: FigureRect }>();
+      const measures: Record<string, RouteMolecule> = {};
+      for (const frame of entry.frames) {
+        const prefix = frame.id + "/";
+        for (const [id, number] of Object.entries(reference.numbers ?? {}))
+          figureNumbers[prefix + id] = figureLabelLines(number);
+        const group = element("g", { "data-frame": frame.id });
+        ctx.append(svg, group);
+        await scene(
+          {
+            ...frame.scene,
+            reactionArrows: frame.scene.reactionArrows?.filter(
+              (arrow) => arrow.id !== `next-${frame.id}`,
+            ),
+          },
+          prefix,
+          group,
+          prefixedFocus(reference.focus, prefix),
+        );
+        const box = ctx.box(group);
+        panels.set(frame.id, { group, box });
+        measures[frame.id] = {
+          width: box.width,
+          top: box.height / 2,
+          bottom: box.height / 2,
+          label: [],
+          text: [],
+          structure: true,
+        };
+      }
+      const limit = token("--chemical-route-width");
+      const layout = layoutRoute(
+        entry.frames.slice(0, -1).map((frame, index) => ({
+          id: frame.id,
+          from: [{ id: frame.id }],
+          to: [{ id: entry.frames[index + 1].id }],
+          above: [frame.title, ...(frame.above ?? [])],
+          below: frame.below ?? [],
+        })),
+        measures,
+        {
+          width: entry.frames.length === 2 ? Infinity : limit,
+          bond: B,
+          gap: token("--chemical-route-gap"),
+          serpentine: true,
+          text(lines) {
+            const wrapped = wrapFigureText(lines, limit * 0.45, (text) =>
+              ctx.textWidth(text, "var(--chemical-caption-font)"),
+            );
+            const nodes = wrapped.map((line) =>
+              label({ x: 0, y: 0 }, line, "var(--chemical-caption-font)"),
+            );
+            return {
+              lines: wrapped,
+              width: Math.max(0, ...nodes.map((node) => node.advance)),
+              height: nodes.reduce(
+                (sum, node) => sum + ctx.box(node).height + B * 0.15,
+                0,
+              ),
+            };
+          },
+        },
+      );
+      width = layout.width;
+      height = layout.height;
+      for (const item of layout.items) {
+        if (item.kind === "molecule") {
+          const { group, box } = panels.get(item.key!)!;
+          const dx = item.at.x - box.x,
+            dy = item.at.y - box.height / 2 - box.y;
+          ctx.set(group, "transform", `translate(${dx} ${dy})`);
+          for (const [id, point] of Object.entries(atomPoints))
+            if (id.startsWith(item.key + "/")) {
+              point.x += dx;
+              point.y += dy;
+            }
+        } else if (item.kind === "arrow") {
+          const frame = entry.frames.find((frame) => frame.id === item.step)!;
+          const points = item.points!;
+          await scene({
+            width: width / B,
+            height: height / B,
+            molecules: [],
+            reactionArrows: [
+              {
+                id: `next-${frame.id}`,
+                from: mul(points.at(-2)!, 1 / B),
+                to: mul(points.at(-1)!, 1 / B),
+                kind: frame.arrow ?? "forward",
+              },
+            ],
+          });
+          const vertical = points[0].x === points.at(-1)!.x;
+          let cursor = points[0].y + B * 0.3;
+          for (const [lines, sign] of [
+            [item.above ?? [], -1],
+            [item.below ?? [], 1],
+          ] as const) {
+            if (!vertical) cursor = item.at.y + sign * B * 0.4;
+            for (const text of sign < 0 && !vertical
+              ? [...lines].reverse()
+              : lines) {
+              const node = label(
+                { x: item.at.x, y: 0 },
+                text,
+                "var(--chemical-caption-font)",
+              );
+              const box = ctx.box(node);
+              const y =
+                cursor - box.y - (sign < 0 && !vertical ? box.height : 0);
+              ctx.set(node, "y", String(y));
+              ctx.setData(node, "label", `${frame.id}:step:${sign}:${text}`);
+              ctx.append(svg, node);
+              cursor += (vertical ? 1 : sign) * (box.height + B * 0.15);
+            }
+          }
+        }
+      }
+    }
   } else if (entry.kind === "route") {
     routeMetrics(entry, library);
     width = entry.width * B;

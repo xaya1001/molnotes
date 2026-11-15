@@ -274,7 +274,13 @@ export function figureProofReferences(
   const refs: FigureReference[] = [
     ...Object.values(library).flatMap((entry) =>
       entry.kind === "mechanism"
-        ? entry.frames.map((frame) => ({ ref: entry.id, frame: frame.id }))
+        ? [
+            { ref: entry.id },
+            ...entry.frames.map((frame) => ({
+              ref: entry.id,
+              frame: frame.id,
+            })),
+          ]
         : entry.kind === "compound"
           ? [
               { ref: entry.id },
@@ -285,12 +291,7 @@ export function figureProofReferences(
             ]
           : [{ ref: entry.id }],
     ),
-    ...references.flatMap((reference) => {
-      const entry = library[reference.ref];
-      return entry?.kind === "mechanism" && !reference.frame
-        ? entry.frames.map((frame) => ({ ...reference, frame: frame.id }))
-        : [reference];
-    }),
+    ...references,
   ];
   return [
     ...new Map(
@@ -300,8 +301,8 @@ export function figureProofReferences(
         const instance: FigureReference = { ref: reference.ref };
         if (kind !== "image" && kind !== "process") {
           if (kind === "compound") instance.variant = reference.variant;
-          if (entry?.kind === "mechanism")
-            instance.frame = reference.frame ?? entry.frames[0]?.id;
+          if (entry?.kind === "mechanism" && reference.frame)
+            instance.frame = reference.frame;
           instance.numbers = reference.numbers;
           instance.focus = reference.focus;
         }
