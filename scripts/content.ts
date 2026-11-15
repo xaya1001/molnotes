@@ -2,17 +2,20 @@ import { join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { setting } from "../shared/settings.ts";
 import { buildSnapshot } from "./content/content-publish.ts";
+import { contentRequests } from "./content/requests.ts";
 import {
   writeSnapshot,
   publishSnapshot,
   rollbackSnapshot,
 } from "./content/content-snapshot.ts";
 
-const usage = "Usage: content build <output> | publish [--rollback <commit>]";
+const usage =
+  "Usage: content build <output> | publish [--rollback <commit>] | todo [<unit>]";
 const [command, ...args] = process.argv.slice(2);
 const valid = {
   build: args.length === 1,
   publish: args.length === 0 || (args.length === 2 && args[0] === "--rollback"),
+  todo: args.length <= 1,
 }[command];
 if (!valid) {
   console.error(usage);
@@ -24,7 +27,15 @@ try {
     "molnotes",
     "figure-proofs",
   );
-  if (command === "build") {
+  if (command === "todo") {
+    for (const request of await contentRequests(
+      setting("MOLNOTES_CONTENT_DIR"),
+      args[0],
+    ))
+      console.log(
+        `${request.file}:${request.line}\t${request.kind}\t${request.caption}\t${request.skill}`,
+      );
+  } else if (command === "build") {
     const built = await buildSnapshot(setting("MOLNOTES_CONTENT_DIR"), {
       figureCache,
     });

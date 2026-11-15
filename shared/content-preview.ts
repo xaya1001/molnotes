@@ -14,11 +14,20 @@ import {
   validateFigureInstance,
 } from "./chemical-library/contract.ts";
 import type { Library } from "./chemical-library/types.ts";
+import type { Note } from "./notes-index.ts";
+import type { GlossaryTerm } from "./glossary.ts";
+import type { ResourceRequest } from "../scripts/content/requests.ts";
+export interface PreviewNote {
+  note: Note;
+  requests: (ResourceRequest & { id: string })[];
+  terms: Record<string, GlossaryTerm>;
+}
 export interface PreviewFigure {
   where: string;
   title?: string;
   kind:
     | "timeline"
+    | "note"
     | "flow"
     | "process"
     | "molecule"

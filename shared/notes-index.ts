@@ -272,6 +272,7 @@ export async function compileNotes({
   routes,
   assetExists,
   citations = {},
+  renderRequest,
 }: {
   directories: DirectoryDraft[];
   notes: NoteDraft[];
@@ -279,6 +280,11 @@ export async function compileNotes({
   routes: Set<string>;
   assetExists: (directory: string, href: string) => boolean;
   citations?: Record<string, Record<string, Citation>>;
+  renderRequest?: (
+    source: string,
+    file: string,
+    line: number,
+  ) => Promise<string>;
 }) {
   const md = noteMarkdown();
   const esc = md.utils.escapeHtml;
@@ -474,6 +480,12 @@ export async function compileNotes({
     for (let i = 0; i < tokens.length; i++) {
       const token = tokens[i];
       env.line = (token.map?.[0] ?? 0) + 1 + env.offset;
+      if (token.type === "fence" && token.info.trim() === "request") {
+        if (!renderRequest)
+          fail(env.file, env.line, "Unresolved resource request");
+        html += await renderRequest(token.content, env.file, env.line);
+        continue;
+      }
       if (token.type === "heading_open") {
         if (token.tag === "h1")
           fail(env.file, env.line, "Body headings must start at ##");
