@@ -5,3 +5,4 @@ playwright-report/
 test-results/
 .venv-molecule/
 tests/fixtures/shelf/
+toolbox/recipes/writing.md

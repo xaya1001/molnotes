@@ -28,6 +28,8 @@ export interface EntryBase {
 export interface CompoundLayout {
   /** Input for indexed molecule controls, preserving authored atom/bond order and depiction. */
   inputSmiles?: string;
+  /** Additional ordinary H atoms, keyed by stable atom ID and attached to a base atom. */
+  explicitHydrogens?: Record<string, string>;
   /** Mapped molblock with explicit Kekulé bonds; atom order matches atomIds. */
   molblock?: string;
   /** Coordinates in bond units, positive y downward. Keys are persistent atom IDs. */

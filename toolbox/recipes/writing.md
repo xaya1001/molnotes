@@ -64,9 +64,9 @@ events:
 
 `flow` 的 `nodes` 写唯一 `id` 和短句 `text`，`edges` 用 `a > b > c` 连成链。
 节点可用 `kind: end` 表示起止、`kind: ask` 表示判断；分支边写 `{from: a, to: b, text: 是}`。
+判断节点的终点出口写 `side: true`，主干才能在手机上折叠。
 详见[流程图契约](../../docs/content.md#内容工作目录)与[更多模板](figures.md#模板)。
 
-<!-- prettier-ignore -->
 ```flow
 caption: 样本记录流程
 nodes:

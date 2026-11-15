@@ -44,6 +44,7 @@ import {
 } from "./geometry-spacing.ts";
 import {
   drawingMolecule,
+  compoundView,
   atomNumberDrawing,
   abbreviatedDrawing,
   compoundAbbreviations,
@@ -193,6 +194,7 @@ export async function prepareFigure(
     chargeAims: Record<string, Point> = {},
   ) {
     validateCompound(toolkit, c);
+    c = compoundView(toolkit, c, layout);
     const coords = placedCoordinates(toolkit, c, layout, rotate, mirror);
     const mol = drawingMolecule(toolkit, c, coords, layout, rotate, mirror);
     let depiction = mol;
@@ -1085,9 +1087,10 @@ export async function prepareFigure(
     const positions = new Map<string, Point>();
     const savedPoints: Record<string, Point> = {};
     for (const p of s.molecules) {
-      const c = library[p.compound];
+      let c = library[p.compound];
       if (c.kind !== "compound") continue;
       const layout = p.variant ? c.variants![p.variant] : c.layout;
+      c = compoundView(toolkit, c, layout);
       const coords = placedCoordinates(toolkit, c, layout, p.rotate, p.mirror);
       c.atomIds.forEach(
         (atom, i) =>
@@ -1381,8 +1384,13 @@ export async function prepareFigure(
         const placement = s.molecules.find(
           (p) => p.id === a.atoms[0].molecule,
         )!;
-        const c = library[placement.compound];
+        let c = library[placement.compound];
         if (c?.kind !== "compound") throw new Error("Missing anchor compound");
+        c = compoundView(
+          toolkit,
+          c,
+          placement.variant ? c.variants![placement.variant] : c.layout,
+        );
         const m = toolkit.get_mol(
           c.smiles,
           JSON.stringify({ removeHs: false }),

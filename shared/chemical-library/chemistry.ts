@@ -44,7 +44,7 @@ export function atomMaps(mol: Mol): number[] {
     .split("\n")
     .map((line) => Number(line.trim().split(/\s+/)[7]));
 }
-function mappedBlock(mol: Mol, maps: number[]) {
+export function mappedBlock(mol: Mol, maps: number[]) {
   let inside = false,
     index = 0;
   return mol
@@ -201,6 +201,28 @@ export function prepareInputVariant(
   return layout;
 }
 
+/** Materialize a drawing variant without changing the saved chemical identity or atom IDs. */
+export function compoundView(
+  toolkit: Toolkit,
+  c: Compound,
+  layout: CompoundLayout,
+): Compound {
+  if (!layout.explicitHydrogens) return c;
+  if (!layout.inputSmiles)
+    throw new Error(`${c.id}: explicit hydrogens require inputSmiles`);
+  const mol = openMolecule(toolkit, layout.inputSmiles);
+  try {
+    return {
+      ...c,
+      smiles: layout.inputSmiles,
+      atomIds: atomMaps(mol).map((n) => `a${n}`),
+      layout,
+    };
+  } finally {
+    mol.delete();
+  }
+}
+
 export function validateCompound(toolkit: Toolkit, c: Compound) {
   const mol = openMolecule(toolkit, c.smiles);
   try {
@@ -211,6 +233,7 @@ export function validateCompound(toolkit: Toolkit, c: Compound) {
     if (atomMaps(mol).some((map, i) => map <= 0 || c.atomIds[i] !== `a${map}`))
       throw new Error(`${c.id}: atom IDs must match persistent SMILES maps`);
     for (const layout of [c.layout, ...Object.values(c.variants ?? {})]) {
+      const view = compoundView(toolkit, c, layout);
       if (layout.inputSmiles) {
         const input = openMolecule(toolkit, layout.inputSmiles);
         try {
@@ -218,6 +241,38 @@ export function validateCompound(toolkit: Toolkit, c: Compound) {
             throw new Error(
               `${c.id}: indexed input graph or stereochemistry differs`,
             );
+        } finally {
+          input.delete();
+        }
+      }
+      if (layout.explicitHydrogens) {
+        const input = openMolecule(toolkit, view.smiles);
+        try {
+          const graph = graphOf(input);
+          const extra = Object.keys(layout.explicitHydrogens);
+          if (
+            new Set(view.atomIds).size !== view.atomIds.length ||
+            view.atomIds.length !== c.atomIds.length + extra.length ||
+            c.atomIds.some((id) => !view.atomIds.includes(id))
+          )
+            throw new Error(
+              `${c.id}: explicit hydrogen variant must retain base atom IDs`,
+            );
+          for (const [id, parent] of Object.entries(layout.explicitHydrogens)) {
+            const i = view.atomIds.indexOf(id),
+              p = view.atomIds.indexOf(parent);
+            const bonds = graph.bonds.filter((b) => b.atoms.includes(i));
+            if (
+              c.atomIds.includes(id) ||
+              !c.atomIds.includes(parent) ||
+              graph.atoms[i]?.z !== 1 ||
+              graph.atoms[i].isotope ||
+              graph.atoms[i].chg ||
+              bonds.length !== 1 ||
+              !bonds[0].atoms.includes(p)
+            )
+              throw new Error(`${c.id}: invalid explicit hydrogen ${id}`);
+          }
         } finally {
           input.delete();
         }
@@ -230,8 +285,8 @@ export function validateCompound(toolkit: Toolkit, c: Compound) {
               `${c.id}: variant molecular graph or stereochemistry differs`,
             );
           if (
-            atomMaps(variant).some((map, i) => c.atomIds[i] !== `a${map}`) ||
-            variant.get_num_atoms() !== c.atomIds.length
+            atomMaps(variant).some((map, i) => view.atomIds[i] !== `a${map}`) ||
+            variant.get_num_atoms() !== view.atomIds.length
           )
             throw new Error(
               `${c.id}: variant atom maps must match atomIds in order`,
@@ -241,8 +296,8 @@ export function validateCompound(toolkit: Toolkit, c: Compound) {
         }
       }
       if (
-        Object.keys(layout.coords).length !== c.atomIds.length ||
-        c.atomIds.some((id) => !layout.coords[id])
+        Object.keys(layout.coords).length !== view.atomIds.length ||
+        view.atomIds.some((id) => !layout.coords[id])
       )
         throw new Error(`${c.id}: complete saved coordinates required`);
       for (const id of [
@@ -251,7 +306,7 @@ export function validateCompound(toolkit: Toolkit, c: Compound) {
         ...(layout.repeatUnits ?? []).flatMap((unit) => unit.atoms),
         ...Object.keys(layout.atomNumbers ?? {}),
       ])
-        if (!c.atomIds.includes(id))
+        if (!view.atomIds.includes(id))
           throw new Error(`${c.id}: unknown layout atom ${id}`);
       validateAbbreviations(layout.abbreviations, c.id);
       abbreviatedGroups(toolkit, mol, layout.abbreviations, c.id);
@@ -563,12 +618,13 @@ export function validateSceneChemistry(
     scene.molecules
       .filter((p) => library[p.compound]?.kind !== "conformation")
       .map((placement) => {
-        const compound = library[placement.compound];
+        let compound = library[placement.compound];
         if (compound?.kind !== "compound")
           throw new Error(`${where}: missing compound`);
         const layout = placement.variant
           ? compound.variants![placement.variant]
           : compound.layout;
+        compound = compoundView(toolkit, compound, layout);
         const mol = openMolecule(
           toolkit,
           layout.molblock ?? compound.smiles,

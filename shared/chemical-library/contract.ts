@@ -75,6 +75,15 @@ function layout(v: unknown, w: string) {
   object(v, w);
   if (v.inputSmiles !== undefined) text(v.inputSmiles, w);
   if (v.molblock !== undefined) text(v.molblock, w);
+  if (v.explicitHydrogens !== undefined) {
+    object(v.explicitHydrogens, w);
+    text(v.inputSmiles, w);
+    for (const [id, parent] of Object.entries(v.explicitHydrogens)) {
+      if (!/^a[1-9]\d*$/.test(id))
+        fail(w, "explicit hydrogen requires a stable atom ID");
+      text(parent, w);
+    }
+  }
   object(v.coords, w);
   if (
     v.ionPairs !== undefined &&
@@ -604,7 +613,17 @@ function validateSceneReferences(
   const atom = (ref: AtomRef) => {
     const placement = scene.molecules.find((m) => m.id === ref.molecule);
     const compound = placement && library[placement.compound];
-    if (compound?.kind !== "compound" || !compound.atomIds.includes(ref.atom))
+    if (
+      compound?.kind !== "compound" ||
+      !(
+        compound.atomIds.includes(ref.atom) ||
+        (placement?.variant &&
+          Object.hasOwn(
+            compound.variants?.[placement.variant]?.explicitHydrogens ?? {},
+            ref.atom,
+          ))
+      )
+    )
       fail(where, `unknown atom ${ref.molecule}:${ref.atom}`);
   };
   const unique = (ids: string[], kind: string) => {
@@ -721,7 +740,17 @@ export function validateFigureInstance(
     (ref) => {
       const placement = molecules.find((m) => m.id === ref.molecule),
         compound = placement && library[placement.compound];
-      if (compound?.kind !== "compound" || !compound.atomIds.includes(ref.atom))
+      if (
+        compound?.kind !== "compound" ||
+        !(
+          compound.atomIds.includes(ref.atom) ||
+          (placement?.variant &&
+            Object.hasOwn(
+              compound.variants?.[placement.variant]?.explicitHydrogens ?? {},
+              ref.atom,
+            ))
+        )
+      )
         fail(entry.id, `unknown atom ${ref.molecule}:${ref.atom}`);
     },
     arrows,
