@@ -16,7 +16,14 @@ import {
 import type { Library } from "./chemical-library/types.ts";
 import type { Note } from "./notes-index.ts";
 import type { GlossaryTerm } from "./glossary.ts";
-import type { ResourceRequest } from "../scripts/content/requests.ts";
+export interface ResourceRequest {
+  file: string;
+  line: number;
+  kind: string;
+  caption: string;
+  skill: string;
+  fields: Record<string, unknown>;
+}
 export interface PreviewNote {
   note: Note;
   requests: (ResourceRequest & { id: string })[];

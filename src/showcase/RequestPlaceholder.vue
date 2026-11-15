@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ResourceRequest } from "../../scripts/content/requests.ts";
+import type { ResourceRequest } from "../../shared/content-preview.ts";
 defineProps<{ request: ResourceRequest }>();
 </script>
 <template>

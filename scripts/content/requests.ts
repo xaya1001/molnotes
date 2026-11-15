@@ -7,6 +7,7 @@ import { parseNote } from "../../shared/notes-index.ts";
 import { moleculeToolkit } from "../../shared/molecule-toolkit.ts";
 import { validateFigureInput } from "../figure-input.ts";
 import { expandFigureSmiles } from "../figure-scene.ts";
+import type { ResourceRequest } from "../../shared/content-preview.ts";
 
 type Check = (value: unknown) => void | Promise<void>;
 const text: Check = (value) => {
@@ -74,15 +75,6 @@ export const requestKinds: Record<
     skill: "note-figures",
   },
 };
-export interface ResourceRequest {
-  file: string;
-  line: number;
-  kind: string;
-  caption: string;
-  skill: string;
-  fields: Record<string, unknown>;
-}
-
 /** Parse one fence body; line names its opening fence in the Markdown source. */
 export async function parseRequest(source: string, file: string, line: number) {
   try {
