@@ -93,8 +93,8 @@ watch(
             parseFloat(padding.paddingRight);
           const w = Math.max(parentWidth, Math.min(result.width, maximum));
           host.value.style.width = `${w}px`;
-          host.value.style.maxWidth = "none";
-          host.value.style.marginLeft = `${(parentWidth - w) / 2}px`;
+          host.value.style.maxWidth = "calc(100vw - 2 * var(--space-4))";
+          host.value.style.marginLeft = `calc((100% - min(${w}px, calc(100vw - 2 * var(--space-4)))) / 2)`;
         }
         const available = root.value!.clientWidth;
         const scale = Math.max(
