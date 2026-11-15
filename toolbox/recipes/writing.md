@@ -118,6 +118,7 @@ caption: 比较初始状态与峰顶
 
 必填 `kind`、`file`、`caption`、`prompt`。
 `prompt` 写要画的内容、读者应看到的要点、元素的相对位置与连接方向；格式和视觉风格由补全者按 note-figures 附加。
+示意图不画确切的分子结构：需要读者看清连接或原子的分子写成 `figure` 请求或 `molecule` 围栏，示意图里的分子只画成带名称的轮廓、偶极或电荷分布。
 
 ```request
 kind: image
