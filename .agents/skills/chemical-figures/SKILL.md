@@ -33,6 +33,22 @@ steps:
 
 For process diagrams, save a `kind: process` entry in `library/processes/prc_<id>.yaml`, using the [ProcessData contract](../../../shared/process.ts) (`title`, `label`, `nodes`, optional `total`, and `scenarios`) plus `id` and `sources`. Pages use `figure-ref` with its `prc_` ID. The existing process player renders it, including scenario selection, trace and budget. Check it with `figure:render --library <content-root> --entry <id>` or `content:preview`; process output includes PNGs and diagnostics, while SVG export applies to static figures. Timeline and generic flow fields are in the [data-figure recipe](../../../toolbox/recipes/figures.md).
 
+## 按请求补全
+
+运行 `npm run content -- todo [<单元>]`，按文件与行号取出 `figure` 请求。
+将请求的 `figure` YAML 保存为源文件，按“Render and review”核对化学关系，用 `heavy npm run figure:compile -- --source <figure.yaml> --library <content-root>` 编入图库。
+按上述渲染与审查流程查看桌面和手机图、逐帧检查机理、清零诊断，图注沿用请求的 `caption`。
+笔记中的化学图请求和 Markdown 练习章中的化学图请求都替换成正式 `figure-ref`，`ref` 使用编译返回的图库 ID；练习章的各类请求补全后一律使用 `figure-ref`：
+
+````markdown
+```figure-ref
+ref: <编译返回的图库 ID>
+caption: <请求的 caption>
+```
+````
+
+全部请求补完后，确认对应单元的 `npm run content -- todo <单元>` 输出为空，并运行 `heavy npm run content:preview -- <单元>`，清零警告。
+
 ## Recompile saved figures
 
 Run `heavy npm run figure:recompile -- --library <content-root>` after compiler or drawing changes to regenerate every entry with a saved `sourceFile`. With no `--library`, it uses `MOLNOTES_CONTENT_DIR`. To limit the run, append one or more source YAML paths, for example `heavy npm run figure:recompile -- --library <content-root> <content-root>/library/sources/<id>.yaml`.

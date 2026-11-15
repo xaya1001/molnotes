@@ -59,6 +59,17 @@ prompt 写内容、数值、要点和使用环境，不指定图片格式。结�
 
 用 image-gen skill 生成或编辑位图（或同等的生图工具）；数据图自己写代码。具体调用、输出位置和额度用完时的备用出图方式见项目 AGENTS.md 的配图派发段。
 
+## 按请求补全
+
+运行 `npm run content -- todo [<单元>]`，按文件与行号逐项处理 `image`、`chart` 请求。
+`image` 以请求的 `prompt` 为内容主体，按本 skill 的“写 prompt”附加工具、文件名、使用环境与视觉风格，再按出图、验收与修改流程完成图片。
+`chart` 按请求的 `data`、`axes` 与 `point` 写出图 prompt，附加本 skill 的使用环境与视觉风格，用代码出图并核对数值、轴范围、刻度和结论。
+图注沿用 `caption`，文件名沿用 `file`。
+笔记按“发布”的资源规则把图存为 `assets/<file>`，完整最终 prompt 存为 `prompts/<file>.md`，把该请求围栏替换成 `![图注](assets/<file>)`。
+Markdown 练习章的图片先用 `npm run figure:image -- <图片> --library <内容根目录> --metadata <metadata.yaml> --prompt-file <完整最终 prompt.md>` 登记图库；metadata 按[图库图片契约](../../../docs/content.md#shared-figure-library)写标题、来源、用途、权利与替代文字，命令保存原始图片与 prompt，输出 `img_` ID。
+练习章的请求一律替换成 `figure-ref` 围栏，写 `ref: <img_ ID>`、`caption: <请求图注>` 和 `presentation: figure`。
+全部请求补完后，确认对应单元的 `npm run content -- todo <单元>` 输出为空，并运行 `heavy npm run content:preview -- <单元>`，清零警告。
+
 ## 验收
 
 - 数据图：按坐标轴换算像素，逐个核对数值点、刻度标签和区间标注的位置。
