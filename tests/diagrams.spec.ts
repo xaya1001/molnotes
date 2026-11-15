@@ -66,7 +66,7 @@ const branching = {
   ],
 };
 
-test("a flow runs across a wide page and down a phone, its side exit beside its source", async ({
+test("a joining flow runs down a wide page and outlines branches on a phone", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1366, height: 900 });
@@ -84,13 +84,11 @@ test("a flow runs across a wide page and down a phone, its side exit beside its 
         }),
       ),
     );
-  for (const [width, along] of [
-    [1366, 0],
-    [390, 1],
-  ] as const) {
+  for (const width of [1366, 390]) {
+    const along = 1;
     await page.setViewportSize({ width, height: 900 });
     await expect(flow).toHaveClass(
-      width === 1366 ? /flow--right/ : /flow--down/,
+      width === 1366 ? /flow--down/ : /flow--outline/,
     );
     const b = await boxes();
     // Each step lies past the one before it along the flow.
@@ -101,11 +99,17 @@ test("a flow runs across a wide page and down a phone, its side exit beside its 
       ["活性仍在？", "放弃"],
     ])
       expect(b[from][along + 2]).toBeLessThan(b[to][along]);
-    // The side exit hangs off its source and takes no step of its own.
+    // The side exit sits beside the source on desktop and indents below it on a phone.
     const out = b["剔除干扰"];
     const pool = b["合并后复测"];
-    expect(out[along]).toBeLessThan(pool[along + 2]);
-    expect(pool[along]).toBeLessThan(out[along + 2]);
+    if (width === 1366) {
+      expect(out[0]).toBeGreaterThan(pool[2]);
+      expect(out[1]).toBeLessThan(pool[3]);
+      expect(pool[1]).toBeLessThan(out[3]);
+    } else {
+      expect(out[1]).toBeGreaterThan(pool[3]);
+      expect(out[0]).toBeGreaterThan(pool[0]);
+    }
   }
 });
 

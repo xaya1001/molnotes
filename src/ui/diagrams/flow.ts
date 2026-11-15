@@ -49,6 +49,8 @@ export interface FlowEdge {
   dashed: boolean;
   /** An exit drawn beside its source; it takes no place in the main line. */
   side: boolean;
+  /** The exit was inferred from one continuing branch and terminal leaves. */
+  inferred?: boolean;
 }
 export interface Flow {
   nodes: FlowNode[];
@@ -123,12 +125,14 @@ export function defineFlow(value: unknown): Flow {
   };
 
   const edges: FlowEdge[] = [];
+  const edgeLocations: string[] = [];
   const seen = new Set<string>();
   const add = (edge: FlowEdge, where: string) => {
     const key = `${edge.from} > ${edge.to}`;
     if (seen.has(key)) fail(`${where} repeats the edge ${key}`);
     seen.add(key);
     edges.push(edge);
+    edgeLocations.push(where);
   };
   list(input.edges, "flow edges").forEach((item, i) => {
     const where = `flow edge ${i + 1}`;
@@ -191,7 +195,8 @@ export function defineFlow(value: unknown): Flow {
       `flow edges run in a circle: ${cycle.join(" > ")}; a flow runs one way, so drop or reverse one of these edges`,
     );
 
-  return {
+  inferFlowSides(nodes, edges);
+  const flow: Flow = {
     nodes,
     edges,
     direction:
@@ -199,6 +204,21 @@ export function defineFlow(value: unknown): Flow {
     over: input.over === undefined ? "" : text(input.over, "flow over"),
     note: input.note === undefined ? "" : text(input.note, "flow note"),
   };
+  const analysis = analyzeFlow(flow);
+  if (analysis.deepest > 4)
+    fail(
+      `flow branches nest ${analysis.deepest} levels deep; a narrow page reads at most 4, so split the figure`,
+    );
+  edges.forEach((edge, i) => {
+    if (
+      edges.filter((e) => e.from === edge.from).length > 1 &&
+      [...edge.text].length > 16
+    )
+      fail(
+        `${edgeLocations[i]} text is longer than 16 characters; move the condition into the ask node`,
+      );
+  });
+  return flow;
 }
 
 /** The ids around a cycle, first id repeated at the end, or null. */
@@ -267,7 +287,11 @@ export interface FlowLayout {
   /** Top-left and width of each node, by node index. */
   nodes: { x: number; y: number; w: number }[];
   /** By edge index: the path ending at the arrow tip, and its text's top-left. */
-  edges: { points: Point[]; label: { x: number; y: number } | null }[];
+  edges: {
+    points: Point[];
+    label: { x: number; y: number } | null;
+    arrow?: boolean;
+  }[];
 }
 
 interface Vertex {
@@ -354,8 +378,11 @@ export function layoutFlow(
   const { mainEdges, sideEdges, satellite, rank } = structure(flow);
   const sideGap = (e: number) =>
     labels[e]
-      ? Math.max(space.side, labelCross(e) + 2 * space.pad)
-      : space.side;
+      ? Math.max(
+          space.side + (right ? 0 : 6),
+          labelCross(e) + 2 * space.pad + (right ? 0 : 6),
+        )
+      : space.side + (right ? 0 : 6);
   const ranks =
     Math.max(0, ...flow.nodes.map((_, i) => (satellite.has(i) ? 0 : rank[i]))) +
     1;
@@ -556,7 +583,7 @@ export function layoutFlow(
         label: labels[e.i]
           ? [
               right ? mid + 6 : mid - 3 - labelMain(e.i),
-              edge + (gap - labelCross(e.i)) / 2,
+              edge + (gap - (right ? 0 : 6) - labelCross(e.i)) / 2,
             ]
           : null,
       });
@@ -914,4 +941,978 @@ function topological(count: number, edges: { a: number; b: number }[]) {
       if (e.a === n && --incoming[e.b] === 0) ready.push(e.b);
   }
   return order;
+}
+
+function inferFlowSides(nodes: FlowNode[], edges: FlowEdge[]) {
+  for (const node of nodes) {
+    const out = edges.filter((e) => e.from === node.id);
+    if (out.length < 2 || out.some((e) => e.side)) continue;
+    const leaves = out.filter(
+      (e) =>
+        !edges.some((other) => other.from === e.to) &&
+        edges.filter((other) => other.to === e.to).length === 1,
+    );
+    if (out.length - leaves.length === 1)
+      for (const edge of leaves) {
+        edge.side = true;
+        edge.inferred = true;
+      }
+  }
+}
+
+interface BranchEdge extends FlowEdge {
+  a: number;
+  b: number;
+  i: number;
+}
+interface BranchEnd {
+  n: number;
+  edge: BranchEdge;
+}
+interface BranchSeq {
+  items: BranchItem[];
+  ends: BranchEnd[];
+}
+interface BranchItem {
+  n: number;
+  exits: BranchEdge[];
+  next: BranchEdge | null;
+  fork: {
+    branches: { edge: BranchEdge; direct: boolean; seq: BranchSeq }[];
+    join: number | null;
+  } | null;
+  joinEnds: BranchEnd[] | null;
+}
+export interface FlowAnalysis {
+  shape: "spine" | "tree" | "merge";
+  seqs: BranchSeq[];
+  mOut: (i: number) => BranchEdge[];
+  all: (i: number) => BranchEdge[];
+  deepest: number;
+  hasJoin: boolean;
+}
+export function analyzeFlow(flow: Flow): FlowAnalysis {
+  const nodes = flow.nodes;
+  const index = new Map(nodes.map((n, i) => [n.id, i]));
+  const edges: BranchEdge[] = flow.edges.map((e, i) => ({
+    ...e,
+    i,
+    a: index.get(e.from)!,
+    b: index.get(e.to)!,
+  }));
+  const N = nodes.length;
+  const out = (i: number) => edges.filter((e) => e.a === i);
+  const main = edges.filter((e) => !e.side);
+  const mOut = (i: number) => main.filter((e) => e.a === i);
+  const mIn = (i: number) => main.filter((e) => e.b === i);
+  const sOut = (i: number) => edges.filter((e) => e.side && e.a === i);
+  const sat = new Set(edges.filter((e) => e.side).map((e) => e.b));
+  const ids = [...Array(N).keys()];
+  const merges = ids.filter((i: number) => mIn(i).length >= 2);
+  const forks = ids.filter((i: number) => mOut(i).length >= 2);
+  const shape: FlowAnalysis["shape"] = merges.length
+    ? "merge"
+    : forks.length
+      ? "tree"
+      : "spine";
+  // Topological order for picking the earliest join.
+  const topo = topological(N, main);
+  const order = new Map(topo.map((n, k) => [n, k]));
+  const reach = (start: number, stop: number | null) => {
+    const seen = new Set([start]);
+    const queue = [start];
+    while (queue.length) {
+      const n = queue.shift()!;
+      if (n === stop) continue;
+      for (const e of mOut(n))
+        if (!seen.has(e.b)) {
+          seen.add(e.b);
+          queue.push(e.b);
+        }
+    }
+    return seen;
+  };
+  const findJoin = (outs: BranchEdge[], stop: number | null) => {
+    const count = new Map<number, number>();
+    for (const e of outs)
+      for (const n of reach(e.b, stop)) count.set(n, (count.get(n) || 0) + 1);
+    const shared = [...count].filter(([, c]) => c >= 2).map(([n]) => n);
+    if (!shared.length) return null;
+    return shared.sort((x, y) => order.get(x)! - order.get(y)!)[0];
+  };
+  const visited = new Set<number>();
+  let deepest = 0;
+  function buildSeq(
+    start: number,
+    stop: number | null,
+    depth: number,
+  ): BranchSeq {
+    const items: BranchItem[] = [];
+    let ends: BranchEnd[] = [];
+    let u = start;
+    for (;;) {
+      if (visited.has(u))
+        fail(
+          `flow node ${nodes[u].id} is reached from two branches that do not start at one fork; join branches only where they split, or split the figure`,
+        );
+      visited.add(u);
+      deepest = Math.max(deepest, depth);
+      for (const e of sOut(u)) {
+        visited.add(e.b);
+        deepest = Math.max(deepest, depth + 1);
+      }
+      const item: BranchItem = {
+        n: u,
+        exits: sOut(u),
+        next: null,
+        fork: null,
+        joinEnds: null,
+      };
+      items.push(item);
+      const o = mOut(u);
+      if (!o.length) break;
+      if (o.length === 1) {
+        if (o[0].b === stop) {
+          ends = [{ n: u, edge: o[0] }];
+          break;
+        }
+        item.next = o[0];
+        u = o[0].b;
+        continue;
+      }
+      const join = findJoin(o, stop);
+      const branches = o.map((e) => {
+        if (e.b === join)
+          return { edge: e, direct: true, seq: { items: [], ends: [] } };
+        return { edge: e, direct: false, seq: buildSeq(e.b, join, depth + 1) };
+      });
+      item.fork = { branches, join };
+      const joinEnds = branches.flatMap((b) =>
+        b.direct ? [{ n: u, edge: b.edge }] : b.seq.ends,
+      );
+      if (join === null) break;
+      if (join === stop) {
+        ends = joinEnds;
+        break;
+      }
+      item.joinEnds = joinEnds;
+      u = join;
+    }
+    return { items, ends };
+  }
+  const roots = ids.filter((i: number) => !sat.has(i) && !mIn(i).length);
+  const seqs = roots.map((r) => buildSeq(r, null, 0));
+  return {
+    shape,
+    seqs,
+    mOut,
+    all: (i: number) => out(i),
+    deepest,
+    hasJoin: merges.length > 0,
+  };
+}
+
+export type FlowMode = "down" | "right" | "outline";
+export interface FlowMeasure {
+  node: (i: number, width: number) => { h: number; tag: number };
+  label: (
+    i: number,
+    mode: "beside" | "on" | "strip",
+    maxWidth?: number,
+  ) => { w: number; h: number };
+}
+interface BranchNode extends FlowSize {
+  i: number;
+  x: number;
+  y: number;
+}
+interface BranchLabel {
+  e: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  on: boolean;
+}
+interface BranchLine {
+  e: number;
+  pts: Point[];
+  arrow?: boolean;
+}
+interface BranchJoin {
+  ends: BranchEnd[];
+  x: number;
+  barY: number;
+  toY: number;
+  to?: number;
+}
+interface BranchBlock {
+  nodes: BranchNode[];
+  lines: BranchLine[];
+  labels: BranchLabel[];
+  joins: BranchJoin[];
+  departures: BranchLine[];
+  l: number;
+  r: number;
+  y0: number;
+  y1: number;
+  mainBottom: number;
+  entryTag: number;
+  width: number;
+  height: number;
+}
+export interface BranchLayout extends FlowLayout {
+  mode: FlowMode;
+  nodes: BranchNode[];
+  edges: { points: Point[]; label: BranchLabel | null; arrow: boolean }[];
+}
+
+/** Lay out branches at measured reading sizes, preserving the chain renderer. */
+export function layoutBranches(
+  flow: Flow,
+  A: FlowAnalysis,
+  M: FlowMeasure,
+  W: number,
+  em = 14,
+): BranchLayout {
+  const EM = em;
+  const S = {
+    rank: 2 * em,
+    cross: 1.4 * em,
+    side: 1.6 * em,
+    pad: 0.4 * em,
+    arrow: 6,
+    bus: em,
+    leafGap: 0.6 * em,
+    groupGap: 1.2 * em,
+    step: 1.75 * em,
+    rail: 1.25 * em,
+    contGap: 1.6 * em,
+    elbowGap: 0.55 * em,
+    narrow: 34 * em,
+  };
+  const WIDE = {
+    down: [15, 14, 13, 12, 11, 10],
+    right: [
+      [11, 13],
+      [10, 12],
+      [9, 12],
+      [9, 11],
+      [8.5, 10],
+    ],
+  };
+
+  interface RightSubtree {
+    placed: BranchNode[];
+    lines: BranchLine[];
+    labels: BranchLabel[];
+    top: number;
+    bottom: number;
+    entry: number;
+    mid: number;
+    move: (dy: number) => void;
+  }
+  type Incoming =
+    | { kind: "cont" | "elbow"; edge: BranchEdge; x: number; from: number }
+    | { kind: "rail"; ends: BranchEnd[] };
+  // Shared output helpers.
+  const empty = (): BranchBlock => ({
+    nodes: [],
+    lines: [],
+    labels: [],
+    joins: [],
+    departures: [],
+    l: 0,
+    r: 0,
+    y0: 0,
+    y1: 0,
+    mainBottom: 0,
+    entryTag: 0,
+    width: 0,
+    height: 0,
+  });
+  function shift(R: BranchBlock, dx: number, dy: number) {
+    R.nodes.forEach((n) => {
+      n.x += dx;
+      n.y += dy;
+    });
+    [...R.lines, ...R.departures].forEach((l) =>
+      l.pts.forEach((p) => {
+        p[0] += dx;
+        p[1] += dy;
+      }),
+    );
+    R.labels.forEach((l) => {
+      l.x += dx;
+      l.y += dy;
+    });
+    R.joins.forEach((j) => {
+      j.x += dx;
+      j.barY += dy;
+      j.toY += dy;
+    });
+  }
+  function absorb(R: BranchBlock, B: BranchBlock) {
+    R.nodes.push(...B.nodes);
+    R.lines.push(...B.lines);
+    R.labels.push(...B.labels);
+    R.joins.push(...B.joins);
+    R.departures.push(...B.departures);
+  }
+  const box = (n: BranchNode) => ({
+    top: n.y + n.tag,
+    bottom: n.y + n.h,
+    mid: n.y + n.tag + (n.h - n.tag) / 2,
+  });
+
+  // Desktop, down: trunks run down; exits sit to the right; a fork lays its
+  // branches side by side under a bus; a join collects them on a bar.
+  function layoutDown(bw: number): BranchBlock {
+    function nodeItem(it: BranchItem) {
+      const s = M.node(it.n, bw);
+      const R = empty();
+      R.nodes.push({ i: it.n, x: -bw / 2, y: 0, w: bw, h: s.h, tag: s.tag });
+      R.l = bw / 2;
+      R.r = bw / 2;
+      R.y0 = 0;
+      R.y1 = s.h;
+      R.mainBottom = s.h;
+      const mid = s.tag + (s.h - s.tag) / 2;
+      let below = 0;
+      it.exits.forEach((e, k) => {
+        const lab = e.text ? M.label(e.i, "beside") : null;
+        const gap = Math.max(
+          S.side + S.arrow,
+          lab ? lab.w + 2 * S.pad + S.arrow : 0,
+        );
+        const es = M.node(e.b, bw);
+        const x = bw / 2 + gap;
+        const emid = es.tag + (es.h - es.tag) / 2;
+        const y = k === 0 ? mid - emid : below + S.leafGap;
+        R.nodes.push({ i: e.b, x, y, w: bw, h: es.h, tag: es.tag });
+        const ty = y + emid;
+        const turn = bw / 2 + S.pad * 2;
+        R.lines.push({
+          e: e.i,
+          pts:
+            k === 0
+              ? [
+                  [bw / 2, mid],
+                  [x, mid],
+                ]
+              : [
+                  [bw / 2, mid],
+                  [turn, mid],
+                  [turn, ty],
+                  [x, ty],
+                ],
+        });
+        if (lab)
+          R.labels.push({
+            e: e.i,
+            x: k === 0 ? bw / 2 + (gap - S.arrow - lab.w) / 2 : turn + S.pad,
+            y: ty - 3 - lab.h,
+            w: lab.w,
+            h: lab.h,
+            on: false,
+          });
+        below = y + es.h;
+        R.r = Math.max(R.r, x + bw);
+        R.y0 = Math.min(R.y0, y);
+        R.y1 = Math.max(R.y1, y + es.h);
+      });
+      return R;
+    }
+    function forkItem(it: BranchItem) {
+      const R = nodeItem(it);
+      const busY = R.mainBottom + S.rank / 2;
+      const brs = it.fork!.branches.map((b) => {
+        return {
+          b,
+          B: b.direct ? empty() : blockSeq(b.seq),
+          lab: b.edge.text ? M.label(b.edge.i, "on") : null,
+        };
+      });
+      const drop = Math.max(
+        S.rank / 2 + S.arrow,
+        ...brs.map((x) => (x.lab ? x.lab.h + 2 * S.pad + S.arrow + 4 : 0)),
+      );
+      const px = [0];
+      for (let k = 1; k < brs.length; k++)
+        px.push(px[k - 1] + brs[k - 1].B.r + S.cross + brs[k].B.l);
+      const c = (px[0] + px.at(-1)!) / 2;
+      brs.forEach((x, k) => {
+        const X = px[k] - c;
+        const top = busY + drop;
+        shift(x.B, X, top);
+        absorb(R, x.B);
+        if (x.b.direct)
+          R.departures.push({
+            e: x.b.edge.i,
+            pts: [
+              [0, R.mainBottom],
+              [0, busY],
+              [X, busY],
+              [X, top],
+            ],
+          });
+        if (!x.b.direct)
+          R.lines.push({
+            e: x.b.edge.i,
+            pts: [
+              [0, R.mainBottom],
+              [0, busY],
+              [X, busY],
+              [X, top + x.B.entryTag],
+            ],
+          });
+        if (x.lab)
+          R.labels.push({
+            e: x.b.edge.i,
+            x: X - x.lab.w / 2,
+            y: busY + (drop - S.arrow - x.lab.h) / 2,
+            w: x.lab.w,
+            h: x.lab.h,
+            on: true,
+          });
+        R.l = Math.max(R.l, x.B.l - X);
+        R.r = Math.max(R.r, x.B.r + X);
+        R.y1 = Math.max(R.y1, x.B.y1 + top);
+      });
+      return R;
+    }
+    function blockSeq(seq: BranchSeq) {
+      const R = empty();
+      let prev: {
+        next: BranchEdge | null;
+        joinEnds: BranchEnd[] | null;
+        bottom: number;
+      } | null = null;
+      seq.items.forEach((it, k) => {
+        const B = it.fork ? forkItem(it) : nodeItem(it);
+        let dy = 0;
+        if (k) {
+          if (prev!.joinEnds) {
+            const barY = R.y1 + S.rank / 2;
+            dy = Math.max(barY + S.rank / 2 + S.arrow, R.y1 + S.rank - B.y0);
+            R.joins.push({
+              ends: prev!.joinEnds,
+              x: 0,
+              barY,
+              toY: dy + B.nodes[0].tag,
+            });
+          } else {
+            const lab = prev!.next!.text
+              ? M.label(prev!.next!.i, "beside")
+              : null;
+            const need = Math.max(
+              S.rank,
+              lab ? lab.h + 2 * S.pad + S.arrow + 4 : 0,
+            );
+            dy = Math.max(prev!.bottom + need, R.y1 + S.pad * 2 - B.y0);
+            R.lines.push({
+              e: prev!.next!.i,
+              pts: [
+                [0, prev!.bottom],
+                [0, dy + B.nodes[0].tag],
+              ],
+            });
+            if (lab)
+              R.labels.push({
+                e: prev!.next!.i,
+                x: 6,
+                y: prev!.bottom + S.pad,
+                w: lab.w,
+                h: lab.h,
+                on: false,
+              });
+          }
+        }
+        const mainBottom = B.mainBottom + dy;
+        shift(B, 0, dy);
+        absorb(R, B);
+        R.l = Math.max(R.l, B.l);
+        R.r = Math.max(R.r, B.r);
+        if (!k) R.y0 = B.y0 + dy;
+        R.y1 = Math.max(R.y1, B.y1 + dy);
+        prev = { next: it.next, joinEnds: it.joinEnds, bottom: mainBottom };
+      });
+      R.mainBottom = R.y1;
+      R.entryTag = R.nodes.length ? R.nodes[0].tag : 0;
+      return R;
+    }
+    const R = empty();
+    let x = 0;
+    for (const seq of A.seqs) {
+      const B = blockSeq(seq);
+      shift(B, x + B.l, -B.y0);
+      absorb(R, B);
+      x += B.l + B.r + S.side * 2;
+      R.y1 = Math.max(R.y1, B.y1 - B.y0);
+    }
+    R.width = x - S.side * 2;
+    R.height = R.y1;
+    resolveJoins(R, "down");
+    return R;
+  }
+  function resolveJoins(R: BranchBlock, mode: FlowMode, railX = 0) {
+    const at = new Map(R.nodes.map((n) => [n.i, n]));
+    for (const j of R.joins)
+      for (const [k, end] of j.ends.entries()) {
+        const n = at.get(end.n)!;
+        const b = box(n);
+        if (mode === "down") {
+          const departure = R.departures.find((d) => d.e === end.edge.i)?.pts;
+          const cx = departure?.at(-1)![0] ?? n.x + n.w / 2;
+          R.lines.push({
+            e: end.edge.i,
+            arrow: k === 0,
+            pts: [
+              ...(departure ?? ([[cx, b.bottom]] as Point[])),
+              [cx, j.barY],
+              [j.x, j.barY],
+              [j.x, j.toY],
+            ],
+          });
+        } else {
+          const t = at.get(j.to!)!;
+          const tb = box(t);
+          R.lines.push({
+            e: end.edge.i,
+            arrow: k === 0,
+            pts: [
+              [n.x + n.w, b.mid],
+              [railX, b.mid],
+              [railX, tb.mid],
+              [t.x + t.w, tb.mid],
+            ],
+          });
+        }
+      }
+  }
+
+  // Desktop, right: a tree's columns advance at forks; a node with one child
+  // keeps it below, in the same column.
+  function layoutRight(wi: number, wl: number): BranchBlock {
+    const kids = (u: number) => [...A.all(u)];
+    const col = new Map<number, number>();
+    let cols = 0;
+    const assign = (u: number, c: number) => {
+      col.set(u, c);
+      cols = Math.max(cols, c + 1);
+      const k = kids(u);
+      k.forEach((e) => assign(e.b, k.length > 1 ? c + 1 : c));
+    };
+    const root = A.seqs[0].items[0].n;
+    assign(root, 0);
+    const isLeaf = (u: number) => !kids(u).length;
+    const colW = Array.from({ length: cols }, (_, c) =>
+      [...col].some(([u, cc]) => cc === c && !isLeaf(u)) ? wi : wl,
+    );
+    const gaps = Array.from({ length: Math.max(cols - 1, 0) }, (_, c) => {
+      let w = 0;
+      for (const [u, cc] of col)
+        if (cc === c && kids(u).length > 1)
+          for (const e of kids(u))
+            if (e.text) w = Math.max(w, M.label(e.i, "on").w);
+      return Math.max(2.5 * EM, S.bus + w + 2 * S.pad + S.arrow + 4);
+    });
+    const colX = [0];
+    for (let c = 1; c < cols; c++)
+      colX.push(colX[c - 1] + colW[c - 1] + gaps[c - 1]);
+    const R = empty();
+    R.width = colX.at(-1)! + colW.at(-1)!;
+    // Returns {top, bottom, mid} with nodes placed relative to y=0.
+    function lay(u: number): RightSubtree {
+      const c = col.get(u)!;
+      const w = colW[c];
+      const s = M.node(u, w);
+      const k = kids(u);
+      const me = { i: u, x: colX[c], y: 0, w, h: s.h, tag: s.tag };
+      const placed = [me];
+      const lines: BranchLine[] = [];
+      const labels: BranchLabel[] = [];
+      let top = 0;
+      let bottom = s.h;
+      const midOf = (n: BranchNode) => n.y + n.tag + (n.h - n.tag) / 2;
+      if (k.length === 1) {
+        const L = k[0].text ? M.label(k[0].i, "beside") : null;
+        const sub = lay(k[0].b);
+        const gap = Math.max(
+          S.rank,
+          k[0].text ? L!.h + 2 * S.pad + S.arrow + 4 : 0,
+        );
+        const dy = s.h + gap - sub.top;
+        sub.move(dy);
+        placed.push(...sub.placed);
+        lines.push(...sub.lines);
+        labels.push(...sub.labels);
+        const cx = me.x + w / 2;
+        lines.push({
+          e: k[0].i,
+          pts: [
+            [cx, s.h],
+            [cx, sub.entry],
+          ],
+        });
+        if (k[0].text)
+          labels.push({
+            e: k[0].i,
+            x: cx + 6,
+            y: s.h + S.pad,
+            w: L!.w,
+            h: L!.h,
+            on: false,
+          });
+        top = Math.min(top, sub.top);
+        bottom = Math.max(bottom, sub.bottom);
+      } else if (k.length > 1) {
+        let cursor = 0;
+        const subs: { e: BranchEdge; sub: RightSubtree }[] = [];
+        k.forEach((e, j) => {
+          const sub = lay(e.b);
+          if (j) {
+            const gap =
+              isLeaf(e.b) && isLeaf(k[j - 1].b) ? S.leafGap : S.groupGap;
+            sub.move(cursor + gap - sub.top);
+          } else sub.move(-sub.top);
+          cursor = sub.bottom;
+          subs.push({ e, sub });
+        });
+        const first = subs[0].sub.mid;
+        const last = subs.at(-1)!.sub.mid;
+        const mid = (first + last) / 2;
+        me.y = mid - s.tag - (s.h - s.tag) / 2;
+        const busX = me.x + w + S.bus;
+        subs.forEach(({ e, sub }) => {
+          placed.push(...sub.placed);
+          lines.push(...sub.lines);
+          labels.push(...sub.labels);
+          const ty = sub.mid;
+          lines.push({
+            e: e.i,
+            pts: [
+              [me.x + w, mid],
+              [busX, mid],
+              [busX, ty],
+              [colX[col.get(e.b)!], ty],
+            ],
+          });
+          if (e.text) {
+            const L = M.label(e.i, "on");
+            labels.push({
+              e: e.i,
+              x: busX + S.pad,
+              y: ty - L!.h / 2,
+              w: L!.w,
+              h: L!.h,
+              on: true,
+            });
+          }
+        });
+        top = Math.min(me.y, subs[0].sub.top);
+        bottom = Math.max(me.y + s.h, cursor);
+      }
+      const res = {
+        placed,
+        lines,
+        labels,
+        top,
+        bottom,
+        entry: me.y + me.tag,
+        mid: midOf(me),
+        move(dy: number) {
+          placed.forEach((n) => (n.y += dy));
+          lines.forEach((l) => l.pts.forEach((p) => (p[1] += dy)));
+          labels.forEach((l) => (l.y += dy));
+          res.top += dy;
+          res.bottom += dy;
+          res.entry += dy;
+          res.mid += dy;
+        },
+      };
+      return res;
+    }
+    const T = lay(root);
+    T.move(-T.top);
+    R.nodes = T.placed;
+    R.lines = T.lines;
+    R.labels = T.labels;
+    R.height = T.bottom;
+    return R;
+  }
+
+  // Outline: one column. A trunk runs down a line at the left of its boxes;
+  // branch children indent one step and take an elbow from their parent's
+  // trunk; the text of an edge sits on its own line above the box it leads
+  // to; joins come in on a rail at the right.
+  function layoutOutline(W: number): BranchBlock {
+    const aligned = A.shape === "spine" && A.seqs.length > 1;
+    const rail = A.hasJoin || aligned ? S.rail : 0;
+    const R = empty();
+    let y = 0;
+    const at = new Map<number, BranchNode>();
+    const trunk = (d: number) => d * S.step + S.step / 2;
+    function place(n: number, depth: number, inc: Incoming | null) {
+      const w = W - rail - depth * S.step;
+      const s = M.node(n, w);
+      const x = depth * S.step;
+      const lab =
+        inc && inc.kind !== "rail" && inc.edge.text
+          ? M.label(
+              inc.edge.i,
+              "strip",
+              w - (inc.kind === "cont" ? S.step / 2 + 7.5 : 0),
+            )
+          : null;
+      const strip = lab ? lab.h + 4 : 0;
+      let gap = 0;
+      if (inc)
+        gap =
+          inc.kind === "elbow"
+            ? S.elbowGap + strip
+            : Math.max(S.contGap, strip + S.arrow + 8);
+      if (!at.size) gap = 0;
+      y += gap;
+      const node = { i: n, x, y, w, h: s.h, tag: s.tag };
+      R.nodes.push(node);
+      at.set(n, node);
+      const b = box(node);
+      if (inc && inc.kind === "cont") {
+        R.lines.push({
+          e: inc.edge.i,
+          pts: [
+            [inc.x, inc.from],
+            [inc.x, b.top],
+          ],
+        });
+        if (lab)
+          R.labels.push({
+            e: inc.edge.i,
+            x: inc.x + 7.5,
+            y: node.y - lab.h - 3,
+            w: lab.w,
+            h: lab.h,
+            on: false,
+          });
+      } else if (inc && inc.kind === "elbow") {
+        R.lines.push({
+          e: inc.edge.i,
+          pts: [
+            [inc.x, inc.from],
+            [inc.x, b.mid],
+            [x, b.mid],
+          ],
+        });
+        if (lab)
+          R.labels.push({
+            e: inc.edge.i,
+            x,
+            y: node.y - lab.h - 3,
+            w: lab.w,
+            h: lab.h,
+            on: false,
+          });
+      } else if (inc && inc.kind === "rail") {
+        R.joins.push({ ends: inc.ends, to: n, x: 0, barY: 0, toY: 0 });
+      }
+      y = node.y + node.h;
+      return node;
+    }
+    function walk(seq: BranchSeq, depth: number, inc: Incoming | null) {
+      seq.items.forEach((it) => {
+        const node = place(it.n, depth, inc);
+        const from = box(node).bottom;
+        const x = trunk(depth);
+        for (const e of it.exits)
+          place(e.b, depth + 1, { kind: "elbow", edge: e, x, from });
+        if (it.fork) {
+          for (const br of it.fork!.branches)
+            walk(br.seq, depth + 1, { kind: "elbow", edge: br.edge, x, from });
+          inc = it.joinEnds ? { kind: "rail", ends: it.joinEnds } : null;
+        } else if (it.next) inc = { kind: "cont", edge: it.next, x, from };
+      });
+    }
+    if (aligned) {
+      const line = mainLine(flow)!;
+      const onLine = new Set(line);
+      const { rank, satellite } = structure(flow);
+      const host = (n: number) =>
+        [...line].reverse().find((p) => rank[p] <= rank[n]) ?? line[0];
+      let previous: BranchNode | null = null;
+      for (const n of line) {
+        const incoming = previous
+          ? A.mOut(previous.i).find((e) => e.b === n)!
+          : null;
+        const node = place(
+          n,
+          0,
+          previous && incoming
+            ? {
+                kind: "cont",
+                edge: incoming,
+                x: trunk(0),
+                from: box(previous).bottom,
+              }
+            : null,
+        );
+        for (const e of A.all(n).filter((e) => e.side))
+          place(e.b, 1, {
+            kind: "elbow",
+            edge: e,
+            x: trunk(0),
+            from: box(node).bottom,
+          });
+        for (const [i] of flow.nodes.entries()) {
+          if (onLine.has(i) || satellite.has(i) || host(i) !== n) continue;
+          const secondary = place(i, 1, null);
+          for (const e of A.all(i).filter((e) => e.side))
+            place(e.b, 2, {
+              kind: "elbow",
+              edge: e,
+              x: trunk(1),
+              from: box(secondary).bottom,
+            });
+        }
+        previous = node;
+      }
+      flow.edges.forEach((edge, i) => {
+        const a = flow.nodes.findIndex((n) => n.id === edge.from);
+        const b = flow.nodes.findIndex((n) => n.id === edge.to);
+        if (!edge.side && !onLine.has(a)) {
+          const from = at.get(a)!,
+            to = at.get(b)!;
+          const x = W - rail / 2;
+          R.lines.push({
+            e: i,
+            pts: [
+              [from.x + from.w, box(from).mid],
+              [x, box(from).mid],
+              [x, box(to).mid],
+              [to.x + to.w, box(to).mid],
+            ],
+          });
+        }
+      });
+    } else A.seqs.forEach((seq) => walk(seq, 0, null));
+    R.width = W;
+    R.height = y;
+    resolveJoins(R, "outline", W - rail / 2);
+    return R;
+  }
+
+  // Choose: outline below the narrow width; else down if it fits at a
+  // readable box width, else right for trees, else outline.
+  function choose(): BranchBlock & { mode: FlowMode } {
+    if (W < S.narrow) return { mode: "outline", ...layoutOutline(W) };
+    const prefer = flow.direction;
+    const tryDown = (): (BranchBlock & { mode: FlowMode }) | null => {
+      for (const w of WIDE.down) {
+        const R =
+          A.shape === "spine"
+            ? desktopSpine(w * EM, "down")
+            : layoutDown(w * EM);
+        if (R.width <= W) return { mode: "down", ...R };
+      }
+      return null;
+    };
+    const tryRight = (): (BranchBlock & { mode: FlowMode }) | null => {
+      if (A.shape === "spine" && prefer === "right") {
+        for (const w of [13, 12, 11, 10]) {
+          const R = desktopSpine(w * EM, "right");
+          if (R.width <= W) return { mode: "right", ...R };
+        }
+      }
+      if (A.shape !== "tree" || A.seqs.length !== 1) return null;
+      for (const [wi, wl] of WIDE.right) {
+        const R = layoutRight(wi * EM, wl * EM);
+        if (R.width <= W) return { mode: "right", ...R };
+      }
+      return null;
+    };
+    const order =
+      prefer === "down"
+        ? [tryDown]
+        : prefer === "right"
+          ? [tryRight, tryDown]
+          : [tryDown, tryRight];
+    for (const f of order) {
+      const r = f();
+      if (r) return r;
+    }
+    return { mode: "outline", ...layoutOutline(W) };
+  }
+
+  function desktopSpine(bw: number, direction: FlowDirection): BranchBlock {
+    const sizes = flow.nodes.map((_, i) => ({ w: bw, ...M.node(i, bw) }));
+    const labels = flow.edges.map((e, i) =>
+      e.text ? M.label(i, "beside") : null,
+    );
+    const L = layoutFlow(flow, direction, sizes, labels, {
+      ...S,
+      cross: 1.2 * em,
+      thread: 0.8 * em,
+    });
+    return {
+      ...empty(),
+      width: L.width,
+      height: L.height,
+      nodes: L.nodes.map((n, i) => ({ ...n, ...sizes[i], i })),
+      lines: L.edges.map((e, i) => ({ e: i, pts: e.points })),
+      labels: L.edges.flatMap((e, i) =>
+        e.label ? [{ ...e.label, ...labels[i]!, e: i, on: false }] : [],
+      ),
+    };
+  }
+
+  const R = choose();
+  return {
+    mode: R.mode,
+    width: R.width,
+    height: R.height,
+    nodes: flow.nodes.map((_, i) => R.nodes.find((n) => n.i === i)!),
+    edges: flow.edges.map((_, i) => {
+      const line = R.lines.find((l) => l.e === i)!;
+      return {
+        points: line.pts,
+        label: R.labels.find((l) => l.e === i) ?? null,
+        arrow: line.arrow !== false,
+      };
+    }),
+  };
+}
+
+/** Nodes in outline reading order, with each incoming edge's text immediately before its box. */
+export function flowReadingOrder(flow: Flow, analysis = analyzeFlow(flow)) {
+  const order: number[] = [];
+  if (analysis.shape === "spine" && analysis.seqs.length > 1) {
+    const line = mainLine(flow)!;
+    const onLine = new Set(line);
+    const { rank, satellite, sideEdges } = structure(flow);
+    const host = (n: number) =>
+      [...line].reverse().find((p) => rank[p] <= rank[n]) ?? line[0];
+    const add = (n: number) => {
+      order.push(n);
+      order.push(...sideEdges.filter((e) => e.a === n).map((e) => e.b));
+    };
+    for (const n of line) {
+      add(n);
+      for (const [i] of flow.nodes.entries())
+        if (!onLine.has(i) && !satellite.has(i) && host(i) === n) add(i);
+    }
+  } else {
+    const walk = (seq: BranchSeq) => {
+      for (const item of seq.items) {
+        order.push(item.n, ...item.exits.map((e) => e.b));
+        for (const branch of item.fork?.branches ?? []) walk(branch.seq);
+      }
+    };
+    analysis.seqs.forEach(walk);
+  }
+  return order.map((n) => ({
+    n,
+    edges: flow.edges.flatMap((e, i) =>
+      e.to === flow.nodes[n].id && e.text ? [i] : [],
+    ),
+  }));
 }

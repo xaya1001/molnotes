@@ -12,24 +12,25 @@ import { readsWell } from "./check.ts";
 import { phrases } from "./model.ts";
 import {
   chainOrder,
-  foldFlow,
-  foldRail,
-  foldable,
+  analyzeFlow,
+  flowReadingOrder,
+  layoutBranches,
+  type BranchLayout,
   layoutFlow,
   wrapFlow,
   wrapRoom,
   type Flow,
   type FlowDirection,
+  type FlowLayout,
   type FlowSpacing,
   type Point,
 } from "./flow.ts";
 
 const props = defineProps<{ flow: Flow; caption?: string }>();
 
-// Box widths in em: the widest a box grows across or down the page. A flow
-// runs right when its text reads well in boxes that wide (see readsWell),
-// else in whichever direction gives the wider boxes; running down, nodes
-// beside the main line fold under it when side by side they read badly.
+// Chain box widths in em: run right when the text reads well, otherwise
+// use the direction with wider boxes or wrap into rows. Branches use the
+// measured reading sizes in layoutBranches.
 const widest = { right: 13, down: 15 };
 const narrowest = 4.4;
 // Below this the author's fixed direction gives way to the wider boxes.
@@ -125,6 +126,16 @@ function readable(w: number) {
     );
   });
 }
+const branched = computed(() => chainOrder(props.flow) === null);
+const analysis = computed(() => analyzeFlow(props.flow));
+const branchLayout = ref<BranchLayout>();
+const readingOrder = computed(() =>
+  flowReadingOrder(props.flow, analysis.value),
+);
+const mode = computed(() =>
+  branched.value ? (branchLayout.value?.mode ?? "down") : direction.value,
+);
+
 const fixed = computed(
   () =>
     props.flow.direction !== "auto" && width.value / em.value >= fixedFromEm,
@@ -157,25 +168,19 @@ const columns = computed(() => {
   }
   return 0;
 });
-const folded = computed(
-  () =>
-    !columns.value &&
-    direction.value === "down" &&
-    !!width.value &&
-    foldable(props.flow) &&
-    !readable(fit("down")),
-);
 const boxWidth = computed(() => {
   if (!width.value) return widest.down * em.value;
   if (columns.value) return wrapWidth(columns.value);
-  if (!folded.value) return fit(direction.value);
-  const rail = foldRail(props.flow) ? space.value.cross : 0;
-  return Math.min(widest.down * em.value, width.value - rail);
+  return fit(direction.value);
 });
 const compact = computed(
-  () => direction.value === "right" && boxWidth.value < compactBelow * em.value,
+  () =>
+    !branched.value &&
+    direction.value === "right" &&
+    boxWidth.value < compactBelow * em.value,
 );
-const layout = computed(() => {
+const layout = computed<FlowLayout>(() => {
+  if (branched.value && branchLayout.value) return branchLayout.value;
   const labels = props.flow.edges.map((_, i) => labelSizes.value[i] ?? null);
   const sizes = sizesAt(boxWidth.value);
   if (columns.value)
@@ -187,13 +192,16 @@ const layout = computed(() => {
       labels,
       space.value,
     );
-  return folded.value
-    ? foldFlow(props.flow, boxWidth.value, sizes, labels, space.value)
-    : layoutFlow(props.flow, direction.value, sizes, labels, space.value);
+  return layoutFlow(props.flow, direction.value, sizes, labels, space.value);
 });
 
 async function measure() {
   await nextTick();
+  if (branched.value) {
+    await document.fonts.ready;
+    measureBranches();
+    return;
+  }
   const nodes = props.flow.nodes.map((_, i) => {
     const el = nodeEls.value.find((n) => n.dataset.node === String(i));
     if (!el) return { h: 3 * em.value, tag: 0, inset: em.value };
@@ -217,47 +225,172 @@ async function measure() {
   if (!same(labels, labelSizes.value)) labelSizes.value = labels;
 }
 watch(
-  [() => props.flow, boxWidth, compact, direction, columns, folded, em],
+  [() => props.flow, width, boxWidth, compact, direction, columns, em],
   measure,
   {
     immediate: true,
   },
 );
 
-// A tag sits beside the arrow that comes into its box from above.
+// Measure candidate widths with the rendered font, then commit the selected layout.
+function measureBranches() {
+  if (!width.value || !root.value) return;
+  const elements = props.flow.nodes.map((_, i) =>
+    nodeEls.value.find((n) => n.dataset.node === String(i))!,
+  );
+  const labels = props.flow.edges.map((_, i) =>
+    labelEls.value.find((n) => n.dataset.edge === String(i)),
+  );
+  if (elements.some((el) => !el)) return;
+  let guess = width.value < fixedFromEm * em.value ? "outline" : "down";
+  let result: BranchLayout;
+  for (let pass = 0; pass < 2; pass++) {
+    root.value.classList.toggle("flow--outline", guess === "outline");
+    const nodes = new Map<string, { h: number; tag: number }>();
+    const text = new Map<string, { w: number; h: number }>();
+    result = layoutBranches(
+      props.flow,
+      analysis.value,
+      {
+        node(i, w) {
+          const key = `${i}|${w}`;
+          if (!nodes.has(key)) {
+            const el = elements[i];
+            el.style.width = `${w}px`;
+            el.classList.toggle(
+              "flow-node--from-above",
+              guess !== "outline" &&
+                props.flow.edges.some((e) => {
+                  if (e.to !== props.flow.nodes[i].id) return false;
+                  if (guess === "down") return !e.side;
+                  const source = props.flow.nodes.findIndex(
+                    (n) => n.id === e.from,
+                  );
+                  return analysis.value.shape === "spine"
+                    ? e.side
+                    : analysis.value.all(source).length === 1;
+                }),
+            );
+            nodes.set(key, {
+              h: el.offsetHeight,
+              tag: el.querySelector<HTMLElement>(".flow-box")!.offsetTop,
+            });
+          }
+          return nodes.get(key)!;
+        },
+        label(i, mode, maxWidth) {
+          const key = `${i}|${mode}|${maxWidth}`;
+          if (!text.has(key)) {
+            const el = labels[i]!;
+            el.style.maxWidth =
+              mode === "strip"
+                ? `${maxWidth}px`
+                : mode === "on"
+                  ? "7em"
+                  : "5em";
+            text.set(key, { w: el.offsetWidth, h: el.offsetHeight });
+          }
+          return text.get(key)!;
+        },
+      },
+      Math.floor(width.value),
+      em.value,
+    );
+    if (result.mode === guess) break;
+    guess = result.mode;
+  }
+  branchLayout.value = result!;
+  // Candidate measurement changed widths directly; restore the selected widths
+  // even when Vue's previous render has the same style value.
+  result!.nodes.forEach((n, i) => {
+    elements[i].style.width = `${n.w}px`;
+    elements[i].classList.toggle(
+      "flow-node--from-above",
+      result!.mode !== "outline" &&
+        props.flow.edges.some((edge, j) => {
+          if (edge.to !== props.flow.nodes[i].id) return false;
+          const points = result!.edges[j].points,
+            a = points.at(-2)!,
+            b = points.at(-1)!;
+          return Math.abs(a[0] - b[0]) < 0.5 && b[1] > a[1];
+        }),
+    );
+  });
+  result!.edges.forEach((e, i) => {
+    if (labels[i] && e.label)
+      labels[i]!.style.maxWidth =
+        result!.mode === "outline"
+          ? `${e.label.w + 1}px`
+          : e.label.on
+            ? "7em"
+            : "5em";
+  });
+}
+
 const fromAbove = computed(() =>
-  props.flow.nodes.map((n) =>
-    props.flow.edges.some(
-      (e) =>
-        e.to === n.id &&
-        (direction.value === "right"
-          ? e.side
-          : !e.side && !folded.value && !columns.value),
-    ),
+  props.flow.nodes.map(
+    (node) =>
+      mode.value !== "outline" &&
+      props.flow.edges.some((edge, i) => {
+        if (edge.to !== node.id) return false;
+        const points = layout.value.edges[i].points;
+        const a = points.at(-2)!,
+          b = points.at(-1)!;
+        return Math.abs(a[0] - b[0]) < 0.5 && b[1] > a[1];
+      }),
   ),
 );
-
+function shape(i: number) {
+  const w = layout.value.nodes[i].w;
+  const n = branchLayout.value?.nodes[i];
+  const h = n
+    ? n.h - n.tag
+    : (heights.value[i]?.h ?? 42) - (heights.value[i]?.tag ?? 0);
+  const slant = 0.75 * em.value;
+  return {
+    view: `0 0 ${w} ${h}`,
+    points: `${slant},.75 ${w - slant},.75 ${w - 0.75},${h / 2} ${w - slant},${h - 0.75} ${slant},${h - 0.75} .75,${h / 2}`,
+  };
+}
+function labelStyle(i: number) {
+  const label = layout.value.edges[i].label;
+  const measured = branchLayout.value?.edges[i].label;
+  return {
+    left: `${label?.x ?? 0}px`,
+    top: `${label?.y ?? 0}px`,
+    maxWidth:
+      branched.value && measured
+        ? mode.value === "outline"
+          ? `${measured.w + 1}px`
+          : measured.on
+            ? "7em"
+            : "5em"
+        : undefined,
+  };
+}
 /** The line, stopping short of the arrow head, and the head. */
-function draw(points: Point[]) {
+function draw(points: Point[], arrowhead = true) {
   const [px, py] = points.at(-2)!;
   const [tx, ty] = points.at(-1)!;
   const length = Math.hypot(tx - px, ty - py) || 1;
   const [dx, dy] = [(tx - px) / length, (ty - py) / length];
   const [bx, by] = [tx - dx * arrow, ty - dy * arrow];
-  const line = [...points.slice(0, -1), [bx, by]]
+  const line = (arrowhead ? [...points.slice(0, -1), [bx, by]] : points)
     .map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`)
     .join(" ");
   const head = `M${tx} ${ty} L${bx - dy * 3.5} ${by + dx * 3.5} L${bx + dy * 3.5} ${by - dx * 3.5} Z`;
-  return { line, head };
+  return { line, head: arrowhead ? head : "" };
 }
-const lines = computed(() => layout.value.edges.map((e) => draw(e.points)));
+const lines = computed(() =>
+  layout.value.edges.map((e) => draw(e.points, e.arrow !== false)),
+);
 </script>
 
 <template>
   <figure
     ref="root"
     class="flow"
-    :class="[`flow--${direction}`, { 'flow--compact': compact }]"
+    :class="[`flow--${mode}`, { 'flow--compact': compact }]"
   >
     <div class="flow-frame" :style="{ width: `${layout.width}px` }">
       <p v-if="flow.over" class="flow-over">
@@ -279,55 +412,59 @@ const lines = computed(() => layout.value.edges.map((e) => draw(e.points)));
             <path class="flow-arrow" :d="line.head" />
           </g>
         </svg>
-        <template v-for="(edge, i) in flow.edges" :key="i">
+        <template
+          v-for="{ n: i, edges } in readingOrder"
+          :key="flow.nodes[i].id"
+        >
           <span
-            v-if="edge.text"
+            v-for="edge in edges"
+            :key="`label-${edge}`"
             ref="labelEls"
             class="flow-label"
-            :data-edge="i"
-            :style="{
-              left: `${layout.edges[i].label?.x ?? 0}px`,
-              top: `${layout.edges[i].label?.y ?? 0}px`,
+            :data-edge="edge"
+            :class="{
+              'flow-label--on': branched && branchLayout?.edges[edge].label?.on,
             }"
-            ><DiagramText :text="edge.text"
+            :style="labelStyle(edge)"
+            ><DiagramText :text="flow.edges[edge].text"
           /></span>
-        </template>
-        <div
-          v-for="(node, i) in flow.nodes"
-          :key="node.id"
-          ref="nodeEls"
-          :data-node="i"
-          class="flow-node"
-          :class="[
-            `flow-node--${node.kind}`,
-            `flow-node--${node.tone}`,
-            { 'flow-node--from-above': fromAbove[i] },
-          ]"
-          :style="{
-            left: `${layout.nodes[i].x}px`,
-            top: `${layout.nodes[i].y}px`,
-            width: `${layout.nodes[i].w}px`,
-          }"
-        >
-          <span v-if="node.tag" class="flow-tag"
-            ><DiagramText :text="node.tag"
-          /></span>
-          <div class="flow-box">
-            <svg
-              v-if="node.kind === 'ask'"
-              class="flow-shape"
-              viewBox="0 0 100 100"
-              preserveAspectRatio="none"
-              aria-hidden="true"
-            >
-              <polygon
-                points="7,1 93,1 99.5,50 93,99 7,99 0.5,50"
-                vector-effect="non-scaling-stroke"
-              />
-            </svg>
-            <span class="flow-text"><DiagramText :text="node.text" /></span>
+          <div
+            ref="nodeEls"
+            :data-node="i"
+            class="flow-node"
+            :class="[
+              `flow-node--${flow.nodes[i].kind}`,
+              `flow-node--${flow.nodes[i].tone}`,
+              { 'flow-node--from-above': fromAbove[i] },
+            ]"
+            :style="{
+              left: `${layout.nodes[i].x}px`,
+              top: `${layout.nodes[i].y}px`,
+              width: `${layout.nodes[i].w}px`,
+            }"
+          >
+            <span v-if="flow.nodes[i].tag" class="flow-tag"
+              ><DiagramText :text="flow.nodes[i].tag"
+            /></span>
+            <div class="flow-box">
+              <svg
+                v-if="flow.nodes[i].kind === 'ask'"
+                class="flow-shape"
+                :viewBox="shape(i).view"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+              >
+                <polygon
+                  :points="shape(i).points"
+                  vector-effect="non-scaling-stroke"
+                />
+              </svg>
+              <span class="flow-text"
+                ><DiagramText :text="flow.nodes[i].text"
+              /></span>
+            </div>
           </div>
-        </div>
+        </template>
       </div>
     </div>
     <p v-if="flow.note" class="flow-note">
@@ -343,6 +480,10 @@ const lines = computed(() => layout.value.edges.map((e) => draw(e.points)));
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   line-height: var(--leading-tight);
+}
+/* Candidate widths must take effect before their geometry is read. */
+.flow * {
+  transition-property: none;
 }
 .flow-frame {
   max-width: 100%;
@@ -386,8 +527,22 @@ const lines = computed(() => layout.value.edges.map((e) => draw(e.points)));
   max-width: 5em;
   font-size: var(--text-xs);
   color: var(--ink-muted);
+  font-weight: 500;
   text-align: center;
   line-break: strict;
+}
+.flow-label--on {
+  background: var(--paper);
+  box-shadow:
+    3px 0 var(--paper),
+    -3px 0 var(--paper);
+}
+.flow--outline .flow-box {
+  text-align: left;
+}
+.flow--outline .flow-tag {
+  padding-left: calc(var(--text-sm) * 0.875 + 6px);
+  text-align: left;
 }
 .flow-node {
   position: absolute;
