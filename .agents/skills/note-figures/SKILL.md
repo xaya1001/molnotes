@@ -63,6 +63,7 @@ prompt 写内容、数值、要点和使用环境，不指定图片格式。结�
 
 运行 `npm run content -- todo [<单元>]`，按文件与行号逐项处理 `image`、`chart` 请求。
 `image` 以请求的 `prompt` 为内容主体，按本 skill 的“写 prompt”附加工具、文件名、使用环境与视觉风格，再按出图、验收与修改流程完成图片。
+`image` 请求要求画出确切的分子结构时，不交给 image-gen：把结构部分改写成 `figure` 请求按 chemical-figures 补全，或把分子改成带名称的轮廓、偶极或电荷分布再出图，并在回报中写明改动。
 `chart` 按请求的 `data`、`axes` 与 `point` 写出图 prompt，附加本 skill 的使用环境与视觉风格，用代码出图并核对数值、轴范围、刻度和结论。
 图注沿用 `caption`，文件名沿用 `file`。
 笔记按“发布”的资源规则把图存为 `assets/<file>`，完整最终 prompt 存为 `prompts/<file>.md`，把该请求围栏替换成 `![图注](assets/<file>)`。
