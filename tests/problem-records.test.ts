@@ -1,16 +1,13 @@
 import { validateTopicContent } from "../shared/topic-content.ts";
-import type FixtureContent from "./fixtures/content/sites/sample/content.json";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { readUnit } from "../scripts/content/content-files.ts";
 import { test } from "node:test";
 import { topicRecordsCodec } from "../server/web/records.ts";
 import { buildTopicIndex } from "../shared/topic-index.ts";
-const content: typeof FixtureContent = JSON.parse(
-  readFileSync(
-    new URL("./fixtures/content/sites/sample/content.json", import.meta.url),
-    "utf8",
-  ),
-);
+const unit = await readUnit(resolve("tests/fixtures/content"), "sites/sample");
+assert.ok(unit.kind === "sites");
+const content = unit.content;
 test("server record codec validates problem answers and omits empty entries", () => {
   const codec = topicRecordsCodec(validateTopicContent(content));
   const records = { version: 1, ...codec.empty() };
@@ -57,7 +54,7 @@ test("server topic index carries review data while excluding exercise text from 
     (index.chapters[0].predictions[0].prediction as { answer: number }).answer,
     0,
   );
-  assert.equal(index.chapters[0].problems.length, 2);
+  assert.equal(index.chapters[0].problems.length, 3);
   assert.deepEqual(
     index.chapters[0].problems[0].parts,
     "parts" in content.chapters[1].blocks[1]

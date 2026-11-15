@@ -507,6 +507,7 @@ test("a build rejects patent data whose resources, structures or references do n
   const { rejects, build } = await editableContent(t, [
     "sites/sample",
     "sites/fable-patent",
+    "notes/reader-test",
   ]);
   await build();
   for (const mutate of [

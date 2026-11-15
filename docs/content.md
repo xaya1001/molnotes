@@ -91,6 +91,134 @@ edges:
 
 专题根路径 `/` 是简介、全部章节与 `sourcesIntro`（专题级来源说明）的首页。章节默认路径是 `/<id>`，可用 `chapterRoute` 或章的 `path` 指定其他路径；章节路径必须唯一，不能是 `/`。章末的资料来源只展示该章 `refs` 中的条目及其 `cite` 原文定位。发布时站内链接必须命中当前栏目与章节路由，练习链接使用 `/practice/<slug>/…`。
 
+### Markdown 练习章
+
+`练习` 分组的专题可在 `content.json` 的 `chapters` 数组中用 `"chapters/<id>.md"` 引用章节。
+字符串引用与 JSON 章对象按数组顺序混排，`parts`、`paths`、`chapterRoute` 和章的 `path` 沿用现有规则。
+Markdown 章的 id 来自文件名，front matter 使用现有章字段，并必填 `note: notes/<dir>/<slug>`。
+`note` 指向任意笔记集的读者篇目；章首生成回到笔记的链接，笔记末尾生成“去练一练”。
+同一篇笔记对应一章，同一套笔记对应一个练习专题。
+JSON 章也可用 `note` 建立同样的对应关系。
+
+下面是 `chapters/observe.md` 的最小例子，专题的 `chapters` 可写为 `["chapters/observe.md", { …JSON 章… }]`。
+`title`、`note`、`refs` 必填；其他字段与 JSON 章一致，`refs` 可以为空。
+正文用普通段落、`##`、`###` 和单层有序或无序列表，文字交给现有专题块显示。
+
+````markdown
+---
+title: 观察练习
+note: notes/reader-test/second
+number: 1
+short: 观察
+minutes: 5
+lead: 比较样本。
+refs: []
+---
+
+## 比较
+
+在相同范围内计数。
+
+```question
+type: choice
+id: count-choice
+question: 哪组更多？
+options: [A, B]
+answer: 0
+explanation: A 有两个，B 有一个。
+optionExplanations: [A 有两个。, B 有一个。]
+```
+````
+
+`question` 围栏内是 YAML，每题必填稳定且在专题内唯一的 `id`。
+缺失或重复 id、非法 YAML 和无法换算的原子映射号会报告文件与行号。
+`type` 选择题型，其余字段沿用现有块契约；选择题、结构题、排序题和数值题都使用 `question` 与 `explanation`。
+`source` 写题目来源，`evidence` 引用专题的原文区 id，`context` 写题设，`reset: true` 开启重新作答。
+选择题的 `options`、`optionExplanations` 逐项对应，`answer` 从 0 起计数。
+
+开放题使用 `type: problem`，字段与 `problem` 块相同。
+`lang` 是 `zh` 或 `en`，`prompt` 是一段文字或段落数组，`parts` 是可选小问列表。
+`answer.text` 写参考答案，`origin` 取 `book` 或 `ai`，`basis` 写答案依据。
+
+```yaml
+type: problem
+id: count-open
+lang: zh
+prompt: A 有两个，B 有一个，相差多少？
+parts: [说明计算过程。]
+answer:
+  text: A 比 B 多一个。
+  origin: ai
+  basis: 题设中的计数
+```
+
+结构题的 `molecule` 写 `name` 和带原子映射号的 `smiles`。
+答案使用 SMILES 中的映射号，发布时换算成现有预测块的零起始下标；映射号无需连续，也无需按 SMILES 顺序排列。
+同一结构中的非零映射号必须唯一，答案引用的映射号必须存在。
+`labels` 的键也写原子映射号。
+
+点原子使用 `type: atoms`，`answer` 列出可接受的原子映射号。
+可选 `minSelections`、`maxSelections` 和 `match: exact | subset` 沿用现有多选规则。
+
+```yaml
+type: atoms
+id: oxygen-atom
+question: 选择氧原子。
+molecule: { name: 样品, smiles: "[CH3:30][CH2:10][OH:20]" }
+answer: [20]
+explanation: 映射号 20 对应氧原子。
+```
+
+点键使用 `type: bonds`，`answer` 的每项是键两端的映射号，端点顺序不限。
+
+```yaml
+type: bonds
+id: oxygen-bond
+question: 选择碳氧键。
+molecule: { name: 样品, smiles: "[CH3:30][CH2:10][OH:20]" }
+answer: [[10, 20]]
+explanation: 映射号 10 和 20 之间是碳氧键。
+```
+
+原子集合使用 `type: atom-set`，`molecules` 的每个分子各写自己的 `answer`。
+可选 `options`、`optionAnswer` 和 `gradeAtoms` 沿用现有块契约。
+
+```yaml
+type: atom-set
+id: carbon-set
+question: 选择所有碳原子。
+molecules:
+  - name: 样品
+    smiles: "[CH3:30][CH2:10][OH:20]"
+    answer: [30, 10]
+explanation: 两个碳原子的映射号分别为 30 和 10。
+```
+
+排序题使用 `type: ranking`，`options` 列出排序项，`answer` 是正确首项在 `options` 中的零起始下标。
+记录保留完整排序，判分沿用现有块的首项规则。
+
+```yaml
+type: ranking
+id: count-ranking
+question: 按数量从多到少排列。
+options: [一个, 三个, 两个]
+answer: 1
+explanation: 三个最多。
+```
+
+数值题使用 `type: number`，`input.label` 是输入名称，可选 `unit`、`min`、`max`、`step`。
+`answer` 是正确值，`tolerance` 是允许的绝对误差。
+
+```yaml
+type: number
+id: count-number
+question: 两个加一个是多少？
+input: { label: 数量, unit: 个, min: 0, step: 1 }
+answer: 3
+tolerance: 0
+explanation: 两个加一个是三个。
+```
+
 ### 数据驱动的实验输入
 
 `lab.data` 引用本专题 `data` 中的对象。`first-order-elimination` 接收 `{ presets }`，每条 preset 含 `name`、正数 `halfLife`（小时）、说明 `label` 与来源标记 `source`（正整数或非空字符串）；选择值是数组下标，默认第一条，选择项按数组顺序显示。其余时间输入、归一化浓度和一级消除计算由共享模型定义。

@@ -380,6 +380,9 @@ const bodyHits = computed(() =>
           @current="matchIndex = $event"
           @ready="ready"
         />
+        <p v-if="detail?.practice">
+          <a :href="detail.practice">去练一练</a>
+        </p>
         <nav class="pager" aria-label="篇目导航">
           <RouterLink v-if="previous" :to="local(previous.path)"
             >上一篇 · {{ previous.title }}</RouterLink
