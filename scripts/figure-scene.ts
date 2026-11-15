@@ -31,6 +31,8 @@ import {
   openMolecule,
   graphSignature,
   molecularSmiles,
+  mappedBlock,
+  compoundView,
   placedCoordinates,
   compoundAbbreviations,
   type Toolkit,
@@ -495,6 +497,66 @@ export async function compileFigure(
         input.abbreviate,
         protectedMaps,
       );
+      const baseTarget = openMolecule(rd, compound.smiles);
+      try {
+        if (m.get_num_atoms() > baseTarget.get_num_atoms()) {
+          const baseCount = baseTarget.get_num_atoms();
+          const persistentMaps = atomMaps(baseTarget);
+          baseTarget.add_hs_in_place();
+          const match: { atoms?: number[] } = JSON.parse(
+            baseTarget.get_substruct_match(
+              m,
+              JSON.stringify({ useChirality: true }),
+            ),
+          );
+          if (match.atoms?.length !== maps.length)
+            throw new Error(`${where}: cannot map explicit hydrogens`);
+          const graph = graphOf(baseTarget),
+            maxMap = Math.max(...persistentMaps);
+          const stableMap = (i: number) =>
+            i < baseCount ? persistentMaps[i] : maxMap + i - baseCount + 1;
+          const explicitHydrogens = Object.fromEntries(
+            match.atoms
+              .filter((i) => i >= baseCount)
+              .sort((a, b) => a - b)
+              .map((i) => {
+                const bond = graph.bonds.find((b) => b.atoms.includes(i))!;
+                const parent = bond.atoms.find((a) => a !== i)!;
+                return [`a${stableMap(i)}`, `a${stableMap(parent)}`];
+              }),
+          );
+          const mapped = openMolecule(
+            rd,
+            mappedBlock(m, match.atoms.map(stableMap)),
+          );
+          try {
+            const inputSmiles = molecularSmiles(
+              mapped,
+              JSON.stringify({ canonical: false }),
+            );
+            const prepared = prepareCompound(rd, {
+              id: compound.id,
+              title: compound.title,
+              sources: compound.sources,
+              smiles: inputSmiles,
+            });
+            variant = `explicit_h_${figureKey(JSON.stringify(explicitHydrogens))}`;
+            compound.variants ??= {};
+            compound.variants[variant] ??= {
+              ...structuredClone(compound.layout),
+              ...prepared.layout,
+              inputSmiles,
+              explicitHydrogens,
+            };
+            generated.add(compound.id);
+            compound = compoundView(rd, compound, compound.variants[variant]);
+          } finally {
+            mapped.delete();
+          }
+        }
+      } finally {
+        baseTarget.delete();
+      }
       const target = openMolecule(rd, compound.smiles),
         query = openMolecule(rd, unmapped);
       try {

@@ -13,6 +13,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { parse } from "yaml";
 import { compileFigure } from "../scripts/figure-scene.ts";
+import { finishFigureEntry } from "../scripts/figure-output.ts";
 import { validateFigureInput } from "../scripts/figure-input.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import {
@@ -21,6 +22,7 @@ import {
   placedCoordinates,
   graphSignature,
   compoundAbbreviations,
+  compoundView,
 } from "../shared/chemical-library/chemistry.ts";
 import { routeMetrics } from "../shared/chemical-library/routes.ts";
 import type {
@@ -529,6 +531,66 @@ test("chemical identity ignores source maps and labels, retaining stereo, isotop
     Object.values(distinct.entries).filter((e) => e.kind === "compound").length,
     6,
   );
+});
+
+test("explicit mapped hydrogens retain their endpoints beside an implicit-hydrogen library entry", async () => {
+  const toolkit = await moleculeToolkit();
+  const implicit = finishFigureEntry(
+    prepareCompound(toolkit, {
+      id: "cmp_water_pair",
+      title: "Water pair",
+      smiles: "O.[OH-]",
+      sources: [{ source: "unknown", locator: "test", note: "Test structure" }],
+    }),
+  );
+  const input = {
+    kind: "mechanism",
+    frames: [
+      {
+        id: "transfer",
+        smiles: "[H:10][OH:6].[OH-:9]",
+        arrows: [
+          { from: "lp(9)", to: "between(9,10)" },
+          { from: "bond(6,10)", to: "atom(6)" },
+        ],
+      },
+    ],
+  };
+  const compiled = await compileFigure(input, { [implicit.id]: implicit });
+  const scene = (compiled.entries[compiled.reference.ref] as Mechanism)
+    .frames[0].scene;
+  const explicit = compiled.entries[scene.molecules[0].compound] as Compound;
+  const layout = explicit.variants![scene.molecules[0].variant!];
+  const view = compoundView(toolkit, explicit, layout);
+  assert.equal(explicit.id, implicit.id);
+  assert.equal(explicit.graph, implicit.graph);
+  assert.deepEqual(explicit.atomIds, implicit.atomIds);
+  assert.deepEqual(explicit.layout, implicit.layout);
+  assert.equal(view.atomIds.length, implicit.atomIds.length + 1);
+  const transfer = scene.arrows![1].from;
+  assert.equal(transfer.kind, "bond");
+  assert.ok(transfer.atoms.every((atom) => view.atomIds.includes(atom.atom)));
+  assert.ok(
+    transfer.atoms.some((atom) =>
+      Object.hasOwn(layout.explicitHydrogens!, atom.atom),
+    ),
+  );
+  const repeated = await compileFigure(input, compiled.entries);
+  const repeatedScene = (repeated.entries[repeated.reference.ref] as Mechanism)
+    .frames[0].scene;
+  assert.equal(repeatedScene.molecules[0].compound, explicit.id);
+  const { prepareFigure } = await import("../src/ui/library/prepare.ts");
+  const { loadFigureStyle } = await import("../scripts/figure-route.ts");
+  const { loadFigureFonts } = await import("../scripts/figure-fonts.ts");
+  const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit,
+    style: await loadFigureStyle(),
+    fonts: await loadFigureFonts(),
+  });
+  for (const atom of transfer.atoms) {
+    const point = geometry.atomPoints[`${atom.molecule}:${atom.atom}`];
+    assert.ok(Number.isFinite(point.x) && Number.isFinite(point.y));
+  }
 });
 
 test("bracket abbreviations expand before graph deduplication", async () => {
