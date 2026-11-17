@@ -217,7 +217,7 @@ export function parseNote(source: string, file: string) {
 }
 
 /** The note dialect: CommonMark with CJK-friendly emphasis, tables, terms, inline and display formulas. */
-function noteMarkdown() {
+export function noteMarkdown() {
   const md = new MarkdownIt("commonmark", { html: false })
     .enable("table")
     .use(markdownItCjkFriendly);
