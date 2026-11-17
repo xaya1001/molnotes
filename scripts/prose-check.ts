@@ -75,61 +75,10 @@ export function prose(unit: string, contentRoot = root()): string[] {
   );
 }
 
-const exponent = String.raw`(?:\^(?:\{[-+−]?\d+\}|[-+−]?\d+))?`;
-const subscript = String.raw`(?:_(?:\{\d+\}|\d+)|\d+)?`;
-const atom = String.raw`[A-Z][a-z]?${subscript}`;
-const charge = String.raw`(?:\^(?:\{\d*[+−-]\}|\d*[+−-])|[+−-])?`;
-const chemical = new RegExp(
-  String.raw`^(?:${atom}|\((?:${atom})+\)${subscript})+${charge}$`,
-);
-const value = String.raw`[-+−]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][-+−]?\d+|${exponent})(?:\s*(?:\\times|[×·])\s*10${exponent})?`;
-const unit = String.raw`(?:(?:[fpnumkMGTµμ]\s*)?(?:mol|g|s|m|L|M|J|Pa|Hz)|kcal|cal|K|°C|%|eV)${exponent}`;
-const unitExpression = String.raw`${unit}(?:(?:\s*[/·⋅]\s*|\s+)${unit})*`;
-const number = new RegExp(String.raw`^${value}(?:\s*${unitExpression})?$`);
-const units = new RegExp(String.raw`^${unitExpression}$`);
-const symbol =
-  /^[A-Za-zΔδλµμσπτΦφΩω](?:[_^](?:\{[A-Za-z0-9+−‡-]+\}|[A-Za-z0-9+−‡-]))*$/;
-
-const symbols: Record<string, string> = {
-  "\\Delta": "Δ",
-  "\\delta": "δ",
-  "\\lambda": "λ",
-  "\\mu": "μ",
-  "\\sigma": "σ",
-  "\\pi": "π",
-  "\\tau": "τ",
-  "\\Phi": "Φ",
-  "\\phi": "φ",
-  "\\Omega": "Ω",
-  "\\omega": "ω",
-};
-
 function plainFormula(formula: string) {
-  let text = formula.trim();
-  // Text/font wrappers can be nested, e.g. \mathrm{mol^{-1}}.
-  while (
-    /\\(?:text|mathrm|textrm|mathbf|mathit|ce)\{((?:[^{}]|\{[^{}]*\})*)\}/.test(
-      text,
-    )
-  )
-    text = text.replace(
-      /\\(?:text|mathrm|textrm|mathbf|mathit|ce)\{((?:[^{}]|\{[^{}]*\})*)\}/g,
-      "$1",
-    );
-  text = text
-    .replace(
-      /\\(?:Delta|delta|lambda|mu|sigma|pi|tau|Phi|phi|Omega|omega)\b/g,
-      (command) => symbols[command],
-    )
-    .replace(/\\ddagger\b/g, "‡")
-    .replace(/\\cdot\b/g, "·")
-    .replace(/\\[,;! ]|\\(?:quad|qquad)\b/g, " ")
-    .trim();
-  return (
-    chemical.test(text) ||
-    number.test(text) ||
-    units.test(text) ||
-    symbol.test(text)
+  const text = formula.replace(/\\(?:text|mathrm|textrm|mathbf|mathit)\b/g, "");
+  return !/[=<>≈≤≥∝]|\\(?:frac|sum|int|prod|log|ln|exp|sqrt|lim|begin)\b/.test(
+    text,
   );
 }
 

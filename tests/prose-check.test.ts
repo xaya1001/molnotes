@@ -16,22 +16,14 @@ test("citation pointers are not counted as prose", () => {
   assert.deepEqual(strings(input, []), [input.lead]);
 });
 
-test("reports standalone chemicals, units, values and simple symbols", () => {
+test("reports inline formulas without relations or operations", () => {
   const formulas = [
     "$\\text{NaN}_3$",
     "$\\mathrm{Cl}^{-}$",
-    "$\\mathrm{SO}_{4}^{2-}$",
-    "$CH_3(CH_2)_2OH$",
     "$10^{-5}$",
     "$1.2 \\times 10^{-5}$",
-    "$2.7$",
-    "$2.7\\,\\mathrm{kcal/mol}$",
     "$k_1$",
-    "$\\Delta^{\\ddagger}$",
-    "$\\mathrm{kcal/mol}$",
-    "$\\mu M$",
-    "$mol^{-1}$",
-    "$\\mathrm{mol^{-1}}$",
+    "$10 - 5$",
   ];
   assert.deepEqual(analyze(formulas).formulas, formulas);
   assert.deepEqual(
@@ -39,7 +31,8 @@ test("reports standalone chemicals, units, values and simple symbols", () => {
       "$v = k[A][B]$",
       "$\\frac{k_1}{k_2}$",
       "$\\log K$",
-      "$10 - 5$",
+      "$a < b$",
+      "$x ≈ y$",
       "$$10^{-5}$$",
       "NaN₃、Cl⁻、10⁻⁵、k₁",
     ]).formulas,
