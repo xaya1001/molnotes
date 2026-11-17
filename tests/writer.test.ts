@@ -79,20 +79,37 @@ test("check reuses compilation and request contracts, reports duplicate addition
     (await checkNote(dir, file)).errors.join("\n"),
     /duplicates 计数/,
   );
+  const quietTerms = [
+    "Cl",
+    "F",
+    "A",
+    "ATP",
+    "syn",
+    "anti",
+    "Hofmann",
+    "SN2",
+    "E1cB",
+    "Clearance",
+    "A+B",
+    "ΔG",
+  ];
   writeFileSync(
     join(dir, "glossary.json"),
     JSON.stringify([
       term,
-      { ...term, term: "F", full: "fluorine" },
-      { ...term, term: "A+B", full: "sum" },
+      ...quietTerms.map((name) => ({ ...term, term: name, full: name })),
+      { ...term, term: "样本 A+B", full: "sample sum" },
     ]),
   );
   writeFileSync(
     join(dir, file),
-    note("## 比较\n\nPDF 与 F，AAAB 与 A+B，计数与计数。"),
+    note(`## 比较\n\n${quietTerms.join("，")}，计数与计数，样本 A+B。`),
   );
-  const hints = (await checkNote(dir, file)).hints;
-  assert.equal(hints.length, 3);
+  const unlinked = await checkNote(dir, file);
+  assert.deepEqual(unlinked.errors, []);
+  assert.equal(unlinked.hints.length, 2);
+  assert.ok(unlinked.hints.some((hint) => hint.endsWith("link [[计数]]")));
+  assert.ok(unlinked.hints.some((hint) => hint.endsWith("link [[样本 A+B]]")));
   writeFileSync(join(dir, file), note("## 比较\n\n[[计数]]，计数。\n\n计数。"));
   assert.deepEqual((await checkNote(dir, file)).hints, []);
   writeFileSync(join(dir, file), note("## 比较\n\n计数。\n\n[[计数]]，计数。"));
