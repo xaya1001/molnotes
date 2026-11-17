@@ -7,8 +7,7 @@
 1. 读该系列 `author/` 约定（基调、人名、自己这一篇的主线）和 `author/plan.md` 中本篇的条目与分工。
 2. 跑 `npm run content -- series <目录>`，了解已写篇目的小节与首次定义的术语。
 3. 凭自己的知识写正文；需要的图写成 `request` 围栏或下文的文字图围栏。不读教材、不上网，没把握的数值在回报里列出。
-4. 跑 `npm run content -- check notes/<目录>/<篇名>.md`，修正错误并判断术语链接提示是否需要处理。
-   新术语可先写进独立 JSON 数组，通过 `--glossary-additions <json>` 一起检查，确认后并入内容根的 `glossary.json`。
+4. 写完直接交稿，不跑 check、不修格式；检查与修正由审查方落库时完成。
 
 不编造引用和页码；资料来源由审查核实后补上。
 数字带体系、溶剂、温度或比较基准；正文直接讲知识，按本系列样稿写，不复述资料的章节与叙事。
@@ -352,6 +351,8 @@ explanation: 两个加一个是三个。
 
 正文写 `[[术语]]`，名称必须与内容根目录 `glossary.json` 中的 `term` 精确一致。
 新增术语时同时向该数组加入条目，四个非空字段为 `term`、`full`、`definition`、`confusion`，`term` 全站唯一。
+审查方落库时跑 `npm run content -- check notes/<目录>/<篇名>.md`，修正格式与重复术语，并判断术语链接提示是否需要处理。
+新术语可先写进独立 JSON 数组，通过 `--glossary-additions <json>` 一起检查，确认后并入内容根的 `glossary.json`。
 
 ```markdown
 用[[计数]]比较两组样本。

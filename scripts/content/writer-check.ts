@@ -36,6 +36,9 @@ export async function checkNote(
   const parsed = parseNote(await readFile(join(root, file), "utf8"), file);
   const source = await writerFiles(root);
   const glossary = await readGlossary(root);
+  const hintTerms = glossary.filter((term) =>
+    /\p{Script=Han}/u.test(term.term),
+  );
   const errors: string[] = [];
   const hints = new Map<string, string>();
   const seen = new Set<string>();
@@ -80,7 +83,7 @@ export async function checkNote(
             confusion: "",
             where,
           });
-      for (const term of glossary)
+      for (const term of hintTerms)
         if (!seen.has(term.term) && mentions(child.content, term.term)) {
           hints.set(term.term, `${where}: link [[${term.term}]]`);
           seen.add(term.term);
