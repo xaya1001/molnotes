@@ -2,8 +2,19 @@
 
 写作 Agent 在正文写 Markdown 和 YAML；需要补图的位置写 `request`，交给补全 Agent 处理。
 分子结构、时间线、流程图和能量图可直接写围栏。
-全站写作规则见[需求的“写作”一节](../../private/docs/requirements.md#写作)。
-开始写某套笔记前先读它的 `author/` 资料，按该套约定与样稿写作。
+开工只读本手册这一份通用文件，按以下顺序工作：
+
+1. 读该系列 `author/` 约定与规划中自己这一篇的主线、样稿和资料依据。
+2. 跑 `npm run content -- series <目录>`，了解已写篇目的小节与首次定义的术语。
+3. 写作中按需跑 `npm run content -- search <查询>`；用 `--in notes|terms|books` 缩小范围，`--limit N` 控制条数。
+   书架命中附带 `material.py text` 命令，直接接着读原文；首次跨书架建索引须经 `heavy`。
+4. 写完跑 `npm run content -- check notes/<目录>/<篇名>.md`，修正错误并判断术语链接提示是否需要处理。
+   新术语可先写进独立 JSON 数组，通过 `--glossary-additions <json>` 一起检查，确认后并入内容根的 `glossary.json`。
+
+出处只写确实读过的资料，未核对的数值、作者示例与类比集中在文末来源中注明。
+数字带体系、溶剂、温度或比较基准；正文直接讲知识，按本系列样稿写，不复述资料的章节与叙事。
+术语首次写“中文（英文）”，之后用中文或通用简称；药物首次写中文通用名加英文，外国人名一般用姓。
+下面的语法足够常规写作；遇到未覆盖的字段时才按需查[内容契约](../../docs/content.md)或[全站写作规定](../../private/docs/requirements.md#写作)。
 以下用 `sample` 目录和 `observe` 篇目演示，实际写作替换为所在目录与篇名。
 
 ## 笔记与小节
@@ -12,7 +23,6 @@
 目录的 `directory.json` 写成 `{"title":"观察笔记","intro":"比较给定的样本。","order":1}`。
 每篇 front matter 必填 `title`、`summary`、`date`、`order`；可加 `updated` 日期，日期写真实的 `YYYY-MM-DD`。
 正文从 `##` 开始，`##`、`###` 生成小节目录，`## 资料来源` 默认收起。
-详见[笔记契约](../../docs/content.md#内容工作目录)与[来源引用](../../docs/content.md#来源与引用)。
 
 ```markdown
 ---
@@ -55,7 +65,6 @@ $$
 
 `molecule` 中每组 `smiles` 与 `caption` 配对；多组可在同一围栏里依次写。
 SMILES 按资料中的连接关系与立体构型填写。
-详见[结构式字段](../../docs/content.md#内容工作目录)。
 
 ```molecule
 smiles: CCO
@@ -66,7 +75,6 @@ caption: 样品结构
 
 `timeline` 写 `caption`、`events`，每个事件写 `date` 和短句 `text`。
 日期可用 `YYYY`、`YYYY-MM`、`YYYY-MM-DD`；`axis` 固定起止与年份刻度间隔，`accent: true` 强调重点。
-详见[时间线契约](../../docs/content.md#内容工作目录)与[更多模板](figures.md#模板)。
 
 ```timeline
 caption: 样本观察的三个阶段
@@ -83,7 +91,6 @@ events:
 节点可用 `kind: end` 表示起止、`kind: ask` 表示判断；分支边写 `{from: a, to: b, text: 是}`。
 `side` 可省略：节点未显式标记侧出口、且恰有一条出边继续到非叶子时，其余单入边叶子自动作为侧出口。
 多层分支在窄屏按大纲缩进排列，同一分支里的连续步骤保持同一缩进。
-详见[流程图契约](../../docs/content.md#内容工作目录)与[更多模板](figures.md#模板)。
 
 ```flow
 caption: 样本记录流程
@@ -118,7 +125,7 @@ edges:
 `energy` 的 `points` 每行写「相对能量 标签」，至少 3 个点，奇数位置是极小点、偶数位置是高于两侧的过渡态。
 `paths` 可叠加 2–3 条有唯一 `name` 的路径，`focus: true` 强调其中一条；`rds` 指定本路径的决速步。
 `marks` 用点标签写 `from`、`to`，极小点到过渡态默认标 `ΔG‡`，极小点到极小点默认标 `ΔG°`。
-默认只画定性高低，`scale: true` 显示刻度与数值；详见[能量图字段](../../docs/content.md#内容工作目录)。
+默认只画定性高低，`scale: true` 显示刻度与数值。
 
 ```energy
 points:
@@ -148,7 +155,7 @@ caption: 比较初始状态与峰顶
 
 笔记正文与 Markdown 练习章都可在所需位置写 `request` 围栏。
 图注写在 `caption`，图片文件名只用字母、数字、下划线、点和连字符。
-下面每例都包含该类请求的必填字段；详见[资源请求契约](../../docs/content.md#内容工作目录)。
+下面每例都包含该类请求的必填字段。
 
 ### image：示意图
 
@@ -170,7 +177,7 @@ prompt: >-
 必填 `kind`、`caption`、`figure`；`figure` 内写完整化学图 YAML。
 机理用 `kind: mechanism` 与 `frames`，每帧有稳定 `id` 和带原子映射号的 `smiles`；相邻帧相同映射号对应同一原子。
 电子箭头 `arrows` 从 `lp(n)`（孤对电子）或 `pi(n,m)`（π 键）指向 `atom(n)` 或 `between(n,m)`（新键中点），`electrons: 2` 表示一对电子。
-以下两帧示例表示加成前后；详见[化学图 YAML 与箭头端点](../../docs/content.md#figure-yaml-compilation)。
+以下两帧示例表示加成前后；需要其他端点时按需查[化学图 YAML](../../docs/content.md#figure-yaml-compilation)。
 
 ```request
 kind: figure
@@ -230,7 +237,6 @@ point: 第二次比第一次多一个；标出两个观测点的数值。
 章 front matter 必填 `title`、`note`、`refs`；`note` 指向对应的读者笔记，`refs` 可为空。
 可加 `number`、`short`、`minutes`、`lead`，正文用段落、`##`、`###`、单层列表和 `question` 或 `request` 围栏。
 每题 `id` 在专题内唯一且保持稳定。
-详见[Markdown 练习章契约](../../docs/content.md#markdown-练习章)。
 
 ```markdown
 ---
@@ -347,7 +353,6 @@ explanation: 两个加一个是三个。
 
 正文写 `[[术语]]`，名称必须与内容根目录 `glossary.json` 中的 `term` 精确一致。
 新增术语时同时向该数组加入条目，四个非空字段为 `term`、`full`、`definition`、`confusion`，`term` 全站唯一。
-详见[术语表契约](../../docs/content.md#术语表)。
 
 ```markdown
 用[[计数]]比较两组样本。
@@ -369,7 +374,6 @@ explanation: 两个加一个是三个。
 同目录写篇名，跨目录写 `../<目录>/<篇名>`，也可写 `/notes/<目录>/<篇名>`；锚点和查询参数可接在路径后。
 练习章使用实际 `/practice/<专题>/<章节路径>`，其他专题使用 `/sites/<专题>/<章节路径>`，章节路径以该专题配置为准。
 目标笔记和章节必须存在，链接不加 `.md`。
-详见[笔记链接](../../docs/content.md#内容工作目录)与[专题路径](../../docs/content.md#专题)。
 
 ```markdown
 [同目录篇目](observe#比较)

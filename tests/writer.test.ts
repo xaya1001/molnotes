@@ -1,0 +1,294 @@
+import assert from "node:assert/strict";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { test } from "node:test";
+import { checkNote } from "../scripts/content/writer-check.ts";
+import { searchIndex, writerIndex } from "../scripts/content/writer-index.ts";
+import { pythonInterpreter } from "../scripts/python.ts";
+
+const root = mkdtempSync(join(tmpdir(), "writer-"));
+process.env.MOLNOTES_WRITER_CACHE = join(root, "cache");
+const term = {
+  term: "计数",
+  full: "Counting",
+  definition: "确定数量的方法。",
+  confusion: "大小与数量分开。",
+};
+function fixture(name: string) {
+  const dir = join(root, name);
+  mkdirSync(join(dir, "notes/sample"), { recursive: true });
+  writeFileSync(
+    join(dir, "notes/sample/directory.json"),
+    JSON.stringify({ title: "观察", intro: "样本", order: 1 }),
+  );
+  writeFileSync(join(dir, "glossary.json"), JSON.stringify([term]));
+  return dir;
+}
+const note = (body: string, order = 1) =>
+  `---\ntitle: 观察 ${order}\nsummary: 样本\ndate: 2026-01-01\norder: ${order}\n---\n\n${body}\n`;
+const cli = (dir: string, ...args: string[]) =>
+  spawnSync(process.execPath, ["scripts/content.ts", ...args], {
+    encoding: "utf8",
+    env: { ...process.env, MOLNOTES_CONTENT_DIR: dir },
+  });
+
+test("search finds Chinese, short queries and English; automatically refreshes notes and terms", async () => {
+  const dir = fixture("search");
+  writeFileSync(
+    join(dir, "notes/sample/first.md"),
+    note("## 比较\n\n[[计数]]（Counting）与蓝色样本。"),
+  );
+  let index = await writerIndex(dir);
+  assert.equal(index.rebuilt, true);
+  assert.equal(
+    searchIndex(index.db, "notes", "蓝色样本", 1)[0].heading,
+    "比较",
+  );
+  assert.equal(searchIndex(index.db, "terms", "计数", 1)[0].identity, "计数");
+  assert.equal(
+    searchIndex(index.db, "terms", "COUNTING", 1)[0].identity,
+    "计数",
+  );
+  index.db.close();
+  index = await writerIndex(dir);
+  assert.equal(index.rebuilt, false);
+  index.db.close();
+  writeFileSync(
+    join(dir, "notes/sample/first.md"),
+    note("## 更新\n\n紫色的样本与两个观察。"),
+  );
+  writeFileSync(
+    join(dir, "glossary.json"),
+    JSON.stringify([{ ...term, definition: "更新定义" }]),
+  );
+  index = await writerIndex(dir);
+  assert.equal(index.rebuilt, true);
+  assert.equal(searchIndex(index.db, "notes", "蓝色", 3).length, 0);
+  assert.equal(searchIndex(index.db, "notes", "紫色", 3)[0].heading, "更新");
+  assert.equal(searchIndex(index.db, "terms", "更新定义", 3).length, 1);
+  index.db.close();
+  const invalid = cli(dir, "search", "x", "--limit", "0");
+  assert.equal(invalid.status, 1);
+});
+
+test("series follows order, lists first terms and references, skips author plans and code", () => {
+  const dir = fixture("series");
+  writeFileSync(
+    join(dir, "notes/sample/later.md"),
+    note("## 后续\n\n[[计数]]\n\n### 细节\n\n结果。", 2),
+  );
+  writeFileSync(
+    join(dir, "notes/sample/first.md"),
+    note("## 起点\n\n[[计数]]（Counting）。"),
+  );
+  mkdirSync(join(dir, "notes/sample/author"));
+  writeFileSync(join(dir, "notes/sample/author/plan.md"), "未写的规划。");
+  const series = cli(dir, "series", "sample");
+  assert.equal(series.status, 0, series.stderr);
+  assert.ok(
+    series.stdout.indexOf("first.md") < series.stdout.indexOf("later.md"),
+  );
+  assert.equal(series.stdout.split("terms: 计数").length - 1, 1);
+  const result = cli(dir, "search", "counting", "--in", "terms");
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    result.stdout,
+    /first: notes\/sample\/first.md; refs: notes\/sample\/later.md/,
+  );
+});
+
+test("check reuses compilation and request contracts, reports duplicate additions and unlinked terms", async () => {
+  const dir = fixture("check");
+  const file = "notes/sample/first.md";
+  writeFileSync(
+    join(dir, file),
+    note(
+      "## 比较\n\n计数\n\n```request\nkind: image\nfile: sample.png\ncaption: 样本\nprompt: 两个圆点\n```",
+    ),
+  );
+  const additions = join(dir, "additions.json");
+  writeFileSync(
+    additions,
+    JSON.stringify([{ ...term, term: "Count ing", full: " counting " }]),
+  );
+  const duplicate = await checkNote(dir, file, additions);
+  assert.equal(duplicate.errors.length, 1);
+  assert.match(duplicate.errors[0], /duplicates 计数/);
+  assert.equal(duplicate.hints.length, 1);
+  writeFileSync(join(dir, file), note("## 比较\n\n[[计 数]]"));
+  assert.match(
+    (await checkNote(dir, file)).errors.join("\n"),
+    /duplicates 计数/,
+  );
+  writeFileSync(join(dir, file), note("## 比较\n\n[[数量法]]（COUNTING）"));
+  assert.match(
+    (await checkNote(dir, file)).errors.join("\n"),
+    /duplicates 计数/,
+  );
+  writeFileSync(
+    join(dir, "glossary.json"),
+    JSON.stringify([
+      term,
+      { ...term, term: "F", full: "fluorine" },
+      { ...term, term: "A+B", full: "sum" },
+    ]),
+  );
+  writeFileSync(
+    join(dir, file),
+    note("## 比较\n\nPDF 与 F，AAAB 与 A+B，计数与计数。"),
+  );
+  const hints = (await checkNote(dir, file)).hints;
+  assert.equal(hints.length, 3);
+  const examples = [
+    ["[链接](missing)", /Unknown internal link/],
+    ["[[缺失]]", /Unknown term/],
+    ["```molecule\nsmiles: wrong\ncaption: 样本\n```", /SMILES/],
+    ["[来源](src:missing#1)", /sources.json/],
+    ["```request\nkind: image\nfile: x.png\ncaption: 样本\n```", /prompt/],
+  ] as const;
+  for (const [body, expected] of examples) {
+    writeFileSync(join(dir, file), note(`## 比较\n\n${body}`));
+    assert.match((await checkNote(dir, file)).errors.join("\n"), expected);
+  }
+});
+
+test("check resolves sparse note and practice links without compiling unrelated drafts", async () => {
+  const dir = fixture("sparse");
+  mkdirSync(join(dir, "notes/other"));
+  writeFileSync(
+    join(dir, "notes/other/directory.json"),
+    JSON.stringify({ title: "其他", intro: "样本", order: 2 }),
+  );
+  writeFileSync(
+    join(dir, "notes/other/next.md"),
+    note("## 比较\n\n```request\nkind: unknown\n```"),
+  );
+  writeFileSync(
+    join(dir, "notes/sample/first.md"),
+    note("## 比较\n\n[下一篇](../other/next)"),
+  );
+  mkdirSync(join(dir, "sites/sample/chapters"), { recursive: true });
+  writeFileSync(
+    join(dir, "sites/sample/site.json"),
+    JSON.stringify({
+      title: "练习",
+      description: "样本",
+      order: 1,
+      group: "练习",
+    }),
+  );
+  writeFileSync(
+    join(dir, "sites/sample/content.json"),
+    JSON.stringify({
+      chapterRoute: "/lesson/{number}",
+      chapters: ["chapters/written.md"],
+    }),
+  );
+  writeFileSync(
+    join(dir, "sites/sample/chapters/written.md"),
+    "---\ntitle: 练习\nnumber: 7\n---\n\n```request\nkind: unknown\n```\n",
+  );
+  writeFileSync(
+    join(dir, "notes/sample/first.md"),
+    note(
+      "## 比较\n\n[下一篇](../other/next) 与 [练习](/practice/sample/lesson/7)",
+    ),
+  );
+  // An unfinished neighboring note must not block checking the selected note.
+  writeFileSync(
+    join(dir, "notes/other/draft.md"),
+    "还没写 front matter 的草稿。",
+  );
+  const git = (...args: string[]) =>
+    execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+  git("init", "-q");
+  git("add", ".");
+  git(
+    "-c",
+    "user.name=Test",
+    "-c",
+    "user.email=test@example.org",
+    "commit",
+    "-qm",
+    "fixture",
+  );
+  git("sparse-checkout", "set", "--cone", "notes/sample");
+  assert.deepEqual((await checkNote(dir, "notes/sample/first.md")).errors, []);
+});
+
+test("books search indexes PDF pages and EPUB headings incrementally and emits readable locators", () => {
+  const dir = join(root, "books");
+  mkdirSync(join(dir, "textbooks"), { recursive: true });
+  const build = spawnSync(
+    pythonInterpreter(),
+    [
+      "-I",
+      "-c",
+      `
+import sys, zipfile, pymupdf
+from pathlib import Path
+root = Path(sys.argv[1])
+with pymupdf.open() as doc:
+    doc.new_page().insert_text((50,50), "First page")
+    doc.new_page().insert_text((50,50), "blue sample comparison")
+    doc.save(root / 'textbooks/sample.pdf')
+with zipfile.ZipFile(root / 'textbooks/sample.epub', 'w') as z:
+    z.writestr('chapter.xhtml', '<html><body><h1>观察章节</h1><p>蓝色样本 comparison</p></body></html>')
+`,
+      dir,
+    ],
+    { encoding: "utf8" },
+  );
+  assert.equal(build.status, 0, build.stderr);
+  const env = {
+    ...process.env,
+    MOLNOTES_MATERIALS_DIR: dir,
+    MOLNOTES_MATERIALS_CACHE: join(dir, "cache"),
+  };
+  const run = (q: string) =>
+    spawnSync(
+      pythonInterpreter(),
+      ["-I", "scripts/material.py", "search", q, "5"],
+      { env, encoding: "utf8" },
+    );
+  let result = run("comparison");
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /PDF p2.*blue sample comparison/);
+  assert.match(result.stdout, /观察章节.*蓝色样本/);
+  assert.match(result.stderr, /2 updated/);
+  result = run("蓝色");
+  assert.match(result.stdout, /观察章节.*蓝色样本/);
+  assert.match(result.stderr, /0 updated/);
+  writeFileSync(
+    join(dir, "textbooks/new.epub"),
+    readFileSync(join(dir, "textbooks/sample.epub")),
+  );
+  result = run("蓝");
+  assert.equal(result.stdout.split(" · 观察章节").length - 1, 2);
+  assert.match(result.stderr, /1 updated/);
+  const replace = spawnSync(
+    pythonInterpreter(),
+    [
+      "-I",
+      "-c",
+      "import sys,zipfile; z=zipfile.ZipFile(sys.argv[1], 'w'); z.writestr('chapter.xhtml','<h1>新章节</h1><p>替换后的样本</p>'); z.close()",
+      join(dir, "textbooks/sample.epub"),
+    ],
+    { encoding: "utf8" },
+  );
+  assert.equal(replace.status, 0, replace.stderr);
+  result = run("替换后");
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /sample.epub · 新章节/);
+  assert.match(result.stderr, /1 updated/);
+  result = run("蓝");
+  assert.equal(result.stdout.split(" · 观察章节").length - 1, 1);
+  const read = spawnSync(
+    pythonInterpreter(),
+    ["-I", "scripts/material.py", "text", "textbooks/sample.pdf", "2", "2"],
+    { env, encoding: "utf8" },
+  );
+  assert.match(read.stdout, /blue sample comparison/);
+});

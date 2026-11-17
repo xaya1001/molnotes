@@ -2,6 +2,7 @@
 """Look things up in the ignored materials/ shelf (PDF and epub).
 
   python3 -I scripts/material.py list
+  python3 -I scripts/material.py search <query> <limit>              # whole shelf; first indexing needs heavy
   python3 -I scripts/material.py toc  <file.pdf|file.epub>
   python3 -I scripts/material.py nav  <file.epub>                    # navigation paths for src:<id>#ch=<path>
   python3 -I scripts/material.py text <file.pdf> <first> <last>      # PDF page numbers, 1-based
@@ -26,6 +27,9 @@ import json
 import os
 import posixpath
 import re
+import shlex
+import sqlite3
+import time
 import sys
 import zipfile
 import xml.etree.ElementTree as ET
@@ -157,6 +161,65 @@ def epub_chapters(path):
         buf.append(line)
     chapters.append((title, "\n".join(buf)))
     return [(t, b) for t, b in chapters if b.strip()]
+
+
+def search_books(query, limit):
+    """Incremental shelf FTS; EPUB extraction shares the reader's digest cache."""
+    started = time.monotonic()
+    CACHE.mkdir(parents=True, exist_ok=True)
+    index = CACHE / ("search-" + hashlib.sha256(str(ROOT.resolve()).encode()).hexdigest()[:24] + ".sqlite3")
+    db = sqlite3.connect(index)
+    try:
+        db.executescript("""
+            CREATE TABLE IF NOT EXISTS books (file TEXT PRIMARY KEY, stamp TEXT NOT NULL);
+            CREATE VIRTUAL TABLE IF NOT EXISTS passages USING fts5(file UNINDEXED, location UNINDEXED, text, tokenize='trigram');
+        """)
+        files = sorted(path for folder in ("textbooks", "reviews") for path in (ROOT / folder).rglob("*")
+                       if path.is_file() and path.suffix.lower() in EXTS)
+        names = {str(path.relative_to(ROOT)) for path in files}
+        old = dict(db.execute("SELECT file, stamp FROM books"))
+        changed = 0
+        with db:
+            for name in old.keys() - names:
+                db.execute("DELETE FROM passages WHERE file=?", (name,))
+                db.execute("DELETE FROM books WHERE file=?", (name,))
+            for path in files:
+                name = str(path.relative_to(ROOT))
+                info = path.stat()
+                stamp = f"{info.st_mtime_ns}:{info.st_size}"
+                if old.get(name) == stamp:
+                    continue
+                if path.suffix.lower() == ".epub":
+                    passages = epub_chapters(path)
+                else:
+                    cache = CACHE / f"pdf-{content_digest(path)}-{info.st_size}.json"
+                    if cache.exists():
+                        pages = json.loads(cache.read_text(encoding="utf8"))
+                    else:
+                        with pdf(path) as doc:
+                            pages = [page.get_text() for page in doc]
+                        cache.write_text(json.dumps(pages, ensure_ascii=False), encoding="utf8")
+                    passages = [(str(i + 1), page) for i, page in enumerate(pages)]
+                db.execute("DELETE FROM passages WHERE file=?", (name,))
+                db.executemany("INSERT INTO passages VALUES (?, ?, ?)", [(name, location, text) for location, text in passages])
+                db.execute("INSERT OR REPLACE INTO books VALUES (?, ?)", (name, stamp))
+                changed += 1
+        long = len(query) >= 3
+        predicate = "passages MATCH ?" if long else "instr(lower(text), lower(?)) > 0"
+        needle = '"' + query.replace('"', '""') + '"' if long else query
+        rows = db.execute(f"SELECT file, location, text FROM passages WHERE {predicate} ORDER BY {'rank' if long else 'rowid'} LIMIT ?", (needle, limit))
+        for name, location, text in rows:
+            at = text.lower().find(query.lower())
+            snippet = " ".join(text[max(0, at - 60):max(0, at) + len(query) + 100].split())
+            pdf_file = name.lower().endswith(".pdf")
+            locator = f"PDF p{location}" if pdf_file else location
+            args = ["python3", "-I", "scripts/material.py", "text", name, location]
+            if pdf_file:
+                args.append(location)
+            print(f"{name} · {locator}\t{snippet}\n  {shlex.join(args)}")
+        print(f"books index: {changed} updated; {time.monotonic() - started:.3f}s; {index.stat().st_size} bytes; {index}", file=sys.stderr)
+    finally:
+        db.close()
 
 
 def cmd_list():
@@ -788,6 +851,8 @@ def main(argv):
     if len(argv) < 1:
         fail(__doc__)
     command, args = argv[0], argv[1:]
+    if command == "search" and len(args) == 2:
+        return search_books(args[0], int(args[1]))
     if command == "list" and not args:
         return cmd_list()
     if command == "cite" and not args:
