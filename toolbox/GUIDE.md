@@ -265,7 +265,7 @@ import { records } from "../records";
 | 二维分子结构       | [二维结构 recipe](recipes/molecule-2d.md) 与 `toolbox/molecule-2d/render.py`                                | 来源可核对的 SVG             |
 | 蛋白或配体三维结构 | [三维结构 recipe](recipes/protein-3d.md)，`StructureLab`（量距）与 `src/showcase/ProteinViewer.vue`（旋转） | 按需加载的结构查看器         |
 | 资料书架查询       | `python3 -I scripts/material.py`                                                                            | 原文页图、章节文字与引用渲染 |
-| 文字自检           | `node scripts/prose-check.ts [slug]`                                                                        | 免责式转折、套话与长句清单   |
+| 文字自检           | `node scripts/prose-check.ts [slug]` / `notes/<目录>[/<篇名>.md]`                                           | 长句与伪公式建议清单         |
 | 固定讲解视频       | [视频 recipe](recipes/explainer-video.md) 与 `npm run video:render`                                         | 嵌入章节的视频               |
 
 每个正式页面在内容工作目录的 `sites/<slug>/` 内保存其用户路径、内容依据、所用素材与数据、图示假设和验收方法。文字与图示表达同一来源。组合图示先确定各图含义与阅读顺序；参数模拟先确定计算函数和单位，再绘图。
