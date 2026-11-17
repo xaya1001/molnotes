@@ -4,11 +4,12 @@
 分子结构、时间线、流程图和能量图可直接写围栏。
 开工只读本手册这一份通用文件，按以下顺序工作：
 
-1. 读该系列 `author/` 约定与规划中自己这一篇的主线、样稿和资料依据。
+1. 读该系列 `author/` 约定中自己这一篇的主线与样稿，并读 `author/plan.md` 中该篇规定的出处（书、节、PDF 页）。
 2. 跑 `npm run content -- series <目录>`，了解已写篇目的小节与首次定义的术语。
-3. 写作中按需跑 `npm run content -- search <查询>`；用 `--in notes|terms|books` 缩小范围，`--limit N` 控制条数。
-   书架命中附带 `material.py text` 命令，直接接着读原文；首次跨书架建索引须经 `heavy`。
-4. 写完跑 `npm run content -- check notes/<目录>/<篇名>.md`，修正错误并判断术语链接提示是否需要处理。
+3. 用 `~/miniconda3/bin/python3 -I scripts/material.py text <书文件.pdf> <起始页> <结束页>` 读完规定的页；页码是 PDF 页序，书文件路径相对 `materials/`。
+   书架命令统一使用 `~/miniconda3/bin/python3 -I scripts/material.py`。
+4. 按本篇主线、系列约定与读过的资料写正文。
+5. 跑 `npm run content -- check notes/<目录>/<篇名>.md`，修正错误并判断术语链接提示是否需要处理。
    新术语可先写进独立 JSON 数组，通过 `--glossary-additions <json>` 一起检查，确认后并入内容根的 `glossary.json`。
 
 出处只写确实读过的资料，未核对的数值、作者示例与类比集中在文末来源中注明。

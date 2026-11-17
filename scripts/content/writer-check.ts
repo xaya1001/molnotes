@@ -15,7 +15,7 @@ import { parse as yaml } from "yaml";
 import { resolveCitations } from "./citations.ts";
 import { readRegistry, readGlossary } from "./content-files.ts";
 import { parseRequest } from "./requests.ts";
-import { writerFiles } from "./writer-index.ts";
+import { writerFiles } from "./writer-context.ts";
 
 const normalized = (text: string) => text.replace(/\s/g, "").toLowerCase();
 const markdown = noteMarkdown();
@@ -38,6 +38,7 @@ export async function checkNote(
   const glossary = await readGlossary(root);
   const errors: string[] = [];
   const hints = new Map<string, string>();
+  const seen = new Set<string>();
   const additions = additionsFile
     ? validateGlossary(
         JSON.parse(await readFile(additionsFile, "utf8")),
@@ -55,6 +56,7 @@ export async function checkNote(
     if (token.type !== "inline") continue;
     const where = `${file}:${parsed.offset + token.map![0] + 1}`;
     for (const [i, child] of (token.children ?? []).entries()) {
+      if (child.type === "note_term") seen.add(child.content);
       if (child.type === "note_term" && !terms[child.content])
         candidates.push({
           term: child.content,
@@ -79,8 +81,10 @@ export async function checkNote(
             where,
           });
       for (const term of glossary)
-        if (!hints.has(term.term) && mentions(child.content, term.term))
+        if (!seen.has(term.term) && mentions(child.content, term.term)) {
           hints.set(term.term, `${where}: link [[${term.term}]]`);
+          seen.add(term.term);
+        }
     }
   }
   for (const candidate of candidates) {

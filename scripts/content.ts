@@ -11,13 +11,12 @@ import {
 } from "./content/content-snapshot.ts";
 
 const usage =
-  "Usage: content build <output> | publish [--rollback <commit>] | todo [<unit>] | search <query> [--in notes|terms|books] [--limit N] | series <directory> | check <note.md> [--glossary-additions <json>]";
+  "Usage: content build <output> | publish [--rollback <commit>] | todo [<unit>] | series <directory> | check <note.md> [--glossary-additions <json>]";
 const [command, ...args] = process.argv.slice(2);
 const valid = {
   build: args.length === 1,
   publish: args.length === 0 || (args.length === 2 && args[0] === "--rollback"),
   todo: args.length <= 1,
-  search: args.length >= 1,
   series: args.length === 1,
   check: args.length >= 1,
 }[command];
@@ -31,7 +30,7 @@ try {
     "molnotes",
     "figure-proofs",
   );
-  if (["search", "series", "check"].includes(command)) {
+  if (["series", "check"].includes(command)) {
     await writerCommand(setting("MOLNOTES_CONTENT_DIR"), command, args);
   } else if (command === "todo") {
     for (const request of await contentRequests(

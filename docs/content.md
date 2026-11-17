@@ -360,20 +360,13 @@ explanation: 两个加一个是三个。
 
 `MOLNOTES_CONTENT_DIR` 指定内容目录，未设置时内容命令报错。构建与发布每次读取内容目录里的全部单元，校验整站的站内链接、术语、SMILES、引用与资源完整性并编译笔记；校验错误给出文件与位置。删除单元就是在内容仓库删除并提交它，仍有内容引用它时发布拒绝并指出引用文件与位置。
 
-`npm run content -- search <查询> [--in notes|terms|books] [--limit N]` 检索笔记、术语与书架，默认三类分组各返回至多 10 条，`--limit` 接受 1–100。
-笔记结果给出文件、目录与篇名、小节和片段；术语结果给出名称、全称、一行定义、首次定义与其他引用笔记。
-首次定义按正文的“术语（全称）”标记识别，同一术语按目录 order、篇目 order 与路径排序取首次；未找到定义标记时显示 `—`。
-书架跨 `materials/textbooks/` 与 `materials/reviews/` 的 PDF、EPUB 检索，给出 PDF 页序或 EPUB 章节标题、片段及可直接执行的 `material.py text` 命令。
-查询是大小写不敏感的字面子串，使用 SQLite FTS5 trigram，少于 3 字时回退到子串扫描。
-笔记与术语按内容文件修改时间、大小更新缓存索引；书架仅更新有改动的文件，EPUB 与 PDF 文字按内容摘要缓存。
-首次书架索引是重操作，用 `heavy npm run content -- search <查询>`；后续查询自动增量更新。
-缓存默认放在 `~/.cache/molnotes/writer/` 与 `~/.cache/molnotes-materials/`，分别可用 `MOLNOTES_WRITER_CACHE`、`MOLNOTES_MATERIALS_CACHE` 指定位置，不进入 Git。
-
 `npm run content -- series <目录>` 按篇目 order 列出已写笔记的标题、二三级小节与该篇首次定义的术语，不读取 `author/` 规划。
+直接从内容目录计算；首次定义按正文的“术语（全称）”标记识别，同一术语按目录 order、篇目 order 与路径排序取首次。
 
 `npm run content -- check notes/<目录>/<篇名>.md [--glossary-additions <json>]` 复用笔记编译、引用和资源请求校验，只检查该篇，格式错误时退出 1。
 待补全的请求可通过格式检查；正文的未知术语与附带 JSON 数组里的新增术语会与全站 glossary 比较，名称忽略大小写和空格后相同、或全称相同的条目会报错并建议链接已有术语。
-正文已有术语未用 `[[术语]]` 链接时给出提示，不影响退出码；代码、公式与链接目标不参与这类提示。
+正文已有术语首次出现未用 `[[术语]]` 链接时给出提示，每篇每个术语只提示一处；前文已经链接的术语后续不提示。
+提示不影响退出码；代码、公式与链接目标不参与这类提示。
 附带条目的格式与 `glossary.json` 相同，校验时临时参与该篇术语解析，不写回文件。
 稀疏检出时从 Git HEAD 读取未检出的笔记和链接目标，无需整站可构建；完整 `glossary.json` 与该篇使用的素材仍须可读。
 

@@ -1,15 +1,12 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { test } from "node:test";
 import { checkNote } from "../scripts/content/writer-check.ts";
-import { searchIndex, writerIndex } from "../scripts/content/writer-index.ts";
-import { pythonInterpreter } from "../scripts/python.ts";
 
 const root = mkdtempSync(join(tmpdir(), "writer-"));
-process.env.MOLNOTES_WRITER_CACHE = join(root, "cache");
 const term = {
   term: "计数",
   full: "Counting",
@@ -34,46 +31,7 @@ const cli = (dir: string, ...args: string[]) =>
     env: { ...process.env, MOLNOTES_CONTENT_DIR: dir },
   });
 
-test("search finds Chinese, short queries and English; automatically refreshes notes and terms", async () => {
-  const dir = fixture("search");
-  writeFileSync(
-    join(dir, "notes/sample/first.md"),
-    note("## 比较\n\n[[计数]]（Counting）与蓝色样本。"),
-  );
-  let index = await writerIndex(dir);
-  assert.equal(index.rebuilt, true);
-  assert.equal(
-    searchIndex(index.db, "notes", "蓝色样本", 1)[0].heading,
-    "比较",
-  );
-  assert.equal(searchIndex(index.db, "terms", "计数", 1)[0].identity, "计数");
-  assert.equal(
-    searchIndex(index.db, "terms", "COUNTING", 1)[0].identity,
-    "计数",
-  );
-  index.db.close();
-  index = await writerIndex(dir);
-  assert.equal(index.rebuilt, false);
-  index.db.close();
-  writeFileSync(
-    join(dir, "notes/sample/first.md"),
-    note("## 更新\n\n紫色的样本与两个观察。"),
-  );
-  writeFileSync(
-    join(dir, "glossary.json"),
-    JSON.stringify([{ ...term, definition: "更新定义" }]),
-  );
-  index = await writerIndex(dir);
-  assert.equal(index.rebuilt, true);
-  assert.equal(searchIndex(index.db, "notes", "蓝色", 3).length, 0);
-  assert.equal(searchIndex(index.db, "notes", "紫色", 3)[0].heading, "更新");
-  assert.equal(searchIndex(index.db, "terms", "更新定义", 3).length, 1);
-  index.db.close();
-  const invalid = cli(dir, "search", "x", "--limit", "0");
-  assert.equal(invalid.status, 1);
-});
-
-test("series follows order, lists first terms and references, skips author plans and code", () => {
+test("series follows order and lists first terms without reading author plans", () => {
   const dir = fixture("series");
   writeFileSync(
     join(dir, "notes/sample/later.md"),
@@ -91,12 +49,6 @@ test("series follows order, lists first terms and references, skips author plans
     series.stdout.indexOf("first.md") < series.stdout.indexOf("later.md"),
   );
   assert.equal(series.stdout.split("terms: 计数").length - 1, 1);
-  const result = cli(dir, "search", "counting", "--in", "terms");
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(
-    result.stdout,
-    /first: notes\/sample\/first.md; refs: notes\/sample\/later.md/,
-  );
 });
 
 test("check reuses compilation and request contracts, reports duplicate additions and unlinked terms", async () => {
@@ -141,6 +93,12 @@ test("check reuses compilation and request contracts, reports duplicate addition
   );
   const hints = (await checkNote(dir, file)).hints;
   assert.equal(hints.length, 3);
+  writeFileSync(join(dir, file), note("## 比较\n\n[[计数]]，计数。\n\n计数。"));
+  assert.deepEqual((await checkNote(dir, file)).hints, []);
+  writeFileSync(join(dir, file), note("## 比较\n\n计数。\n\n[[计数]]，计数。"));
+  const first = await checkNote(dir, file);
+  assert.equal(first.hints.length, 1);
+  assert.match(first.hints[0], /first.md:10:/);
   const examples = [
     ["[链接](missing)", /Unknown internal link/],
     ["[[缺失]]", /Unknown term/],
@@ -216,79 +174,4 @@ test("check resolves sparse note and practice links without compiling unrelated 
   );
   git("sparse-checkout", "set", "--cone", "notes/sample");
   assert.deepEqual((await checkNote(dir, "notes/sample/first.md")).errors, []);
-});
-
-test("books search indexes PDF pages and EPUB headings incrementally and emits readable locators", () => {
-  const dir = join(root, "books");
-  mkdirSync(join(dir, "textbooks"), { recursive: true });
-  const build = spawnSync(
-    pythonInterpreter(),
-    [
-      "-I",
-      "-c",
-      `
-import sys, zipfile, pymupdf
-from pathlib import Path
-root = Path(sys.argv[1])
-with pymupdf.open() as doc:
-    doc.new_page().insert_text((50,50), "First page")
-    doc.new_page().insert_text((50,50), "blue sample comparison")
-    doc.save(root / 'textbooks/sample.pdf')
-with zipfile.ZipFile(root / 'textbooks/sample.epub', 'w') as z:
-    z.writestr('chapter.xhtml', '<html><body><h1>观察章节</h1><p>蓝色样本 comparison</p></body></html>')
-`,
-      dir,
-    ],
-    { encoding: "utf8" },
-  );
-  assert.equal(build.status, 0, build.stderr);
-  const env = {
-    ...process.env,
-    MOLNOTES_MATERIALS_DIR: dir,
-    MOLNOTES_MATERIALS_CACHE: join(dir, "cache"),
-  };
-  const run = (q: string) =>
-    spawnSync(
-      pythonInterpreter(),
-      ["-I", "scripts/material.py", "search", q, "5"],
-      { env, encoding: "utf8" },
-    );
-  let result = run("comparison");
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /PDF p2.*blue sample comparison/);
-  assert.match(result.stdout, /观察章节.*蓝色样本/);
-  assert.match(result.stderr, /2 updated/);
-  result = run("蓝色");
-  assert.match(result.stdout, /观察章节.*蓝色样本/);
-  assert.match(result.stderr, /0 updated/);
-  writeFileSync(
-    join(dir, "textbooks/new.epub"),
-    readFileSync(join(dir, "textbooks/sample.epub")),
-  );
-  result = run("蓝");
-  assert.equal(result.stdout.split(" · 观察章节").length - 1, 2);
-  assert.match(result.stderr, /1 updated/);
-  const replace = spawnSync(
-    pythonInterpreter(),
-    [
-      "-I",
-      "-c",
-      "import sys,zipfile; z=zipfile.ZipFile(sys.argv[1], 'w'); z.writestr('chapter.xhtml','<h1>新章节</h1><p>替换后的样本</p>'); z.close()",
-      join(dir, "textbooks/sample.epub"),
-    ],
-    { encoding: "utf8" },
-  );
-  assert.equal(replace.status, 0, replace.stderr);
-  result = run("替换后");
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /sample.epub · 新章节/);
-  assert.match(result.stderr, /1 updated/);
-  result = run("蓝");
-  assert.equal(result.stdout.split(" · 观察章节").length - 1, 1);
-  const read = spawnSync(
-    pythonInterpreter(),
-    ["-I", "scripts/material.py", "text", "textbooks/sample.pdf", "2", "2"],
-    { env, encoding: "utf8" },
-  );
-  assert.match(read.stdout, /blue sample comparison/);
 });
