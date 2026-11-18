@@ -132,9 +132,15 @@ h4 {
 .prose h3,
 .prose h4 {
   margin: var(--space-7) 0 0;
+  font-family: var(--font-sans);
   font-weight: 600;
   line-height: var(--leading-tight);
   letter-spacing: 0.01em;
+}
+
+.prose .chemical-name {
+  color: var(--chemical-name);
+  font-weight: 500;
 }
 
 .prose h2 {

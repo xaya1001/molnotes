@@ -10,6 +10,7 @@ import type { TimelineInput } from "../diagrams/model.ts";
 import type { MatrixInput } from "../matrix/model.ts";
 import type { StructureSetInput } from "../structure/model.ts";
 import type { TopicPrediction } from "./content.ts";
+import type { ProsePart } from "../../../shared/prose-format.ts";
 
 interface BlockBase {
   /** Names the block; a prediction's records are kept under it (the chapter id when absent). */
@@ -23,10 +24,12 @@ export interface HeadingBlock extends BlockBase {
   type: "heading";
   text: string;
   level?: 2 | 3;
+  inline?: ProsePart[];
 }
 export interface ParagraphBlock extends BlockBase {
   type: "paragraph";
   text: string;
+  inline?: ProsePart[];
 }
 export interface CalloutBlock extends BlockBase {
   type: "callout";
@@ -38,6 +41,7 @@ export interface ListBlock extends BlockBase {
   type: "list";
   items: string[];
   ordered?: boolean;
+  inlineItems?: (ProsePart[] | null)[];
 }
 export interface FormulaBlock extends BlockBase {
   type: "formula";

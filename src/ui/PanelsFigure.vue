@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ProseCaption from "./ProseCaption.vue";
 import { computed, onMounted, onBeforeUnmount, ref } from "vue";
 import {
   type Panels,
@@ -122,7 +123,9 @@ const columns = computed(() =>
       </div>
     </div>
     <p v-if="error" role="alert">{{ error }}</p>
-    <figcaption v-if="panels.caption">{{ panels.caption }}</figcaption>
+    <figcaption v-if="panels.caption">
+      <ProseCaption :text="panels.caption" />
+    </figcaption>
   </figure>
 </template>
 <style scoped>

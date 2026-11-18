@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ProseCaption from "../ProseCaption.vue";
 import {
   computed,
   nextTick,
@@ -539,7 +540,7 @@ watch([width, () => props.energy], reflow);
         >{{ path.name }}</span
       >
     </p>
-    <figcaption v-if="caption">{{ caption }}</figcaption>
+    <figcaption v-if="caption"><ProseCaption :text="caption" /></figcaption>
     <p class="visually-hidden">{{ description }}</p>
   </figure>
 </template>

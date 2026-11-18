@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ProseCaption from "./ProseCaption.vue";
+import { captionParts } from "../../shared/prose-format.ts";
 import PanelsFigure from "./PanelsFigure.vue";
 import LibraryReference from "./library/LibraryReference.vue";
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
@@ -161,8 +163,10 @@ defineExpose({ showMatch });
         :key="i"
         :smiles="mol.smiles"
         :abbreviations="mol.abbreviations"
-        :name="mol.caption"
-      />
+        :name="captionParts(mol.caption).join('')"
+      >
+        <template #caption><ProseCaption :text="mol.caption" /></template>
+      </MoleculeView>
     </Teleport>
     <Teleport v-for="row in diagrams" :key="row.id" :to="`#${row.id}`">
       <TimelineFigure

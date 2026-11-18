@@ -12,6 +12,8 @@ import {
 import type { TopicBlock } from "../../src/ui/topic/blocks.ts";
 import { parseNote } from "../../shared/notes-index.ts";
 import { parseRequest } from "./requests.ts";
+import { proseMarkdown } from "../../shared/prose-markdown.ts";
+import type { ProsePart } from "../../shared/prose-format.ts";
 
 type RequestHandler = (
   source: string,
@@ -20,6 +22,50 @@ type RequestHandler = (
 ) => void | Promise<void>;
 
 const markdown = new MarkdownIt("commonmark", { html: false });
+const inlineMarkdown = proseMarkdown();
+// Citations and terms in topic prose use the topic's existing runtime links.
+inlineMarkdown.inline.ruler.disable(["link", "image", "autolink", "entity"]);
+
+function practiceProse(source: string): { text: string; inline?: ProsePart[] } {
+  if (!/[{*\\]/.test(source)) return { text: source };
+  const inline: ProsePart[] = [];
+  const stack = [inline];
+  let text = "";
+  for (const token of inlineMarkdown.parseInline(source, {})[0].children ??
+    []) {
+    const style =
+      token.type === "chemical_name_open" ||
+      token.type === "chemical_name_close"
+        ? "chemical-name"
+        : token.markup === "*" &&
+            (token.type === "em_open" || token.type === "em_close")
+          ? "em"
+          : undefined;
+    if (style) {
+      if (token.nesting === 1) {
+        const parts: ProsePart[] = [];
+        stack.at(-1)!.push({ style, parts });
+        stack.push(parts);
+      } else stack.pop();
+      continue;
+    }
+    const part =
+      token.type === "softbreak" || token.type === "hardbreak"
+        ? "\n"
+        : token.type === "note_term"
+          ? `[[${token.content}]]`
+          : token.type === "note_math" || token.type === "code_inline"
+            ? `${token.markup}${token.content}${token.markup}`
+            : token.content || token.markup;
+    if (!part) continue;
+    stack.at(-1)!.push(part);
+    text += part;
+  }
+  return inline.some((part) => typeof part !== "string")
+    ? { text, inline }
+    : { text };
+}
+
 const slug = "[a-z0-9]+(?:-[a-z0-9]+)*";
 function fail(where: string, message: string): never {
   throw new Error(`${where}: ${message}`);
@@ -247,23 +293,23 @@ export async function compilePracticeChapter(
         {
           type: "heading",
           level: Number(token.tag[1]),
-          text: tokens[++i].content,
+          ...practiceProse(tokens[++i].content),
         },
         where,
       );
       i++;
     } else if (token.type === "paragraph_open") {
-      add({ type: "paragraph", text: tokens[++i].content }, where);
+      add({ type: "paragraph", ...practiceProse(tokens[++i].content) }, where);
       i++;
     } else if (
       token.type === "bullet_list_open" ||
       token.type === "ordered_list_open"
     ) {
-      const items: string[] = [];
+      const items: ReturnType<typeof practiceProse>[] = [];
       const close = token.type.replace("_open", "_close");
       while (++i < tokens.length && tokens[i].type !== close) {
         const item = tokens[i];
-        if (item.type === "inline") items.push(item.content);
+        if (item.type === "inline") items.push(practiceProse(item.content));
         else if (
           ![
             "list_item_open",
@@ -277,8 +323,14 @@ export async function compilePracticeChapter(
             "Use a flat list of paragraphs",
           );
       }
+      const inlineItems = items.map((item) => item.inline ?? null);
       add(
-        { type: "list", items, ordered: token.type === "ordered_list_open" },
+        {
+          type: "list",
+          items: items.map((item) => item.text),
+          ordered: token.type === "ordered_list_open",
+          ...(inlineItems.some(Boolean) ? { inlineItems } : {}),
+        },
         where,
       );
     } else fail(where, `Unsupported Markdown block ${token.type}`);

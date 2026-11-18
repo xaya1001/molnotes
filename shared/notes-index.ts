@@ -1,9 +1,9 @@
 import { definePanels, panelsText, type Panels } from "./panels.ts";
 import { validateFigureReference } from "./chemical-library/contract.ts";
 import { isInteger } from "./json.ts";
-import MarkdownIt from "markdown-it";
 import type { Env } from "markdown-it";
-import markdownItCjkFriendly from "markdown-it-cjk-friendly";
+import { proseMarkdown } from "./prose-markdown.ts";
+import { captionParts } from "./prose-format.ts";
 import { parseDocument } from "yaml";
 import katex from "katex";
 import {
@@ -216,24 +216,9 @@ export function parseNote(source: string, file: string) {
   };
 }
 
-/** The note dialect: CommonMark with CJK-friendly emphasis, tables, terms, inline and display formulas. */
+/** The note dialect adds tables, terms and formulas to prose Markdown. */
 export function noteMarkdown() {
-  const md = new MarkdownIt("commonmark", { html: false })
-    .enable("table")
-    .use(markdownItCjkFriendly);
-  md.inline.ruler.before("escape", "note-term-math", (state, silent) => {
-    const remaining = state.src.slice(state.pos);
-    const term = /^\[\[([^\]\n]+)\]\]/.exec(remaining);
-    const math = /^\$([^$\n]+)\$/.exec(remaining);
-    const match = term ?? math;
-    if (!match) return false;
-    if (!silent) {
-      const token = state.push(term ? "note_term" : "note_math", "", 0);
-      token.content = match[1];
-    }
-    state.pos += match[0].length;
-    return true;
-  });
+  const md = proseMarkdown().enable("table");
   // A display formula is a block delimited by $$ on its own lines.
   md.block.ruler.before(
     "fence",
@@ -505,10 +490,15 @@ export async function compileNotes({
   md.renderer.rules.image = (tokens, i, _options, env) => {
     const token = tokens[i];
     const src = link(String(token.attrGet("src")), noteEnv(env), true);
-    const image = `<button type="button" class="note-image" data-image="${esc(src)}" aria-label="放大图片：${esc(token.content)}"><img src="${esc(src)}" alt="${esc(token.content)}"></button>`;
+    const parts = captionParts(token.content);
+    const alt = esc(parts.join(""));
+    const image = `<button type="button" class="note-image" data-image="${esc(src)}" aria-label="放大图片：${alt}"><img src="${esc(src)}" alt="${alt}"></button>`;
     // The description doubles as the visible caption.
+    const caption = parts
+      .map((part, i) => (i % 2 ? `<em>${esc(part)}</em>` : esc(part)))
+      .join("");
     return token.content
-      ? `${image}<span class="note-caption">${esc(token.content)}</span>`
+      ? `${image}<span class="note-caption">${caption}</span>`
       : image;
   };
   md.renderer.rules.table_open = () => '<div class="table-scroll"><table>';
