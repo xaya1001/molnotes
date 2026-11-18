@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import LibraryReference from "../library/LibraryReference.vue";
 import ProblemBlock from "./ProblemBlock.vue";
-import SourceText from "./SourceText.vue";
 import SourcePages from "./SourcePages.vue";
 import RecordCollection from "./RecordCollection.vue";
 import ClaimsBlock from "./ClaimsBlock.vue";
@@ -28,7 +27,8 @@ import { defineFlow } from "../diagrams/flow.ts";
 import { defineTimeline } from "../diagrams/model.ts";
 import type { TopicBlock } from "./blocks.ts";
 import ChapterPrediction from "./ChapterPrediction.vue";
-import { blockPieces, sourceIdsOf } from "./chapter-text.ts";
+import { blockPieces, inlinePieces, sourceIdsOf } from "./chapter-text.ts";
+import ChapterText from "./ChapterText.vue";
 import { useTopic } from "./context.ts";
 import LabBlock from "./LabBlock.vue";
 import MatrixBlock from "./MatrixBlock.vue";
@@ -39,9 +39,7 @@ import PathPicker from "./PathPicker.vue";
 import TabsBlock from "./TabsBlock.vue";
 import PanelsFigure from "../PanelsFigure.vue";
 import SpectrumBlock from "./SpectrumBlock.vue";
-import TopicRefs from "./TopicRefs.vue";
 import TopicTable from "./TopicTable.vue";
-import TopicTerm from "./TopicTerm.vue";
 
 /** A chapter's blocks in order, with source and glossary links in prose. */
 const props = defineProps<{ chapter: string; blocks: TopicBlock[] }>();
@@ -135,28 +133,19 @@ const toneClass = (tone?: string) =>
       :cases="block.cases"
       :collection="block.collection"
     />
-    <component
-      :is="`h${block.level ?? 2}`"
-      v-else-if="block.type === 'heading'"
-      >{{ block.text }}</component
+    <component :is="`h${block.level ?? 2}`" v-else-if="block.type === 'heading'"
+      ><ChapterText v-if="block.inline" :pieces="inlinePieces(block.inline)" />
+      <template v-else>{{ block.text }}</template></component
     >
     <p v-else-if="block.type === 'paragraph'">
-      <template v-for="(piece, j) in pieces[index]" :key="j">
-        <TopicTerm v-if="piece.kind === 'term'" :name="piece.name" />
-        <TopicRefs v-else-if="piece.kind === 'refs'" :ids="piece.ids" />
-        <SourceText v-else :text="piece.text" />
-      </template>
+      <ChapterText :pieces="pieces[index]" link-patent-text />
     </p>
     <p
       v-else-if="block.type === 'callout'"
       class="callout"
       :class="toneClass(block.tone)"
     >
-      <template v-for="(piece, j) in pieces[index]" :key="j">
-        <TopicTerm v-if="piece.kind === 'term'" :name="piece.name" />
-        <TopicRefs v-else-if="piece.kind === 'refs'" :ids="piece.ids" />
-        <SourceText v-else :text="piece.text" />
-      </template>
+      <ChapterText :pieces="pieces[index]" link-patent-text />
       <a v-if="block.link" :href="block.link.to">{{ block.link.text }}</a>
     </p>
     <figure v-else-if="block.type === 'formula'" class="figure">
@@ -166,10 +155,22 @@ const toneClass = (tone?: string) =>
       </figcaption>
     </figure>
     <ol v-else-if="block.type === 'list' && block.ordered">
-      <li v-for="item in block.items" :key="item">{{ item }}</li>
+      <li v-for="(item, j) in block.items" :key="j">
+        <ChapterText
+          v-if="block.inlineItems?.[j]"
+          :pieces="inlinePieces(block.inlineItems[j])"
+        />
+        <template v-else>{{ item }}</template>
+      </li>
     </ol>
     <ul v-else-if="block.type === 'list'">
-      <li v-for="item in block.items" :key="item">{{ item }}</li>
+      <li v-for="(item, j) in block.items" :key="j">
+        <ChapterText
+          v-if="block.inlineItems?.[j]"
+          :pieces="inlinePieces(block.inlineItems[j])"
+        />
+        <template v-else>{{ item }}</template>
+      </li>
     </ul>
     <figure v-else-if="block.type === 'molecule'" class="figure">
       <MoleculeView

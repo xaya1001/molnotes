@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ProseCaption from "./ProseCaption.vue";
 import { ref } from "vue";
 import { useLibraryImage } from "./library/client.ts";
 import type { FigureReference } from "../../shared/chemical-library/types.ts";
@@ -24,7 +25,7 @@ const viewing = ref(false);
       <img v-if="image.src" :src="image.src" :alt="alt" loading="lazy" />
     </button>
     <p v-if="error" role="alert">{{ error }}</p>
-    <figcaption v-if="caption">{{ caption }}</figcaption>
+    <figcaption v-if="caption"><ProseCaption :text="caption" /></figcaption>
     <ImageViewer
       v-model:open="viewing"
       :src="image.src"

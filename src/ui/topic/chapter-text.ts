@@ -1,9 +1,31 @@
 import type { TopicBlock } from "./blocks.ts";
+import type { ProsePart } from "../../../shared/prose-format.ts";
 
-export type ChapterPiece =
+type PlainChapterPiece =
   | { kind: "text"; text: string }
   | { kind: "refs"; ids: number[] }
   | { kind: "term"; name: string };
+
+export type ChapterPiece =
+  | PlainChapterPiece
+  | { kind: "styled"; style: "chemical-name" | "em"; pieces: ChapterPiece[] };
+
+export function inlinePieces(
+  parts: ProsePart[],
+  plain: (text: string) => ChapterPiece[] = (text) => [{ kind: "text", text }],
+): ChapterPiece[] {
+  return parts.flatMap((part): ChapterPiece[] =>
+    typeof part === "string"
+      ? plain(part)
+      : [
+          {
+            kind: "styled",
+            style: part.style,
+            pieces: inlinePieces(part.parts, plain),
+          },
+        ],
+  );
+}
 
 /** Keep the topic's declared IDs: string identifiers are not numeric citations. */
 export const sourceIdsOf = (sources: readonly { id: number | string }[]) =>
@@ -21,8 +43,8 @@ function linkTerms(
   text: string,
   terms: readonly string[],
   seen: Set<string>,
-): ChapterPiece[] {
-  const pieces: ChapterPiece[] = [];
+): PlainChapterPiece[] {
+  const pieces: PlainChapterPiece[] = [];
   let rest = text;
   for (;;) {
     const pending = terms.filter((term) => !seen.has(term));
@@ -56,8 +78,8 @@ export function paragraphPieces(
   terms: readonly string[],
   seen: Set<string>,
   sourceIds?: ReadonlySet<number | string>,
-): ChapterPiece[] {
-  return paragraph.split(REFS_SPLIT).flatMap((part): ChapterPiece[] => {
+): PlainChapterPiece[] {
+  return paragraph.split(REFS_SPLIT).flatMap((part): PlainChapterPiece[] => {
     if (REFS.test(part)) {
       const ids = part.slice(1, -1).split(",").map(Number);
       if (!sourceIds || ids.every((id) => sourceIds.has(id)))
@@ -79,9 +101,12 @@ export function blockPieces(
   sourceIds?: ReadonlySet<number | string>,
 ): (ChapterPiece[] | null)[] {
   const seen = new Set<string>();
-  return blocks.map((block) =>
-    block.type === "paragraph" || block.type === "callout"
-      ? paragraphPieces(block.text, terms, seen, sourceIds)
-      : null,
-  );
+  const plain = (text: string) => paragraphPieces(text, terms, seen, sourceIds);
+  return blocks.map((block) => {
+    if (block.type === "paragraph" && block.inline)
+      return inlinePieces(block.inline, plain);
+    return block.type === "paragraph" || block.type === "callout"
+      ? plain(block.text)
+      : null;
+  });
 }

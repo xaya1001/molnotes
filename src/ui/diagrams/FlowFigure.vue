@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ProseCaption from "../ProseCaption.vue";
 import {
   computed,
   nextTick,
@@ -610,7 +611,7 @@ function blockLabelStyle(marker: {
     <p v-if="flow.note" class="flow-note">
       <DiagramText :text="flow.note" />
     </p>
-    <figcaption v-if="caption">{{ caption }}</figcaption>
+    <figcaption v-if="caption"><ProseCaption :text="caption" /></figcaption>
   </figure>
 </template>
 

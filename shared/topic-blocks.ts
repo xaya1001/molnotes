@@ -57,6 +57,18 @@ function optionalText(
   if (value !== undefined) text(value, where);
 }
 
+function proseParts(value: unknown, where: string) {
+  assert(isList(value), `${where} must be a list of prose parts`);
+  for (const part of value) {
+    if (typeof part === "string") continue;
+    assert(
+      isObject(part) && (part.style === "chemical-name" || part.style === "em"),
+      `${where} has an invalid prose style`,
+    );
+    proseParts(part.parts, where);
+  }
+}
+
 function molecule(
   value: unknown,
   where: string,
@@ -574,10 +586,10 @@ const blockFields: Record<string, string[]> = {
   "record-collection": ["collection"],
   claims: ["set"],
   "sar-cases": ["cases", "collection"],
-  heading: "text level".split(" "),
-  paragraph: "text".split(" "),
+  heading: "text level inline".split(" "),
+  paragraph: "text inline".split(" "),
   callout: "text tone link".split(" "),
-  list: "items ordered".split(" "),
+  list: "items ordered inlineItems".split(" "),
   formula: "tex caption".split(" "),
   molecule:
     "name smiles abbreviations atoms bonds highlightAtoms highlightBonds labels caption IUPACName anchorAtoms canonical checked cid source stereo".split(
@@ -691,6 +703,7 @@ export function validateBlocks(
         break;
       case "heading":
         text(block.text, `${here} text`);
+        if (block.inline !== undefined) proseParts(block.inline, here);
         assert(
           block.level === undefined || block.level === 2 || block.level === 3,
           `${here} level must be 2 or 3`,
@@ -698,6 +711,7 @@ export function validateBlocks(
         break;
       case "paragraph":
         text(block.text, `${here} text`);
+        if (block.inline !== undefined) proseParts(block.inline, here);
         break;
       case "callout":
         text(block.text, `${here} text`);
@@ -718,6 +732,15 @@ export function validateBlocks(
             block.items.every((item) => typeof item === "string" && item),
           `${here} items must be a list of text`,
         );
+        if (block.inlineItems !== undefined) {
+          assert(
+            isList(block.inlineItems) &&
+              block.inlineItems.length === block.items.length,
+            `${here} inlineItems must match items`,
+          );
+          for (const item of block.inlineItems)
+            if (item !== null) proseParts(item, here);
+        }
         break;
       case "formula":
         text(block.tex, `${here} tex`);

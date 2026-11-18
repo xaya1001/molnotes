@@ -276,6 +276,15 @@ async function compile(root: string, assetExists = () => false) {
     assetExists,
   });
 }
+test("a chemical name compiles with its stereochemical prefix in emphasis", async (t) => {
+  const root = fixture(t, "样品{(*R*)-lactate}。");
+  const { notes } = await compile(root);
+  assert.equal(
+    notes[0].html.trim(),
+    '<p>\n样品<span class="chemical-name">(<em>R</em>)-lactate</span>。</p>',
+  );
+});
+
 test("front matter rejects missing, malformed, unknown, duplicate and invalid fields", () => {
   for (const source of [
     "Text",

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ProseCaption from "../ProseCaption.vue";
 import { computed, ref, watch, onBeforeUnmount } from "vue";
 import type {
   FigureReference,
@@ -182,9 +183,9 @@ onBeforeUnmount(() => {
           :alt="reference.alt ?? entry.alt"
         />
       </button>
-      <span v-if="reference.caption" class="note-caption">{{
-        reference.caption
-      }}</span>
+      <span v-if="reference.caption" class="note-caption"
+        ><ProseCaption :text="reference.caption"
+      /></span>
       <ImageViewer
         v-model:open="viewing"
         :src="`/library/assets/${entry.asset}`"
@@ -231,7 +232,9 @@ onBeforeUnmount(() => {
       :title="entry.title"
     />
     <p v-if="error" role="alert">{{ error }}</p>
-    <figcaption v-if="reference.caption">{{ reference.caption }}</figcaption>
+    <figcaption v-if="reference.caption">
+      <ProseCaption :text="reference.caption" />
+    </figcaption>
   </figure>
 </template>
 <style scoped>

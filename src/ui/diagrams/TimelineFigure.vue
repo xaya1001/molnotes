@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ProseCaption from "../ProseCaption.vue";
 import {
   computed,
   nextTick,
@@ -752,7 +753,7 @@ const rows = computed(() =>
         >{{ item.text }}</span
       >
     </p>
-    <figcaption v-if="caption">{{ caption }}</figcaption>
+    <figcaption v-if="caption"><ProseCaption :text="caption" /></figcaption>
   </figure>
 </template>
 
