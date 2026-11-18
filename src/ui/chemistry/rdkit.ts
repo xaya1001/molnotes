@@ -3,7 +3,7 @@ import type { MainModule, Mol } from "@rdkit/rdkit";
 export type MoleculeHandle = Mol;
 export type ChemistryToolkit = Pick<
   MainModule,
-  "get_mol" | "get_qmol" | "MolList" | "get_mcs_as_smarts"
+  "get_mol" | "get_qmol" | "MolList" | "get_mcs_as_smarts" | "get_mcs_as_mol"
 >;
 export async function loadChemistry(): Promise<ChemistryToolkit> {
   return (await import("./runtime.ts")).loadToolkit();

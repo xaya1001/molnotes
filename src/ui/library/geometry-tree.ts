@@ -134,5 +134,18 @@ export function geometrySvg(geometry: FigureGeometry) {
       .join("");
     return `<g${attributes({ ...attrs, "aria-label": node.text, "data-text": node.text })}>${glyphs}</g>`;
   };
-  return `<svg${attributes({ xmlns: "http://www.w3.org/2000/svg", width: geometry.width, height: geometry.height, viewBox: `0 0 ${geometry.width} ${geometry.height}` })}>${serialize(geometry.root)}</svg>`;
+  const plans = geometry.cardPlans
+    ?.map(
+      ({ width, rows, scale, oversizedFrame, geometry }) =>
+        `<g${attributes({
+          "data-card-width": width,
+          "data-rows": rows,
+          "data-scale": scale,
+          "data-width": geometry.width,
+          "data-height": geometry.height,
+          "data-oversized-frame": oversizedFrame ? "yes" : "no",
+        })}>${serialize(geometry.root)}</g>`,
+    )
+    .join("");
+  return `<svg${attributes({ xmlns: "http://www.w3.org/2000/svg", width: geometry.width, height: geometry.height, viewBox: `0 0 ${geometry.width} ${geometry.height}` })}>${serialize(geometry.root)}${plans ? `<defs data-card-plans="">${plans}</defs>` : ""}</svg>`;
 }

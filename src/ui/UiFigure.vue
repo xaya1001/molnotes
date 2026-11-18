@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import ProseCaption from "./ProseCaption.vue";
+import FigureCard from "./FigureCard.vue";
 import { ref } from "vue";
 import { useLibraryImage } from "./library/client.ts";
 import type { FigureReference } from "../../shared/chemical-library/types.ts";
@@ -15,9 +15,9 @@ const viewing = ref(false);
 </script>
 
 <template>
-  <figure class="ui-figure">
+  <FigureCard class="ui-figure" :caption="caption">
     <button
-      class="ui-figure-open"
+      class="figure-image-open"
       type="button"
       :aria-label="`放大查看：${caption || alt}`"
       @click="viewing = true"
@@ -25,32 +25,12 @@ const viewing = ref(false);
       <img v-if="image.src" :src="image.src" :alt="alt" loading="lazy" />
     </button>
     <p v-if="error" role="alert">{{ error }}</p>
-    <figcaption v-if="caption"><ProseCaption :text="caption" /></figcaption>
     <ImageViewer
       v-model:open="viewing"
       :src="image.src"
       :alt="alt"
       :title="caption || alt"
     />
-  </figure>
+    <template v-if="$slots.caption" #caption><slot name="caption" /></template>
+  </FigureCard>
 </template>
-
-<style scoped>
-.ui-figure-open {
-  display: block;
-  width: 100%;
-  padding: var(--space-4);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  background: #fff;
-  cursor: zoom-in;
-}
-
-.ui-figure-open:hover {
-  border-color: var(--rule-strong);
-}
-
-img {
-  margin-inline: auto;
-}
-</style>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import MoleculeView from "../MoleculeView.vue";
+import MoleculeGroup from "../MoleculeGroup.vue";
 import type { MoleculeData } from "../chemistry/types.ts";
 
 type Item = MoleculeData & { highlightAtoms?: number[]; caption?: string };
@@ -21,6 +21,17 @@ const sides = computed(() => [
   { key: "left", label: "左", model: left },
   { key: "right", label: "右", model: right },
 ]);
+const pair = computed(() =>
+  sides.value.map((side) => {
+    const item = byName(side.model.value, 0);
+    return {
+      ...item,
+      detail: item.caption,
+      caption: item.name,
+      highlightAtoms: highlight.value ? item.highlightAtoms : undefined,
+    };
+  }),
+);
 const canHighlight = computed(() =>
   props.items.some((item) => item.highlightAtoms?.length),
 );
@@ -41,22 +52,7 @@ const canHighlight = computed(() =>
         {{ highlightLabel ?? "标出高亮原子" }}</label
       >
     </div>
-    <div class="pair">
-      <figure v-for="side in sides" :key="side.key" class="figure">
-        <MoleculeView
-          :key="side.model.value"
-          :name="byName(side.model.value, 0).name"
-          :smiles="byName(side.model.value, 0).smiles"
-          :abbreviations="byName(side.model.value, 0).abbreviations"
-          :highlight-atoms="
-            highlight ? (byName(side.model.value, 0).highlightAtoms ?? []) : []
-          "
-        />
-        <figcaption v-if="byName(side.model.value, 0).caption" class="caption">
-          {{ byName(side.model.value, 0).caption }}
-        </figcaption>
-      </figure>
-    </div>
+    <MoleculeGroup :molecules="pair" />
   </section>
 </template>
 
@@ -71,10 +67,5 @@ const canHighlight = computed(() =>
 select {
   margin-inline-start: var(--space-2);
   padding: var(--space-2);
-}
-.pair {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-  gap: var(--space-3);
 }
 </style>

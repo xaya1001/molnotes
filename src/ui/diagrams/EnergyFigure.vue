@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import ProseCaption from "../ProseCaption.vue";
+import FigureCard from "../FigureCard.vue";
 import {
   computed,
   nextTick,
@@ -17,7 +17,8 @@ import {
 } from "./energy.ts";
 
 const props = defineProps<{ energy: Energy; caption?: string }>();
-const root = ref<HTMLElement>();
+const card = ref<InstanceType<typeof FigureCard>>();
+const root = computed(() => card.value?.art);
 const width = ref(0);
 const em = ref(14);
 const labelEls = ref<HTMLElement[]>([]);
@@ -187,7 +188,7 @@ async function reflow() {
   const a = axisX + 0.8 * E + pe,
     b = W - gR - pe - (gR ? 0 : 0.3 * E);
   const X = (u: number) => a + u * (b - a);
-  const plotH = W < 560 ? clamp(0.72 * W, 220, 280) : clamp(0.38 * W, 230, 290);
+  const plotH = Math.max(220, Math.round(W * 0.48));
   const Y = (e: number) => ((hi - e) / (hi - lo)) * plotH;
   const pps = ps.map((p) =>
     p.points.map((_, index) => pointAt({ path: p.k, index })),
@@ -382,7 +383,7 @@ async function reflow() {
     oy = yLabel.value!.offsetHeight + 6 - top,
     axisY = bottom + oy;
   drawing.value = {
-    height: axisY + 4 + xLabel.value!.offsetHeight,
+    height: Math.max(plotH, axisY + 4 + xLabel.value!.offsetHeight),
     oy,
     axisX,
     axisY,
@@ -414,7 +415,7 @@ watch([width, () => props.energy], reflow);
 </script>
 
 <template>
-  <figure ref="root" class="energy">
+  <FigureCard ref="card" :caption="caption" class="energy">
     <div
       class="energy-canvas"
       :style="{
@@ -540,14 +541,12 @@ watch([width, () => props.energy], reflow);
         >{{ path.name }}</span
       >
     </p>
-    <figcaption v-if="caption"><ProseCaption :text="caption" /></figcaption>
     <p class="visually-hidden">{{ description }}</p>
-  </figure>
+  </FigureCard>
 </template>
 
 <style scoped>
 .energy {
-  margin: 0;
   font: var(--text-sm) / var(--leading-tight) var(--font-sans);
 }
 .energy-canvas {
@@ -695,10 +694,6 @@ watch([width, () => props.energy], reflow);
 .energy-legend svg {
   flex: none;
   overflow: visible;
-}
-.energy figcaption {
-  margin-top: var(--space-3);
-  color: var(--ink-soft);
 }
 .energy-label--p2 {
   color: var(--ink-soft);

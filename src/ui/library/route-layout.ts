@@ -37,6 +37,7 @@ export interface RouteLayoutItem {
   above?: string[];
   below?: string[];
   boxes?: { key: string; at: Point }[];
+  side?: "left" | "right";
 }
 type Kind =
   "molecule" | "reference" | "plus" | "horizontal" | "vertical" | "elbow";
@@ -75,6 +76,7 @@ class Item {
   after?: Item;
   target?: Item;
   fanned = false;
+  side?: "left" | "right";
   above?: RouteBlock;
   below?: RouteBlock;
   boxes: { key: string; measure: RouteMolecule }[] = [];
@@ -115,6 +117,7 @@ export function layoutRoute(
     bond: number;
     gap: number;
     serpentine?: boolean;
+    card?: { scale: number; vertical?: boolean };
     text(lines: string[]): RouteBlock;
   },
 ): {
@@ -122,9 +125,11 @@ export function layoutRoute(
   connections: Point[][];
   width: number;
   height: number;
+  rows: number;
+  singleton: boolean;
 } {
-  const { width, bond, gap } = options,
-    padding = bond * 0.3;
+  const { width, bond, gap, card } = options,
+    padding = card ? 4 / card.scale : bond * 0.3;
   const items: Item[] = [],
     rows: Row[] = [],
     joins: Line[] = [],
@@ -411,7 +416,13 @@ export function layoutRoute(
       below = step.below.length ? options.text(step.below) : undefined,
       box = boxSize(boxes),
       textWidth = Math.max(above?.width ?? 0, below?.width ?? 0),
-      length = Math.max(bond * 4.5, textWidth + bond * 1.4, box.width + bond);
+      length = card
+        ? Math.max(
+            96 / card.scale,
+            textWidth + 24 / card.scale,
+            box.width + gap,
+          )
+        : Math.max(bond * 4.5, textWidth + bond * 1.4, box.width + bond);
     const continuation = step.to.find((o) => uses.has(o.id)) ?? step.to.at(-1)!;
     const outputs = [
       ...step.to.filter((o) => o !== continuation),
@@ -543,6 +554,7 @@ export function layoutRoute(
     const lead = fan ? gap + stub : gap;
     if (!turn && overflows(line, edge, lead))
       turn = joined || options.serpentine ? "down" : "wrap";
+    if (card?.vertical) turn = "down";
     cur.tail = false;
     let x: number, arrow: Item;
     if (!turn) {
@@ -550,7 +562,11 @@ export function layoutRoute(
       let center = ax + (direction * length) / 2,
         arrowLength = length;
       const previous = incoming.get(cur.key!);
-      if (previous?.kind === "vertical" && (previous.above || previous.below)) {
+      if (
+        !card &&
+        previous?.kind === "vertical" &&
+        (previous.above || previous.below)
+      ) {
         const previousWidth =
             Math.max(previous.above?.width ?? 0, previous.below?.width ?? 0) +
             bond * 1.4,
@@ -693,6 +709,55 @@ export function layoutRoute(
       y += extents[index][1] - extents[index][0] + bond;
     });
   }
+  if (card) {
+    // Independent linear rows can reach both card edges without moving branch joins.
+    const linear =
+      rows.every((row) => !row.fans) &&
+      items.every((item) => !item.sources && !item.after) &&
+      (rows.length === 1 ||
+        rows
+          .slice(1)
+          .every((row) => row.items.some((item) => item.kind === "vertical")));
+    if (linear) {
+      const extents = rows.map((row) =>
+        span(row.items.filter((item) => item.kind !== "vertical")),
+      );
+      const available = card.vertical
+        ? Math.max(...extents.map(([left, right]) => right - left))
+        : width;
+      for (const [index, row] of rows.entries()) {
+        const [left, right] = extents[index];
+        const arrows = row.items.filter((item) => item.kind === "horizontal");
+        const rtl = index % 2 === 1;
+        const space = Math.max(0, available - (right - left));
+        const stretch =
+          index < rows.length - 1 && arrows.length && !card.vertical
+            ? space / arrows.length
+            : 0;
+        let shift =
+          (card.vertical ? space / 2 : rtl && !stretch ? space : 0) - left;
+        for (const item of [...row.items]
+          .filter((item) => item.kind !== "vertical")
+          .sort((a, b) => horizontalRange(a)[0] - horizontalRange(b)[0])) {
+          item.x += shift;
+          item.textCenter += shift;
+          if (item.kind === "horizontal") {
+            item.length += stretch;
+            item.textCenter += stretch / 2;
+            if (item.direction < 0) item.x += stretch;
+            shift += stretch;
+          }
+        }
+      }
+      for (const item of items.filter((item) => item.kind === "vertical")) {
+        const from = item.source!,
+          to = item.target!;
+        item.x = from.width < to.width ? from.center : to.center;
+        item.side =
+          !card.vertical && rows.indexOf(item.row) % 2 === 1 ? "left" : "right";
+      }
+    }
+  }
   const bottom = (p: Item) => p.y + p.measure.bottom + padding;
   const obstacles: [number, number, number, number][] = [],
     centers: number[] = [];
@@ -710,7 +775,10 @@ export function layoutRoute(
           y = Math.max(
             y,
             start +
-              Math.max(bond * 2.6, contentHeight + bond) +
+              Math.max(
+                card ? (card.vertical ? 72 : 56) / card.scale : bond * 2.6,
+                contentHeight + bond,
+              ) +
               p.target!.measure.top,
           );
           if (contentHeight) {
@@ -721,9 +789,10 @@ export function layoutRoute(
               ),
               offset = bond * 0.6;
             p.textCenter =
-              p.x + (p.step.side === "left" ? -1 : 1) * (offset + w / 2);
+              p.x +
+              ((p.side ?? p.step.side) === "left" ? -1 : 1) * (offset + w / 2);
             obstacles.push(
-              p.step.side === "left"
+              (p.side ?? p.step.side) === "left"
                 ? [
                     p.x - offset - w,
                     p.x - offset,
@@ -836,6 +905,7 @@ export function layoutRoute(
         above: p.above?.lines,
         below: p.below?.lines,
         boxes,
+        side: p.side,
       });
     }
   }
@@ -874,5 +944,9 @@ export function layoutRoute(
     connections,
     width: Math.max(...xs) - minX,
     height: Math.max(...obstacles.map((o) => o[3])) - top,
+    rows: rows.length,
+    singleton: rows.some(
+      (row) => !row.items.some((item) => item.kind === "horizontal"),
+    ),
   };
 }

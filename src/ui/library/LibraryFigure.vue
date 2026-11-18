@@ -1,26 +1,27 @@
 <script setup lang="ts">
-import ProseCaption from "../ProseCaption.vue";
-import { computed, ref, watch, onBeforeUnmount } from "vue";
+import { computed, nextTick, shallowRef, ref, watch } from "vue";
 import type {
+  Diagnostic,
   FigureReference,
   LibrarySnapshot,
 } from "../../../shared/chemical-library/types.ts";
+import FigureCard from "../FigureCard.vue";
 import UiFigure from "../UiFigure.vue";
 import ImageViewer from "../ImageViewer.vue";
 import StepDescriptions from "../StepDescriptions.vue";
 import { figureDescriptions } from "./descriptions.ts";
 import { snapshotSvg } from "./snapshot-svg.ts";
 import { imageSvg } from "./image-svg.ts";
+import { moleculeBondLength } from "../chemistry/drawing.ts";
+import { useFigureWidths } from "../figure-width.ts";
+
 const props = defineProps<{
   library: LibrarySnapshot;
   reference: FigureReference;
   contained?: boolean;
+  scale?: number;
 }>();
-const emit = defineEmits<{
-  diagnostics: [
-    value: import("../../../shared/chemical-library/types.ts").Diagnostic[],
-  ];
-}>();
+const emit = defineEmits<{ diagnostics: [value: Diagnostic[]] }>();
 const entry = computed(() => props.library.entries[props.reference.ref]);
 const viewing = ref(false);
 const descriptions = computed(() =>
@@ -32,237 +33,195 @@ const descriptions = computed(() =>
       )
     : [],
 );
-const markers = ref<{ x: number; y: number; number: number }[]>([]);
 const host = ref<HTMLElement>();
 const root = ref<HTMLElement>();
-const canvas = ref<HTMLElement>();
 const error = ref("");
-let generation = 0;
-let observer: ResizeObserver | undefined;
-let resizeFrame = 0;
+const widths = useFigureWidths(host);
+const drawing = shallowRef<{
+  svg: SVGSVGElement;
+  width: number;
+  height: number;
+  minimumScale: number;
+  diagnostics: Diagnostic[];
+  original: Element[];
+  plans: {
+    width: number;
+    height: number;
+    natural: number;
+    scale: number;
+    rows: number;
+    oversizedFrame: boolean;
+    group: Element;
+  }[];
+}>();
+const inlineImage = computed(
+  () => entry.value?.kind === "image" && !entry.value.crop,
+);
 watch(
   [root, () => props.library, () => JSON.stringify(props.reference)],
-  async () => {
-    const current = ++generation;
-    observer?.disconnect();
-    cancelAnimationFrame(resizeFrame);
+  async (_, __, cleanup) => {
+    let active = true;
+    cleanup(() => {
+      active = false;
+    });
     if (!root.value) return;
     try {
       const result =
         entry.value?.kind === "image"
           ? { ...(await imageSvg(entry.value)), diagnostics: [] }
           : await snapshotSvg(props.library, props.reference);
-      if (current !== generation) return;
+      if (!active) return;
+      const list = result.svg.querySelector("defs[data-card-plans]");
+      const plans = [...(list?.children ?? [])].map((group) => ({
+        width: Number(group.getAttribute("data-card-width")),
+        height: Number(group.getAttribute("data-height")),
+        natural: Number(group.getAttribute("data-width")),
+        scale: Number(group.getAttribute("data-scale")),
+        rows: Number(group.getAttribute("data-rows")),
+        oversizedFrame: group.getAttribute("data-oversized-frame") === "yes",
+        group,
+      }));
+      list?.remove();
+      drawing.value = { ...result, plans, original: [...result.svg.children] };
       root.value.replaceChildren(result.svg);
       error.value = "";
-
-      if (entry.value?.kind === "image") {
-        result.svg.setAttribute("tabindex", "0");
-        result.svg.setAttribute("role", "button");
-        result.svg.setAttribute("aria-label", `放大查看：${entry.value.title}`);
-        result.svg.addEventListener("click", () => {
-          viewing.value = true;
-        });
-        result.svg.addEventListener("keydown", (event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            viewing.value = true;
-          }
-        });
-      }
-      observer?.disconnect();
-      const boundary = host.value?.closest("main");
-      const resize = () => {
-        if (
-          host.value &&
-          boundary &&
-          !props.contained &&
-          (entry.value?.kind === "reaction" ||
-            entry.value?.kind === "route" ||
-            entry.value?.kind === "mechanism")
-        ) {
-          const parent = host.value.parentElement!;
-          const padding = getComputedStyle(boundary);
-          const parentPadding = getComputedStyle(parent);
-          const parentWidth =
-            parent.clientWidth -
-            parseFloat(parentPadding.paddingLeft) -
-            parseFloat(parentPadding.paddingRight);
-          const maximum =
-            boundary.clientWidth -
-            parseFloat(padding.paddingLeft) -
-            parseFloat(padding.paddingRight);
-          const w = Math.max(parentWidth, Math.min(result.width, maximum));
-          host.value.style.width = `${w}px`;
-          host.value.style.maxWidth = "calc(100vw - 2 * var(--space-4))";
-          host.value.style.marginLeft = `calc((100% - min(${w}px, calc(100vw - 2 * var(--space-4)))) / 2)`;
-        }
-        const available = root.value!.clientWidth;
-        const scale = Math.max(
-          result.minimumScale,
-          Math.min(1, available / result.width),
-        );
-        result.svg.style.width = `${result.width * scale}px`;
-        result.svg.style.height = `${result.height * scale}px`;
-        markers.value = [];
-        if (entry.value?.kind === "route" && entry.value.steps.length > 1) {
-          const origin = canvas.value!.getBoundingClientRect();
-          const size =
-            parseFloat(
-              getComputedStyle(host.value!).getPropertyValue(
-                "--figure-step-size",
-              ),
-            ) * parseFloat(getComputedStyle(document.documentElement).fontSize);
-          markers.value = entry.value.steps.flatMap((step, index) => {
-            const arrow = [
-              ...result.svg.querySelectorAll<SVGGraphicsElement>(
-                "[data-reaction-id]",
-              ),
-            ].find((node) => node.dataset.reactionId === step.reaction);
-            const reaction = props.library.entries[step.reaction];
-            if (!arrow || reaction?.kind !== "reaction") return [];
-            const box = arrow.getBoundingClientRect();
-            const direction = step.arrow ?? reaction.arrow;
-            const vertical =
-              Math.abs(direction.to.y - direction.from.y) >
-              Math.abs(direction.to.x - direction.from.x);
-            const x = vertical
-              ? (box.left + box.right) / 2
-              : direction.to.x > direction.from.x
-                ? box.left
-                : box.right;
-            const y = vertical
-              ? direction.to.y > direction.from.y
-                ? box.top
-                : box.bottom
-              : (box.top + box.bottom) / 2;
-            return [
-              {
-                x: x - origin.left + canvas.value!.scrollLeft - size / 2,
-                y: y - origin.top - size / 2,
-                number: index + 1,
-              },
-            ];
-          });
-        }
-        emit("diagnostics", result.diagnostics);
-      };
-      observer = new ResizeObserver(() => {
-        cancelAnimationFrame(resizeFrame);
-        resizeFrame = requestAnimationFrame(resize);
-      });
-      observer.observe(root.value);
-      if (boundary) observer.observe(boundary);
-      resize();
-    } catch (e) {
-      if (current === generation)
-        error.value = e instanceof Error ? e.message : String(e);
+      emit("diagnostics", result.diagnostics);
+    } catch (reason) {
+      if (active)
+        error.value = reason instanceof Error ? reason.message : String(reason);
     }
   },
   { flush: "post" },
 );
-onBeforeUnmount(() => {
-  generation++;
-  observer?.disconnect();
-  cancelAnimationFrame(resizeFrame);
+const choice = computed(() => {
+  const result = drawing.value;
+  const { reading, wide, desktop } = widths.value;
+  if (!result || !result.plans.length) return;
+  const pad = desktop ? 34 : 26;
+  const phone = result.plans.at(-1)!;
+  if (!desktop) return { plan: phone, wide: undefined };
+  function fitting(width: number) {
+    return (
+      result!.plans
+        .filter((plan) => plan.natural * plan.scale <= width - pad + 1)
+        .sort(
+          (a, b) => a.rows - b.rows || b.scale - a.scale || a.width - b.width,
+        )[0] ?? phone
+    );
+  }
+  const normal = fitting(reading);
+  const expanded = props.contained ? normal : fitting(wide);
+  return expanded.rows < normal.rows
+    ? { plan: expanded, wide }
+    : { plan: normal, wide: undefined };
 });
+
+watch(
+  [root, drawing, widths, choice, () => props.scale],
+  async () => {
+    await nextTick();
+    const result = drawing.value;
+    if (!result || !root.value) return;
+    const plan = choice.value?.plan;
+    const width = plan?.natural ?? result.width;
+    const height = plan?.height ?? result.height;
+    const naturalScale =
+      entry.value?.kind === "compound"
+        ? moleculeBondLength / (entry.value.style?.bond ?? 32)
+        : 1;
+    const scale =
+      plan?.scale ??
+      props.scale ??
+      Math.max(
+        result.minimumScale,
+        Math.min(naturalScale, root.value.clientWidth / width),
+      );
+    result.svg.replaceChildren(...(plan ? [plan.group] : result.original));
+    result.svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    result.svg.style.width = `${width * scale}px`;
+    result.svg.style.height = `${height * scale}px`;
+  },
+  { flush: "post" },
+);
 </script>
+
 <template>
-  <template
-    v-if="entry?.kind === 'image' && reference.presentation && !entry.crop"
-  >
-    <template v-if="reference.presentation === 'note'">
+  <div ref="host" class="library-host">
+    <UiFigure
+      v-if="inlineImage && entry?.kind === 'image'"
+      :src="`/library/assets/${entry.asset}`"
+      :alt="reference.alt ?? entry.alt"
+      :caption="reference.caption ?? ''"
+    >
+      <template v-if="$slots.caption" #caption
+        ><slot name="caption"
+      /></template>
+    </UiFigure>
+    <FigureCard
+      v-else
+      class="library-figure"
+      :wide="choice?.wide"
+      :caption="reference.caption"
+      :data-frame-overflow="choice?.plan.oversizedFrame ? '' : undefined"
+    >
       <button
+        v-if="entry?.kind === 'image'"
         type="button"
-        class="note-image"
-        :aria-label="`放大图片：${reference.caption ?? entry.alt}`"
+        class="figure-image-open library-image"
+        :aria-label="`放大查看：${reference.caption ?? entry.alt}`"
         @click="viewing = true"
       >
-        <img
-          :src="`/library/assets/${entry.asset}`"
-          :alt="reference.alt ?? entry.alt"
-        />
+        <span ref="root" class="library-artwork" />
       </button>
-      <span v-if="reference.caption" class="note-caption"
-        ><ProseCaption :text="reference.caption"
-      /></span>
+      <div
+        v-else
+        class="library-canvas"
+        tabindex="0"
+        role="group"
+        :aria-label="entry?.title"
+      >
+        <div ref="root" class="library-artwork" />
+      </div>
+      <p v-if="entry?.overview">{{ entry.overview }}</p>
+      <StepDescriptions
+        v-if="descriptions.length"
+        :items="descriptions"
+        :columns="true"
+      />
       <ImageViewer
+        v-if="entry?.kind === 'image'"
         v-model:open="viewing"
         :src="`/library/assets/${entry.asset}`"
         :alt="reference.alt ?? entry.alt"
         :title="reference.caption ?? entry.title"
       />
-    </template>
-    <UiFigure
-      v-else
-      :src="`/library/assets/${entry.asset}`"
-      :alt="reference.alt ?? entry.alt"
-      :caption="reference.caption ?? ''"
-    />
-  </template>
-  <figure v-else ref="host" class="library-figure">
-    <div
-      ref="canvas"
-      class="library-canvas"
-      tabindex="0"
-      role="group"
-      :aria-label="library.entries[reference.ref]?.title"
-    >
-      <div ref="root" class="library-artwork" />
-      <span
-        v-for="marker in markers"
-        :key="marker.number"
-        class="route-step-number step-number"
-        :style="{ left: `${marker.x}px`, top: `${marker.y}px` }"
-        >{{ marker.number }}</span
-      >
-    </div>
-    <p v-if="entry?.overview">{{ entry.overview }}</p>
-    <StepDescriptions
-      v-if="descriptions.length"
-      :items="descriptions"
-      :numbered="!reference.frame && descriptions.length > 1"
-      :columns="true"
-    />
-    <ImageViewer
-      v-if="entry?.kind === 'image'"
-      v-model:open="viewing"
-      :src="`/library/assets/${entry.asset}`"
-      :alt="reference.alt ?? entry.alt"
-      :title="entry.title"
-    />
-    <p v-if="error" role="alert">{{ error }}</p>
-    <figcaption v-if="reference.caption">
-      <ProseCaption :text="reference.caption" />
-    </figcaption>
-  </figure>
+      <p v-if="error" role="alert">{{ error }}</p>
+      <template v-if="$slots.caption" #caption
+        ><slot name="caption"
+      /></template>
+    </FigureCard>
+  </div>
 </template>
+
 <style scoped>
-.library-figure {
-  margin: var(--space-5) 0;
-  max-width: 100%;
+.library-host {
+  display: flow-root;
+  min-width: 0;
 }
 .library-canvas {
-  position: relative;
   overflow-x: auto;
   max-width: 100%;
-  padding: var(--space-2) 0;
 }
 .library-canvas :deep(svg) {
   display: block;
-  margin: auto;
+  margin-inline: auto;
   max-width: none;
 }
-figcaption {
-  color: var(--ink-muted);
-  font-size: var(--text-sm);
-  margin-top: var(--space-2);
-}
-.library-canvas :deep([role="button"]:focus-visible) {
-  outline: 2px solid var(--chemical-focus);
-}
-.route-step-number {
-  position: absolute;
-  pointer-events: none;
+.library-image :deep(svg) {
+  display: block;
+  max-width: 100%;
+  max-height: var(--figure-card-image-height);
+  width: auto !important;
+  height: auto !important;
 }
 </style>

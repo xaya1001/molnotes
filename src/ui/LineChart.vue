@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FigureCard from "./FigureCard.vue";
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import * as echarts from "echarts/core";
 import { LineChart, ScatterChart } from "echarts/charts";
@@ -31,6 +32,7 @@ const props = defineProps<{
   points?: { x: number; y: number }[];
   /** Several named series with a legend; scatter ones are drawn as points only. */
   series?: ChartSeries[];
+  caption?: string;
   xLabel: string;
   yLabel: string;
   /** Fixed axis range; without it the axis starts at 0 and follows the data. */
@@ -38,6 +40,7 @@ const props = defineProps<{
   yDomain?: readonly [number, number];
 }>();
 const element = ref<HTMLElement | null>(null);
+const height = ref(220);
 let chart: EChartsType | undefined;
 let resizeObserver: ResizeObserver | undefined;
 
@@ -56,8 +59,8 @@ function render() {
   const axis = {
     type: "value" as const,
     min: 0,
-    nameTextStyle: { color: ink, fontFamily: font },
-    axisLabel: { color: ink, fontFamily: font },
+    nameTextStyle: { color: ink, fontFamily: font, fontSize: 12 },
+    axisLabel: { color: ink, fontFamily: font, fontSize: 12 },
     axisLine: { lineStyle: { color: token("--rule-strong") } },
     splitLine: { lineStyle: { color: rule } },
   };
@@ -107,7 +110,10 @@ function render() {
 onMounted(() => {
   if (!element.value) throw new Error("Chart mount element is missing");
   chart = echarts.init(element.value, undefined, { renderer: "svg" });
-  resizeObserver = new ResizeObserver(() => chart?.resize());
+  resizeObserver = new ResizeObserver(([entry]) => {
+    height.value = Math.max(220, Math.round(entry.contentRect.width * 0.5));
+    chart?.resize();
+  });
   resizeObserver.observe(element.value);
   render();
 });
@@ -129,17 +135,19 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div
-    ref="element"
-    class="line-chart"
-    role="img"
-    :aria-label="`${yLabel} 随 ${xLabel} 变化的曲线`"
-  ></div>
+  <FigureCard :caption="caption">
+    <div
+      ref="element"
+      class="line-chart"
+      :style="{ height: height + 'px' }"
+      role="img"
+      :aria-label="`${yLabel} 随 ${xLabel} 变化的曲线`"
+    ></div>
+  </FigureCard>
 </template>
 
 <style scoped>
 .line-chart {
   width: 100%;
-  height: 18rem;
 }
 </style>

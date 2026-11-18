@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import FigureCard from "../FigureCard.vue";
+import { vTableCard, numericCell } from "../table-card.ts";
 import { computed } from "vue";
 import { tableTextAlign, tableColumnStyle } from "./table-text.ts";
 import { provideTableStructureScales } from "./table-structure-scale.ts";
@@ -53,10 +55,10 @@ const pieces = (cell: string) =>
 </script>
 
 <template>
-  <figure class="figure">
+  <FigureCard v-table-card table :caption="caption">
     <div class="table-scroll">
       <table class="data-table">
-        <caption class="title">
+        <caption class="visually-hidden">
           {{
             caption
           }}
@@ -105,7 +107,14 @@ const pieces = (cell: string) =>
                 v-for="(cell, i) in row"
                 :key="i"
                 :scope="rowHeader && i === 0 ? 'row' : undefined"
-                :style="columnStyles[i]"
+                :data-numeric="
+                  typeof cell === 'string' && numericCell(cell) ? '' : undefined
+                "
+                :style="
+                  typeof cell === 'string' && numericCell(cell)
+                    ? undefined
+                    : columnStyles[i]
+                "
               >
                 <TableStructure
                   v-if="typeof cell !== 'string' && 'figure' in cell"
@@ -135,15 +144,11 @@ const pieces = (cell: string) =>
         </tbody>
       </table>
     </div>
-    <p v-if="note" class="caption"><TableText :text="note" /></p>
-  </figure>
+    <template v-if="note" #caption><TableText :text="note" /></template>
+  </FigureCard>
 </template>
 
 <style scoped>
-.data-table {
-  width: auto;
-  min-width: 0;
-}
 .data-table th,
 .data-table td {
   text-align: center;
@@ -152,9 +157,6 @@ const pieces = (cell: string) =>
 }
 .short-heading {
   min-width: var(--table-heading-width);
-}
-.data-table tbody tr + tr td {
-  border-top: none;
 }
 .column-groups th {
   border-bottom: none;
@@ -168,12 +170,5 @@ const pieces = (cell: string) =>
 .group-row th {
   text-align: left;
   padding-block: var(--space-3) var(--space-1);
-}
-.title {
-  padding: 0 0 var(--space-2);
-  color: var(--ink);
-  font-weight: 600;
-  text-align: start;
-  caption-side: top;
 }
 </style>

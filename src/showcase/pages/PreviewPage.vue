@@ -12,7 +12,7 @@ import {
   type Panels,
 } from "../../../shared/panels.ts";
 import PanelsFigure from "../../ui/PanelsFigure.vue";
-import MoleculeView from "../../ui/MoleculeView.vue";
+import MoleculeGroup from "../../ui/MoleculeGroup.vue";
 import FlowFigure from "../../ui/diagrams/FlowFigure.vue";
 import TimelineFigure from "../../ui/diagrams/TimelineFigure.vue";
 import { figureWarnings } from "../../ui/diagrams/check.ts";
@@ -140,7 +140,9 @@ onMounted(async () => {
   while (
     Date.now() < deadline &&
     (readyNotes.value < shown.filter((f) => f.kind === "note").length ||
-      document.querySelector(".molecule [role='status']") ||
+      document.querySelector(
+        ".molecule-group [role='status'], .molecule [role='status']",
+      ) ||
       [...document.querySelectorAll(".library-canvas")].some(
         (node) =>
           !node.querySelector("svg") &&
@@ -160,6 +162,19 @@ onMounted(async () => {
     const errors = [...host.querySelectorAll('[role="alert"]')].map(
       (node) => node.textContent?.trim() ?? "Render failed",
     );
+    const layoutWarnings = [
+      ...[
+        ...host.querySelectorAll(".molecule--grouped .figure-card-art"),
+      ].flatMap((art) =>
+        art.scrollWidth > art.clientWidth + 1 ? ["分子组中单个分子过宽"] : [],
+      ),
+      ...[...host.querySelectorAll("[data-frame-overflow]")].map(
+        () => "机理单帧过宽",
+      ),
+      ...[...host.querySelectorAll("[data-table-overflow]")].map(
+        () => "表格在宽版紧凑档仍过宽",
+      ),
+    ];
     const found = figureDiagnostics(figure);
     errors.push(...found.map((d) => `${d.code}: ${d.elements.join(", ")}`));
     if (figure.kind === "request")
@@ -187,6 +202,7 @@ onMounted(async () => {
           ),
         ],
         warnings: [
+          ...layoutWarnings,
           ...found.map((d) => `${d.code}: ${d.elements.join(", ")}`),
           ...[
             ...host.querySelectorAll<HTMLElement>(
@@ -205,7 +221,10 @@ onMounted(async () => {
           errors.push("Image did not load");
       return {
         where: figure.where,
-        warnings: [...found.map((d) => `${d.code}: ${d.elements.join(", ")}`)],
+        warnings: [
+          ...layoutWarnings,
+          ...found.map((d) => `${d.code}: ${d.elements.join(", ")}`),
+        ],
         errors,
       };
     }
@@ -217,6 +236,7 @@ onMounted(async () => {
       ...(errors.length ? { errors } : {}),
       warnings: root
         ? [
+            ...layoutWarnings,
             ...found.map((d) => `${d.code}: ${d.elements.join(", ")}`),
             ...figureWarnings(root),
             ...[
@@ -302,15 +322,7 @@ onMounted(async () => {
             v-else-if="figure.kind === 'substrate-scope'"
             :scope="figure.scope"
           />
-          <div v-else class="preview-molecules">
-            <MoleculeView
-              v-for="(m, j) in figure.molecules"
-              :key="j"
-              :smiles="m.smiles"
-              :abbreviations="m.abbreviations"
-              :name="m.caption"
-            />
-          </div>
+          <MoleculeGroup v-else :molecules="figure.molecules" />
         </template>
       </section>
     </div>
@@ -320,14 +332,5 @@ onMounted(async () => {
 <style scoped>
 .preview-figure {
   padding: var(--space-4) 0;
-}
-.preview-molecules {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4);
-}
-.preview-molecules > :deep(figure) {
-  flex: 1 1 14rem;
-  min-width: 0;
 }
 </style>

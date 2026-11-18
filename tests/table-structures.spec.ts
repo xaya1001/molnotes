@@ -95,7 +95,7 @@ test("table groups and compound cells share library identity and keep local phon
   });
   expect(layout.shortRules).toBeTruthy();
   expect(layout.align).toBe("center");
-  expect(layout.border).toBe("none");
+  expect(layout.border).toBe("solid");
   expect(layout.font).not.toMatch(/monospace/);
   await screenshot(
     page,
