@@ -662,7 +662,7 @@ input[type="range"] {
     box-shadow: 1px 0 var(--rule);
   }
 
-  .figure-card--scrolling .table-scroll {
+  .figure-card--scrolling[data-more-columns] .table-scroll {
     mask-image: linear-gradient(
       to right,
       black calc(100% - 1.75rem),

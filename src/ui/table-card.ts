@@ -7,6 +7,12 @@ export function observeTableCard(card: HTMLElement) {
   const parent = card.parentElement!;
   const main = card.closest("main");
   let frame = 0;
+  function updateFade() {
+    card.toggleAttribute(
+      "data-more-columns",
+      scroll.scrollLeft + scroll.clientWidth < scroll.scrollWidth - 1,
+    );
+  }
   function measure() {
     const { wide, desktop } = figureWidths(parent);
     card.style.removeProperty("--figure-width");
@@ -18,16 +24,19 @@ export function observeTableCard(card: HTMLElement) {
     }
     card.classList.toggle("figure-card--scrolling", overflowing());
     card.toggleAttribute("data-table-overflow", desktop && overflowing());
+    updateFade();
   }
   const observer = new ResizeObserver(() => {
     cancelAnimationFrame(frame);
     frame = requestAnimationFrame(measure);
   });
+  scroll.addEventListener("scroll", updateFade, { passive: true });
   observer.observe(parent);
   observer.observe(table);
   if (main) observer.observe(main);
   measure();
   return () => {
+    scroll.removeEventListener("scroll", updateFade);
     observer.disconnect();
     cancelAnimationFrame(frame);
   };
