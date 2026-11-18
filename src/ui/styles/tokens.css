@@ -125,3 +125,18 @@
   --figure-block-length: 18px;
   --figure-block-line: 3px;
 }
+
+:root {
+  --figure-card-min: 12.5rem;
+  --figure-card-pad: var(--space-4);
+  --figure-card-caption-pad: 0.625rem var(--space-4) var(--space-3);
+  --figure-card-image-height: 28rem;
+  --figure-compact-text: 0.8125rem;
+}
+
+@media (max-width: 640px) {
+  :root {
+    --figure-card-pad: var(--space-3);
+    --figure-card-caption-pad: var(--space-2) var(--space-3) 0.625rem;
+  }
+}

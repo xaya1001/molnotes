@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import ProseCaption from "./ProseCaption.vue";
-import { captionParts } from "../../shared/prose-format.ts";
+import { numericCell, observeTableCard } from "./table-card.ts";
 import PanelsFigure from "./PanelsFigure.vue";
 import LibraryReference from "./library/LibraryReference.vue";
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import MoleculeView from "./MoleculeView.vue";
+import MoleculeGroup from "./MoleculeGroup.vue";
 import EnergyFigure from "./diagrams/EnergyFigure.vue";
 import FlowFigure from "./diagrams/FlowFigure.vue";
 import TimelineFigure from "./diagrams/TimelineFigure.vue";
@@ -46,6 +45,54 @@ const citation = ref<Citation>();
 const citationOpen = ref(false);
 const matches = ref<HTMLElement[]>([]);
 const current = ref(0);
+let tables: (() => void)[] = [];
+
+function cardFor(art: HTMLElement, table = false) {
+  const card = document.createElement("figure");
+  card.className = table ? "figure-card figure-card--table" : "figure-card";
+  const area = document.createElement("div");
+  area.className = "figure-card-art";
+  art.before(card);
+  card.append(area);
+  area.append(art);
+  return card;
+}
+
+function formatProseCards(element: HTMLElement) {
+  for (const table of element.querySelectorAll(".table-scroll > table")) {
+    for (const cell of table.querySelectorAll("tbody td"))
+      cell.toggleAttribute("data-numeric", numericCell(cell.textContent ?? ""));
+    tables.push(observeTableCard(cardFor(table.parentElement!, true)));
+  }
+  const imageParagraphs = new Map<HTMLElement, HTMLElement>();
+  for (const image of element.querySelectorAll<HTMLElement>(".note-image")) {
+    const caption = image.nextElementSibling;
+    const paragraph = image.parentElement!;
+    image.classList.add("figure-image-open");
+    const card = cardFor(image);
+    if (caption?.matches(".note-caption")) {
+      const label = document.createElement("figcaption");
+      label.className = "figure-card-caption";
+      label.append(...caption.childNodes);
+      caption.remove();
+      card.append(label);
+    }
+    if (paragraph.tagName !== "P") continue;
+    if (!imageParagraphs.has(paragraph)) {
+      const group = document.createElement("div");
+      group.className = "note-image-group";
+      paragraph.before(group);
+      imageParagraphs.set(paragraph, group);
+    }
+    imageParagraphs.get(paragraph)!.append(card);
+  }
+  for (const [paragraph, group] of imageParagraphs) {
+    if (group.childElementCount === 1)
+      group.replaceWith(group.firstElementChild!);
+    if (!paragraph.textContent?.trim() && !paragraph.children.length)
+      paragraph.remove();
+  }
+}
 function showMatch(index: number) {
   if (!matches.value.length) return;
   current.value = (index + matches.value.length) % matches.value.length;
@@ -107,7 +154,12 @@ function highlight() {
 async function render() {
   ready.value = false;
   await nextTick();
-  if (body.value) body.value.innerHTML = props.html;
+  tables.forEach((stop) => stop());
+  tables = [];
+  if (body.value) {
+    body.value.innerHTML = props.html;
+    formatProseCards(body.value);
+  }
   ready.value = true;
   await nextTick();
   await document.fonts.ready;
@@ -150,6 +202,7 @@ watch(
   },
 );
 onBeforeUnmount(() => {
+  tables.forEach((stop) => stop());
   ready.value = false;
 });
 defineExpose({ showMatch });
@@ -158,15 +211,7 @@ defineExpose({ showMatch });
   <div ref="body" class="prose compiled-prose" @click="click"></div>
   <template v-if="ready">
     <Teleport v-for="row in molecules" :key="row.id" :to="`#${row.id}`">
-      <MoleculeView
-        v-for="(mol, i) in row.molecules"
-        :key="i"
-        :smiles="mol.smiles"
-        :abbreviations="mol.abbreviations"
-        :name="captionParts(mol.caption).join('')"
-      >
-        <template #caption><ProseCaption :text="mol.caption" /></template>
-      </MoleculeView>
+      <MoleculeGroup :molecules="row.molecules" />
     </Teleport>
     <Teleport v-for="row in diagrams" :key="row.id" :to="`#${row.id}`">
       <TimelineFigure
@@ -213,36 +258,6 @@ defineExpose({ showMatch });
 }
 .compiled-prose :deep(.term:hover) {
   color: var(--accent);
-}
-.compiled-prose :deep(.note-image) {
-  display: block;
-  max-width: 100%;
-  margin-inline: auto;
-  padding: 0;
-  border: 0;
-  background: none;
-  cursor: zoom-in;
-}
-.compiled-prose :deep(.note-caption) {
-  display: block;
-  margin-top: var(--space-2);
-  color: var(--ink-muted);
-  font: var(--text-sm) / 1.6 var(--font-sans);
-  text-align: center;
-}
-.compiled-prose :deep(img) {
-  max-width: 100%;
-  height: auto;
-}
-.compiled-prose :deep(.note-molecules) {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4);
-}
-.compiled-prose :deep(figure) {
-  flex: 1 1 14rem;
-  min-width: 0;
-  margin: 0;
 }
 .compiled-prose :deep(mark) {
   color: var(--ink);

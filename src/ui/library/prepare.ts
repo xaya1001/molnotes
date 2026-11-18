@@ -32,6 +32,7 @@ import {
 import { refreshGeometry } from "./geometry-tree.ts";
 import { wrapFigureText, figureLabelLines } from "./text-runs.ts";
 import { solidArrow } from "./arrow-layout.ts";
+import { cardConditionFont, chemicalCardLayout } from "./card-layout.ts";
 import { layoutRoute, type RouteMolecule } from "./route-layout.ts";
 
 import {
@@ -120,6 +121,9 @@ export async function prepareFigure(
     fonts: FigureFontResolver;
     style: FigureStyle;
     canvas?: "scene";
+    cardWidth?: number;
+    cardScale?: number;
+    cardRoute?: Route;
   },
 ): Promise<FigureGeometry> {
   options = {
@@ -150,7 +154,9 @@ export async function prepareFigure(
     ctx.setStyle(node, "fill", "none");
     return node;
   };
-  const entry = library[reference.ref];
+  const entry = options.cardRoute ?? library[reference.ref];
+  const standalone = library[reference.ref]?.kind === "reaction";
+  let cardPlan: FigureGeometry["cardPlan"];
   if (!entry) throw new Error(`Unknown figure ${reference.ref}`);
   const figureNumbers: Record<string, string[]> = {};
   const numbering = (
@@ -165,7 +171,8 @@ export async function prepareFigure(
   if (entry.kind === "route")
     for (const step of entry.steps) {
       const reaction = library[step.reaction];
-      if (reaction?.kind === "reaction") numbering(reaction, step.id + "/");
+      if (reaction?.kind === "reaction")
+        numbering(reaction, standalone ? "" : step.id + "/");
     }
   const svg = element("g", {
     role: entry.kind === "reaction" || entry.kind === "route" ? "group" : "img",
@@ -1965,9 +1972,12 @@ export async function prepareFigure(
       ctx.append(parent, mark);
     }
     const textWidth = r.arrow.textWidth * B;
+    const conditionFont = options.cardScale
+      ? cardConditionFont(options.cardScale)
+      : "var(--chemical-caption-font)";
     const wrap = (lines: string[]) =>
       wrapFigureText(lines, textWidth, (text) =>
-        ctx.textWidth(text, "var(--chemical-caption-font)"),
+        ctx.textWidth(text, conditionFont),
       );
     let verticalCursor = Math.max(
       Math.min(a.y, b.y) + B * 0.3,
@@ -1990,17 +2000,13 @@ export async function prepareFigure(
               ...arrowShape.vertices.map((p) => p.y),
               ...occupied.map((p) => p.bounds.y + p.bounds.height),
             );
-      const gap = token("--chemical-caption-font") / 4;
+      const gap = parseFloat(ctx.resolve(conditionFont)) / 4;
       let cursor = edge;
       const vertical = Math.abs(a.y - b.y) > Math.abs(a.x - b.x);
       const upward = sign < 0 && !vertical;
       (upward ? [...lines].reverse() : lines).forEach((text, index) => {
         const i = upward ? lines.length - 1 - index : index;
-        const e = label(
-          { x: center, y: 0 },
-          text,
-          "var(--chemical-caption-font)",
-        );
+        const e = label({ x: center, y: 0 }, text, conditionFont);
         ctx.set(e, "data-label", `${prefix}${id}:condition:${sign}:${i}`);
         ctx.append(parent, e);
         const bounds = ctx.box(e);
@@ -2169,38 +2175,54 @@ export async function prepareFigure(
         };
       }
       const limit = token("--chemical-route-width");
-      const layout = layoutRoute(
-        entry.frames.slice(0, -1).map((frame, index) => ({
-          id: frame.id,
-          from: [{ id: frame.id }],
-          to: [{ id: entry.frames[index + 1].id }],
-          above: [frame.title, ...(frame.above ?? [])],
-          below: frame.below ?? [],
-        })),
-        measures,
-        {
+      const steps = entry.frames.slice(0, -1).map((frame, index) => ({
+        id: frame.id,
+        from: [{ id: frame.id }],
+        to: [{ id: entry.frames[index + 1].id }],
+        above: [frame.title, ...(frame.above ?? [])],
+        below: frame.below ?? [],
+      }));
+      const text = (lines: string[], scale?: number) => {
+        const font = scale
+          ? cardConditionFont(scale)
+          : "var(--chemical-caption-font)";
+        const wrapped = wrapFigureText(
+          lines,
+          scale ? 152 / scale : limit * 0.45,
+          (text) => ctx.textWidth(text, font),
+        );
+        const nodes = wrapped.map((line) => label({ x: 0, y: 0 }, line, font));
+        return {
+          lines: wrapped,
+          width: Math.max(0, ...nodes.map((node) => node.advance)),
+          height: nodes.reduce(
+            (sum, node) => sum + ctx.box(node).height + B * 0.15,
+            0,
+          ),
+        };
+      };
+      const plan = options.cardWidth
+        ? chemicalCardLayout(steps, measures, options.cardWidth, B, text)
+        : undefined;
+      if (plan)
+        cardPlan = {
+          rows: plan.layout.rows,
+          scale: plan.scale,
+          oversizedFrame: Object.values(measures).some(
+            ({ width }) =>
+              width * (20 / B) >
+              options.cardWidth! - (options.cardWidth === 334 ? 26 : 34),
+          ),
+        };
+      const layout =
+        plan?.layout ??
+        layoutRoute(steps, measures, {
           width: entry.frames.length === 2 ? Infinity : limit,
           bond: B,
           gap: token("--chemical-route-gap"),
           serpentine: true,
-          text(lines) {
-            const wrapped = wrapFigureText(lines, limit * 0.45, (text) =>
-              ctx.textWidth(text, "var(--chemical-caption-font)"),
-            );
-            const nodes = wrapped.map((line) =>
-              label({ x: 0, y: 0 }, line, "var(--chemical-caption-font)"),
-            );
-            return {
-              lines: wrapped,
-              width: Math.max(0, ...nodes.map((node) => node.advance)),
-              height: nodes.reduce(
-                (sum, node) => sum + ctx.box(node).height + B * 0.15,
-                0,
-              ),
-            };
-          },
-        },
-      );
+          text,
+        });
       width = layout.width;
       height = layout.height;
       for (const item of layout.items) {
@@ -2243,7 +2265,9 @@ export async function prepareFigure(
               const node = label(
                 { x: item.at.x, y: 0 },
                 text,
-                "var(--chemical-caption-font)",
+                plan
+                  ? cardConditionFont(plan.scale)
+                  : "var(--chemical-caption-font)",
               );
               const box = ctx.box(node);
               const y =
@@ -2267,9 +2291,10 @@ export async function prepareFigure(
         "data-step": s.id,
       });
       ctx.append(svg, group);
-      await reaction(s.reaction, s.id + "/", group, s);
+      const prefix = standalone ? "" : s.id + "/";
+      await reaction(s.reaction, prefix, group, s);
       for (const [id, p] of Object.entries(atomPoints))
-        if (id.startsWith(s.id + "/")) atomPoints[id] = plus(p, mul(s.at, B));
+        if (id.startsWith(prefix)) atomPoints[id] = plus(p, mul(s.at, B));
     }
     for (const [index, point] of (entry.plusAt ?? []).entries()) {
       const mark = label(mul(point, B), "+", "var(--chemical-plus-font)");
@@ -2343,6 +2368,9 @@ export async function prepareFigure(
     height,
     minimumScale,
     atomPoints,
+    ...(cardPlan && { cardPlan }),
   };
-  return options.canvas === "scene" ? geometry : fitFigureCanvas(geometry, B);
+  return options.canvas === "scene"
+    ? geometry
+    : fitFigureCanvas(geometry, options.cardWidth ? 0 : B);
 }

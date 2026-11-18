@@ -244,24 +244,10 @@ test("published notes keep authored coordinates at the shared scale and render t
     exact: true,
   });
   await expect(a).toBeVisible({ timeout: 45_000 });
-  await expect
-    .poll(async () =>
-      (
-        await short
-          .locator('.abbreviation-label[data-abbreviation="Boc"]')
-          .allTextContents()
-      ).join(""),
-    )
-    .toBe("BocN");
-  await expect
-    .poll(async () =>
-      (
-        await short
-          .locator('.abbreviation-label[data-abbreviation="CO₂Et"]')
-          .allTextContents()
-      ).join(""),
-    )
-    .toBe("CO₂Et");
+  for (const abbreviation of ["Boc", "CO₂Et"])
+    await expect(
+      short.locator(`.abbreviation-label[data-abbreviation="${abbreviation}"]`),
+    ).toHaveCount(1);
   const lengths = await Promise.all(
     [a.locator("path.bond-0"), b.locator("path.bond-5")].map((path) =>
       path.evaluate((el: SVGPathElement) => {

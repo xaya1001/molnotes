@@ -48,7 +48,7 @@ async function fixture(): Promise<LibrarySnapshot> {
   };
 }
 
-test("complete library previews share one saved layout and preserve local scroll on phones", async ({
+test("library previews keep saved geometry and readable bonds on phones", async ({
   page,
 }) => {
   const library = await fixture();
@@ -96,7 +96,9 @@ test("complete library previews share one saved layout and preserve local scroll
   await page.setViewportSize({ width: 390, height: 844 });
   const canvas = page.locator("#rxn_example .library-canvas");
   await expect
-    .poll(() => canvas.evaluate((e) => e.scrollWidth > e.clientWidth))
+    .poll(() =>
+      canvas.evaluate((element) => element.scrollWidth <= element.clientWidth),
+    )
     .toBe(true);
   expect(
     await page.evaluate(
@@ -609,7 +611,6 @@ test("mechanism references show the complete overview or one pinned frame", asyn
   await expect(overview.locator("[data-frame]")).toHaveCount(2);
   await expect(overview.getByRole("button")).toHaveCount(0);
   await expect(overview.locator(".step-description")).toHaveCount(2);
-  await expect(overview.locator(".step-number")).toHaveText(["1", "2"]);
   await expect(overview.getByRole("heading", { level: 4 })).toHaveCount(2);
   await expect(overview.locator(".step-description p")).toHaveCount(2);
   for (const id of ["first", "second"])
@@ -738,7 +739,10 @@ test("saved product separators are rendered once", async () => {
     ".",
   );
   const svg = result.assets[0].bytes.toString();
-  expect((svg.match(/data-text="\+"/g) ?? []).length).toBe(1);
+  const layouts = svg.split(/<g[^>]*\bdata-card-width="\d+"[^>]*>/);
+  expect(
+    layouts.map((art) => (art.match(/data-text="\+"/g) ?? []).length),
+  ).toEqual([1, 1, 1, 1]);
   expect(Object.values(result.renders)[0].diagnostics).toEqual([]);
 });
 

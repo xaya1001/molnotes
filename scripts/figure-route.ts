@@ -5,10 +5,16 @@ import {
 import { readFile } from "node:fs/promises";
 import type {
   Library,
+  FigureReference,
   Point,
   Reaction,
   Route,
 } from "../shared/chemical-library/types.ts";
+import {
+  chemicalCardLayout,
+  cardConditionFont,
+  chemicalCardWidths,
+} from "../src/ui/library/card-layout.ts";
 import type { FigureInput, StepInput } from "./figure-input.ts";
 import { prepareFigure } from "../src/ui/library/prepare.ts";
 import { loadFigureFonts } from "./figure-fonts.ts";
@@ -100,6 +106,7 @@ export async function compileRouteLayout(
   input: FigureInput,
   rawSteps: Map<string, StepInput>,
   style?: FigureStyle,
+  card?: FigureReference,
 ) {
   style ??= await loadFigureStyle();
   const fonts = await loadFigureFonts(),
@@ -108,13 +115,17 @@ export async function compileRouteLayout(
     bond = ctx.token("--chemical-bond"),
     width = ctx.token("--chemical-route-width"),
     gap = ctx.token("--chemical-route-gap");
-  const text = (lines: string[]) => {
+  const text = (lines: string[], scale?: number) => {
     const font =
       lines.length === 1 && lines[0] === "+"
         ? "var(--chemical-plus-font)"
-        : "var(--chemical-caption-font)";
-    const wrapped = wrapFigureText(lines, width * 0.45, (text) =>
-      ctx.textWidth(text, font),
+        : scale
+          ? cardConditionFont(scale)
+          : "var(--chemical-caption-font)";
+    const wrapped = wrapFigureText(
+      lines,
+      scale ? 152 / scale : width * 0.45,
+      (text) => ctx.textWidth(text, font),
     );
     const nodes = wrapped.map((line) => ctx.label({ x: 0, y: 0 }, line, font));
     return {
@@ -138,6 +149,13 @@ export async function compileRouteLayout(
     // Measure saved precision; reserve a number row for later page references.
     for (const p of [...reaction.reactants, ...reaction.products])
       finishFigureEntry(library[p.compound]);
+    const numbers =
+      card?.numbers &&
+      Object.fromEntries(
+        Object.entries(card.numbers)
+          .filter(([key]) => key.startsWith(step.id + "/"))
+          .map(([key, number]) => [key.slice(step.id.length + 1), number]),
+      );
     const reserved = await prepareFigure(
       library,
       {
@@ -145,7 +163,7 @@ export async function compileRouteLayout(
         numbers: Object.fromEntries(
           [...reaction.reactants, ...reaction.products].map((p) => [
             p.id,
-            "888",
+            numbers?.[p.id] ?? "888",
           ]),
         ),
       },
@@ -168,7 +186,7 @@ export async function compileRouteLayout(
     });
     const geometry = await prepareFigure(
       library,
-      { ref: reaction.id },
+      { ref: reaction.id, numbers },
       {
         toolkit,
         fonts,
@@ -288,6 +306,19 @@ export async function compileRouteLayout(
       reverse: raw.reverse,
     });
   }
+  if (card)
+    return chemicalCardWidths.map((width) => {
+      const { scale, layout } = chemicalCardLayout(
+        layoutSteps,
+        molecules,
+        width,
+        bond,
+        text,
+      );
+      const variant = structuredClone(route);
+      applyLayout(variant, layout, library, measured, rawSteps, bond, scale);
+      return { route: variant, width, scale, rows: layout.rows };
+    });
   const layout = layoutRoute(layoutSteps, molecules, {
     width,
     bond,
@@ -295,6 +326,18 @@ export async function compileRouteLayout(
     serpentine: input.wrap === "serpentine",
     text,
   });
+  applyLayout(route, layout, library, measured, rawSteps, bond);
+}
+
+function applyLayout(
+  route: Route,
+  layout: ReturnType<typeof layoutRoute>,
+  library: Library,
+  measured: Map<string, Map<string, Measured>>,
+  rawSteps: Map<string, StepInput>,
+  bond: number,
+  scale?: number,
+) {
   const margin = bond * 1.5,
     origin = new Map<string, Point>();
   for (const item of layout.items)
@@ -361,13 +404,13 @@ export async function compileRouteLayout(
         }));
         step.arrow = {
           ...reaction.arrow,
-          ...(rawSteps.get(step.id)!.side
-            ? { side: rawSteps.get(step.id)!.side }
-            : {}),
+          side: item.side ?? rawSteps.get(step.id)!.side ?? reaction.arrow.side,
           from: points[0],
           to: points.at(-1)!,
-          textWidth: Math.max(1, item.width / bond - 1.2),
-          ...(points.length > 2 ? { via: points.slice(1, -1) } : {}),
+          textWidth: scale
+            ? 152 / scale / bond
+            : Math.max(1, item.width / bond - 1.2),
+          via: points.length > 2 ? points.slice(1, -1) : undefined,
         };
         for (const box of item.boxes ?? []) {
           const pid = reaction.reactants.find(

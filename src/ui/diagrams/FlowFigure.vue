@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import ProseCaption from "../ProseCaption.vue";
+import FigureCard from "../FigureCard.vue";
 import {
   computed,
   nextTick,
@@ -47,7 +47,8 @@ const fixedFromEm = 34;
 const compactBelow = 6.5;
 const arrow = 6;
 
-const root = ref<HTMLElement>();
+const card = ref<InstanceType<typeof FigureCard>>();
+const root = computed(() => card.value?.art);
 const width = ref(0);
 const em = ref(14);
 let pen: CanvasRenderingContext2D | null = null;
@@ -289,7 +290,9 @@ function measureBranches() {
   let guess = width.value < fixedFromEm * em.value ? "outline" : "down";
   let result: BranchLayout;
   for (let pass = 0; pass < 2; pass++) {
-    root.value.classList.toggle("flow--outline", guess === "outline");
+    root.value
+      .closest("figure")
+      ?.classList.toggle("flow--outline", guess === "outline");
     const nodes = new Map<string, { h: number; tag: number }>();
     const text = new Map<string, { w: number; h: number }>();
     result = layoutBranches(
@@ -491,8 +494,9 @@ function blockLabelStyle(marker: {
 </script>
 
 <template>
-  <figure
-    ref="root"
+  <FigureCard
+    ref="card"
+    :caption="caption"
     class="flow"
     :class="[`flow--${mode}`, { 'flow--compact': compact }]"
   >
@@ -611,13 +615,12 @@ function blockLabelStyle(marker: {
     <p v-if="flow.note" class="flow-note">
       <DiagramText :text="flow.note" />
     </p>
-    <figcaption v-if="caption"><ProseCaption :text="caption" /></figcaption>
-  </figure>
+    <template v-if="$slots.caption" #caption><slot name="caption" /></template>
+  </FigureCard>
 </template>
 
 <style scoped>
 .flow {
-  margin: 0;
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   line-height: var(--leading-tight);
@@ -770,10 +773,6 @@ function blockLabelStyle(marker: {
 .flow-note {
   margin: var(--space-4) 0 0;
   text-align: center;
-  color: var(--ink-soft);
-}
-figcaption {
-  margin-top: var(--space-3);
   color: var(--ink-soft);
 }
 .flow-step-number {

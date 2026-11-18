@@ -77,6 +77,14 @@ export interface FigureGeometry {
   minimumScale: number;
   atomPoints: Record<string, Point>;
   root: FigureNode;
+  cardPlans?: {
+    width: number;
+    rows: number;
+    scale: number;
+    oversizedFrame?: boolean;
+    geometry: FigureGeometry;
+  }[];
+  cardPlan?: { rows: number; scale: number; oversizedFrame?: boolean };
 }
 
 /** A viewport-independent, element-addressed observation for render comparison. */

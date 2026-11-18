@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import ProseCaption from "../ProseCaption.vue";
+import FigureCard from "../FigureCard.vue";
 import {
   computed,
   nextTick,
@@ -23,7 +23,8 @@ const leader = 12;
 // centred on it, so rounding never pushes a line onto a second row.
 const slack = 12;
 
-const root = ref<HTMLElement>();
+const card = ref<InstanceType<typeof FigureCard>>();
+const root = computed(() => card.value?.art);
 const width = ref(0);
 let observer: ResizeObserver | undefined;
 onMounted(() => {
@@ -533,7 +534,12 @@ const rows = computed(() =>
 </script>
 
 <template>
-  <figure ref="root" class="timeline" :class="{ 'timeline--narrow': narrow }">
+  <FigureCard
+    ref="card"
+    :caption="caption"
+    class="timeline"
+    :class="{ 'timeline--narrow': narrow }"
+  >
     <div
       v-if="!narrow"
       class="timeline-canvas"
@@ -753,13 +759,11 @@ const rows = computed(() =>
         >{{ item.text }}</span
       >
     </p>
-    <figcaption v-if="caption"><ProseCaption :text="caption" /></figcaption>
-  </figure>
+  </FigureCard>
 </template>
 
 <style scoped>
 .timeline {
-  margin: 0;
   font-family: var(--font-sans);
 }
 .timeline-canvas {
@@ -974,10 +978,5 @@ const rows = computed(() =>
 .timeline-legend-marks {
   flex: none;
   overflow: visible;
-}
-figcaption {
-  margin-top: var(--space-3);
-  font-size: var(--text-sm);
-  color: var(--ink-soft);
 }
 </style>

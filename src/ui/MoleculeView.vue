@@ -2,7 +2,13 @@
 import { rGroupLabel } from "../../shared/reaction-scheme.ts";
 import { mappedDummies } from "../../shared/reaction-chemistry.ts";
 import { nextTick, ref, watch } from "vue";
-import { loadChemistry, molecule } from "./chemistry/rdkit.ts";
+import FigureCard from "./FigureCard.vue";
+import { alignMolecule } from "./chemistry/group-alignment.ts";
+import {
+  loadChemistry,
+  molecule,
+  type MoleculeHandle,
+} from "./chemistry/rdkit.ts";
 import {
   abbreviatedGroups,
   type MoleculeAbbreviation,
@@ -28,8 +34,12 @@ const props = withDefaults(
     highlightBonds?: readonly number[];
     labels?: Record<number, string>;
     disabled?: boolean;
+    scale?: number;
+    alignment?: MoleculeHandle;
+    grouped?: boolean;
   }>(),
   {
+    scale: 1,
     abbreviations: () => [],
     selected: () => [],
     selectedKind: "atoms",
@@ -38,7 +48,10 @@ const props = withDefaults(
     labels: () => ({}),
   },
 );
-const emit = defineEmits<{ "update:selected": [value: number[]] }>();
+const emit = defineEmits<{
+  "update:selected": [value: number[]];
+  measure: [width: number];
+}>();
 type Point = { x: number; y: number };
 const svg = ref("");
 const structure = ref<SVGSVGElement>();
@@ -57,13 +70,14 @@ watch(
     await nextTick();
     if (!structure.value) return;
     const box = structure.value.getBBox();
-    const padding = 12;
+    const padding = props.grouped ? 4 : 12;
     bounds.value = {
       x: box.x - padding,
       y: box.y - padding,
       width: box.width + padding * 2,
       height: box.height + padding * 2,
     };
+    emit("measure", bounds.value.width * moleculeScreenScale);
   },
   { deep: true, flush: "post" },
 );
@@ -73,7 +87,7 @@ const foldedAtoms = ref(new Set<number>());
 const error = ref("");
 const retry = ref(0);
 watch(
-  [() => props.smiles, () => props.abbreviations, retry],
+  [() => props.smiles, () => props.abbreviations, () => props.alignment, retry],
   async (_, __, cleanup) => {
     let active = true;
     cleanup(() => {
@@ -88,6 +102,7 @@ watch(
       if (!active) return;
       const mol = molecule(toolkit, props.smiles);
       try {
+        if (props.grouped) alignMolecule(mol, props.alignment);
         const count = mol.get_num_atoms();
         const groups = abbreviatedGroups(toolkit, mol, props.abbreviations);
         const folded = new Set(groups.flatMap((group) => group.atoms));
@@ -243,7 +258,11 @@ function toggle(index: number) {
 }
 </script>
 <template>
-  <figure class="molecule" :aria-label="name">
+  <FigureCard
+    class="molecule"
+    :class="{ 'molecule--grouped': grouped }"
+    :aria-label="name"
+  >
     <div v-if="error" role="alert" class="callout callout--caution">
       <p>{{ error }}</p>
       <code>{{ smiles }}</code>
@@ -255,7 +274,7 @@ function toggle(index: number) {
       class="structure"
       ref="structure"
       :viewBox="`${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}`"
-      :style="{ width: `${bounds.width * moleculeScreenScale}px` }"
+      :style="{ width: `${bounds.width * moleculeScreenScale * scale}px` }"
       :role="selectable ? 'group' : 'img'"
       :aria-label="`${name}二维结构`"
     >
@@ -355,9 +374,6 @@ function toggle(index: number) {
         </text>
       </g>
     </svg>
-    <figcaption>
-      <slot name="caption">{{ name }}</slot>
-    </figcaption>
     <p v-if="selectable" class="selection" aria-live="polite">
       {{
         selected.length
@@ -365,11 +381,13 @@ function toggle(index: number) {
           : `尚未选择${selectable === "atoms" ? "原子" : "键"}`
       }}
     </p>
-  </figure>
+    <template #caption>
+      <slot name="caption">{{ name }}</slot>
+    </template>
+  </FigureCard>
 </template>
 <style scoped>
 .molecule {
-  margin: 0;
   min-width: 0;
 }
 .structure {
@@ -378,6 +396,13 @@ function toggle(index: number) {
   height: auto;
   margin-inline: auto;
   background: var(--surface);
+}
+.molecule--grouped :deep(.figure-card-art) {
+  min-width: 0;
+  overflow-x: auto;
+}
+.molecule--grouped .structure {
+  max-width: none;
 }
 .atom-target {
   fill: transparent;
@@ -425,8 +450,7 @@ function toggle(index: number) {
   fill: var(--ink);
   text-anchor: middle;
 }
-.selection,
-figcaption {
+.selection {
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   color: var(--ink-soft);

@@ -268,18 +268,15 @@ const toneClass = (tone?: string) =>
       :alt="block.alt"
       :caption="block.caption"
     />
-    <figure v-else-if="block.type === 'chart'" class="figure">
-      <LineChart
-        :points="content.dataOf(block.points)"
-        :x-label="block.xLabel"
-        :y-label="block.yLabel"
-        :x-domain="block.xDomain"
-        :y-domain="block.yDomain"
-      />
-      <figcaption v-if="block.caption" class="caption">
-        {{ block.caption }}
-      </figcaption>
-    </figure>
+    <LineChart
+      v-else-if="block.type === 'chart'"
+      :points="content.dataOf(block.points)"
+      :x-label="block.xLabel"
+      :y-label="block.yLabel"
+      :x-domain="block.xDomain"
+      :y-domain="block.yDomain"
+      :caption="block.caption"
+    />
     <TimelineFigure
       v-else-if="block.type === 'timeline'"
       class="figure"
