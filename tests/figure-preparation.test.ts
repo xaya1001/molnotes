@@ -1317,8 +1317,13 @@ test("worker preparation and diagnostics agree with direct Node execution", asyn
       },
       0,
     );
+    const { cardPlans, ...standard } = geometry;
     assert.deepEqual(
-      geometry,
+      cardPlans?.map(({ width }) => width),
+      [680, 814, 334],
+    );
+    assert.deepEqual(
+      standard,
       await prepareFigure(compiled.entries, compiled.reference, {
         toolkit,
         fonts,

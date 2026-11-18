@@ -2368,7 +2368,7 @@ export async function prepareFigure(
     height,
     minimumScale,
     atomPoints,
-    cardPlan,
+    ...(cardPlan && { cardPlan }),
   };
   return options.canvas === "scene"
     ? geometry
