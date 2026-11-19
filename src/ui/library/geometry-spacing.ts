@@ -1,9 +1,8 @@
-import { mainRowBox, rectangle, transformPoint } from "./geometry-math.ts";
+import { mainRowBox, rectangle } from "./geometry-math.ts";
 import { ringExteriorAngle } from "../../../shared/chemical-library/chemistry.ts";
 import type { Point } from "../../../shared/chemical-library/types.ts";
 import { type FigureGroup, type FigureScene } from "./scene-geometry.ts";
 import type {
-  FigureMatrix,
   FigureNode,
   FigureRect,
 } from "../../../shared/chemical-library/geometry.ts";
@@ -239,31 +238,22 @@ export function spaceChiralHydrogens(
     const directions = neighbours.map((p) =>
       Math.atan2(p.y - origin.y, p.x - origin.x),
     );
+    const exterior = ringExteriorAngle(rings, positions, owner, directions);
+    const preferred = exterior ?? angle;
     const offsets = directions.map((direction) => {
-      const a = direction - angle;
+      const a = direction - preferred;
       return ((a % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
     });
     const positive = Math.min(...offsets),
       negative = Math.max(...offsets) - 2 * Math.PI;
     const own = new Set(paths);
-    const score = (rotation: number, scale = 1) => {
-      const ux = Math.cos(angle),
-        uy = Math.sin(angle);
-      const vx = Math.cos(angle + rotation),
-        vy = Math.sin(angle + rotation);
-      const a = scale * vx * ux + vy * uy;
-      const b = scale * vy * ux - vx * uy;
-      const c = scale * vx * uy - vy * ux;
-      const d = scale * vy * uy + vx * ux;
-      const matrix: FigureMatrix = [
-        a,
-        b,
-        c,
-        d,
-        origin.x - a * origin.x - c * origin.y,
-        origin.y - b * origin.x - d * origin.y,
-      ];
-      const move = (point: Point) => transformPoint(point, matrix);
+    const score = (rotation: number) => {
+      const cos = Math.cos(rotation),
+        sin = Math.sin(rotation);
+      const move = (p: Point) => ({
+        x: origin.x + (p.x - origin.x) * cos - (p.y - origin.y) * sin,
+        y: origin.y + (p.x - origin.x) * sin + (p.y - origin.y) * cos,
+      });
       const end = move(endpoint),
         dx = end.x - endpoint.x,
         dy = end.y - endpoint.y;
@@ -282,14 +272,14 @@ export function spaceChiralHydrogens(
           b !== owner &&
           crosses(origin, end, positions[a], positions[b])
         )
-          return { cost: Infinity, end, dx, dy, matrix };
+          return { cost: Infinity, end, dx, dy, rotation };
       for (const [a, b] of nativeBonds.values())
         if (
           a !== owner &&
           b !== owner &&
           crosses(origin, end, positions[a], positions[b])
         )
-          return { cost: Infinity, end, dx, dy, matrix };
+          return { cost: Infinity, end, dx, dy, rotation };
       for (const [other, b] of boxes) if (other !== id) cost += overlap(box, b);
       for (const trace of traces) {
         const contours = own.has(trace.el)
@@ -308,32 +298,28 @@ export function spaceChiralHydrogens(
                 inkIntersectsBox(contours, b, trace.width, trace.filled),
               );
       }
-      return { cost, end, dx, dy, matrix };
+      return { cost, end, dx, dy, rotation };
     };
-    const exterior = ringExteriorAngle(rings, positions, owner, directions);
-    const rotation = exterior === undefined ? 0 : exterior - angle;
+    const rotation = preferred - angle;
     let best = score(rotation);
-    if (exterior === undefined) {
-      for (let degrees = 5; degrees < 180 && best.cost > 0; degrees += 5)
-        for (const sign of [1, -1]) {
-          const rotation = (sign * degrees * Math.PI) / 180;
-          if (rotation >= positive - 0.05 || rotation <= negative + 0.05)
-            continue;
-          const candidate = score(rotation);
-          if (candidate.cost < best.cost) best = candidate;
-          if (best.cost === 0) break;
-        }
-    } else {
-      // Keep the bisector when two exterior labels or wedges meet.
-      for (const scale of [1.1, 1.2, 1.3, 1.4]) {
-        if (best.cost === 0) break;
-        const candidate = score(rotation, scale);
+    const step = exterior === undefined ? 5 : 1;
+    for (let degrees = step; degrees < 180 && best.cost > 0; degrees += step)
+      for (const sign of [1, -1]) {
+        const offset = (sign * degrees * Math.PI) / 180;
+        if (offset >= positive - 0.05 || offset <= negative + 0.05) continue;
+        const candidate = score(rotation + offset);
         if (candidate.cost < best.cost) best = candidate;
+        if (best.cost === 0) break;
       }
-    }
     if (Math.hypot(best.dx, best.dy) < 1e-8) continue;
+    const cos = Math.cos(best.rotation),
+      sin = Math.sin(best.rotation);
     for (const p of paths)
-      ctx.set(p, "transform", `matrix(${best.matrix.join(" ")})`);
+      ctx.set(
+        p,
+        "transform",
+        `matrix(${cos} ${sin} ${-sin} ${cos} ${origin.x - origin.x * cos + origin.y * sin} ${origin.y - origin.x * sin - origin.y * cos})`,
+      );
     for (const glyph of glyphs)
       ctx.set(glyph, "transform", `translate(${best.dx} ${best.dy})`);
     positions[h] = best.end;

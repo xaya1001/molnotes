@@ -1007,6 +1007,7 @@ export function chargeMarks(
       };
     let bestScore = -Infinity,
       bestCollisions = Infinity,
+      bestFacesAway = true,
       best: Point | undefined;
     for (const [index, degrees] of (angles[id] === undefined
       ? [-45, -135, 45, 135, -90, 90, 0, 180]
@@ -1041,8 +1042,10 @@ export function chargeMarks(
         )
           clear = 0;
       let score = Math.min(clear, B * 0.8) - index * B * 0.012;
-      if (aims[id])
-        score += dot({ x: dx, y: dy }, unit(sub(aims[id], p))) * B * 0.2;
+      const aim = aims[id];
+      const facing = aim ? dot({ x: dx, y: dy }, unit(sub(aim, p))) : 0;
+      const facesAway = charges[id] < 0 && facing < -0.1;
+      score += facing * B * 0.2;
       const outer = radius + 0.8,
         rectangle = [
           { x: point.x - outer, y: point.y - outer },
@@ -1084,9 +1087,11 @@ export function chargeMarks(
           collisions++;
       if (
         collisions < bestCollisions ||
-        (collisions === bestCollisions && score > bestScore)
+        (collisions === bestCollisions &&
+          (facesAway === bestFacesAway ? score > bestScore : !facesAway))
       ) {
         bestCollisions = collisions;
+        bestFacesAway = facesAway;
         bestScore = score;
         best = point;
       }
