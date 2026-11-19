@@ -1,4 +1,5 @@
 import { mainRowBox, rectangle } from "./geometry-math.ts";
+import { ringExteriorAngle } from "../../../shared/chemical-library/chemistry.ts";
 import type { Point } from "../../../shared/chemical-library/types.ts";
 import { type FigureGroup, type FigureScene } from "./scene-geometry.ts";
 import type {
@@ -193,8 +194,7 @@ function crosses(a: Point, b: Point, c: Point, d: Point) {
   return side(a, b, c) * side(a, b, d) < 0 && side(c, d, a) * side(c, d, b) < 0;
 }
 
-// Only drawing-added H atoms may move. Rotate their native wedge rigidly,
-// keeping bond length, wedge sense and the angular order of heavy ligands.
+// Place drawing-added wedges without changing their sense.
 export function spaceChiralHydrogens(
   g: FigureGroup,
   positions: Point[],
@@ -202,6 +202,7 @@ export function spaceChiralHydrogens(
   nativeBonds: Map<number, [number, number]>,
   bonds: { atoms: number[] }[],
   ctx: FigureScene,
+  rings: number[][],
 ) {
   for (const [index, pair] of nativeBonds) {
     const h = pair.find((i) => i >= atomCount);
@@ -234,8 +235,13 @@ export function spaceChiralHydrogens(
         ? [positions[b.atoms.find((i) => i !== owner)!]]
         : [],
     );
-    const offsets = neighbours.map((p) => {
-      const a = Math.atan2(p.y - origin.y, p.x - origin.x) - angle;
+    const directions = neighbours.map((p) =>
+      Math.atan2(p.y - origin.y, p.x - origin.x),
+    );
+    const exterior = ringExteriorAngle(rings, positions, owner, directions);
+    const preferred = exterior ?? angle;
+    const offsets = directions.map((direction) => {
+      const a = direction - preferred;
       return ((a % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
     });
     const positive = Math.min(...offsets),
@@ -244,11 +250,11 @@ export function spaceChiralHydrogens(
     const score = (rotation: number) => {
       const cos = Math.cos(rotation),
         sin = Math.sin(rotation);
-      const rotate = (p: Point) => ({
+      const move = (p: Point) => ({
         x: origin.x + (p.x - origin.x) * cos - (p.y - origin.y) * sin,
         y: origin.y + (p.x - origin.x) * sin + (p.y - origin.y) * cos,
       });
-      const end = rotate(endpoint),
+      const end = move(endpoint),
         dx = end.x - endpoint.x,
         dy = end.y - endpoint.y;
       const box = rectangle(
@@ -266,19 +272,19 @@ export function spaceChiralHydrogens(
           b !== owner &&
           crosses(origin, end, positions[a], positions[b])
         )
-          return { cost: Infinity, end, dx, dy };
+          return { cost: Infinity, end, dx, dy, rotation };
       for (const [a, b] of nativeBonds.values())
         if (
           a !== owner &&
           b !== owner &&
           crosses(origin, end, positions[a], positions[b])
         )
-          return { cost: Infinity, end, dx, dy };
+          return { cost: Infinity, end, dx, dy, rotation };
       for (const [other, b] of boxes) if (other !== id) cost += overlap(box, b);
       for (const trace of traces) {
         const contours = own.has(trace.el)
           ? trace.contours.map((contour) => {
-              const points = contour.points.map(rotate);
+              const points = contour.points.map(move);
               return { points, box: bounds(points) };
             })
           : trace.contours;
@@ -292,20 +298,20 @@ export function spaceChiralHydrogens(
                 inkIntersectsBox(contours, b, trace.width, trace.filled),
               );
       }
-      return { cost, end, dx, dy };
+      return { cost, end, dx, dy, rotation };
     };
-    let best = { rotation: 0, ...score(0) };
-    if (best.cost === 0) continue;
-    for (let degrees = 5; degrees < 180 && best.cost > 0; degrees += 5)
+    const rotation = preferred - angle;
+    let best = score(rotation);
+    const step = exterior === undefined ? 5 : 1;
+    for (let degrees = step; degrees < 180 && best.cost > 0; degrees += step)
       for (const sign of [1, -1]) {
-        const rotation = (sign * degrees * Math.PI) / 180;
-        if (rotation >= positive - 0.05 || rotation <= negative + 0.05)
-          continue;
-        const candidate = score(rotation);
-        if (candidate.cost < best.cost) best = { rotation, ...candidate };
+        const offset = (sign * degrees * Math.PI) / 180;
+        if (offset >= positive - 0.05 || offset <= negative + 0.05) continue;
+        const candidate = score(rotation + offset);
+        if (candidate.cost < best.cost) best = candidate;
         if (best.cost === 0) break;
       }
-    if (!best.rotation) continue;
+    if (Math.hypot(best.dx, best.dy) < 1e-8) continue;
     const cos = Math.cos(best.rotation),
       sin = Math.sin(best.rotation);
     for (const p of paths)

@@ -19,10 +19,143 @@ export interface ChemicalGraph {
   }[];
   bonds: { atoms: [number, number]; bo?: number }[];
   conformers?: { coords: [number, number][] }[];
+  extensions?: {
+    name: string;
+    atomRings?: number[][];
+    aromaticBonds?: number[];
+  }[];
 }
 export function graphOf(mol: Mol): ChemicalGraph {
   return JSON.parse(mol.get_json()).molecules[0];
 }
+
+export const atomRings = (graph: ChemicalGraph) =>
+  graph.extensions?.find((e) => e.name === "rdkitRepresentation")?.atomRings ??
+  [];
+
+/** Bisect the widest exterior sector at a ring vertex. */
+export function ringExteriorAngle(
+  rings: number[][],
+  points: Point[],
+  vertex: number,
+  bondDirections: number[] = [],
+) {
+  const turn = 2 * Math.PI;
+  const wrap = (angle: number) => ((angle % turn) + turn) % turn;
+  const origin = points[vertex];
+  const interiors = rings.flatMap((ring) => {
+    const i = ring.indexOf(vertex);
+    if (i < 0) return [];
+    const prev = points[ring[(i + ring.length - 1) % ring.length]];
+    const next = points[ring[(i + 1) % ring.length]];
+    const area = ring.reduce((sum, atom, j) => {
+      const a = points[atom],
+        b = points[ring[(j + 1) % ring.length]];
+      return sum + a.x * b.y - a.y * b.x;
+    }, 0);
+    const angle = (p: Point) =>
+      wrap(Math.atan2(p.y - origin.y, p.x - origin.x));
+    const [start, end] =
+      area > 0 ? [angle(next), angle(prev)] : [angle(prev), angle(next)];
+    return [{ start, end }];
+  });
+  if (!interiors.length) return;
+  const edges = [
+    ...new Set([
+      ...interiors.flatMap(({ start, end }) => [start, end]),
+      ...bondDirections.map(wrap),
+    ]),
+  ].sort((a, b) => a - b);
+  let exterior: number | undefined,
+    widest = 0;
+  for (const [i, start] of edges.entries()) {
+    const sweep = (edges[i + 1] ?? edges[0] + turn) - start;
+    const middle = start + sweep / 2;
+    if (
+      sweep <= widest ||
+      interiors.some(
+        ({ start, end }) => wrap(middle - start) < wrap(end - start),
+      )
+    )
+      continue;
+    widest = sweep;
+    exterior = middle;
+  }
+  return exterior;
+}
+
+export function placeRingHydrogens(graph: ChemicalGraph, points: Point[]) {
+  const rings = atomRings(graph);
+  if (!rings.length) return;
+  const neighbors = (i: number) =>
+    graph.bonds.flatMap(({ atoms: [a, b] }) =>
+      a === i ? [b] : b === i ? [a] : [],
+    );
+  for (const { atoms } of graph.bonds) {
+    const h = atoms.find(
+      (i) => graph.atoms[i].z === 1 && !graph.atoms[i].isotope,
+    );
+    if (h === undefined) continue;
+    const parent = atoms[0] === h ? atoms[1] : atoms[0];
+    const p = points[parent],
+      q = points[h];
+    const heavy = neighbors(parent).filter((i) => graph.atoms[i].z !== 1);
+    const stereo = graph.atoms[parent].stereo;
+    const keepHeavyDirections = stereo && stereo !== "unspecified";
+    // Retain the heavy-ligand directions of a stereocentre across aligned views.
+    const directions = keepHeavyDirections
+      ? heavy.map((i) => Math.atan2(points[i].y - p.y, points[i].x - p.x))
+      : [];
+    const angle = ringExteriorAngle(rings, points, parent, directions);
+    if (angle === undefined) continue;
+    let length = Math.hypot(q.x - p.x, q.y - p.y);
+    const ringNeighbors = new Set(
+      rings.flatMap((ring) => {
+        const i = ring.indexOf(parent);
+        return i < 0
+          ? []
+          : [
+              ring[(i + 1) % ring.length],
+              ring[(i + ring.length - 1) % ring.length],
+            ];
+      }),
+    );
+    for (const next of keepHeavyDirections ? [] : heavy) {
+      if (ringNeighbors.has(next)) continue;
+      const { x, y } = points[next];
+      const bearing = Math.atan2(y - p.y, x - p.x);
+      if (Math.cos(bearing - angle) < Math.cos(Math.PI / 6)) continue;
+      // Keep the substituent on the original H side of the bisector.
+      const oldAngle = Math.atan2(q.y - p.y, q.x - p.x);
+      const side = Math.sin(oldAngle - angle) < 0 ? -1 : 1;
+      const turn = angle + (side * Math.PI) / 3 - bearing;
+      const cos = Math.cos(turn),
+        sin = Math.sin(turn);
+      const branch = new Set([next]);
+      for (const i of branch) {
+        for (const j of neighbors(i)) if (j !== parent) branch.add(j);
+        const dx = points[i].x - p.x,
+          dy = points[i].y - p.y;
+        points[i] = {
+          x: p.x + dx * cos - dy * sin,
+          y: p.y + dx * sin + dy * cos,
+        };
+      }
+      // Give the adjacent C–H and substituent bonds room for their labels.
+      const ringBond =
+        [...ringNeighbors].reduce(
+          (sum, i) => sum + Math.hypot(points[i].x - p.x, points[i].y - p.y),
+          0,
+        ) / ringNeighbors.size;
+      length = Math.max(length, 0.85 * ringBond);
+    }
+    points[h] = {
+      x: p.x + length * Math.cos(angle),
+      y: p.y + length * Math.sin(angle),
+    };
+  }
+}
+
 export function openMolecule(toolkit: Toolkit, text: string, sanitize = true) {
   const mol = toolkit.get_mol(
     text,
@@ -340,16 +473,20 @@ export function placedCoordinates(
   mirror = false,
 ) {
   let points = c.atomIds.map((id) => layout.pins?.[id] ?? layout.coords[id]);
-  if (layout.ionPairs !== "keep" && c.smiles.includes(".")) {
+  const positionIons = layout.ionPairs !== "keep" && c.smiles.includes(".");
+  if (positionIons || layout.explicitHydrogens || c.smiles.includes("[H")) {
     const mol = openMolecule(toolkit, c.smiles);
     try {
-      points = ionPairCoordinates(
-        graphOf(mol),
-        points,
-        new Set(
-          Object.keys(layout.pins ?? {}).map((id) => c.atomIds.indexOf(id)),
-        ),
-      );
+      const graph = graphOf(mol);
+      if (positionIons)
+        points = ionPairCoordinates(
+          graph,
+          points,
+          new Set(
+            Object.keys(layout.pins ?? {}).map((id) => c.atomIds.indexOf(id)),
+          ),
+        );
+      placeRingHydrogens(graph, points);
     } finally {
       mol.delete();
     }

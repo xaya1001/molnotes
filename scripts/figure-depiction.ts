@@ -6,10 +6,13 @@ import {
 } from "./figure-coordinate-relief.ts";
 import {
   atomMaps,
+  atomRings,
   graphOf,
   openMolecule,
   graphSignature,
   abbreviatedDrawing,
+  placeRingHydrogens,
+  type ChemicalGraph,
 } from "../shared/chemical-library/chemistry.ts";
 import {
   abbreviatedGroups,
@@ -423,11 +426,7 @@ function free(mol: Mol, coordgen: boolean) {
   return mol;
 }
 function rings(mol: Mol): number[][] {
-  return (
-    JSON.parse(mol.get_json()).molecules[0].extensions?.find(
-      (e: { name: string }) => e.name === "rdkitRepresentation",
-    )?.atomRings ?? []
-  );
+  return atomRings(graphOf(mol));
 }
 function follow(
   rd: Toolkit,
@@ -722,7 +721,7 @@ export function depictSeries(
           core,
         );
       mols[i].normalize_depiction(0);
-      const points = savedCoordinates(xy(mols[i]), [], [], 1),
+      const points = savedCoordinates(graphOf(mols[i]), xy(mols[i]), [], [], 1),
         layout = item.variant
           ? item.compound.variants![item.variant]
           : item.compound.layout;
@@ -744,20 +743,23 @@ export function depictSeries(
 
 /** Score and save the same centred, quantized coordinates, including folded atoms. */
 function savedCoordinates(
+  graph: ChemicalGraph,
   fullPoints: [number, number][],
   original: number[],
   points: [number, number][],
   scale: number,
 ) {
-  const expanded = fullPoints.map((p) => [...p] as [number, number]);
+  const expanded = fullPoints.map(([x, y]) => ({ x, y }));
   original.forEach((a, i) => {
-    expanded[a] = points[i];
+    const [x, y] = points[i];
+    expanded[a] = { x, y };
   });
-  const xs = expanded.map((p) => p[0]),
-    ys = expanded.map((p) => p[1]),
+  placeRingHydrogens(graph, expanded);
+  const xs = expanded.map((p) => p.x),
+    ys = expanded.map((p) => p.y),
     cx = (Math.min(...xs) + Math.max(...xs)) / 2,
     cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-  return expanded.map(([x, y]) => ({
+  return expanded.map(({ x, y }) => ({
     x: figureDimension(((x - cx) / 1.5) * scale),
     y: figureDimension((-(y - cy) / 1.5) * scale),
   }));
@@ -773,7 +775,14 @@ function nativeLabelCost(
   style: FigureStyle,
 ) {
   const { original } = displayAtoms.get(mol)!;
-  const saved = savedCoordinates(fullPoints, original, points, spec.scale ?? 1);
+  const graph = graphOf(full);
+  const saved = savedCoordinates(
+    graph,
+    fullPoints,
+    original,
+    points,
+    spec.scale ?? 1,
+  );
   const angle = ((spec.rot ?? 0) * Math.PI) / 180,
     fx = spec.flip === true || spec.flip === "h" ? -1 : 1,
     fy = spec.flip === "v" ? -1 : 1,
@@ -782,7 +791,6 @@ function nativeLabelCost(
       1.5 * (x * fx * Math.sin(angle) - y * fy * Math.cos(angle)),
     ]),
     copy = withCoordinates(rd, full, placed),
-    graph = graphOf(full),
     names = new Map(
       [...displayAtoms.get(mol)!.labels].map(([i, name]) => [
         original[i],
@@ -1144,6 +1152,7 @@ export function depictRoute(
         );
         // Propagated references include the author's final rot/flip, while the saved placement owns that transform.
         const coords = savedCoordinates(
+          graphOf(fulls.get(key)!),
           fullPoints,
           displayAtoms.get(final)!.original,
           xy(final),
