@@ -42,7 +42,6 @@ async function fixture(t: TestContext) {
     products: [{ id: "output", compound: "cmp_b" }],
     reagents: [],
     conditions: [],
-    explanation: "Example",
     scene: {
       width: 12,
       height: 8,
@@ -327,7 +326,6 @@ test("mechanism overview and pinned views retain local numbering and focus", asy
     frames: ["first", "second"].map((id) => ({
       id,
       title: id,
-      explanation: id,
       scene: {
         width: 8,
         height: 6,

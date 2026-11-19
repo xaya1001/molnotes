@@ -278,7 +278,7 @@ test("template structures participate in routes, panels and mechanism frames", a
     {
       kind: "mechanism",
       frames: [
-        { id: "a", ...chair, above: "Heat", explain: "First view" },
+        { id: "a", ...chair, above: "Heat" },
         { id: "b", ...chair, flip: true },
       ],
     },

@@ -18,7 +18,6 @@ export interface EntryBase {
   sourceFile?: string;
   sourceKey?: string;
   owner?: string;
-  overview?: string;
   footnote?: string;
   id: string;
   title: string;
@@ -179,7 +178,6 @@ export interface Reaction extends EntryBase {
   tags?: string[];
   plusAt?: Point[];
   showPlus?: boolean;
-  explanation: string;
   scene: Scene;
   arrow: {
     from: Point;
@@ -216,7 +214,6 @@ export interface Mechanism extends EntryBase {
     id: string;
     title: string;
     scene: Scene;
-    explanation: string;
     arrow?: ArrowKind;
     above?: string[];
     below?: string[];

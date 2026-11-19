@@ -64,7 +64,6 @@ export interface StepInput {
   side?: "left" | "right";
   reverse?: boolean;
   changes?: boolean | "on" | "off" | { add?: number[]; remove?: number[] };
-  explain?: Key;
   arrow?: ArrowKind;
   tags?: string[];
   reagentPosition?: "above-arrow" | "below-arrow";
@@ -89,7 +88,6 @@ export interface FrameInput extends StructureInput {
   }[];
   partialBonds?: { from: string; to: string; order?: number }[];
   map?: Record<string, number | string>;
-  explain?: Key;
   above?: Key;
   below?: Key;
   arrow?: ArrowKind;
@@ -118,7 +116,6 @@ export interface FigureInput {
   rot?: number;
   flip?: "h" | "v";
   title?: Key;
-  explain?: Key;
   sources?: { source: Key; locator?: Key; note?: Key }[];
   compounds?: Record<string, string | StructureInput>;
   steps?: StepInput[];
@@ -311,7 +308,6 @@ export function validateFigureInput(value: unknown): {
         object({ add: list(number), remove: list(number) }),
       ),
       enclose: map(enclose),
-      explain: text,
       arrow: arrowKind,
       tags: list(string),
       reagentPosition: choice("above-arrow", "below-arrow"),
@@ -330,7 +326,6 @@ export function validateFigureInput(value: unknown): {
         kind: choice("markush"),
         title: text,
         sources,
-        explain: text,
         footnote: text,
         core: string,
         groups: () => {},
@@ -358,7 +353,6 @@ export function validateFigureInput(value: unknown): {
     width: positiveNumber,
     kind: choice("route", "mechanism", "gallery", "scope", "cycle"),
     title: text,
-    explain: text,
     sources,
     coordgen: bool,
     forming: bool,
@@ -437,7 +431,6 @@ export function validateFigureInput(value: unknown): {
             id: text,
             title: text,
             map: map(either(number, string)),
-            explain: text,
             above: text,
             below: text,
             arrow: arrowKind,

@@ -114,7 +114,6 @@ export async function compilePanelScene(
           {
             id: "measure",
             title: "Measure",
-            explanation: "Measure",
             scene: cell.scene,
           },
         ],
