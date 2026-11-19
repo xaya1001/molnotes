@@ -1432,17 +1432,31 @@ test("wrapping measures SVG text without a trailing space", async () => {
   assert.deepEqual(lines, ["AAAA BBBB CCCC", "DDDD"]);
 });
 
-test("wrapFigureText breaks only at punctuation or spaces and keeps chemical phrases intact", async () => {
+test("wrapFigureText prioritizes punctuation and keeps chemical phrases intact", async () => {
   const { wrapFigureText } = await import("../src/ui/library/text-runs.ts");
-  const text =
-    "Et₃N 去质子化生成的硫叶立德在五元环内抓走 α-H，C–H 键电子建 C=O π 键，O–S 键电子退归硫正离子";
+  const text = "登记溶剂与反应温度，标记 C=O π 键，复核 O–S 键的方向";
   const measure = (value: string) => value.length * 10;
-  const wrapped = wrapFigureText([text], 280, measure, { balance: true });
+  const wrapped = wrapFigureText([text], 160, measure, { balance: true });
   assert.ok(wrapped.length >= 2);
   assert.equal(wrapped.join(""), text);
   for (const line of wrapped.slice(0, -1)) assert.match(line, /[，、；：。]$/u);
   assert.ok(wrapped.some((line) => line.includes("C=O π 键")));
   assert.ok(wrapped.some((line) => line.includes("O–S 键")));
+
+  const narrow = wrapFigureText(
+    [
+      "混合试剂（保持缓慢搅拌），沿容器壁慢慢加入溶剂后持续搅拌 C=O π 键，降温至 25 °C。",
+    ],
+    140,
+    measure,
+    { balance: true, breakHan: true },
+  );
+  assert.ok(narrow.every((line) => measure(line) <= 140));
+  assert.ok(narrow.every((line) => !/^[）、。，；：]/u.test(line)));
+  assert.ok(narrow.every((line) => !/[（「]$/u.test(line)));
+  assert.ok(narrow.includes("混合试剂（保持缓慢搅拌），"));
+  assert.ok(narrow.some((line) => line.includes("C=O π 键")));
+  assert.ok(narrow.some((line) => line.includes("25 °C")));
 });
 
 test("SVG subscript line boxes follow the central baseline", async () => {
