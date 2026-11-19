@@ -58,6 +58,7 @@ export interface Note {
   title: string;
   summary: string;
   date: string;
+  /** The last file commit's day, when later than date. */
   updated?: string;
   order: number;
   html: string;
@@ -165,7 +166,6 @@ let toolkit: Awaited<ReturnType<typeof moleculeToolkit>> | undefined;
 function fields(
   value: unknown,
   required: string[],
-  optional: string[],
   file: string,
 ): asserts value is Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -173,8 +173,7 @@ function fields(
   for (const key of required)
     if (!(key in value)) fail(file, 1, `Missing ${key}`);
   for (const key of Object.keys(value))
-    if (![...required, ...optional].includes(key))
-      fail(file, 1, `Unknown field ${key}`);
+    if (!required.includes(key)) fail(file, 1, `Unknown field ${key}`);
 }
 function date(value: unknown) {
   return (
@@ -195,20 +194,17 @@ export function parseNote(source: string, file: string) {
       doc.errors[0].message,
     );
   const metadata: unknown = doc.toJS();
-  fields(metadata, ["title", "summary", "date", "order"], ["updated"], file);
+  fields(metadata, ["title", "summary", "date", "order"], file);
   for (const key of ["title", "summary"])
     if (typeof metadata[key] !== "string" || !metadata[key].trim())
       fail(file, 1, `Invalid ${key}`);
   if (!isInteger(metadata.order)) fail(file, 1, "order must be an integer");
-  for (const key of ["date", "updated"])
-    if (key in metadata && !date(metadata[key]))
-      fail(file, 1, `Invalid ${key}: expected YYYY-MM-DD`);
+  if (!date(metadata.date)) fail(file, 1, "Invalid date: expected YYYY-MM-DD");
   return {
     ...(metadata as {
       title: string;
       summary: string;
       date: string;
-      updated?: string;
       order: number;
     }),
     body: source.slice(match[0].length),

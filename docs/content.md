@@ -6,7 +6,12 @@
 
 `directory.json` 只含 `title`（非空字符串）、`intro`（Markdown 字符串）、`order`（大于等于 1 的整数）。目录按 order、slug 排序。每个目录必须有这份文件。
 
-每篇 `<slug>.md` 以 YAML front matter 开始，必填 `title`、`summary`（非空字符串）、`date`（YYYY-MM-DD）、`order`（整数），可选 `updated`（YYYY-MM-DD）。日期必须真实存在，未知字段与重复 YAML key 报错。篇目按 order、slug 排序，order 同时是侧栏里的篇号（0 不编号，用于导读）；页面标题来自 title，正文从 `##` 开始，禁止 `#`。`##`、`###` 生成小节目录，`## 资料来源` 默认收起。
+每篇 `<slug>.md` 以 YAML front matter 开始，必填 `title`、`summary`（非空字符串）、`date`（首发日期，YYYY-MM-DD）、`order`（整数）。
+发布时从 Git 历史取该 Markdown 文件最后一次提交的上海日期，晚于首发日期时在页面显示更新日期。
+日期必须真实存在，未知字段与重复 YAML key 报错。
+篇目按 order、slug 排序，order 同时是侧栏里的篇号（0 不编号，用于导读）。
+页面标题来自 title，正文从 `##` 开始，禁止 `#`。
+`##`、`###` 生成小节目录，`## 资料来源` 默认收起。
 
 `notes/<dir>/author/` 存放这套笔记的作者资料：写作约定、写作规划、素材与检索记录、待核实清单和修订记录。Agent 写作或修订某套笔记前先读该目录的作者资料。`author/` 里只放 `<slug>.md`，契约与篇目相同（front matter、术语、引用、结构式与图片同样校验，图片放目录的 `assets/`），`order` 只在作者资料内部排序，slug 可以与篇目同名。作者资料随目录进入快照；网站读取接口、阅读页面、侧栏、阅读记录、首页和搜索只提供读者篇目。作者资料里的站内链接 `<slug>` 指 `author/` 中的另一篇，`../<slug>` 指本目录的篇目。
 

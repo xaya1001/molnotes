@@ -32,6 +32,7 @@ import {
   readUnit,
   readRegistry,
   readGlossary,
+  noteCommitDates,
   type ContentUnit,
   type NotesUnit,
   type SiteUnit,
@@ -307,13 +308,23 @@ function notebookSources(data: PublishData) {
     );
   return { directories, notes };
 }
-async function compile(data: PublishData) {
+async function compile(data: PublishData, root: string, commit: string | null) {
   const ctx = context(data);
   await validateTopics(data, ctx);
   const { directories, notes } = notebookSources(data);
+  const dates = commit
+    ? await noteCommitDates(
+        root,
+        commit,
+        notes.map(({ file }) => file),
+      )
+    : undefined;
   return compileNotes({
     directories,
-    notes,
+    notes: notes.map((note) => {
+      const updated = dates?.get(note.file);
+      return updated && updated > note.date ? { ...note, updated } : note;
+    }),
     terms: ctx.terms,
     routes: ctx.routes,
     assetExists: (dir, path) => ctx.assets.has(`/notes/${dir}/${path}`),
@@ -402,7 +413,9 @@ async function build(
     assets: [...inputs.flatMap((input) => input.assets), ...library.assets],
     glossary,
   };
-  const compiled = await measureStage("publish.compile", () => compile(data));
+  const compiled = await measureStage("publish.compile", () =>
+    compile(data, root, commit),
+  );
   const usage = libraryUsage(library.entries, [
     ...sites.map((s) => ({
       value: [s.content, ...s.compoundReferences],

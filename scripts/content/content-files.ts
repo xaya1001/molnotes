@@ -278,6 +278,33 @@ async function checkRepository(root: string) {
       `${root}: not inside a Git work tree; the content directory must be in a Git repository or one of its worktrees`,
     );
 }
+
+/** Last commit days for note paths relative to the content directory. */
+export async function noteCommitDates(
+  root: string,
+  commit: string,
+  files: string[],
+) {
+  if (
+    (await git(root, ["rev-parse", "--is-shallow-repository"])).trim() ===
+    "true"
+  )
+    throw new Error(`${root}: publishing requires a complete Git history`);
+  const shanghai = new Intl.DateTimeFormat("en-CA", {
+    dateStyle: "short",
+    timeZone: "Asia/Shanghai",
+  });
+  const dates = new Map<string, string>();
+  for (const file of files) {
+    const seconds = (
+      await git(root, ["log", "-1", "--format=%ct", commit, "--", file])
+    ).trim();
+    if (!seconds) throw new Error(`${file}: no Git history at ${commit}`);
+    dates.set(file, shanghai.format(Number(seconds) * 1000));
+  }
+  return dates;
+}
+
 /**
  * The committed state of the content repository at `root` for publishing
  * `paths`: HEAD, with none of those paths changed, untracked or ignored.

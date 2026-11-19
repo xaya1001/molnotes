@@ -149,6 +149,72 @@ test("snapshot assets stay frozen on disk until writing or disposal", async (t) 
   }
 });
 
+test("publication uses each note's latest commit day in Shanghai when it follows the first publication day", async (t) => {
+  const root = await temporary(t);
+  const repo = join(root, "repo");
+  const contentRoot = join(repo, "content");
+  const notes = join(contentRoot, "notes/sample");
+  const releases = join(root, "releases");
+  const git = (...args: string[]) =>
+    execFileAsync("git", ["-C", repo, ...args]);
+  await mkdir(notes, { recursive: true });
+  await writeFile(join(contentRoot, "glossary.json"), "[]");
+  await writeFile(
+    join(notes, "directory.json"),
+    JSON.stringify({ title: "Sample", intro: "Notes", order: 1 }),
+  );
+  const writeNote = (slug: string, date: string, body: string) =>
+    writeFile(
+      join(notes, `${slug}.md`),
+      `---\ntitle: Sample\nsummary: A sample note\ndate: ${date}\norder: 1\n---\n\n${body}\n`,
+    );
+  const commit = async (date: string) => {
+    await git("add", ".");
+    await execFileAsync(
+      "git",
+      [
+        "-C",
+        repo,
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@example.invalid",
+        "commit",
+        "-qm",
+        date,
+      ],
+      {
+        env: {
+          ...process.env,
+          GIT_AUTHOR_DATE: date,
+          GIT_COMMITTER_DATE: date,
+        },
+      },
+    );
+  };
+
+  await git("init", "-q");
+  await writeNote("before", "2026-01-02", "Sample");
+  await writeNote("same", "2026-01-01", "Sample");
+  await writeNote("revised", "2026-01-01", "Sample");
+  await commit("2026-01-01T00:00:00Z");
+  await writeNote("revised", "2026-01-01", "New paragraph");
+  await commit("2026-01-01T16:30:00Z");
+  await writeFile(join(repo, "README.md"), "Unrelated change");
+  await commit("2026-01-03T00:00:00Z");
+
+  const name = await publishSnapshot(contentRoot, releases);
+  const snapshot: Snapshot = JSON.parse(
+    await readFile(join(releases, name, "snapshot.json"), "utf8"),
+  );
+  const bySlug = new Map(
+    snapshot.notes.map(({ slug, compiled }) => [slug, compiled]),
+  );
+  assert.equal(bySlug.get("revised")?.updated, "2026-01-02");
+  assert.equal("updated" in bySlug.get("same")!, false);
+  assert.equal("updated" in bySlug.get("before")!, false);
+});
+
 test("publish switches current to the committed snapshot, keeps five and rolls back", async (t) => {
   const root = await temporary(t);
   const repo = join(root, "repo");
