@@ -118,3 +118,71 @@ test("terminal alkoxy rotation frees neighboring labels while preserving branch 
     mol.delete();
   }
 });
+
+test("cyclic enone aligned to a same-ring tertiary alcohol places its carbonyl oxygen on the external bisector", async () => {
+  const { compileFigure } = await import("../scripts/figure-scene.ts");
+  const compiled = await compileFigure({
+    title: "Ring carbonyl alignment",
+    anchor: "alcohol",
+    compounds: {
+      enone: "[O:1]=[C:2]1[CH:3]=[CH:4][CH2:5][CH2:6][CH2:7]1",
+      alcohol: "C[C:2]1([O:1])[CH:3]=[CH:4][CH2:5][CH2:6][CH2:7]1",
+    },
+    steps: [{ id: "add", from: "enone", to: "alcohol" }],
+  });
+  const reaction = Object.values(compiled.entries).find(
+    (entry) => entry.kind === "reaction",
+  )!;
+  const participant = reaction.reactants[0];
+  const placement = reaction.scene.molecules.find(
+    (molecule) => molecule.id === participant.id,
+  )!;
+  const compound = compiled.entries[placement.compound];
+  assert.equal(compound.kind, "compound");
+  assert.ok(placement.variant);
+  const layout = compound.variants![placement.variant];
+  const rd = await moleculeToolkit();
+  const mol = rd.get_mol(compound.smiles)!;
+  try {
+    const graph = JSON.parse(mol.get_json()).molecules[0] as {
+      atoms: { z?: number }[];
+      bonds: { atoms: [number, number] }[];
+    };
+    const oxygen = graph.atoms.findIndex((atom) => atom.z === 8);
+    assert.ok(oxygen >= 0);
+    const neighbors = (index: number) =>
+      graph.bonds.flatMap(({ atoms: [a, b] }) =>
+        a === index ? [b] : b === index ? [a] : [],
+      );
+    const carbonyl = neighbors(oxygen)[0];
+    const [left, right] = neighbors(carbonyl).filter((a) => a !== oxygen);
+    const point = (index: number) => layout.coords[compound.atomIds[index]];
+    const pC = point(carbonyl),
+      pO = point(oxygen),
+      pA = point(left),
+      pB = point(right);
+    const unit = (
+      from: { x: number; y: number },
+      to: { x: number; y: number },
+    ) => {
+      const dx = to.x - from.x,
+        dy = to.y - from.y,
+        length = Math.hypot(dx, dy);
+      return [dx / length, dy / length] as const;
+    };
+    const [ax, ay] = unit(pC, pA),
+      [bx, by] = unit(pC, pB),
+      [ox, oy] = unit(pC, pO);
+    const bisX = -(ax + bx),
+      bisY = -(ay + by),
+      bisLen = Math.hypot(bisX, bisY);
+    const dot = Math.max(-1, Math.min(1, (ox * bisX + oy * bisY) / bisLen));
+    const deviationDegrees = (Math.acos(dot) * 180) / Math.PI;
+    assert.ok(
+      deviationDegrees < 2,
+      `Expected carbonyl oxygen on external bisector, got ${deviationDegrees.toFixed(2)}° deviation`,
+    );
+  } finally {
+    mol.delete();
+  }
+});
