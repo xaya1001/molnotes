@@ -191,6 +191,90 @@ function matchingCopy(rd: Toolkit, mol: Mol) {
     };
   return descriptionMolecule(rd, data);
 }
+function ringBondSet(atomRings: number[][]) {
+  return new Set(
+    atomRings.flatMap((ring) =>
+      ring.map((a, i) =>
+        [a, ring[(i + 1) % ring.length]].sort((a, b) => a - b).join(","),
+      ),
+    ),
+  );
+}
+function ringConnectivity(mol: Mol) {
+  const graph = graphOf(mol),
+    atomRings = rings(mol),
+    ringAtoms = new Set(atomRings.flat()),
+    ringBonds = ringBondSet(atomRings),
+    heavy = (i: number) => (graph.atoms[i].z ?? 6) !== 1,
+    exoDegree = new Array<number>(graph.atoms.length).fill(0),
+    neighbors: number[][] = Array.from(
+      { length: graph.atoms.length },
+      () => [],
+    );
+  for (const {
+    atoms: [a, b],
+  } of graph.bonds) {
+    neighbors[a].push(b);
+    neighbors[b].push(a);
+    if (ringBonds.has(a < b ? `${a},${b}` : `${b},${a}`)) continue;
+    if (heavy(b)) exoDegree[a]++;
+    if (heavy(a)) exoDegree[b]++;
+  }
+  return { ringAtoms, exoDegree, neighbors };
+}
+function pinnedPairs(
+  mol: Mol,
+  reference: Mol,
+  pairs: [number, number][],
+): [number, number][] {
+  const current = ringConnectivity(mol),
+    ref = ringConnectivity(reference),
+    toRef = new Map(pairs.map(([r, m]) => [m, r])),
+    blocked = new Set<number>();
+  for (const [r, m] of pairs) {
+    if (!current.ringAtoms.has(m) || current.exoDegree[m] === ref.exoDegree[r])
+      continue;
+    for (const neighbor of current.neighbors[m])
+      if (toRef.has(neighbor) && !current.ringAtoms.has(neighbor))
+        blocked.add(neighbor);
+  }
+  if (!blocked.size) return pairs;
+  const suspect = new Set<number>(blocked),
+    suspectQueue = [...blocked];
+  while (suspectQueue.length) {
+    const atom = suspectQueue.shift()!;
+    for (const neighbor of current.neighbors[atom]) {
+      if (
+        !toRef.has(neighbor) ||
+        current.ringAtoms.has(neighbor) ||
+        suspect.has(neighbor)
+      )
+        continue;
+      suspect.add(neighbor);
+      suspectQueue.push(neighbor);
+    }
+  }
+  const rescued = new Set<number>(),
+    rescueQueue: number[] = [];
+  for (const [r, m] of pairs) {
+    if (!current.ringAtoms.has(m) || current.exoDegree[m] !== ref.exoDegree[r])
+      continue;
+    for (const neighbor of current.neighbors[m])
+      if (suspect.has(neighbor) && !rescued.has(neighbor)) {
+        rescued.add(neighbor);
+        rescueQueue.push(neighbor);
+      }
+  }
+  while (rescueQueue.length) {
+    const atom = rescueQueue.shift()!;
+    for (const neighbor of current.neighbors[atom])
+      if (suspect.has(neighbor) && !rescued.has(neighbor)) {
+        rescued.add(neighbor);
+        rescueQueue.push(neighbor);
+      }
+  }
+  return pairs.filter(([, m]) => !suspect.has(m) || rescued.has(m));
+}
 function alignCore(
   rd: Toolkit,
   mol: Mol,
@@ -207,7 +291,14 @@ function alignCore(
     rd.alignAtomMap(
       current,
       reference,
-      referenceMatch.map((atom, i) => [atom, currentMatch[i]]),
+      pinnedPairs(
+        mol,
+        reference,
+        referenceMatch.map((atom, i): [number, number] => [
+          atom,
+          currentMatch[i],
+        ]),
+      ),
       coordgen,
     );
     return current;
@@ -353,14 +444,8 @@ function follow(
       toRef = new Map(mm.map((a, i) => [a, rm[i]]));
     const graph = graphOf(mol),
       referenceRings = rings(reference),
-      freeAtoms = new Set<number>();
-    const referenceRingBonds = new Set(
-      referenceRings.flatMap((r) =>
-        r.map((a, i) =>
-          [a, r[(i + 1) % r.length]].sort((a, b) => a - b).join(","),
-        ),
-      ),
-    );
+      freeAtoms = new Set<number>(),
+      referenceRingBonds = ringBondSet(referenceRings);
     for (const ring of rings(mol))
       if (
         !ring.every((a, i) => {
@@ -375,7 +460,13 @@ function follow(
         })
       )
         for (const a of ring) freeAtoms.add(a);
-    const pinned = mm.filter((a) => !freeAtoms.has(a));
+    const pinned = pinnedPairs(
+      mol,
+      reference,
+      mm
+        .filter((a) => !freeAtoms.has(a))
+        .map((a): [number, number] => [toRef.get(a)!, a]),
+    ).map(([, a]) => a);
     if (pinned.length < 4) return false;
     const indices = new Map(pinned.map((a, i) => [a, i])),
       rxy = xy(reference),
