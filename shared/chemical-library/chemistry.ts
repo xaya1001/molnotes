@@ -87,16 +87,27 @@ export function ringExteriorAngle(
 export function placeRingHydrogens(graph: ChemicalGraph, points: Point[]) {
   const rings = atomRings(graph);
   if (!rings.length) return;
+  const neighbors = (i: number) =>
+    graph.bonds.flatMap(({ atoms: [a, b] }) =>
+      a === i ? [b] : b === i ? [a] : [],
+    );
   for (const { atoms } of graph.bonds) {
     const h = atoms.find(
       (i) => graph.atoms[i].z === 1 && !graph.atoms[i].isotope,
     );
     if (h === undefined) continue;
     const parent = atoms[0] === h ? atoms[1] : atoms[0];
-    const angle = ringExteriorAngle(rings, points, parent);
-    if (angle === undefined) continue;
     const p = points[parent],
       q = points[h];
+    const heavy = neighbors(parent).filter((i) => graph.atoms[i].z !== 1);
+    const stereo = graph.atoms[parent].stereo;
+    const keepHeavyDirections = stereo && stereo !== "unspecified";
+    // Retain the heavy-ligand directions of a stereocentre across aligned views.
+    const directions = keepHeavyDirections
+      ? heavy.map((i) => Math.atan2(points[i].y - p.y, points[i].x - p.x))
+      : [];
+    const angle = ringExteriorAngle(rings, points, parent, directions);
+    if (angle === undefined) continue;
     let length = Math.hypot(q.x - p.x, q.y - p.y);
     const ringNeighbors = new Set(
       rings.flatMap((ring) => {
@@ -109,12 +120,8 @@ export function placeRingHydrogens(graph: ChemicalGraph, points: Point[]) {
             ];
       }),
     );
-    const neighbors = (i: number) =>
-      graph.bonds.flatMap(({ atoms: [a, b] }) =>
-        a === i ? [b] : b === i ? [a] : [],
-      );
-    for (const next of neighbors(parent)) {
-      if (next === h || ringNeighbors.has(next)) continue;
+    for (const next of keepHeavyDirections ? [] : heavy) {
+      if (ringNeighbors.has(next)) continue;
       const { x, y } = points[next];
       const bearing = Math.atan2(y - p.y, x - p.x);
       if (Math.cos(bearing - angle) < Math.cos(Math.PI / 6)) continue;
