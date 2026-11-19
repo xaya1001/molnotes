@@ -129,6 +129,25 @@ test("check reuses compilation and request contracts, reports duplicate addition
   }
 });
 
+test("check reports terms in table headers and rows at their source lines", async () => {
+  const dir = fixture("table");
+  const file = "notes/sample/first.md";
+  writeFileSync(
+    join(dir, "glossary.json"),
+    JSON.stringify([term, { ...term, term: "数量", full: "Quantity" }]),
+  );
+  writeFileSync(
+    join(dir, file),
+    note("## 比较\n\n| 计数 | 结果 |\n| --- | --- |\n| 数量 | 1 |"),
+  );
+  const result = await checkNote(dir, file);
+  assert.deepEqual(result.errors, []);
+  assert.deepEqual(result.hints, [
+    `${file}:10: link [[计数]]`,
+    `${file}:12: link [[数量]]`,
+  ]);
+});
+
 test("check resolves sparse note and practice links without compiling unrelated drafts", async () => {
   const dir = fixture("sparse");
   mkdirSync(join(dir, "notes/other"));

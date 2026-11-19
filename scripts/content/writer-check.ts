@@ -55,9 +55,11 @@ export async function checkNote(
   }));
   // Terms are authored as [[name]] and as Chinese (English) first definitions.
   const tokens = markdown.parse(parsed.body, { file });
+  let tableRowLine = 0;
   for (const token of tokens) {
+    if (token.type === "tr_open") tableRowLine = token.map![0];
     if (token.type !== "inline") continue;
-    const where = `${file}:${parsed.offset + token.map![0] + 1}`;
+    const where = `${file}:${parsed.offset + (token.map?.[0] ?? tableRowLine) + 1}`;
     for (const [i, child] of (token.children ?? []).entries()) {
       if (child.type === "note_term") seen.add(child.content);
       if (child.type === "note_term" && !terms[child.content])
