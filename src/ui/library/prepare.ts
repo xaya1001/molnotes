@@ -17,6 +17,7 @@ import {
 } from "./scene-geometry.ts";
 import {
   electronArrowShapes,
+  lonePairDistance,
   chargeMarks,
   type ArrowIntent,
   type ArrowAtom,
@@ -24,11 +25,7 @@ import {
 import { drawEnclosure } from "./geometry-enclosures.ts";
 import { nativeDepictionGeometry } from "./native-geometry.ts";
 import { transformPoint, rectangle } from "./geometry-math.ts";
-import {
-  pathMetrics,
-  pathContours,
-  inkIntersectsBox,
-} from "./path-geometry.ts";
+import { pathContours, inkIntersectsBox } from "./path-geometry.ts";
 import { refreshGeometry } from "./geometry-tree.ts";
 import { wrapFigureText, figureLabelLines } from "./text-runs.ts";
 import { solidArrow } from "./arrow-layout.ts";
@@ -60,6 +57,7 @@ import {
   atomNumberDrawing,
   abbreviatedDrawing,
   compoundAbbreviations,
+  atomRings,
   graphOf,
   placedCoordinates,
   validateCompound,
@@ -196,6 +194,7 @@ export async function prepareFigure(
   const atomPoints: Record<string, Point> = {};
   const arrowLabels: Record<string, boolean> = {};
   const arrowVisible: Record<string, boolean> = {};
+  const negativeChargeOwners = new Set<string>();
   const atomBonds: [string, string][] = [];
   let width = 0,
     height = 0;
@@ -396,23 +395,6 @@ export async function prepareFigure(
         if (i >= drawn.bonds.length && atoms.length === 2)
           nativeBonds.set(i, [atoms[0], atoms[1]]);
       }
-      ctx.setData(
-        g,
-        "bondLengths",
-        JSON.stringify(
-          [
-            ...graph.bonds
-              .filter((_, i) => !hiddenBonds.has(i))
-              .map(({ atoms }) => atoms),
-            ...nativeBonds.values(),
-          ].map(([a, b]) =>
-            Math.hypot(
-              positions[a].x - positions[b].x,
-              positions[a].y - positions[b].y,
-            ),
-          ),
-        ),
-      );
       const compactRepeats = new Set(
         (layout.repeatUnits ?? [])
           .filter((u) => u.compact)
@@ -598,6 +580,7 @@ export async function prepareFigure(
         ctx.append(g, e);
       }
       spaceBondEndpoints(g, ctx);
+      const rings = atomRings(graph);
       spaceChiralHydrogens(
         g,
         positions,
@@ -605,6 +588,24 @@ export async function prepareFigure(
         nativeBonds,
         graph.bonds,
         ctx,
+        rings,
+      );
+      ctx.setData(
+        g,
+        "bondLengths",
+        JSON.stringify(
+          [
+            ...graph.bonds
+              .filter((_, i) => !hiddenBonds.has(i))
+              .map(({ atoms }) => atoms),
+            ...nativeBonds.values(),
+          ].map(([a, b]) =>
+            Math.hypot(
+              positions[a].x - positions[b].x,
+              positions[a].y - positions[b].y,
+            ),
+          ),
+        ),
       );
       finishScaffoldGeometry(g, layout, c.atomIds, positions, ctx, mirror);
       const localPoints: Record<string, Point> = {};
@@ -640,11 +641,6 @@ export async function prepareFigure(
             atom: c.atomIds[b] ?? `hydrogen-${b - c.atomIds.length}`,
           }),
         ]);
-      const rings: number[][] =
-        JSON.parse(mol.get_json()).molecules[0].extensions?.find(
-          (extension: { name: string }) =>
-            extension.name === "rdkitRepresentation",
-        )?.atomRings ?? [];
       ctx.setData(
         g,
         "atomRings",
@@ -748,6 +744,7 @@ export async function prepareFigure(
       for (const [index, mark] of Object.entries(marks)) {
         const i = Number(index),
           aid = key({ molecule: id, atom: c.atomIds[i] });
+        if (chargeValues[index] < 0) negativeChargeOwners.add(aid);
         let center = mark.point,
           r = mark.radius;
         if (!chargeAims[aid]) {
@@ -1102,7 +1099,6 @@ export async function prepareFigure(
         entry.id,
       );
     }
-    const positions = new Map<string, Point>();
     const savedPoints: Record<string, Point> = {};
     for (const p of s.molecules) {
       let c = library[p.compound];
@@ -1179,6 +1175,18 @@ export async function prepareFigure(
       if (!p) throw new Error(`Unknown atom ${key(a)}`);
       return p;
     };
+    const isNegative = (at: AtomRef) =>
+      negativeChargeOwners.has(
+        key({ molecule: prefix + at.molecule, atom: at.atom }),
+      );
+    const arrows = (s.arrows ?? []).map((arrow) => {
+      if (arrow.from.kind !== "lonePair") return arrow;
+      const label = arrow.from.label;
+      const { at } = s.labels!.find((l) => l.id === label)!;
+      return isNegative(at)
+        ? { ...arrow, from: { kind: "charge" as const, at } }
+        : arrow;
+    });
     const glyphBoxes = (at: AtomRef) => {
       const id = key({ molecule: prefix + at.molecule, atom: at.atom });
       return [
@@ -1229,18 +1237,13 @@ export async function prepareFigure(
     };
     for (const l of s.labels ?? []) {
       if (hidden.has(l.at.molecule)) continue;
+      if (l.kind === "lonePair" && isNegative(l.at)) continue;
       if (l.kind === "radical") {
         // Reuse RDKit's radical dot when it is already part of the native label.
         const dots = glyphBoxes(l.at).filter(
           (b) => Math.max(b.right - b.left, b.bottom - b.top) <= B * 0.1,
         );
-        if (dots.length) {
-          const b = dots[0],
-            p = { x: (b.left + b.right) / 2, y: (b.top + b.bottom) / 2 };
-          positions.set(l.id, p);
-          positions.set("radical:" + key(l.at), p);
-          continue;
-        }
+        if (dots.length) continue;
       }
       let p = plus(atom(l.at), mul(l.offset, B));
       let dotAngle = l.angle ?? 0;
@@ -1261,10 +1264,26 @@ export async function prepareFigure(
         const angle =
           (Math.atan2(target.y - origin.y, target.x - origin.x) * 180) /
           Math.PI;
-        p = plus(origin, toward(angle, labelClearance(l.at, angle, B * 0.075)));
         dotAngle = angle + 90;
-        if (l.kind === "lonePair") {
-          const radius = Math.hypot(p.x - origin.x, p.y - origin.y),
+        if (l.kind === "radical") {
+          p = plus(
+            origin,
+            toward(angle, labelClearance(l.at, angle, B * 0.075)),
+          );
+        } else {
+          const owner = glyphBoxes(l.at),
+            radius = B * 0.03,
+            gap = token("--chemical-line"),
+            position = (degrees: number) => {
+              const direction = toward(degrees, 1);
+              return plus(
+                origin,
+                mul(
+                  direction,
+                  lonePairDistance(origin, direction, radius, gap, owner),
+                ),
+              );
+            },
             labels = [...labelBoxes(parent, ctx).values()],
             bonds = ctx
               .nodes(parent)
@@ -1279,7 +1298,7 @@ export async function prepareFigure(
                 };
               });
           const clear = (degrees: number) => {
-            const centre = plus(origin, toward(degrees, radius)),
+            const centre = position(degrees),
               dx =
                 B * 0.053 * Math.abs(Math.cos(radians(degrees + 90))) +
                 B * 0.03,
@@ -1307,12 +1326,13 @@ export async function prepareFigure(
               )
             );
           };
+          p = position(angle);
           if (!clear(angle)) {
             search: for (let turn = 10; turn <= 180; turn += 10)
               for (const sign of [1, -1]) {
                 const candidate = angle + sign * turn;
                 if (!clear(candidate)) continue;
-                p = plus(origin, toward(candidate, radius));
+                p = position(candidate);
                 dotAngle = candidate + 90;
                 break search;
               }
@@ -1329,19 +1349,8 @@ export async function prepareFigure(
             key({ molecule: prefix + l.at.molecule, atom: l.at.atom }),
         )[0];
         if (!native) throw new Error(`No displayed charge at ${key(l.at)}`);
-        const box = ctx.box(native);
-        const matrix = ctx.relativeMatrix(native, parent);
-        positions.set(
-          l.id,
-          transformPoint(
-            { x: box.x + box.width / 2, y: box.y + box.height / 2 },
-            matrix,
-          ),
-        );
         continue;
       }
-      positions.set(l.id, p);
-      if (l.kind === "radical") positions.set("radical:" + key(l.at), p);
       const g = element("g", {
         "data-label": prefix + l.id,
         "data-owner": key(l.at),
@@ -1363,104 +1372,6 @@ export async function prepareFigure(
         spaceAtomNumber(g, parent, atom(l.at), ctx);
       }
     }
-    function anchor(a: Anchor): Point {
-      if (a.kind === "atom") return atom(a.at);
-      if (a.kind === "radical") return positions.get("radical:" + key(a.at))!;
-      if (a.kind === "charge") {
-        const declared = s.labels?.find(
-          (l) =>
-            l.kind === "charge" &&
-            l.at.molecule === a.at.molecule &&
-            l.at.atom === a.at.atom,
-        );
-        if (declared) return positions.get(declared.id)!;
-        const owner = key({
-          molecule: prefix + a.at.molecule,
-          atom: a.at.atom,
-        });
-        const charge = ctx
-          .nodes(parent, (node) => ctx.data(node, "chargeOwner") === owner)
-          .filter((node) => node.kind === "group")[0];
-        if (!charge) throw new Error(`No displayed charge at ${owner}`);
-        const box = ctx.box(charge),
-          matrix = ctx.relativeMatrix(charge, parent);
-        return transformPoint(
-          { x: box.x + box.width / 2, y: box.y + box.height / 2 },
-          matrix,
-        );
-      }
-      if (a.kind === "lonePair") {
-        const p = positions.get(a.label);
-        if (!p) throw new Error(`Unknown lone pair ${a.label}`);
-        return p;
-      }
-      const p = atom(a.atoms[0]),
-        q = atom(a.atoms[1]);
-      if (a.kind === "bond" || a.kind === "pi") {
-        if (a.atoms[0].molecule !== a.atoms[1].molecule)
-          throw new Error("Bond anchor crosses molecules");
-        const placement = s.molecules.find(
-          (p) => p.id === a.atoms[0].molecule,
-        )!;
-        let c = library[placement.compound];
-        if (c?.kind !== "compound") throw new Error("Missing anchor compound");
-        c = compoundView(
-          toolkit,
-          c,
-          placement.variant ? c.variants![placement.variant] : c.layout,
-        );
-        const m = toolkit.get_mol(
-          c.smiles,
-          JSON.stringify({ removeHs: false }),
-        )!;
-        try {
-          if (
-            !graphOf(m).bonds.some((b) =>
-              b.atoms.every((i) =>
-                a.atoms.some((a) => a.atom === c.atomIds[i]),
-              ),
-            )
-          )
-            throw new Error("Unknown bond anchor");
-        } finally {
-          m.delete();
-        }
-      }
-      const fraction = a.fraction ?? 0.5;
-      if ((a.kind === "bond" && a.side) || a.kind === "pi") {
-        const names = a.atoms.map((v) =>
-          key({ molecule: prefix + v.molecule, atom: v.atom }),
-        );
-        const lines = [
-          ...ctx
-            .nodes(parent, (node) => ctx.data(node, "bond") !== undefined)
-            .filter((node) => node.kind === "path"),
-        ]
-          .filter((el) =>
-            names.every((name) =>
-              (ctx.data(el, "atoms") ?? "").split(" ").includes(name),
-            ),
-          )
-          .map((el) =>
-            transformPoint(
-              pathMetrics(el.d).pointAt(pathMetrics(el.d).length * fraction),
-              ctx.relativeMatrix(el, parent),
-            ),
-          );
-        const nx = -(q.y - p.y),
-          ny = q.x - p.x;
-        lines.sort(
-          (aPoint, bPoint) =>
-            (a.side ?? 1) *
-            ((bPoint.x - aPoint.x) * nx + (bPoint.y - aPoint.y) * ny),
-        );
-        if (lines.length) return lines[0];
-      }
-      return {
-        x: p.x + (q.x - p.x) * fraction,
-        y: p.y + (q.y - p.y) * fraction,
-      };
-    }
     const focused = focusKeys(f);
     const refs = (a: Anchor): AtomRef[] =>
       a.kind === "lonePair"
@@ -1476,7 +1387,20 @@ export async function prepareFigure(
         if (id.startsWith(owner) && arrowVisible[id])
           arrowAtoms[id] = { point, labelled: arrowLabels[id] };
     }
-    const intents: ArrowIntent[] = (s.arrows ?? [])
+    const marks: Record<string, { point: Point; radius: number }> = {};
+    for (const node of ctx.nodes(
+      parent,
+      (node) =>
+        node.kind === "group" && ctx.data(node, "chargeOwner") !== undefined,
+    )) {
+      const id = ctx.data(node, "chargeOwner"),
+        box = ctx.inkBox(node, parent);
+      marks[id] = {
+        point: { x: (box.left + box.right) / 2, y: (box.top + box.bottom) / 2 },
+        radius: Number(ctx.data(node, "chargeRadius")),
+      };
+    }
+    const intents: ArrowIntent[] = arrows
       .filter(
         (a) =>
           ![...refs(a.from), ...refs(a.to)].every((at) =>
@@ -1489,26 +1413,12 @@ export async function prepareFigure(
             key({ ...at, molecule: prefix + at.molecule }),
           );
           const origin = location(a);
-          // Lone pairs and charges are visible marks, rather than atom-centred origins.
-          const nativeCharge =
-            a.kind === "lonePair" &&
-            ctx
-              .nodes(parent, (node) => ctx.data(node, "chargeOwner") === ids[0])
-              .some((node) => node.kind === "group");
-          const chargeNode = ctx.nodes(
-            parent,
-            (node) =>
-              node.kind === "group" && ctx.data(node, "chargeOwner") === ids[0],
-          )[0];
           const mark =
-            a.kind === "charge" || nativeCharge
-              ? {
-                  point: anchor(
-                    nativeCharge ? { kind: "charge", at: refs(a)[0] } : a,
-                  ),
-                  radius: Number(ctx.data(chargeNode, "chargeRadius")),
-                }
+            a.kind === "charge" || a.kind === "lonePair"
+              ? marks[ids[0]]
               : undefined;
+          if (a.kind === "charge" && !mark)
+            throw new Error(`No displayed charge at ${ids[0]}`);
           return {
             kind: a.kind,
             atoms: ids,
@@ -1547,19 +1457,6 @@ export async function prepareFigure(
       });
     }
     const boxes = [...groupedBoxes.values()];
-    const marks: Record<string, { point: Point; radius: number }> = {};
-    for (const node of ctx.nodes(
-      parent,
-      (node) =>
-        node.kind === "group" && ctx.data(node, "chargeOwner") !== undefined,
-    )) {
-      const id = ctx.data(node, "chargeOwner"),
-        box = ctx.inkBox(node, parent);
-      marks[id] = {
-        point: { x: (box.left + box.right) / 2, y: (box.top + box.bottom) / 2 },
-        radius: Number(ctx.data(node, "chargeRadius")),
-      };
-    }
     const visibleBonds = atomBonds.filter(
       ([a, b]) => arrowAtoms[a] && arrowAtoms[b],
     );

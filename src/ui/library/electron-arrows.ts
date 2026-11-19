@@ -46,6 +46,51 @@ const compare = (a: number[], b: number[]) => {
 };
 const nearest = (a: Point[], b: Point[], otherwise: number) =>
   Math.min(otherwise, ...a.flatMap((p) => b.map((q) => dist(p, q))));
+function rayExit(origin: Point, direction: Point, box: ArrowBox) {
+  let enter = -Infinity,
+    exit = Infinity;
+  for (const [start, delta, min, max] of [
+    [origin.x, direction.x, box.left, box.right],
+    [origin.y, direction.y, box.top, box.bottom],
+  ]) {
+    if (Math.abs(delta) < 1e-8) {
+      if (start < min || start > max) return 0;
+    } else {
+      const a = (min - start) / delta,
+        b = (max - start) / delta;
+      enter = Math.max(enter, Math.min(a, b));
+      exit = Math.min(exit, Math.max(a, b));
+    }
+  }
+  return exit >= Math.max(enter, 0) ? exit : 0;
+}
+export function lonePairDistance(
+  origin: Point,
+  direction: Point,
+  radius: number,
+  gap: number,
+  boxes: ArrowBox[],
+) {
+  const pad = radius + gap;
+  return Math.max(
+    pad,
+    ...[-1, 1].flatMap((sign) => {
+      const offset = mul(
+        { x: -direction.y, y: direction.x },
+        sign * 2 * radius,
+      );
+      return boxes.map((box) =>
+        rayExit(add(origin, offset), direction, {
+          left: box.left - pad,
+          top: box.top - pad,
+          right: box.right + pad,
+          bottom: box.bottom + pad,
+        }),
+      );
+    }),
+  );
+}
+
 function sample(s: Point, c: Point, e: Point, lead?: Point) {
   return Array.from({ length: 21 }, (_, i) => {
     const t = i / 20,
@@ -133,24 +178,6 @@ export function electronArrowShapes(
     points: Point[];
     clear: number;
   };
-  function rayExit(origin: Point, direction: Point, box: ArrowBox) {
-    let enter = -Infinity,
-      exit = Infinity;
-    for (const [start, delta, min, max] of [
-      [origin.x, direction.x, box.left, box.right],
-      [origin.y, direction.y, box.top, box.bottom],
-    ]) {
-      if (Math.abs(delta) < 1e-8) {
-        if (start < min || start > max) return 0;
-      } else {
-        const a = (min - start) / delta,
-          b = (max - start) / delta;
-        enter = Math.max(enter, Math.min(a, b));
-        exit = Math.min(exit, Math.max(a, b));
-      }
-    }
-    return exit >= Math.max(enter, 0) ? exit : 0;
-  }
   const labelRadius = (id: string, direction: Point, gap: number) =>
     Math.max(
       radius(id),
@@ -243,24 +270,21 @@ export function electronArrowShapes(
       return;
     const direction = unit(sub(c.s, xy(source.atoms[0]))),
       radius = Math.max(1, B * 0.06);
-    const originalDistance = sourceRadius(
-        source.atoms[0],
-        direction,
-        atomFont * 0.18 + 1.5,
-      ),
-      maximumDistance = dist(source.point, c.s) - radius - 1.5;
-    const dx = Math.abs(direction.y) * radius * 2 + radius,
-      dy = Math.abs(direction.x) * radius * 2 + radius;
-    const distances = [originalDistance];
-    for (
-      let r = originalDistance + B * 0.03;
-      r < maximumDistance;
-      r += B * 0.03
-    )
-      distances.push(r);
-    if (maximumDistance > originalDistance) distances.push(maximumDistance);
-    const candidates = distances.map((distance) => {
+    const nearestDistance = lonePairDistance(
+      source.point,
+      direction,
+      radius,
+      2,
+      boxes.filter((box) => box.atom === source.atoms[0]),
+    );
+    const ownerBoxes = Object.keys(atoms).flatMap((id) => {
+      const b = ownerBox(id);
+      return b ? [b] : [];
+    });
+    const pairAt = (distance: number) => {
       const point = add(source.point, mul(direction, distance)),
+        dx = Math.abs(direction.y) * radius * 2 + radius,
+        dy = Math.abs(direction.x) * radius * 2 + radius,
         box = {
           left: point.x - dx,
           right: point.x + dx,
@@ -268,10 +292,6 @@ export function electronArrowShapes(
           bottom: point.y + dy,
         },
         rectangle = rectPoints(box);
-      const ownerBoxes = Object.keys(atoms).flatMap((id) => {
-        const b = ownerBox(id);
-        return b ? [b] : [];
-      });
       let collisions = ownerBoxes.filter((b) =>
         polygonsOverlap(rectangle, rectPoints(b), 0.2),
       ).length;
@@ -305,13 +325,21 @@ export function electronArrowShapes(
                 )
         )
           collisions++;
-      return { point, direction, radius, box, collisions, distance };
-    });
-    candidates.sort(
-      (a, b) => a.collisions - b.collisions || a.distance - b.distance,
-    );
-    return candidates[0];
+      return { point, direction, radius, box, collisions };
+    };
+    let best = pairAt(nearestDistance);
+    const limit = dist(source.point, c.s) - radius - 1.5;
+    for (
+      let distance = nearestDistance + B * 0.03;
+      best.collisions && distance <= limit;
+      distance += B * 0.03
+    ) {
+      const pair = pairAt(distance);
+      if (pair.collisions < best.collisions) best = pair;
+    }
+    return best;
   }
+
   function one(
     intent: ArrowIntent,
     drawn: Point[][],
@@ -338,10 +366,11 @@ export function electronArrowShapes(
       s0 = add(s0, mul(sub(xy(near), s0), atoms[near].labelled ? 0 : 0.3));
     }
     const fromMark =
-      (from.kind === "lonePair" || from.kind === "charge") &&
-      from.mark &&
-      !(ta.length === 2 && ta.includes(fa[0]));
-    if (fromMark) s0 = from.mark!.point;
+      from.kind === "charge" ||
+      (from.kind === "lonePair" && !(ta.length === 2 && ta.includes(fa[0])))
+        ? from.mark
+        : undefined;
+    if (fromMark) s0 = fromMark.point;
     const chord = dist(e0, s0);
     if (chord < 1e-6) return { curve: null, score: [0, 0] };
     const u = unit(sub(e0, s0)),
@@ -380,6 +409,19 @@ export function electronArrowShapes(
         forced = undefined;
       }
     }
+    const markTail = (
+      mark: NonNullable<ArrowEndpoint["mark"]>,
+      direction: Point,
+    ) => {
+      const { point, radius } = mark;
+      const distance = rayExit(point, direction, {
+        left: point.x - radius,
+        right: point.x + radius,
+        top: point.y - radius,
+        bottom: point.y + radius,
+      });
+      return add(point, mul(direction, distance + 1.5));
+    };
     const ownBond =
       (to.kind === "bond" || to.kind === "pi") &&
       fa.length === 1 &&
@@ -407,33 +449,28 @@ export function electronArrowShapes(
           d,
           (from.kind === "lonePair" ? atomFont * 0.18 : 0) + 2 + B * 0.22,
         );
-        s = add(a, mul(d, r));
+        s = fromMark ? markTail(fromMark, d) : add(a, mul(d, r));
         e = add(e0, mul(p, B * 0.22));
         c = add(mid(s, e), mul(p, B * 0.75 * k));
       } else {
         c = add(mid(s0, e0), mul(n, h * side));
         if (fa.length === 1) {
-          let r = sourceRadius(
-            fa[0],
-            unit(sub(c, s0)),
-            (from.kind === "lonePair" ? atomFont * 0.18 : 0) +
-              (from.kind === "lonePair" ? 2 + B * 0.22 : 2),
-          );
-          if (fromMark) {
-            const mark = from.mark!,
-              direction = unit(sub(c, s0));
-            r =
-              Math.max(
-                mark.radius,
-                rayExit(mark.point, direction, {
-                  left: mark.point.x - mark.radius,
-                  right: mark.point.x + mark.radius,
-                  top: mark.point.y - mark.radius,
-                  bottom: mark.point.y + mark.radius,
-                }),
-              ) + 1.5;
-          }
-          s = add(s0, mul(unit(sub(c, s0)), r));
+          const direction = unit(sub(c, s0));
+          s = fromMark
+            ? markTail(fromMark, direction)
+            : add(
+                s0,
+                mul(
+                  direction,
+                  sourceRadius(
+                    fa[0],
+                    direction,
+                    from.kind === "lonePair"
+                      ? atomFont * 0.18 + 2 + B * 0.22
+                      : 2,
+                  ),
+                ),
+              );
         } else s = add(s0, mul(n, side * B * 0.16));
         c = add(mid(s, e0), mul(n, h * side));
         if (to.kind === "atom" && fa.includes(ta[0])) {

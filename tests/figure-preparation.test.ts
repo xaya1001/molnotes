@@ -13,7 +13,11 @@ import { isFigureGeometry } from "../src/ui/library/geometry-contract.ts";
 import { geometrySvg } from "../src/ui/library/geometry-tree.ts";
 import { figureGeometryDiagnostics } from "../src/ui/library/geometry-diagnostics.ts";
 import { walkGeometry } from "../src/ui/library/geometry-walk.ts";
-import { transformBox, unionBoxes } from "../src/ui/library/geometry-math.ts";
+import {
+  transformBox,
+  transformPoint,
+  unionBoxes,
+} from "../src/ui/library/geometry-math.ts";
 import type { FigureBox } from "../shared/chemical-library/geometry.ts";
 const toolkit = await moleculeToolkit(),
   fonts = await loadFigureFonts();
@@ -995,6 +999,7 @@ test("drawing hydrogens rotate clear of neighbouring stroke edges without stretc
     new Map([[2, [0, 3]]]),
     [{ atoms: [0, 1] }, { atoms: [0, 2] }],
     ctx,
+    [],
   );
   assert.notEqual(positions[3].y, 0);
   assert.equal(
@@ -1184,33 +1189,58 @@ test("folded neutral nitro groups do not display their internal charges", async 
   assert.deepEqual(charges, []);
 });
 
-test("an automatic lone pair aimed at its own bond clears the drawn bond", async () => {
-  const compiled = await compileFigure({
-    kind: "mechanism",
-    frames: [
-      {
-        id: "first",
-        smiles: "[O-:1][C:2]([CH3:4])=[CH2:3]",
-        arrows: [{ from: "lp(1)", to: "bond(1,2)" }],
-      },
-    ],
-  });
-  const geometry = await prepareFigure(compiled.entries, compiled.reference, {
-    toolkit,
-    fonts,
-    style,
-  });
-  const pairs: string[] = [];
-  walkGeometry(geometry.root, (node) => {
-    if (node.attributes["data-label"]?.endsWith("-lp"))
-      pairs.push(node.attributes["data-label"]);
-  });
-  assert.equal(pairs.length, 1);
-  assert.ok(
-    !figureGeometryDiagnostics(geometry, style).some(
-      (d) => d.code === "BOND_LABEL_OVERLAP" && d.elements.includes(pairs[0]),
-    ),
-  );
+test("donors aimed at their own bond display a neutral pair or a negative charge", async () => {
+  for (const [smiles, negative] of [
+    ["[OH:1][C:2]([CH3:4])=[CH2:3]", false],
+    ["[O-:1][C:2]([CH3:4])=[CH2:3]", true],
+  ] as const) {
+    const compiled = await compileFigure({
+      kind: "mechanism",
+      frames: [
+        {
+          id: "first",
+          smiles,
+          arrows: [{ from: "lp(1)", to: "bond(1,2)" }],
+        },
+      ],
+    });
+    const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+      toolkit,
+      fonts,
+      style,
+    });
+    const pairs: string[] = [];
+    let charge: FigureBox | undefined,
+      tail: { x: number; y: number } | undefined;
+    walkGeometry(geometry.root, (node, matrix) => {
+      if (node.attributes["data-label"]?.endsWith("-lp"))
+        pairs.push(node.attributes["data-label"]);
+      if (node.attributes["data-charge-owner"])
+        charge = transformBox(node.bounds, matrix) ?? undefined;
+      if (node.attributes["data-electron-arrow"]) {
+        const [start] = JSON.parse(node.attributes["data-curve-points"]);
+        tail = transformPoint(start, matrix);
+      }
+    });
+    assert.equal(pairs.length, negative ? 0 : 1);
+    if (negative) {
+      assert.ok(charge && tail);
+      const dx = tail.x - (charge.x + charge.width / 2);
+      const dy = tail.y - (charge.y + charge.height / 2);
+      const gap = Math.hypot(dx, dy) - charge.width / 2;
+      assert.ok(
+        gap >= 0 && gap <= 5,
+        `Arrow tail distance from charge: ${gap}`,
+      );
+    } else {
+      assert.ok(
+        !figureGeometryDiagnostics(geometry, style).some(
+          (d) =>
+            d.code === "BOND_LABEL_OVERLAP" && d.elements.includes(pairs[0]),
+        ),
+      );
+    }
+  }
 });
 
 test("bond diagnostics catch a stretched bond within an enlarged structure", async () => {
