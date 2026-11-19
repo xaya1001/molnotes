@@ -673,12 +673,11 @@ test("reaction participants preserve product text and text-only reagents", async
   }
 });
 
-test("mechanism YAML preserves explanation, maps, arrow IDs and focus", async () => {
+test("mechanism YAML preserves maps, arrow IDs and focus", async () => {
   const r = await compileFigure(await fixture("mechanism")),
     m = r.entries[r.reference.ref] as Mechanism;
   assert.equal(m.frames.length, 2);
   assert.equal(m.maps?.length, 4);
-  assert.equal(m.frames[0].explanation, "Two arrows in one event.");
   const scene = m.frames[0].scene;
   assert.equal(scene.arrows![1].electrons, 1);
   assert.deepEqual(scene.focus, {
@@ -879,10 +878,7 @@ test("compilation stores source and stable entries, and recompilation writes no 
   const loaded = await readChemicalLibrary(root);
   assert.equal(loaded.entries[compound.id].kind, "compound");
 
-  await writeFile(
-    source,
-    text.replace("First transformation.", "Updated explanation."),
-  );
+  await writeFile(source, text.replace('above: "MeOH"', 'above: "EtOH"'));
   assert.equal(
     (await run(process.execPath, args)).stdout.trim().split("\n").at(-1),
     id,

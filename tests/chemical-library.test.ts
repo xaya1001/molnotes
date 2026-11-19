@@ -228,7 +228,6 @@ test("a convergent route validates graph edges and counts the longest path", asy
     products: [{ id: "output", compound: c.id, yield: yieldValue }],
     reagents: [],
     conditions: [],
-    explanation: "Example transformation",
     scene: {
       width: 12,
       height: 6,
@@ -272,20 +271,6 @@ test("a convergent route validates graph edges and counts the longest path", asy
   library[route.id] = route;
   validateLibrary(library);
   assert.equal(routeMetrics(route, library).longestLinearSteps, 2);
-  const { figureDescriptions } =
-    await import("../src/ui/library/descriptions.ts");
-  assert.deepEqual(
-    figureDescriptions(library, route),
-    route.steps.map((step, index) => {
-      const reaction = library[step.reaction];
-      assert.equal(reaction.kind, "reaction");
-      return {
-        title: reaction.title,
-        text: reaction.explanation,
-        number: index + 1,
-      };
-    }),
-  );
   assert.throws(
     () =>
       routeMetrics(

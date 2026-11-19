@@ -450,7 +450,6 @@ export function validateLibraryEntry(
       fail(w, "invalid reagent position");
     strings(v.conditions, w);
     if (v.tags !== undefined) strings(v.tags, w);
-    text(v.explanation, w);
     scene(v.scene, w);
     reactionArrow(v.arrow, w);
   } else if (v.kind === "route") {
@@ -514,7 +513,6 @@ export function validateLibraryEntry(
       object(f, w);
       text(f.id, w);
       text(f.title, w);
-      text(f.explanation, w);
       scene(f.scene, w);
     }
     if (v.maps !== undefined) {
@@ -538,7 +536,6 @@ export function validateLibraryEntry(
       "sourceFile",
       "sourceKey",
       "owner",
-      "overview",
       "footnote",
     ]);
   } else {

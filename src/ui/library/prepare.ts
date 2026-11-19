@@ -32,8 +32,18 @@ import {
 import { refreshGeometry } from "./geometry-tree.ts";
 import { wrapFigureText, figureLabelLines } from "./text-runs.ts";
 import { solidArrow } from "./arrow-layout.ts";
-import { cardConditionFont, chemicalCardLayout } from "./card-layout.ts";
-import { layoutRoute, type RouteMolecule } from "./route-layout.ts";
+import {
+  cardConditionFont,
+  cardInset,
+  chemicalCardLayout,
+  phoneArtworkWidth,
+  phoneCardWidth,
+} from "./card-layout.ts";
+import {
+  layoutRoute,
+  verticalArrowLabelOffset,
+  type RouteMolecule,
+} from "./route-layout.ts";
 
 import {
   bondTraces,
@@ -2182,14 +2192,31 @@ export async function prepareFigure(
         above: [frame.title, ...(frame.above ?? [])],
         below: frame.below ?? [],
       }));
-      const text = (lines: string[], scale?: number) => {
+      const cardWidth = options.cardWidth;
+      const phone = cardWidth === phoneCardWidth;
+      // Preserve the approved line lengths for the standalone, reading and wide drawings.
+      const captionWidth =
+        cardWidth === undefined
+          ? 576
+          : phone
+            ? phoneArtworkWidth
+            : cardWidth === 680
+              ? 290.7
+              : 320;
+      const text = (
+        lines: string[],
+        scale?: number,
+        remainingWidth?: number,
+      ) => {
         const font = scale
           ? cardConditionFont(scale)
           : "var(--chemical-caption-font)";
+        const maxWidth = remainingWidth ?? captionWidth / (scale ?? 1);
         const wrapped = wrapFigureText(
           lines,
-          scale ? 152 / scale : limit * 0.45,
+          maxWidth,
           (text) => ctx.textWidth(text, font),
+          { balance: true, breakHan: remainingWidth !== undefined },
         );
         const nodes = wrapped.map((line) => label({ x: 0, y: 0 }, line, font));
         return {
@@ -2201,17 +2228,22 @@ export async function prepareFigure(
           ),
         };
       };
-      const plan = options.cardWidth
-        ? chemicalCardLayout(steps, measures, options.cardWidth, B, text)
+      const plan = cardWidth
+        ? chemicalCardLayout(
+            steps,
+            measures,
+            cardWidth,
+            B,
+            text,
+            phone ? phoneArtworkWidth : undefined,
+          )
         : undefined;
       if (plan)
         cardPlan = {
           rows: plan.layout.rows,
           scale: plan.scale,
           oversizedFrame: Object.values(measures).some(
-            ({ width }) =>
-              width * (20 / B) >
-              options.cardWidth! - (options.cardWidth === 334 ? 26 : 34),
+            ({ width }) => width * (20 / B) > cardWidth! - cardInset(phone),
           ),
         };
       const layout =
@@ -2221,7 +2253,7 @@ export async function prepareFigure(
           bond: B,
           gap: token("--chemical-route-gap"),
           serpentine: true,
-          text,
+          text: (lines) => text(lines),
         });
       width = layout.width;
       height = layout.height;
@@ -2253,6 +2285,11 @@ export async function prepareFigure(
             ],
           });
           const vertical = points[0].x === points.at(-1)!.x;
+          const side = item.side === "left" ? -1 : 1;
+          const labelX = vertical
+            ? points[0].x + side * verticalArrowLabelOffset(B)
+            : item.at.x;
+          const labelAlign = vertical ? (side < 0 ? "end" : "start") : "middle";
           let cursor = points[0].y + B * 0.3;
           for (const [lines, sign] of [
             [item.above ?? [], -1],
@@ -2263,11 +2300,12 @@ export async function prepareFigure(
               ? [...lines].reverse()
               : lines) {
               const node = label(
-                { x: item.at.x, y: 0 },
+                { x: labelX, y: 0 },
                 text,
                 plan
                   ? cardConditionFont(plan.scale)
                   : "var(--chemical-caption-font)",
+                labelAlign,
               );
               const box = ctx.box(node);
               const y =

@@ -27,7 +27,6 @@ async function fixture(): Promise<LibrarySnapshot> {
     products: [{ id: "output", compound: compound.id, yield: "80%" }],
     reagents: ["Reagent"],
     conditions: ["Ambient temperature"],
-    explanation: "The selected transformation uses the shared structure.",
     scene: {
       width: 24,
       height: 9,
@@ -92,7 +91,6 @@ test("library previews keep saved geometry and readable bonds on phones", async 
   ).toHaveCount(3);
   const after = await signatures();
   expect(after).toEqual(before);
-  await expect(page.locator("#rxn_example .step-description")).toHaveCount(1);
   await page.setViewportSize({ width: 390, height: 844 });
   const canvas = page.locator("#rxn_example .library-canvas");
   await expect
@@ -568,7 +566,6 @@ test("mechanism references show the complete overview or one pinned frame", asyn
     frames: ["first", "second"].map((id) => ({
       id,
       title: id,
-      explanation: `Explanation for ${id}`,
       scene: {
         width: 12,
         height: 8,
@@ -610,9 +607,6 @@ test("mechanism references show the complete overview or one pinned frame", asyn
   await expect(overview.locator('[data-figure="mec_example"]')).toBeVisible();
   await expect(overview.locator("[data-frame]")).toHaveCount(2);
   await expect(overview.getByRole("button")).toHaveCount(0);
-  await expect(overview.locator(".step-description")).toHaveCount(2);
-  await expect(overview.getByRole("heading", { level: 4 })).toHaveCount(2);
-  await expect(overview.locator(".step-description p")).toHaveCount(2);
   for (const id of ["first", "second"])
     await expect(
       overview.locator(`[data-label="${id}/structure:number:0"]`),
@@ -621,7 +615,6 @@ test("mechanism references show the complete overview or one pinned frame", asyn
   await expect(
     pinned.locator('[data-label="structure:number:0"]'),
   ).toHaveAttribute("data-text", "7");
-  await expect(pinned.locator(".step-description")).toHaveCount(1);
   await expect(pinned.locator(".step-number")).toHaveCount(0);
   for (const width of [1366, 390]) {
     await page.setViewportSize({ width, height: width === 1366 ? 900 : 844 });

@@ -61,9 +61,7 @@ export async function compileMechanismFrameLayout(
     const distance = async (scene: Scene) => {
       const probe: Mechanism = {
         ...entry,
-        frames: [
-          { id: "measure", title: "Measure", explanation: "Measure", scene },
-        ],
+        frames: [{ id: "measure", title: "Measure", scene }],
       };
       const geometry = await prepareFigure(
         { ...library, [entry.id]: probe },
@@ -138,7 +136,6 @@ export async function compileMechanismFrameLayout(
       products,
       reagents: words(step.above).split("\n").filter(Boolean),
       conditions: words(step.below).split("\n").filter(Boolean),
-      explanation: words(frame.explain),
       scene,
       arrow: {
         from: { x: 0, y: 0 },

@@ -1,5 +1,7 @@
 import type { Point } from "../../../shared/chemical-library/types.ts";
 
+export const verticalArrowLabelOffset = (bond: number) => bond * 0.6;
+
 export interface RouteBlock {
   width: number;
   height: number;
@@ -117,8 +119,8 @@ export function layoutRoute(
     bond: number;
     gap: number;
     serpentine?: boolean;
-    card?: { scale: number; vertical?: boolean };
-    text(lines: string[]): RouteBlock;
+    card?: { scale: number; vertical?: boolean; artworkWidth?: number };
+    text(lines: string[], maxWidth?: number): RouteBlock;
   },
 ): {
   items: RouteLayoutItem[];
@@ -767,6 +769,19 @@ export function layoutRoute(
     if (index) {
       for (const p of mine) {
         if (p.kind === "vertical") {
+          const side = (p.side ?? p.step.side) === "left" ? -1 : 1;
+          const offset = verticalArrowLabelOffset(bond);
+          if (card?.artworkWidth !== undefined) {
+            const labelX = p.x + side * offset;
+            const remaining =
+              side < 0 ? labelX : card.artworkWidth / card.scale - labelX;
+            p.above = p.step.above.length
+              ? options.text(p.step.above, remaining)
+              : undefined;
+            p.below = p.step.below.length
+              ? options.text(p.step.below, remaining)
+              : undefined;
+          }
           const box = boxSize(p.boxes),
             textHeight = (p.above?.height ?? 0) + (p.below?.height ?? 0),
             contentHeight =
@@ -783,16 +798,13 @@ export function layoutRoute(
           );
           if (contentHeight) {
             const w = Math.max(
-                p.above?.width ?? 0,
-                p.below?.width ?? 0,
-                box.width,
-              ),
-              offset = bond * 0.6;
-            p.textCenter =
-              p.x +
-              ((p.side ?? p.step.side) === "left" ? -1 : 1) * (offset + w / 2);
+              p.above?.width ?? 0,
+              p.below?.width ?? 0,
+              box.width,
+            );
+            p.textCenter = p.x + side * (offset + w / 2);
             obstacles.push(
-              (p.side ?? p.step.side) === "left"
+              side < 0
                 ? [
                     p.x - offset - w,
                     p.x - offset,

@@ -8,8 +8,6 @@ import type {
 import FigureCard from "../FigureCard.vue";
 import UiFigure from "../UiFigure.vue";
 import ImageViewer from "../ImageViewer.vue";
-import StepDescriptions from "../StepDescriptions.vue";
-import { figureDescriptions } from "./descriptions.ts";
 import { snapshotSvg } from "./snapshot-svg.ts";
 import { imageSvg } from "./image-svg.ts";
 import { moleculeBondLength } from "../chemistry/drawing.ts";
@@ -24,15 +22,6 @@ const props = defineProps<{
 const emit = defineEmits<{ diagnostics: [value: Diagnostic[]] }>();
 const entry = computed(() => props.library.entries[props.reference.ref]);
 const viewing = ref(false);
-const descriptions = computed(() =>
-  entry.value
-    ? figureDescriptions(
-        props.library.entries,
-        entry.value,
-        props.reference.frame,
-      )
-    : [],
-);
 const host = ref<HTMLElement>();
 const root = ref<HTMLElement>();
 const error = ref("");
@@ -182,12 +171,6 @@ watch(
       >
         <div ref="root" class="library-artwork" />
       </div>
-      <p v-if="entry?.overview">{{ entry.overview }}</p>
-      <StepDescriptions
-        v-if="descriptions.length"
-        :items="descriptions"
-        :columns="true"
-      />
       <ImageViewer
         v-if="entry?.kind === 'image'"
         v-model:open="viewing"
