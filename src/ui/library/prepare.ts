@@ -2186,10 +2186,19 @@ export async function prepareFigure(
         const font = scale
           ? cardConditionFont(scale)
           : "var(--chemical-caption-font)";
+        const cardAvailable = options.cardWidth
+          ? options.cardWidth - (options.cardWidth === 334 ? 26 : 34)
+          : 0;
+        const maxWidth = scale
+          ? (options.cardWidth === 334
+              ? Math.min(cardAvailable * 0.56, 170)
+              : Math.min(cardAvailable * 0.45, 320)) / scale
+          : Math.min(limit * 0.45, B * 18);
         const wrapped = wrapFigureText(
           lines,
-          scale ? 152 / scale : limit * 0.45,
+          maxWidth,
           (text) => ctx.textWidth(text, font),
+          { balance: true },
         );
         const nodes = wrapped.map((line) => label({ x: 0, y: 0 }, line, font));
         return {
@@ -2253,6 +2262,9 @@ export async function prepareFigure(
             ],
           });
           const vertical = points[0].x === points.at(-1)!.x;
+          const side = item.side === "left" ? -1 : 1;
+          const labelX = vertical ? points[0].x + side * B * 0.6 : item.at.x;
+          const labelAlign = vertical ? (side < 0 ? "end" : "start") : "middle";
           let cursor = points[0].y + B * 0.3;
           for (const [lines, sign] of [
             [item.above ?? [], -1],
@@ -2263,11 +2275,12 @@ export async function prepareFigure(
               ? [...lines].reverse()
               : lines) {
               const node = label(
-                { x: item.at.x, y: 0 },
+                { x: labelX, y: 0 },
                 text,
                 plan
                   ? cardConditionFont(plan.scale)
                   : "var(--chemical-caption-font)",
+                labelAlign,
               );
               const box = ctx.box(node);
               const y =

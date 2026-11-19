@@ -57,7 +57,6 @@ for (const width of [1366, 390]) {
         frames: ["first", "second"].map((id) => ({
           id,
           title: id,
-          explanation: id,
           scene: {
             width: 9,
             height: 7,

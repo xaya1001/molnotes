@@ -244,7 +244,6 @@ export async function compileFigure(
       "kind",
       "title",
       "sources",
-      "explain",
       "footnote",
       "bond",
       "width",
@@ -276,9 +275,6 @@ export async function compileFigure(
       );
     delete entry.bond;
     delete entry.width;
-    delete entry.explain;
-    if (inputValue.explain !== undefined)
-      entry.overview = String(inputValue.explain);
     validateLibraryEntry(entry);
     const entries = { ...structuredClone(existing), [id]: entry };
     return {
@@ -338,7 +334,6 @@ export async function compileFigure(
     ...(input.footnote === undefined
       ? {}
       : { footnote: words(input.footnote) }),
-    ...(input.explain === undefined ? {} : { overview: words(input.explain) }),
   };
   if (kind === "markush") {
     const entry: LibraryMarkush = finishFigureEntry({
@@ -1123,7 +1118,6 @@ export async function compileFigure(
     panel.frames.push({
       id: "overview",
       title,
-      explanation: words(input.explain) || title,
       scene,
       arrow: "none",
     });
@@ -1402,7 +1396,6 @@ export async function compileFigure(
         frames.push({
           id: fid,
           title: words(frame.title) || fid,
-          explanation: words(frame.explain) || words(input.explain) || title,
           scene,
           ...(frame.arrow === undefined ? {} : { arrow: frame.arrow }),
           ...(frame.above === undefined ? {} : { above: lines(frame.above) }),
@@ -1458,7 +1451,6 @@ export async function compileFigure(
       frames.push({
         id: fid,
         title: words(frame.title) || fid,
-        explanation: words(frame.explain) || words(input.explain) || title,
         scene,
         arrow,
         above: lines(frame.above),
@@ -1734,7 +1726,6 @@ export async function compileFigure(
         ...(step.reagentPosition === undefined
           ? {}
           : { reagentPosition: step.reagentPosition }),
-        explanation: words(step.explain) || words(input.explain) || title,
         scene,
         arrow: { from, to, textWidth: 5, kind: step.arrow ?? "forward" },
       };

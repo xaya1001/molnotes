@@ -31,7 +31,6 @@ test("library mechanism previews collect the overview or the explicitly selected
     frames: ["first", "second"].map((id) => ({
       id,
       title: id,
-      explanation: id,
       scene: {
         width: 4,
         height: 4,

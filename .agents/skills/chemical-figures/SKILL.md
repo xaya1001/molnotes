@@ -28,7 +28,7 @@ compounds:
   3: CC(=O)O
 steps:
   - { id: oxidation, from: 1, to: 2, above: "[O]" }
-  - { id: second, from: 2, to: 3, above: "[O]", explain: Further oxidation. }
+  - { id: second, from: 2, to: 3, above: "[O]" }
 ```
 
 For process diagrams, use inline `flow` with `steps: [{at,title,text,block?}]`; `at` names a node or existing edge, and `block` labels an inhibited edge. Use `panels` for separate state images. Preview these blocks with `content:preview`. Timeline and flow fields are in the [data-figure recipe](../../../toolbox/recipes/figures.md) and [content contract](../../../docs/content.md#static-composite-figures).
