@@ -69,6 +69,97 @@ export function validateBlockReferences(
     assert(ids.has(id), `${where} refers to unknown ${kind} ${id}`);
 }
 
+function validateSourceReferences(
+  refs: unknown,
+  sourceIds: ReadonlySet<unknown>,
+  where: string,
+) {
+  if (refs === undefined) return;
+  assert(isList(refs), `${where} refs must be an array`);
+  for (const id of refs)
+    assert(sourceIds.has(id), `${where} refers to unknown source ${id}`);
+}
+
+export function validateChapterDetails(
+  chapter: ChapterHead,
+  sourceIds: ReadonlySet<unknown>,
+  excerptIds: ReadonlySet<unknown>,
+  name: string,
+): asserts chapter is ChapterHead & { terms?: string[] } {
+  const where = `${name}: chapter ${chapter.id}`;
+  assert(isList(chapter.refs), `${where} needs refs`);
+  validateSourceReferences(chapter.refs, sourceIds, where);
+  if (chapter.excerpts !== undefined) {
+    assert(isList(chapter.excerpts), `${where} excerpts must be an array`);
+    for (const id of chapter.excerpts) {
+      if (typeof id === "string")
+        assert(excerptIds.has(id), `${where} refers to unknown excerpt ${id}`);
+      else assert(isObject(id), `${where} excerpts`);
+    }
+  }
+  if (chapter.terms !== undefined) {
+    assert(
+      isList(chapter.terms) &&
+        chapter.terms.every((term) => typeof term === "string" && term),
+      `${where} terms must be a list of term names`,
+    );
+    assert(
+      new Set(chapter.terms).size === chapter.terms.length,
+      `${where} terms repeat a term`,
+    );
+  }
+}
+
+export function validateChapterRoutes(
+  route: unknown,
+  chapters: readonly ChapterHead[],
+  name: string,
+) {
+  if (route !== undefined) {
+    assert(
+      typeof route === "string" &&
+        route.startsWith("/") &&
+        [...route.matchAll(routePlaceholder)].every(([, name]) =>
+          ["id", "number"].includes(name),
+        ) &&
+        !/[{}]/.test(route.replace(routePlaceholder, "")),
+      `${name}: chapterRoute must start with / and use only {id} and {number}`,
+    );
+    if (route.includes("{number}"))
+      for (const chapter of chapters)
+        assert(
+          isInteger(chapter.number),
+          `${name}: chapter ${chapter.id} needs a number for chapterRoute`,
+        );
+  }
+  const paths = new Set(
+    chapters.map((chapter) =>
+      chapterRoutePath({ chapterRoute: route }, chapter),
+    ),
+  );
+  assert(
+    !paths.has("/") && paths.size === chapters.length,
+    route === undefined
+      ? `${name}: chapter paths must be unique and cannot be /`
+      : `${name}: chapterRoute gives two chapters the same path`,
+  );
+}
+
+export function validateTopicCitationSyntax(
+  content: Parameters<typeof contentCitations>[0],
+  name: string,
+) {
+  for (const { href, where } of contentCitations(content, name)) {
+    try {
+      parseCitation(href);
+    } catch (error) {
+      throw new Error(
+        `${where}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+}
+
 export function validateTopicChapter(
   chapter: unknown,
   data: Record<string, unknown> | undefined,
@@ -160,44 +251,7 @@ function checkTopicContent(
     `${name}: a path-picker block needs top-level paths`,
   );
 
-  const route = content.chapterRoute;
-  if (route !== undefined) {
-    assert(
-      typeof route === "string" &&
-        route.startsWith("/") &&
-        [...route.matchAll(routePlaceholder)].every(([, name]) =>
-          ["id", "number"].includes(name),
-        ) &&
-        !/[{}]/.test(route.replace(routePlaceholder, "")),
-      `${name}: chapterRoute must start with / and use only {id} and {number}`,
-    );
-    if (route.includes("{number}"))
-      for (const chapter of chapters)
-        assert(
-          isInteger(chapter.number),
-          `${name}: chapter ${chapter.id} needs a number for chapterRoute`,
-        );
-    const paths = new Set(
-      chapters.map((chapter) =>
-        chapterRoutePath({ chapterRoute: route }, chapter),
-      ),
-    );
-    assert(
-      !paths.has("/") && paths.size === chapters.length,
-      `${name}: chapterRoute gives two chapters the same path`,
-    );
-  }
-  {
-    const paths = new Set(
-      chapters.map((chapter) =>
-        chapterRoutePath({ chapterRoute: route }, chapter),
-      ),
-    );
-    assert(
-      !paths.has("/") && paths.size === chapters.length,
-      `${name}: chapter paths must be unique and cannot be /`,
-    );
-  }
+  validateChapterRoutes(content.chapterRoute, chapters, name);
 
   const sourceIds = new Set<unknown>();
   const sources = content.sources ?? [];
@@ -212,15 +266,7 @@ function checkTopicContent(
     sourceIds.add(source.id);
     text(source.title, `${name}: source ${source.id} title`);
   }
-  for (const { href, where } of contentCitations(content, name)) {
-    try {
-      parseCitation(href);
-    } catch (error) {
-      throw new Error(
-        `${where}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
+  validateTopicCitationSyntax(content, name);
   if (content.sourcesIntro !== undefined) {
     const intro = content.sourcesIntro;
     assert(isObject(intro), `${name}: sourcesIntro must be an object`);
@@ -246,17 +292,6 @@ function checkTopicContent(
       found.excerpts.push(...intros.excerpts);
     }
   }
-  const refs = (ids: unknown, where: string) => {
-    if (ids === undefined) return;
-    assert(isList(ids), `${where} refs must be an array`);
-    for (const id of ids)
-      assert(sourceIds.has(id), `${where} refers to unknown source ${id}`);
-  };
-  for (const chapter of chapters) {
-    assert(isList(chapter.refs), `${name}: chapter ${chapter.id} needs refs`);
-    refs(chapter.refs, `${name}: chapter ${chapter.id}`);
-  }
-
   const excerptIds = new Set<unknown>();
   const excerpts = content.excerpts ?? [];
   assert(isList(excerpts), `${name}: excerpts must be an array`);
@@ -280,24 +315,8 @@ function checkTopicContent(
       validateFigureReference(excerpt.figure, `${name}: excerpt ${excerpt.id}`);
   }
   validateBlockReferences(found.excerpts, excerptIds, "excerpt");
-  for (const chapter of chapters) {
-    if (chapter.excerpts === undefined) continue;
-    assert(
-      isList(chapter.excerpts),
-      `${name}: chapter ${chapter.id} excerpts must be an array`,
-    );
-    for (const id of chapter.excerpts) {
-      // Some topics inline the excerpt object in the chapter instead of an id.
-      if (typeof id !== "string") {
-        assert(isObject(id), `${name}: chapter ${chapter.id} excerpts`);
-        continue;
-      }
-      assert(
-        excerptIds.has(id),
-        `${name}: chapter ${chapter.id} refers to unknown excerpt ${id}`,
-      );
-    }
-  }
+  for (const chapter of chapters)
+    validateChapterDetails(chapter, sourceIds, excerptIds, name);
 
   const quiz = content.quiz ?? [];
   assert(isList(quiz), `${name}: quiz must be an array`);
@@ -333,24 +352,9 @@ function checkTopicContent(
         chapterIds.has(question.chapter),
         `${where} refers to unknown chapter`,
       );
-    refs(question.refs, where);
+    validateSourceReferences(question.refs, sourceIds, where);
   });
   validateBlockReferences(found.quiz, quizIds, "quiz question");
-
-  // The terms a chapter uses; their definitions live in the site glossary.
-  for (const chapter of chapters) {
-    if (chapter.terms === undefined) continue;
-    const where = `${name}: chapter ${chapter.id} terms`;
-    assert(
-      isList(chapter.terms) &&
-        chapter.terms.every((term) => typeof term === "string" && term),
-      `${where} must be a list of term names`,
-    );
-    assert(
-      new Set(chapter.terms).size === chapter.terms.length,
-      `${where} repeat a term`,
-    );
-  }
 }
 
 /** Every prediction of the topic with the id its records are kept under and its chapter. */

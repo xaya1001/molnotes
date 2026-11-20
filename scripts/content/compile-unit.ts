@@ -3,6 +3,9 @@ import {
   validateTopicContent,
   validateTopicChapter,
   validateBlockReferences,
+  validateChapterDetails,
+  validateChapterRoutes,
+  validateTopicCitationSyntax,
 } from "../../shared/topic-content.ts";
 import { isObject } from "../../shared/json.ts";
 import type { TopicBlock } from "../../src/ui/topic/blocks.ts";
@@ -38,8 +41,14 @@ export function compileUnit(input: SiteInput): Promise<{
 }>;
 export function compileUnit(input: NotesInput): ReturnType<typeof compileNotes>;
 export function compileUnit(input: ChapterInput): Promise<{
-  chapter: { id: string; title: string; blocks: TopicBlock[] };
+  chapter: {
+    id: string;
+    title: string;
+    blocks: TopicBlock[];
+    terms?: string[];
+  };
   data: Record<string, unknown> | undefined;
+  index: number;
 }>;
 export async function compileUnit(
   input: SiteInput | NotesInput | ChapterInput,
@@ -55,17 +64,18 @@ export async function compileUnit(
   }
   const where = `${input.unit}/content.json`;
   let authored = input.authored;
+  let index = 0;
   if (input.kind === "chapter") {
     if (!isObject(authored) || !Array.isArray(authored.chapters))
       throw new Error(`${where}: chapters must be an array`);
-    const selected = authored.chapters.find((entry) =>
+    index = authored.chapters.findIndex((entry) =>
       typeof entry === "string"
         ? entry === input.chapter
         : isObject(entry) && entry.id === input.chapter,
     );
-    if (!selected)
+    if (index === -1)
       throw new Error(`${input.unit}/${input.chapter}: chapter not found`);
-    authored = { ...authored, chapters: [selected] };
+    authored = { ...authored, chapters: [authored.chapters[index]] };
   }
   await compileTableStructures(authored, input.library, where);
   const resolved = resolveCompoundSlots(authored, input.library, where);
@@ -94,10 +104,15 @@ export async function compileUnit(
       new Set(
         Array.isArray(value) ? value.filter(isObject).map((row) => row.id) : [],
       );
-    validateBlockReferences(
-      found.excerpts,
-      ids(resolved.value.excerpts),
-      "excerpt",
+    const excerptIds = ids(resolved.value.excerpts);
+    validateChapterRoutes(resolved.value.chapterRoute, [chapter], where);
+    validateTopicCitationSyntax({ chapters: [chapter] }, where);
+    validateBlockReferences(found.excerpts, excerptIds, "excerpt");
+    validateChapterDetails(
+      chapter,
+      ids(resolved.value.sources),
+      excerptIds,
+      where,
     );
     validateBlockReferences(
       found.quiz,
@@ -106,7 +121,7 @@ export async function compileUnit(
     );
     if (found.pathPicker && resolved.value.paths === undefined)
       throw new Error(`${where}: a path-picker block needs top-level paths`);
-    return { chapter, data };
+    return { chapter, data, index };
   }
   const content = validateTopicContent(resolved.value, where);
   if ("glossary" in content && content.glossary !== undefined)

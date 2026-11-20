@@ -25,24 +25,43 @@ import { buildSnapshot } from "../scripts/content/content-publish.ts";
 test("single chapter check and publication report the same chapter error", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "practice-check-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  cpSync(resolve("tests/fixtures/content"), root, { recursive: true });
+  const fixture = resolve("tests/fixtures/content");
+  for (const entry of ["glossary.json", "notes/reader-test", "sites/sample"])
+    cpSync(join(fixture, entry), join(root, entry), { recursive: true });
   const path = join(root, "sites/sample/content.json");
   const content = JSON.parse(readFileSync(path, "utf8"));
-  content.chapters[0].blocks[0] = { type: "quiz", questions: ["missing"] };
-  writeFileSync(path, JSON.stringify(content));
-  const check = spawnSync(
-    process.execPath,
-    ["scripts/content.ts", "check", "sites/sample/content.json#start"],
+  const [chapter, ...rest] = content.chapters;
+  for (const change of [
+    { blocks: [{ type: "quiz", questions: ["missing"] }] },
+    { blocks: [{ type: "table", columns: ["Value"], rows: [["1"]] }] },
+    { refs: ["missing"] },
+    { terms: ["missing"] },
     {
-      encoding: "utf8",
-      env: { ...process.env, MOLNOTES_CONTENT_DIR: root },
+      blocks: [
+        {
+          type: "callout",
+          text: "Sample",
+          link: { to: "/missing", text: "Link" },
+        },
+      ],
     },
-  );
-  assert.equal(check.status, 1);
-  await assert.rejects(buildSnapshot(root), (error: Error) => {
-    assert.equal(error.message, check.stderr.trim());
-    return true;
-  });
+  ]) {
+    content.chapters = [{ ...chapter, ...change }, ...rest];
+    writeFileSync(path, JSON.stringify(content));
+    const check = spawnSync(
+      process.execPath,
+      ["scripts/content.ts", "check", "sites/sample/content.json#start"],
+      {
+        encoding: "utf8",
+        env: { ...process.env, MOLNOTES_CONTENT_DIR: root },
+      },
+    );
+    assert.equal(check.status, 1);
+    await assert.rejects(buildSnapshot(root), (error: Error) => {
+      assert.equal(error.message, check.stderr.trim());
+      return true;
+    });
+  }
 });
 
 test("practice requests share validation, preview positions, todo and the snapshot gate", async (t) => {
@@ -322,6 +341,7 @@ test("practice chapter checks referenced note headings and explanations", async 
 test("check accepts a Markdown chapter and a JSON chapter selector", (t) => {
   const root = mkdtempSync(join(tmpdir(), "practice-cli-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
+  writeFileSync(join(root, "glossary.json"), "[]");
   mkdirSync(join(root, "sites/practice/chapters"), { recursive: true });
   mkdirSync(join(root, "notes/reader-test"), { recursive: true });
   writeFileSync(
@@ -346,6 +366,7 @@ test("check accepts a Markdown chapter and a JSON chapter selector", (t) => {
         {
           id: "json",
           title: "JSON",
+          refs: [],
           note: "notes/reader-test/second",
           blocks: [],
         },

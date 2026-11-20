@@ -6,15 +6,10 @@ import {
   noteMarkdown,
 } from "../../shared/notes-index.ts";
 import { validateGlossary } from "../../shared/glossary.ts";
-import { parseSiteManifest } from "../../shared/site-catalog.ts";
-import { chapterRoutePath, topicBasePath } from "../../shared/topic-content.ts";
-import { patentRoutePaths } from "../../shared/patent-contract.ts";
-import type { TopicContent } from "../../src/ui/topic/content.ts";
-import { parse as yaml } from "yaml";
 import { resolveCitations } from "./citations.ts";
 import { readRegistry, readGlossary } from "./content-files.ts";
 import { parseRequest } from "./requests.ts";
-import { writerFiles } from "./writer-context.ts";
+import { writerFiles, writerRoutes } from "./writer-context.ts";
 import { compileUnit } from "./compile-unit.ts";
 
 const normalized = (text: string) => text.replace(/\s/g, "").toLowerCase();
@@ -105,55 +100,7 @@ export async function checkNote(
       );
   }
   for (const term of additions) if (!terms[term.term]) terms[term.term] = term;
-  const routes = new Set([
-    "/",
-    "/notes/",
-    "/review/",
-    "/system/",
-    "/glossary/",
-    "/library/",
-  ]);
-  for (const path of source.files) {
-    if (/^notes\/[^/]+\/(?:author\/)?[^/]+\.md$/.test(path))
-      routes.add(`/${path.slice(0, -3)}`);
-    if (/^notes\/[^/]+\/directory\.json$/.test(path))
-      routes.add(`/${path.slice(0, -"directory.json".length)}`);
-    if (!/^sites\/[^/]+\/site\.json$/.test(path)) continue;
-    const slug = path.split("/")[1];
-    const site = parseSiteManifest(slug, JSON.parse(await source.read(path)));
-    // Route discovery reads identities; it does not compile unrelated chapters.
-    const content: Omit<TopicContent, "chapters"> & {
-      chapters: (TopicContent["chapters"][number] | string)[];
-    } = JSON.parse(await source.read(`sites/${slug}/content.json`));
-    const base = topicBasePath(site);
-    routes.add(base + "/");
-    for (const path of patentRoutePaths({
-      ...content,
-      chapters: content.chapters
-        .filter((chapter) => typeof chapter !== "string")
-        .map((chapter) => ({ ...chapter, blocks: chapter.blocks ?? [] })),
-    }))
-      routes.add(base + path);
-    for (const chapter of content.chapters) {
-      if (typeof chapter === "string") {
-        const chapterSource = await source.read(`sites/${slug}/${chapter}`);
-        const header = /^---\r?\n([\s\S]*?)\r?\n---/.exec(chapterSource);
-        if (!header)
-          throw new Error(`sites/${slug}/${chapter}: missing front matter`);
-        const metadata = yaml(header[1]);
-        routes.add(
-          base +
-            chapterRoutePath(content, {
-              id: String(chapter)
-                .replace(/^chapters\//, "")
-                .replace(/\.md$/, ""),
-              number: metadata.number,
-              path: metadata.path,
-            }),
-        );
-      } else routes.add(base + chapterRoutePath(content, chapter));
-    }
-  }
+  const routes = await writerRoutes(source);
   const [, dir, name] = file.split("/");
   try {
     const [resolved] = await resolveCitations(

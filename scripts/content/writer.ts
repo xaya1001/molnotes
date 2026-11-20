@@ -1,10 +1,21 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { compileUnit } from "./compile-unit.ts";
-import { readChemicalLibrary } from "./chemical-library.ts";
+import { libraryUsage, readChemicalLibrary } from "./chemical-library.ts";
+import { readGlossary } from "./content-files.ts";
 import { parseSiteManifest } from "../../shared/site-catalog.ts";
 import { checkNote } from "./writer-check.ts";
-import { readSeriesNotes } from "./writer-context.ts";
+import {
+  readSeriesNotes,
+  writerFiles,
+  writerRoutes,
+} from "./writer-context.ts";
+import {
+  validateChapterTerms,
+  validateTopicSchemes,
+  validateTopicValues,
+} from "./topic-validation.ts";
+import { topicBasePath } from "../../shared/topic-content.ts";
 
 export async function writerCommand(
   root: string,
@@ -42,9 +53,35 @@ export async function writerCommand(
         group: site.group,
         library,
       };
-      if (path)
-        await compileUnit({ ...common, kind: "chapter", chapter: id ?? path });
-      else await compileUnit({ ...common, kind: "site" });
+      if (path) {
+        const { chapter, data, index } = await compileUnit({
+          ...common,
+          kind: "chapter",
+          chapter: id ?? path,
+        });
+        const where = `${unit}/content.json`;
+        const glossary = await readGlossary(root);
+        validateChapterTerms(
+          chapter,
+          new Set(glossary.map((term) => term.term)),
+          where,
+        );
+        await validateTopicSchemes(chapter.blocks, data, where);
+        const source = await writerFiles(root);
+        await validateTopicValues(
+          chapter,
+          `content.chapters[${index}]`,
+          site.slug,
+          data,
+          {
+            routes: await writerRoutes(source),
+            assets: new Set(source.files.map((file) => `/${file}`)),
+          },
+        );
+        libraryUsage(library, [
+          { value: chapter, path: topicBasePath(site), title: site.title },
+        ]);
+      } else await compileUnit({ ...common, kind: "site" });
       console.log(`${args[0]}: 0 errors`);
       return;
     }
