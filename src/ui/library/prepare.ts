@@ -842,6 +842,10 @@ export async function prepareFigure(
           let boxes = (anchorNodes.length ? anchorNodes : labelNodes).map(
             (node) => inkBox(node, g, ctx),
           );
+          if (anchorNodes.length)
+            for (const [index, node] of labelNodes.entries())
+              if (!anchorNodes.includes(node))
+                chargeBoxes[`glyph:${i}:${index}`] = inkBox(node, g, ctx);
           if (
             groups.some(
               (group) => group.name === "PPh3" && group.atoms[0] === i,
