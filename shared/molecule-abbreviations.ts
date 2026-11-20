@@ -261,13 +261,10 @@ export const reagentAbbreviations = [
   { smiles: "O", label: "H<sub>2</sub>O", atom: 8 },
   { smiles: "[OH3+]", label: "H<sub>3</sub>O", atom: 8 },
   { smiles: "N", label: "NH<sub>3</sub>", atom: 7 },
-  { smiles: "[C-]#N", label: "CN", atom: 6 },
+  { smiles: "[C-]#N", label: "CN", atom: 6, secondGlyph: 7 },
   { smiles: "[N-]=[N+]=[N-]", label: "N<sub>3</sub>", atom: 7 },
   { smiles: "C[S-]", label: "MeS", atom: 16 },
   { smiles: "CC(=O)[O-]", label: "AcO", atom: 8 },
   { smiles: "CC(=O)O", label: "AcOH", atom: 8 },
   { smiles: "CCN(CC)CC", label: "Et<sub>3</sub>N", atom: 7 },
-  ...["[Br-]", "[Cl-]", "[I-]", "[F-]", "[H+]", "[Na+]", "[K+]", "[Li+]"].map(
-    (smiles) => ({ smiles, label: "", atom: 0 }),
-  ),
 ] as const;

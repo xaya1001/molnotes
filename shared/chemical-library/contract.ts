@@ -72,8 +72,11 @@ function focus(v: unknown, w: string) {
 }
 function layout(v: unknown, w: string) {
   object(v, w);
-  if (v.reagentAbbreviate !== undefined && v.reagentAbbreviate !== false)
-    fail(w, "reagentAbbreviate must be false when present");
+  if (
+    v.reagentAbbreviate !== undefined &&
+    typeof v.reagentAbbreviate !== "boolean"
+  )
+    fail(w, "reagentAbbreviate must be a boolean");
   if (v.inputSmiles !== undefined) text(v.inputSmiles, w);
   if (v.molblock !== undefined) text(v.molblock, w);
   if (v.explicitHydrogens !== undefined) {

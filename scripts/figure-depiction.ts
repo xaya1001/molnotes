@@ -8,6 +8,7 @@ import {
   atomMaps,
   atomRings,
   graphOf,
+  hasLinearDepiction,
   openMolecule,
   graphSignature,
   abbreviatedDrawing,
@@ -411,40 +412,6 @@ function retainsStereo(rd: Toolkit, mol: Mol, identity: string) {
     drawn.delete();
   }
 }
-function retainsLinearCentres(mol: Mol) {
-  const graph = graphOf(mol),
-    points = xy(mol),
-    ringBonds = ringBondSet(atomRings(graph));
-  return graph.atoms.every((_, index) => {
-    const bonds = graph.bonds.filter((bond) => bond.atoms.includes(index));
-    if (
-      bonds.some(
-        (bond) =>
-          bond.bo === 3 &&
-          ringBonds.has([...bond.atoms].sort((a, b) => a - b).join(",")),
-      )
-    )
-      return true;
-    if (
-      bonds.length !== 2 ||
-      !(
-        bonds.some((bond) => bond.bo === 3) ||
-        bonds.every((bond) => bond.bo === 2)
-      )
-    )
-      return true;
-    const [a, b] = bonds.map(
-      (bond) => points[bond.atoms.find((atom) => atom !== index)!],
-    );
-    const center = points[index],
-      u = [a[0] - center[0], a[1] - center[1]],
-      v = [b[0] - center[0], b[1] - center[1]];
-    return (
-      (u[0] * v[0] + u[1] * v[1]) / (Math.hypot(...u) * Math.hypot(...v)) <=
-      -Math.cos((5 * Math.PI) / 180)
-    );
-  });
-}
 function matched(rd: Toolkit, mol: Mol, query: Mol): number[] {
   const copy = matchingCopy(rd, mol);
   try {
@@ -639,7 +606,7 @@ function alignDepiction(
   ) {
     const candidate = alignCore(rd, mol, reference, core.smarts, coordgen);
     if (candidate) {
-      if (retainsLinearCentres(candidate)) {
+      if (hasLinearDepiction(graphOf(candidate))) {
         mol.delete();
         mol = candidate;
         aligned = retainsStereo(rd, mol, identity);
@@ -652,7 +619,7 @@ function alignDepiction(
     aligned =
       follow(rd, mol, reference, coordgen, groupCore) &&
       retainsStereo(rd, mol, identity) &&
-      retainsLinearCentres(mol);
+      hasLinearDepiction(graphOf(mol));
   }
   if (!aligned) {
     mol.delete();
@@ -1152,7 +1119,7 @@ export function depictRoute(
           const candidate = withCoordinates(rd, final, coordinates);
           if (
             !retainsStereo(rd, candidate, expected.get(key)!) ||
-            !retainsLinearCentres(candidate)
+            !hasLinearDepiction(graphOf(candidate))
           ) {
             candidate.delete();
             return;

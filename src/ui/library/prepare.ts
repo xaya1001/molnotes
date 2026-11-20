@@ -58,6 +58,7 @@ import {
   compoundAbbreviations,
   atomRings,
   graphOf,
+  linearCentres,
   placedCoordinates,
   validateCompound,
   validateSceneChemistry,
@@ -216,7 +217,7 @@ export async function prepareFigure(
     deferredCharges?: ((priority: boolean) => void)[],
     explicitRadicals = new Set<string>(),
     allowReagents = false,
-    protectedAtoms = new Set<string>(),
+    protectedAtoms = new Map<string, "atom" | "bond">(),
   ) {
     validateCompound(toolkit, c);
     c = compoundView(toolkit, c, layout);
@@ -295,6 +296,7 @@ export async function prepareFigure(
       }
       for (const id of layout.methylLabels ?? [])
         atomLabels[c.atomIds.indexOf(id)] = "Me";
+      const nativeHydrogenLabels = new Set<number>();
       for (const [i, atom] of graph.atoms.entries()) {
         if (!atom.chg || atomLabels[i]) continue;
         const symbol = elementSymbols[atom.z ?? 6];
@@ -302,12 +304,16 @@ export async function prepareFigure(
         const h = atom.impHs
           ? `H${atom.impHs > 1 ? `<sub>${atom.impHs}</sub>` : ""}`
           : "";
-        const isolated = !graph.bonds.some((b) => b.atoms.includes(i));
         const neighbors = graph.bonds.flatMap((b) =>
           b.atoms.includes(i) ? [b.atoms.find((a) => a !== i)!] : [],
         );
+        // Native orientation places hydrogens across from the attached bonds.
+        if (atom.impHs && neighbors.length > 1) {
+          nativeHydrogenLabels.add(i);
+          continue;
+        }
         atomLabels[i] =
-          (isolated && [8, 16].includes(atom.z ?? 6)) ||
+          (!neighbors.length && [8, 16].includes(atom.z ?? 6)) ||
           (neighbors.length === 1 && coords[neighbors[0]].x > coords[i].x)
             ? h + symbol
             : symbol + h;
@@ -320,55 +326,54 @@ export async function prepareFigure(
             `(CH<sub>2</sub>)<sub>${unit.label}</sub>`;
       const xs = coords.map((p) => p.x),
         ys = coords.map((p) => p.y);
-      const draw = (
+      const drawSvg = (
         count: number,
         handle = depiction,
         atomNotes = false,
         indices?: number[],
+        noFreetype = false,
       ) =>
-        nativeDepictionGeometry(
-          handle.get_svg_with_highlights(
-            JSON.stringify({
-              width: Math.ceil((Math.max(...xs) - Math.min(...xs)) * B + 100),
-              height: Math.ceil((Math.max(...ys) - Math.min(...ys)) * B + 100),
-              scalingFactor: B / 1.5,
-              fixedBondLength: B / 1.5,
-              bondLineWidth: token("--chemical-line"),
-              scaleBondWidth: false,
-              additionalAtomLabelPadding: token(
-                "--chemical-atom-label-padding",
-              ),
-              multipleBondOffset: token("--chemical-multiple-bond-offset"),
-              fixedFontSize: token("--chemical-font"),
-              noFreetype: false,
-              atomColourPalette: "bw",
-              atomLabelDeuteriumTritium: true,
-              addStereoAnnotation: atomNotes
-                ? false
-                : (layout.stereoAnnotations ?? false),
-              annotationFontScale: atomNotes
-                ? token("--chemical-atom-note-scale")
-                : 0.65,
-              atomLabels: indices
-                ? Object.fromEntries(
-                    indices.flatMap((original, i) =>
-                      atomLabels[original] === undefined
-                        ? []
-                        : [[i, atomLabels[original]]],
-                    ),
-                  )
-                : atomLabels,
-              atoms: Array.from({ length: count }, (_, i) => i),
-              bonds: [],
-              highlightRadius: 0.1,
-              atomHighlightsAreCircles: true,
-              prepareMolsBeforeDrawing: true,
-              addChiralHs: !layout.scaffold && layout.ringHydrogens !== false,
-              useMolBlockWedging: !!layout.wedgeBonds?.length,
-              wedgeBonds: !layout.wedgeBonds?.length,
-            }),
-          ),
+        handle.get_svg_with_highlights(
+          JSON.stringify({
+            width: Math.ceil((Math.max(...xs) - Math.min(...xs)) * B + 100),
+            height: Math.ceil((Math.max(...ys) - Math.min(...ys)) * B + 100),
+            scalingFactor: B / 1.5,
+            fixedBondLength: B / 1.5,
+            bondLineWidth: token("--chemical-line"),
+            scaleBondWidth: false,
+            additionalAtomLabelPadding: token("--chemical-atom-label-padding"),
+            multipleBondOffset: token("--chemical-multiple-bond-offset"),
+            fixedFontSize: token("--chemical-font"),
+            noFreetype,
+            atomColourPalette: "bw",
+            atomLabelDeuteriumTritium: true,
+            addStereoAnnotation: atomNotes
+              ? false
+              : (layout.stereoAnnotations ?? false),
+            annotationFontScale: atomNotes
+              ? token("--chemical-atom-note-scale")
+              : 0.65,
+            atomLabels: indices
+              ? Object.fromEntries(
+                  indices.flatMap((original, i) =>
+                    atomLabels[original] === undefined
+                      ? []
+                      : [[i, atomLabels[original]]],
+                  ),
+                )
+              : atomLabels,
+            atoms: Array.from({ length: count }, (_, i) => i),
+            bonds: [],
+            highlightRadius: 0.1,
+            atomHighlightsAreCircles: true,
+            prepareMolsBeforeDrawing: true,
+            addChiralHs: !layout.scaffold && layout.ringHydrogens !== false,
+            useMolBlockWedging: !!layout.wedgeBonds?.length,
+            wedgeBonds: !layout.wedgeBonds?.length,
+          }),
         );
+      const draw = (...args: Parameters<typeof drawSvg>) =>
+        nativeDepictionGeometry(drawSvg(...args));
       let doc = draw(graph.atoms.length);
       // Native preparation adds drawing-only H atoms for fused stereocentres.
       // Include their highlight centres so bond-size diagnostics measure them too.
@@ -383,6 +388,19 @@ export async function prepareFigure(
         ),
       );
       if (count > graph.atoms.length) doc = draw(count);
+      const nativeGlyphs = new Map<number, string[]>();
+      if (nativeHydrogenLabels.size) {
+        const textSvg = drawSvg(count, depiction, false, undefined, true);
+        for (const [, index, character] of textSvg.matchAll(
+          /<text\b[^>]+class='atom-(\d+)'[^>]*>\s*([^<]+?)\s*<\/text>/g,
+        )) {
+          const i = Number(index);
+          if (!nativeHydrogenLabels.has(i)) continue;
+          const letters = nativeGlyphs.get(i) ?? [];
+          letters.push(character);
+          nativeGlyphs.set(i, letters);
+        }
+      }
       const positions = Array.from({ length: count }, (_, i) => {
         const e = ctx
           .nodes(doc)
@@ -508,6 +526,7 @@ export async function prepareFigure(
         )
           f.atoms.add(ids[0]);
       }
+      const glyphCounts = new Map<number, number>();
       for (const node of [...doc.children]) {
         if (node.kind === "rect" || node.kind === "ellipse") continue;
         const cls = ctx.get(node, "class") ?? "";
@@ -549,6 +568,15 @@ export async function prepareFigure(
         )
           continue;
         if (e.kind === "path" && !bi && !ai.length) continue;
+        if (!bi && nativeGlyphs.has(ai[0])) {
+          const i = ai[0],
+            index = glyphCounts.get(i) ?? 0;
+          glyphCounts.set(i, index + 1);
+          const glyph = nativeGlyphs.get(i)![index];
+          if (/^[+−-]$/.test(glyph)) continue;
+          if (glyph === elementSymbols[graph.atoms[i].z ?? 6][0])
+            ctx.set(e, "data-element-anchor", "true");
+        }
         if (e.kind === "path" && bi) {
           const drawnIndex = Number(bi[1]);
           const index =
@@ -620,6 +648,12 @@ export async function prepareFigure(
         }
         ctx.append(g, e);
       }
+      const glyphsByAtom = new Map<string, FigureNode[]>();
+      for (const node of ctx.nodes(g)) {
+        const owner = ctx.data(node, "label");
+        if (owner)
+          glyphsByAtom.set(owner, [...(glyphsByAtom.get(owner) ?? []), node]);
+      }
       for (const [i, atom] of graph.atoms.entries()) {
         const symbol = elementSymbols[atom.z ?? 6];
         if (
@@ -628,9 +662,7 @@ export async function prepareFigure(
         )
           continue;
         const aid = key({ molecule: id, atom: c.atomIds[i] });
-        const glyphs = ctx
-          .nodes(g, (node) => ctx.data(node, "label") === aid)
-          .slice(0, 2);
+        const glyphs = glyphsByAtom.get(aid)?.slice(0, 2) ?? [];
         if (glyphs.length !== 2) continue;
         const [first, second] = glyphs.map((node) => inkBox(node, g, ctx));
         const x =
@@ -647,7 +679,7 @@ export async function prepareFigure(
       }
       for (const reagent of reagents) {
         const aid = key({ molecule: id, atom: c.atomIds[reagent.root] });
-        const glyphs = ctx.nodes(g, (node) => ctx.data(node, "label") === aid);
+        const glyphs = glyphsByAtom.get(aid) ?? [];
         const plain = reagent.label.replace(/<[^>]+>/g, "");
         const symbol = elementSymbols[graph.atoms[reagent.root].z ?? 6];
         const index = plain.lastIndexOf(symbol);
@@ -659,10 +691,27 @@ export async function prepareFigure(
         const dy = positions[reagent.root].y - (box.top + box.bottom) / 2;
         for (const node of glyphs)
           ctx.set(node, "transform", `translate(${dx} ${dy})`);
+        for (const i of reagent.glyphAtoms.slice(1)) {
+          const symbol = elementSymbols[graph.atoms[i].z ?? 6];
+          const node = glyphs[plain.indexOf(symbol)];
+          const box = inkBox(node, g, ctx);
+          positions[i] = {
+            x: (box.left + box.right) / 2,
+            y: (box.top + box.bottom) / 2,
+          };
+          const owner = key({ molecule: id, atom: c.atomIds[i] });
+          ctx.set(node, "data-label", owner);
+          ctx.set(node, "data-element-anchor", "true");
+          glyphsByAtom.set(owner, [node]);
+          glyphsByAtom.set(
+            aid,
+            glyphsByAtom.get(aid)!.filter((glyph) => glyph !== node),
+          );
+        }
       }
       for (const [i] of graph.atoms.entries()) {
         const aid = key({ molecule: id, atom: c.atomIds[i] });
-        const glyphs = ctx.nodes(g, (node) => ctx.data(node, "label") === aid);
+        const glyphs = glyphsByAtom.get(aid) ?? [];
         if (
           !glyphs.length ||
           glyphs.some(
@@ -722,7 +771,7 @@ export async function prepareFigure(
         arrowVisible[atom] =
           !folded.has(i) ||
           groups.some((group) => group.atoms[0] === i) ||
-          reagents.some((group) => group.root === i);
+          reagents.some((group) => group.glyphAtoms.includes(i));
         arrowLabels[atom] =
           !graph.atoms[i] ||
           (graph.atoms[i].z ?? 6) !== 6 ||
@@ -730,49 +779,16 @@ export async function prepareFigure(
           !!atomLabels[i];
       });
       ctx.setData(g, "atomPoints", JSON.stringify(localPoints));
-      const linear = graph.atoms.flatMap((_, i) => {
-        const incident = graph.bonds.filter(
-          (b, index) => !hiddenBonds.has(index) && b.atoms.includes(i),
+      const linear = linearCentres(graph)
+        .filter((centre) => centre.every((i) => !folded.has(i)))
+        .map((centre) =>
+          centre.map((i) => key({ molecule: id, atom: c.atomIds[i] })),
         );
-        if (
-          incident.some(
-            (bond) =>
-              bond.bo === 3 &&
-              rings.some((ring) =>
-                ring.some(
-                  (atom, index) =>
-                    bond.atoms.includes(atom) &&
-                    bond.atoms.includes(ring[(index + 1) % ring.length]),
-                ),
-              ),
-          )
-        )
-          return [];
-        if (
-          incident.length !== 2 ||
-          !(
-            incident.some((b) => b.bo === 3) ||
-            incident.every((b) => b.bo === 2)
-          )
-        )
-          return [];
-        return [
-          [
-            ...incident.map((b) =>
-              key({
-                molecule: id,
-                atom: c.atomIds[b.atoms.find((a) => a !== i)!],
-              }),
-            ),
-            key({ molecule: id, atom: c.atomIds[i] }),
-          ],
-        ];
-      });
       ctx.setData(g, "linearCentres", JSON.stringify(linear));
       for (const {
         atoms: [a, b],
       } of [
-        ...graph.bonds,
+        ...graph.bonds.filter((_, i) => !hiddenBonds.has(i)),
         ...[...nativeBonds.values()].map((atoms) => ({ atoms })),
       ])
         atomBonds.push([
@@ -821,6 +837,10 @@ export async function prepareFigure(
           chargeBoxes: Record<string, import("./electron-arrows.ts").ArrowBox> =
             {};
         for (const [i, atom] of graph.atoms.entries()) {
+          if (
+            !!chargeAims[key({ molecule: id, atom: c.atomIds[i] })] !== priority
+          )
+            continue;
           const group =
             groups.find((group) => group.atoms[0] === i) ??
             reagents.find((group) => group.root === i);
@@ -830,12 +850,10 @@ export async function prepareFigure(
           if (!value || (folded.has(i) && !group)) continue;
           chargeValues[String(i)] = value;
         }
+        if (!Object.keys(chargeValues).length) return;
         for (const i of graph.atoms.keys()) {
           const aid = key({ molecule: id, atom: c.atomIds[i] });
-          const labelNodes = ctx.nodes(
-            g,
-            (node) => ctx.data(node, "label") === aid,
-          );
+          const labelNodes = glyphsByAtom.get(aid) ?? [];
           const anchorNodes = labelNodes.filter(
             (node) => node.attributes["data-element-anchor"] === "true",
           );
@@ -876,10 +894,13 @@ export async function prepareFigure(
           .nodes(
             parent,
             (n) =>
-              n.kind === "group" && n.attributes["data-owner"] !== undefined,
+              n.kind === "group" &&
+              (ctx.data(n, "owner") ?? ctx.data(n, "chargeOwner")) !==
+                undefined,
           )
           .entries()) {
-          const owner = ctx.data(node, "owner");
+          const owner =
+            ctx.data(node, "owner") ?? ctx.data(node, "chargeOwner");
           if (!owner.startsWith(id + ":")) continue;
           const box = inkBox(node, g, ctx);
           chargeBoxes[`label:${owner}:${index}`] = box;
@@ -887,7 +908,7 @@ export async function prepareFigure(
         const visible = (i: number) =>
           !folded.has(i) ||
           groups.some((group) => group.atoms[0] === i) ||
-          reagents.some((group) => group.root === i);
+          reagents.some((group) => group.glyphAtoms.includes(i));
         const visibleBonds = graph.bonds.filter(
           (b, i) => !hiddenBonds.has(i) && b.atoms.every(visible),
         );
@@ -930,11 +951,15 @@ export async function prepareFigure(
             width: trace.width,
             filled: trace.filled,
           })),
+          new Set(
+            Object.keys(chargeValues).filter(
+              (i) => graph.atoms[Number(i)].nRad,
+            ),
+          ),
         );
         for (const [index, mark] of Object.entries(marks)) {
           const i = Number(index),
             aid = key({ molecule: id, atom: c.atomIds[i] });
-          if (!!chargeAims[aid] !== priority) continue;
           const center = mark.point,
             r = mark.radius;
           const charge = element("g", {
@@ -966,13 +991,13 @@ export async function prepareFigure(
               String(chargeAims[aid] ? line * 1.15 : line),
             ),
           );
-          if (graph.atoms[i]?.nRad)
+          if (mark.dot)
             ctx.append(
               charge,
               element("circle", {
-                cx: center.x - r - B * 0.07,
-                cy: center.y,
-                r: B * 0.04,
+                cx: mark.dot.x,
+                cy: mark.dot.y,
+                r: chargeBond * 0.04,
                 fill: color,
                 "data-radical-owner": aid,
               }),
@@ -1194,8 +1219,11 @@ export async function prepareFigure(
         entry.id,
       );
     }
+    const markerArrows = (s.arrows ?? []).filter(
+      ({ from }) => from.kind === "charge" || from.kind === "radical",
+    );
     const savedPoints: Record<string, Point> = {};
-    for (const p of s.molecules) {
+    for (const p of markerArrows.length ? s.molecules : []) {
       let c = library[p.compound];
       if (c.kind !== "compound") continue;
       const layout = p.variant ? c.variants![p.variant] : c.layout;
@@ -1218,7 +1246,7 @@ export async function prepareFigure(
           key({ ...label.at, molecule: prefix + label.at.molecule }),
         ),
     );
-    for (const a of s.arrows ?? []) {
+    for (const a of markerArrows) {
       const from = a.from,
         to = a.to;
       const source =
@@ -1255,15 +1283,18 @@ export async function prepareFigure(
         throw new Error(`Missing compound ${p.compound}`);
       const layout = p.variant ? c.variants?.[p.variant] : c.layout;
       if (!layout) throw new Error(`Missing variant ${p.variant}`);
-      const protectedAtoms = new Set<string>();
-      const protect = (ref: AtomRef) => {
-        if (ref.molecule === p.id) protectedAtoms.add(ref.atom);
+      const protectedAtoms = new Map<string, "atom" | "bond">();
+      const protect = (ref: AtomRef, use: "atom" | "bond" = "atom") => {
+        if (ref.molecule === p.id && protectedAtoms.get(ref.atom) !== "bond")
+          protectedAtoms.set(ref.atom, use);
       };
       for (const label of s.labels ?? []) protect(label.at);
       for (const arrow of s.arrows ?? [])
         for (const anchor of [arrow.from, arrow.to]) {
           if ("at" in anchor) protect(anchor.at);
-          else if ("atoms" in anchor) anchor.atoms.forEach(protect);
+          else if ("atoms" in anchor)
+            for (const ref of anchor.atoms)
+              protect(ref, anchor.kind === "formingBond" ? "atom" : "bond");
         }
       for (const selection of [
         s.focus?.primary,
@@ -1271,21 +1302,28 @@ export async function prepareFigure(
         ...(s.enclose ?? []),
         s.changes,
       ]) {
-        selection?.atoms?.forEach(protect);
-        selection?.bonds?.forEach((bond) => bond.forEach(protect));
+        selection?.atoms?.forEach((atom) => protect(atom));
+        selection?.bonds?.forEach((bond) =>
+          bond.forEach((atom) => protect(atom, "bond")),
+        );
       }
       for (const selection of [
         override?.primary,
         ...(override?.supporting ?? []),
       ]) {
         const protectOverride = (ref: AtomRef) => {
-          if (ref.molecule === prefix + p.id) protectedAtoms.add(ref.atom);
+          if (ref.molecule === prefix + p.id)
+            protect({ ...ref, molecule: p.id });
         };
         selection?.atoms?.forEach(protectOverride);
-        selection?.bonds?.forEach((bond) => bond.forEach(protectOverride));
+        selection?.bonds?.forEach((bond) => {
+          for (const ref of bond)
+            if (ref.molecule === prefix + p.id)
+              protect({ ...ref, molecule: p.id }, "bond");
+        });
       }
       Object.keys(layout.atomNumbers ?? {}).forEach((atom) =>
-        protectedAtoms.add(atom),
+        protect({ molecule: p.id, atom }),
       );
       await molecule(
         c,
@@ -1543,6 +1581,14 @@ export async function prepareFigure(
       const g = element("g", {
         "data-label": prefix + l.id,
         "data-owner": key({ ...l.at, molecule: prefix + l.at.molecule }),
+        ...(l.kind === "radical"
+          ? {
+              "data-radical-owner": key({
+                ...l.at,
+                molecule: prefix + l.at.molecule,
+              }),
+            }
+          : {}),
       });
       ctx.append(parent, g);
       if (l.kind === "lonePair" || l.kind === "radical") {
@@ -1614,11 +1660,7 @@ export async function prepareFigure(
               : a.kind === "radical"
                 ? ctx.nodes(
                     parent,
-                    (n) =>
-                      n.attributes["data-radical-owner"] === ids[0] ||
-                      (n.kind === "group" &&
-                        n.attributes["data-owner"] === ids[0] &&
-                        !!n.attributes["data-label"]?.includes("radical")),
+                    (n) => n.attributes["data-radical-owner"] === ids[0],
                   )[0]
                 : undefined;
           const box = label && ctx.inkBox(label, parent);

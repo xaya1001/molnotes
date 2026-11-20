@@ -569,6 +569,7 @@ export function electronArrowShapes(
             dist(visible.at(-1)!, tip),
           );
       if (length < B * 1.25) count++;
+      if (length > chord * 3.5) count++;
       if (chord < B * 1.2 || (fa.length === 2 && to.kind === "bond")) {
         const height = Math.max(
           ...visible.map(
@@ -865,7 +866,6 @@ export function electronArrowShapes(
           }
     if (
       (to.kind === "atom" || to.kind === "formingBond" || ownBond) &&
-      !ownAtom &&
       candidates.every((c) => c.score[0])
     )
       for (const degrees of [0, 30, -30, 60, -60, 90, -90, 120, -120, 180])
@@ -977,9 +977,10 @@ export function chargeMarks(
   atomFont: number,
   angles: Record<string, number> = {},
   ink: { points: Point[]; width: number; filled: boolean }[] = [],
+  radicalIons: ReadonlySet<string> = new Set(),
 ) {
   const radius = atomFont * 0.3,
-    placed: Record<string, { point: Point; radius: number }> = {};
+    placed: Record<string, { point: Point; radius: number; dot?: Point }> = {};
   for (const id of Object.keys(charges)) {
     const p = points[id],
       box = boxes[id] ?? {
@@ -1028,17 +1029,15 @@ export function chargeMarks(
       angles[id] !== undefined
         ? [(angles[id] * Math.PI) / 180]
         : aim
-          ? [
-              defaultAngle,
-              ...gaps.map((gap) => gap.angle),
-              Math.atan2(aim.y - p.y, aim.x - p.x),
-            ]
+          ? gaps.length
+            ? gaps.map((gap) => gap.angle)
+            : [Math.atan2(aim.y - p.y, aim.x - p.x)]
           : blocked
             ? gaps.map((gap) => gap.angle)
             : [defaultAngle, ...gaps.map((gap) => gap.angle)];
     let bestScore = -Infinity,
       bestCollisions = Infinity,
-      best: Point | undefined;
+      best: (typeof placed)[string] | undefined;
     for (const [index, a] of candidates.entries()) {
       const dx = Math.cos(a),
         dy = Math.sin(a);
@@ -1055,27 +1054,35 @@ export function chargeMarks(
       const facing = aim ? dot({ x: dx, y: dy }, unit(sub(aim, p))) : 0;
       const score = aim ? facing : -index;
       const outer = radius + 0.8,
+        dotPoint = radicalIons.has(id)
+          ? {
+              x: point.x + (dx >= 0 ? 1 : -1) * (radius + B * 0.07),
+              y: point.y,
+            }
+          : undefined,
+        left = Math.min(
+          point.x - outer,
+          dotPoint ? dotPoint.x - B * 0.04 : Infinity,
+        ),
+        right = Math.max(
+          point.x + outer,
+          dotPoint ? dotPoint.x + B * 0.04 : -Infinity,
+        ),
         rectangle = [
-          { x: point.x - outer, y: point.y - outer },
-          { x: point.x + outer, y: point.y - outer },
-          { x: point.x + outer, y: point.y + outer },
-          { x: point.x - outer, y: point.y + outer },
+          { x: left, y: point.y - outer },
+          { x: right, y: point.y - outer },
+          { x: right, y: point.y + outer },
+          { x: left, y: point.y + outer },
         ];
-      const combined = {
-        left: Math.min(box.left, point.x - outer),
-        right: Math.max(box.right, point.x + outer),
-        top: Math.min(box.top, point.y - outer),
-        bottom: Math.max(box.bottom, point.y + outer),
-      };
       let collisions = 0;
       for (const mark of Object.values(placed))
         if (dist(point, mark.point) < radius + mark.radius) collisions++;
       for (const [other, b] of Object.entries(boxes))
         if (
           other !== id &&
-          Math.min(combined.right, b.right) - Math.max(combined.left, b.left) >
-            0.7 &&
-          Math.min(combined.bottom, b.bottom) - Math.max(combined.top, b.top) >
+          Math.min(right, b.right) - Math.max(left, b.left) > 0.7 &&
+          Math.min(point.y + outer, b.bottom) -
+            Math.max(point.y - outer, b.top) >
             0.7
         )
           collisions++;
@@ -1101,10 +1108,10 @@ export function chargeMarks(
       ) {
         bestCollisions = collisions;
         bestScore = score;
-        best = point;
+        best = { point, radius, ...(dotPoint ? { dot: dotPoint } : {}) };
       }
     }
-    placed[id] = { point: best!, radius };
+    placed[id] = best!;
   }
   return placed;
 }

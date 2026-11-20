@@ -568,7 +568,7 @@ export async function compileFigure(
         );
         if (
           compound.smiles.includes(".") ||
-          spec.abbreviate === false ||
+          spec.abbreviate !== undefined ||
           JSON.stringify(abbreviations.abbreviations) !==
             JSON.stringify(compound.layout.abbreviations ?? []) ||
           JSON.stringify(abbreviationAtoms) !==
@@ -579,10 +579,9 @@ export async function compileFigure(
           const layout = {
             ...structuredClone(compound.layout),
             abbreviations: abbreviations.abbreviations,
-            ...(spec.abbreviate === false
-              ? { reagentAbbreviate: false as const }
-              : {}),
           };
+          if (spec.abbreviate === undefined) delete layout.reagentAbbreviate;
+          else layout.reagentAbbreviate = spec.abbreviate;
           delete layout.abbreviationAtoms;
           if (abbreviationAtoms) layout.abbreviationAtoms = abbreviationAtoms;
           compound.variants[variant] = layout;

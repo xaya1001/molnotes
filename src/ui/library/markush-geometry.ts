@@ -248,8 +248,8 @@ export async function prepareMarkush(
             }
           }
           const q = coords[c.atomIds[neighbor]],
-            dx = (q.x - p.x) * 0.8,
-            dy = (q.y - p.y) * 0.8;
+            dx = (q.x - p.x) * 1.2,
+            dy = (q.y - p.y) * 1.2;
           for (const n of component) {
             coords[c.atomIds[n]].x += dx;
             coords[c.atomIds[n]].y += dy;

@@ -145,8 +145,8 @@ These kinds compile to a `mec_` entry with one static `overview` scene; pages re
 
 ## Endpoint vocabulary
 
-亲核体与另一原子成新键时，箭头落在受进攻的原子上，使用 `to: atom(n)`。
-已有 σ 键回推形成 π 键时，箭头落在该键中点，使用 `to: bond(n,m)`。
+Point a new-bond arrow at the attacked atom with `to: atom(n)`.
+Point an arrow that pushes σ electrons back to form a π bond at that bond’s midpoint with `to: bond(n,m)`.
 
 - Sources: `lp(a1)` is a lone pair, `charge(a1)` a displayed negative charge, `bond(a1,a2)` sigma electrons, `pi(a1,a2)` a multiple-bond line, and `radical(a1)` a single electron.
 - Destinations: `atom(a1)`, `bond(a1,a2)`, or `between(donor:a1,acceptor:a2)` for a forming-bond midpoint; the second atom is the acceptor. Radical endpoints use a half head; `electrons: 1` explicitly selects one for bond electrons.

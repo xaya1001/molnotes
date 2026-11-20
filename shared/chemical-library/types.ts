@@ -24,8 +24,8 @@ export interface EntryBase {
   sources: Evidence[];
 }
 export interface CompoundLayout {
-  /** An author's explicit request to keep complete small reagents expanded. */
-  reagentAbbreviate?: false;
+  /** The author's explicit choice for abbreviating complete small reagents. */
+  reagentAbbreviate?: boolean;
   /** Input for indexed molecule controls, preserving authored atom/bond order and depiction. */
   inputSmiles?: string;
   /** Additional ordinary H atoms, keyed by stable atom ID and attached to a base atom. */

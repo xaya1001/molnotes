@@ -34,6 +34,56 @@ export const atomRings = (graph: ChemicalGraph) =>
   graph.extensions?.find((e) => e.name === "rdkitRepresentation")?.atomRings ??
   [];
 
+export function linearCentres(graph: ChemicalGraph) {
+  const rings = atomRings(graph);
+  const neighbors = graph.atoms.map(
+    () => [] as { index: number; order: number }[],
+  );
+  for (const {
+    atoms: [a, b],
+    bo = 1,
+  } of graph.bonds) {
+    neighbors[a].push({ index: b, order: bo });
+    neighbors[b].push({ index: a, order: bo });
+  }
+  const centres: [number, number, number][] = [];
+  for (const [centre, bonds] of neighbors.entries()) {
+    if (bonds.length !== 2) continue;
+    const [a, b] = bonds;
+    if (a.order === 2 && b.order === 2) {
+      centres.push([a.index, b.index, centre]);
+      continue;
+    }
+    const triple = bonds.find(({ order }) => order === 3);
+    if (!triple) continue;
+    const inRing = rings.some((ring) => {
+      const i = ring.indexOf(centre);
+      return (
+        i >= 0 &&
+        (ring[(i + 1) % ring.length] === triple.index ||
+          ring[(i + ring.length - 1) % ring.length] === triple.index)
+      );
+    });
+    if (!inRing) centres.push([a.index, b.index, centre]);
+  }
+  return centres;
+}
+
+export function hasLinearDepiction(graph: ChemicalGraph) {
+  const points = graph.conformers![0].coords;
+  return linearCentres(graph).every(([left, right, centre]) => {
+    const [x, y] = points[centre];
+    const [ax, ay] = points[left],
+      [bx, by] = points[right];
+    const u = [ax - x, ay - y],
+      v = [bx - x, by - y];
+    return (
+      (u[0] * v[0] + u[1] * v[1]) / (Math.hypot(...u) * Math.hypot(...v)) <=
+      -Math.cos((5 * Math.PI) / 180)
+    );
+  });
+}
+
 /** Bisect the widest exterior sector at a ring vertex. */
 export function ringExteriorAngle(
   rings: number[][],
