@@ -3,8 +3,7 @@ import {
   validateFigureReference,
   validateImageReference,
 } from "./chemical-library/contract.ts";
-import type { PatentBlock, TopicBlock } from "../src/ui/topic/blocks.ts";
-import type { PageSource, PatentData } from "../src/ui/topic/patent.ts";
+import type { FigureReference } from "./chemical-library/types.ts";
 import {
   isFiniteNumber,
   isInteger,
@@ -17,6 +16,223 @@ import {
   validateResearchData,
   type CheckedCollection,
 } from "./patent-research.ts";
+/** Data checked by the topic block contract at publication and mount. */
+export type RecordId = string | number;
+export interface PageRef {
+  source?: string;
+  page: number;
+  end?: number;
+  rect?: number[];
+  asset?: string | FigureReference;
+}
+export interface PageSource {
+  size: [number, number];
+  title: string;
+  pages: number;
+  image?: string;
+  images?: FigureReference[];
+  text: string;
+  paragraphs: Record<string, number>;
+}
+export interface RecordField {
+  key: string;
+  label: string;
+  kind:
+    | "text"
+    | "number"
+    | "grade"
+    | "tags"
+    | "smiles"
+    | "ref"
+    | "link"
+    | "body"
+    | "measurement"
+    | "assignments";
+  placement?: "identifier";
+  scale?: string;
+  ref?: PageRef;
+  filter?: boolean;
+  sort?: boolean;
+}
+export interface GradeScale {
+  bins: { value: string; label: string }[];
+  blank: string;
+  dash: string;
+}
+export interface BodyRef {
+  url: string;
+  key: string;
+}
+export type FieldValue = string | number | string[] | PageRef | BodyRef;
+export interface CollectionRecord {
+  id: RecordId;
+  source: string;
+  refs?: Record<string, RecordId[]>;
+  notes?: { field?: string; text: string; ref?: PageRef }[];
+  [key: string]: unknown;
+}
+export interface RecordCollection {
+  title: string;
+  route: string;
+  fields: RecordField[];
+  scales: Record<string, GradeScale>;
+  assays?: Record<string, Assay>;
+  pins?: { max: number };
+  export?: boolean;
+  structureFigures?: Record<string, Record<string, FigureReference>>;
+  records: CollectionRecord[];
+}
+export interface Claim {
+  notes?: string[];
+  id: number;
+  title: string;
+  group: string;
+  text: string;
+  note?: string;
+  refs: number[];
+  children: number[];
+  segments: PageRef[];
+  markush?: import("./patent-markush.ts").Markush;
+  examples: RecordId[];
+}
+export interface ClaimSet {
+  source: string;
+  claims: Claim[];
+}
+export interface SarCase {
+  structureFigures?: Record<string, Record<string, FigureReference>>;
+  analysis?: {
+    kind: "observation" | "design-around-hypothesis" | "unresolved";
+    rationale: string;
+    evidence: PageRef[];
+  };
+  id: string;
+  title: string;
+  ids: RecordId[];
+  area: string;
+  change: string;
+  finding: string;
+  limit: string;
+  claims: number[];
+}
+export interface PatentData {
+  synthesis?: Record<string, SynthesisNetwork>;
+  sources?: Record<string, PageSource>;
+  collections?: Record<string, RecordCollection>;
+  claims?: Record<string, ClaimSet>;
+  sarCases?: Record<string, SarCase[]>;
+}
+export interface Assay {
+  title: string;
+  target: string;
+  endpoint: string;
+  conditions: string;
+  unit: string | null;
+  unitReason?: string;
+  evidence: PageRef[];
+}
+export type Measurement =
+  | {
+      assay: string;
+      status: "reported";
+      qualifier: "=" | "<" | "<=" | ">" | ">=" | "range";
+      value: number;
+      upper?: number;
+      ref: PageRef;
+    }
+  | {
+      assay: string;
+      status: "unreported" | "not-tested" | "unresolved";
+      reason: string;
+      ref?: PageRef;
+    };
+export interface Assignment {
+  group: string;
+  basis: "author" | "agent" | "chemical-pattern";
+  limit: string;
+  evidence: PageRef[];
+  claims: number[];
+  pattern?: string;
+}
+export interface CompoundRef {
+  collection: string;
+  id: RecordId;
+}
+export interface Procedure {
+  sourceRecord?: CompoundRef;
+  reagents: string;
+  conditions: string;
+  evidence: PageRef[];
+}
+export interface SynthesisStep {
+  id: string;
+  title: string;
+  strategy: string;
+  reactants: CompoundRef[];
+  products: CompoundRef[];
+  evidence: PageRef[];
+  procedure?: string;
+  procedureNote?: string;
+  overrideEvidence?: PageRef[];
+  reagents?: string;
+  conditions?: string;
+  owner?: CompoundRef;
+  limit?: string;
+  isolatedMass?: {
+    value: number;
+    unit: "mg" | "g" | "kg";
+    state: "crude" | "purified";
+    product: CompoundRef;
+    ref: PageRef;
+  };
+  yield:
+    | {
+        status: "reported";
+        value: number;
+        unit: "%";
+        basis: string;
+        ref: PageRef;
+        product: CompoundRef;
+      }
+    | { status: "unreported"; reason: string };
+}
+export interface ResearchRoute {
+  id: string;
+  title: string;
+  scaffold: string;
+  steps: string[];
+  target: CompoundRef;
+  startingMaterials: CompoundRef[];
+  extent: "complete" | "fragment";
+  limit: string;
+  evidence: PageRef[];
+  reportedYield?: {
+    value: number;
+    unit: "%";
+    basis: string;
+    ref: PageRef;
+    scopeStepIds: string[];
+    product: CompoundRef;
+  };
+}
+export interface ProcedureReference {
+  record: CompoundRef;
+  procedure: string;
+  note: string;
+  reagents?: string;
+  conditions?: string;
+  evidence: PageRef[];
+  overrideEvidence?: PageRef[];
+  yield: { status: "unreported"; reason: string };
+}
+export interface SynthesisNetwork {
+  references?: ProcedureReference[];
+  title: string;
+  procedures?: Record<string, Procedure>;
+  steps: SynthesisStep[];
+  routes: ResearchRoute[];
+}
+
 // Structural and referential validation shared by publishing and the browser.
 function ok(test: unknown, at: string): asserts test {
   if (!test) throw new Error(at);
@@ -28,7 +244,7 @@ const key = (v: unknown): v is string =>
   typeof v === "string" &&
   /^[a-zA-Z0-9_-]+$/.test(v) &&
   !["__proto__", "constructor", "prototype"].includes(v);
-const id = (v: unknown) => (isSafeInteger(v) && v > 0) || key(v);
+const id = (v: unknown): v is RecordId => (isSafeInteger(v) && v > 0) || key(v);
 const list = (v: unknown, at: string): unknown[] => {
   ok(isList(v), `${at}: expected array`);
   return v;
@@ -73,20 +289,35 @@ const fieldKinds: readonly unknown[] = [
   "measurement",
   "assignments",
 ];
+export type PatentBlock =
+  | { type: "source-pages"; source: string }
+  | { type: "synthesis-network"; network: string }
+  | { type: "record-collection"; collection: string }
+  | { type: "claims"; set: string }
+  | { type: "sar-cases"; cases: string; collection: string };
+
+type NestedBlock = { type: string; items?: unknown };
+const isTabs = (
+  block: NestedBlock,
+): block is NestedBlock & {
+  items: readonly { blocks: readonly NestedBlock[] }[];
+} => block.type === "tabs";
 /** The patent blocks of checked content, those inside tabs included. */
 export function patentBlocks(content: {
-  chapters?: readonly { blocks: readonly TopicBlock[] }[];
+  chapters?: readonly { blocks: readonly NestedBlock[] }[];
 }): PatentBlock[] {
-  const walk = (blocks: readonly TopicBlock[]): TopicBlock[] =>
+  const walk = (blocks: readonly NestedBlock[]): NestedBlock[] =>
     blocks.flatMap((block) => [
       block,
-      ...(block.type === "tabs"
+      ...(isTabs(block)
         ? block.items.flatMap((item) => walk(item.blocks))
         : []),
     ]);
   return (content.chapters ?? [])
     .flatMap((c) => walk(c.blocks))
-    .filter((b): b is TopicBlock & PatentBlock => patentTypes.includes(b.type));
+    .filter((b): b is NestedBlock & PatentBlock =>
+      patentTypes.includes(b.type),
+    );
 }
 /** The patent blocks of content JSON whose blocks are not checked yet. */
 function uncheckedPatentBlocks(chapters: readonly unknown[]): JsonObject[] {
@@ -429,7 +660,7 @@ export function validatePatentData(
 }
 /** Concrete routes also used by publication's internal-link checker. */
 export function patentRoutePaths(content: {
-  chapters?: readonly { blocks: readonly TopicBlock[] }[];
+  chapters?: readonly { blocks: readonly NestedBlock[] }[];
   data?: PatentData;
 }): string[] {
   const data = content.data ?? {},

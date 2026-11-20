@@ -1,6 +1,6 @@
 import { validateMarkushChemistry } from "../../shared/patent-markush-chemistry.ts";
 import { isObject } from "../../shared/json.ts";
-import type { BodyRef, Assignment } from "../../src/ui/topic/patent.ts";
+import type { BodyRef, Assignment } from "../../shared/patent-contract.ts";
 import { moleculeToolkit } from "../../shared/molecule-toolkit.ts";
 import { patentBlocks } from "../../shared/patent-contract.ts";
 import type { TopicContent } from "../../src/ui/topic/content.ts";

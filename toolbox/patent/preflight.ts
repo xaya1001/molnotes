@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Authoring checks in addition to the authoritative content build validation.
 import type { TopicContent } from "../../src/ui/topic/content.ts";
-import type { BodyRef } from "../../src/ui/topic/patent.ts";
+import type { BodyRef } from "../../shared/patent-contract.ts";
 import fs from "node:fs/promises";
 import {
   readChemicalLibrary,

@@ -1,10 +1,13 @@
 import { measurementWithin } from "./patent-measurements.ts";
-import type { Measurement, Assignment } from "./patent.ts";
-import {
-  gradeText,
-  type RecordCollection,
-  type CollectionRecord,
-} from "./patent.ts";
+import type {
+  Measurement,
+  Assignment,
+} from "../../../shared/patent-contract.ts";
+import { gradeText } from "./patent.ts";
+import type {
+  RecordCollection,
+  CollectionRecord,
+} from "../../../shared/patent-contract.ts";
 export type FilterQuery = Record<string, unknown>;
 export function queryText(q: FilterQuery, key: string) {
   return typeof q[key] === "string" ? q[key] : "";

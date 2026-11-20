@@ -1,19 +1,22 @@
 <script setup lang="ts">
 import TableText from "./TableText.vue";
 import { measurementText } from "./patent-measurements.ts";
-import type { Measurement, Assignment } from "./patent.ts";
+import type {
+  Measurement,
+  Assignment,
+} from "../../../shared/patent-contract.ts";
 import SourceText from "./SourceText.vue";
 import { computed, ref, watch } from "vue";
 import TableStructure from "./TableStructure.vue";
 import SourceRef from "./SourceRef.vue";
-import {
-  gradeText,
-  type RecordCollection,
-  type RecordField,
-  type CollectionRecord,
-  type PageRef,
-  type BodyRef,
-} from "./patent.ts";
+import { gradeText } from "./patent.ts";
+import type {
+  RecordCollection,
+  RecordField,
+  CollectionRecord,
+  PageRef,
+  BodyRef,
+} from "../../../shared/patent-contract.ts";
 const props = defineProps<{
   collection: RecordCollection;
   field: RecordField;

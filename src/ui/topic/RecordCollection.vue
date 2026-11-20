@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import type { RecordId, Assignment } from "../../../shared/patent-contract.ts";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useTopic } from "./context.ts";
-import { patentData, type RecordId, type Assignment } from "./patent.ts";
+import { patentData } from "./patent.ts";
 import { filterRecords, queryText, recordsCsv } from "./patent-filter.ts";
 import { substructureMatches } from "./patent-chemistry.ts";
 import { tableTextAlign, tableColumnStyle } from "./table-text.ts";
