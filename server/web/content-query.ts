@@ -129,7 +129,7 @@ function proseTerms(snapshot: LoadedSnapshot, html: string) {
 
 /**
  * Topic metadata in catalog order, the group order of the case directory, and
- * note directories with the practice topics their notes link to.
+ * note directories with their associated practice topics.
  */
 export function contentCatalog(snapshot: LoadedSnapshot) {
   const sites = sortSites(
@@ -145,30 +145,16 @@ export function contentCatalog(snapshot: LoadedSnapshot) {
       ),
     })),
   );
-  const practice = sites.filter((site) => site.group === "练习");
-  const linked = new Map<string, Set<string>>();
-  for (const { dir, compiled } of readerNotes(snapshot)) {
-    const slugs = linked.get(dir) ?? new Set();
-    const paired = compiled.practice?.href.match(/^\/practice\/([a-z0-9-]+)\//);
-    if (paired) slugs.add(paired[1]);
-    for (const [, slug] of compiled.html.matchAll(
-      /href="\/practice\/([a-z0-9-]+)\//g,
-    ))
-      slugs.add(slug);
-    linked.set(dir, slugs);
-  }
   return {
     groups: siteGroups,
     sites,
     directories: snapshot.directories
-      .map(({ dir, metadata }) => ({
+      .map(({ dir, metadata, practice }) => ({
         title: metadata.title,
         order: metadata.order,
         slug: dir,
         path: `/notes/${dir}/`,
-        practice: practice
-          .filter((site) => linked.get(dir)?.has(site.slug))
-          .map((site) => site.slug),
+        practice,
       }))
       .sort((a, b) => a.order - b.order || a.slug.localeCompare(b.slug)),
   };

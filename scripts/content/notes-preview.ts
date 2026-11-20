@@ -1,10 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  compileNotes,
-  parseNote,
-  noteCitations,
-} from "../../shared/notes-index.ts";
+import { parseNote, noteCitations } from "../../shared/notes-index.ts";
 import { chapterRoutePath, topicBasePath } from "../../shared/topic-content.ts";
 import { parseSiteManifest } from "../../shared/site-catalog.ts";
 import { patentRoutePaths } from "../../shared/patent-contract.ts";
@@ -15,6 +11,7 @@ import { readUnit, readGlossary, readRegistry } from "./content-files.ts";
 import { resolveCitations } from "./citations.ts";
 import { inspectRequest } from "./requests.ts";
 import { readPracticeChapters } from "./practice-markdown.ts";
+import { compileUnit } from "./compile-unit.ts";
 
 async function names(root: string) {
   try {
@@ -100,27 +97,33 @@ export async function previewNotes(
     );
     assets.push(...resolved.assets);
     const requests: PreviewNote["requests"] = [];
-    const { notes } = await compileNotes({
-      directories: [],
-      notes: [
-        {
-          ...parsed,
-          slug: row.slug,
-          directory: dir,
-          directoryTitle: input.metadata.title,
-          path: `/notes/${dir}/${slug}`,
-          file,
+    const { notes } = await compileUnit({
+      kind: "notes",
+      root,
+      input: {
+        directories: [],
+        notes: [
+          {
+            ...parsed,
+            slug: row.slug,
+            directory: dir,
+            directoryTitle: input.metadata.title,
+            path: `/notes/${dir}/${slug}`,
+            file,
+            author: row.author,
+          },
+        ],
+        terms,
+        routes,
+        assetExists: (_dir, path) =>
+          assets.some((asset) => asset.path === path),
+        citations: { [dir]: resolved.citations },
+        renderRequest: async (source, file, line) => {
+          const request = await inspectRequest(source, file, line);
+          const id = `${prefix}-request-${requests.length}`;
+          requests.push({ ...request, id });
+          return `<div id="${id}" class="resource-request-mount"></div>`;
         },
-      ],
-      terms,
-      routes,
-      assetExists: (_dir, path) => assets.some((asset) => asset.path === path),
-      citations: { [dir]: resolved.citations },
-      renderRequest: async (source, file, line) => {
-        const request = await inspectRequest(source, file, line);
-        const id = `${prefix}-request-${requests.length}`;
-        requests.push({ ...request, id });
-        return `<div id="${id}" class="resource-request-mount"></div>`;
       },
     });
     const note = notes[0];

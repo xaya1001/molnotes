@@ -1,4 +1,4 @@
-import { lintProse, proseTerms } from "./prose-lint.ts";
+import { compileUnit } from "./compile-unit.ts";
 import { readChemicalLibrary, libraryUsage } from "./chemical-library.ts";
 import { verifyLibraryFigures } from "./figure-build.ts";
 import { rejectContentRequests } from "./requests.ts";
@@ -17,17 +17,9 @@ import { measureStage } from "../../shared/stage-timing.ts";
 import { moleculeToolkit } from "../../shared/molecule-toolkit.ts";
 import { patentRoutePaths } from "../../shared/patent-contract.ts";
 import { validatePatentAssets } from "./patent-assets.ts";
-import {
-  compileNotes,
-  parseNote,
-  type Note,
-} from "../../shared/notes-index.ts";
+import { parseNote, type Note } from "../../shared/notes-index.ts";
 import { sortSites } from "../../shared/site-catalog.ts";
-import {
-  chapterRoutePath,
-  topicBasePath,
-  validateTopicContent,
-} from "../../shared/topic-content.ts";
+import { chapterRoutePath, topicBasePath } from "../../shared/topic-content.ts";
 import { resolveCitations, type Shelf } from "./citations.ts";
 import {
   readUnit,
@@ -96,7 +88,6 @@ const checkedSmiles = new Set<string>();
 async function validateTopics(data: PublishData, ctx: BuildContext) {
   for (const topic of data.topics) {
     const where = `sites/${topic.slug}/content.json`;
-    validateTopicContent(topic.content, where);
     for (const chapter of topic.content.chapters)
       for (const term of chapter.terms ?? [])
         if (!Object.hasOwn(ctx.terms, term))
@@ -307,12 +298,12 @@ function notebookSources(data: PublishData) {
         a.order - b.order ||
         a.slug.localeCompare(b.slug),
     );
-  return { directories, notes };
+  return { directories, notes, notebooks };
 }
 async function compile(data: PublishData, root: string, commit: string | null) {
   const ctx = context(data);
   await validateTopics(data, ctx);
-  const { directories, notes } = notebookSources(data);
+  const { directories, notes, notebooks } = notebookSources(data);
   const dates = commit
     ? await noteCommitDates(
         root,
@@ -320,19 +311,24 @@ async function compile(data: PublishData, root: string, commit: string | null) {
         notes.map(({ file }) => file),
       )
     : undefined;
-  return compileNotes({
-    directories,
-    notes: notes.map((note) => {
-      const updated = dates?.get(note.file);
-      return updated && updated > note.date ? { ...note, updated } : note;
-    }),
-    terms: ctx.terms,
-    routes: ctx.routes,
-    assetExists: (dir, path) => ctx.assets.has(`/notes/${dir}/${path}`),
-    citations: Object.fromEntries(
-      data.directories.map((row) => [row.dir, row.citations]),
-    ),
+  const compiled = await compileUnit({
+    kind: "notes",
+    root,
+    input: {
+      directories,
+      notes: notes.map((note) => {
+        const updated = dates?.get(note.file);
+        return updated && updated > note.date ? { ...note, updated } : note;
+      }),
+      terms: ctx.terms,
+      routes: ctx.routes,
+      assetExists: (dir, path) => ctx.assets.has(`/notes/${dir}/${path}`),
+      citations: Object.fromEntries(
+        data.directories.map((row) => [row.dir, row.citations]),
+      ),
+    },
   });
+  return { ...compiled, notebooks };
 }
 /** Every content unit in the content directory: `sites/<slug>` and `notes/<dir>`. */
 async function contentUnits(root: string) {
@@ -377,19 +373,6 @@ async function build(
         citations: {},
       });
   });
-  const terms = await proseTerms(root);
-  for (const input of inputs)
-    if (input.kind === "notes")
-      for (const note of input.notes) {
-        if (note.author) continue;
-        const file = `${input.unit}/${note.slug}.md`;
-        const errors = lintProse(
-          parseNote(note.source, file).body,
-          file,
-          terms,
-        );
-        if (errors.length) throw new Error(errors.join("\n"));
-      }
   const glossary = await readGlossary(root);
   const registry = await readRegistry(root);
   if (!registry && inputs.some((input) => input.occurrences.length))
@@ -493,6 +476,9 @@ async function build(
       })),
       directories: data.directories.map((directory) => ({
         ...directory,
+        practice: compiled.notebooks.has(directory.dir)
+          ? [compiled.notebooks.get(directory.dir)!]
+          : [],
         compiled: directories.get(directory.dir)!,
       })),
       notes: data.notes.map(({ dir, slug, author, source }) => ({

@@ -7,13 +7,43 @@ import {
 } from "../scripts/content/practice-markdown.ts";
 import { readUnit } from "../scripts/content/content-files.ts";
 import { join, resolve } from "node:path";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import {
+  cpSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import {
   contentRequests,
   inspectRequest,
 } from "../scripts/content/requests.ts";
 import { buildSnapshot } from "../scripts/content/content-publish.ts";
+
+test("single chapter check and publication report the same chapter error", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "practice-check-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  cpSync(resolve("tests/fixtures/content"), root, { recursive: true });
+  const path = join(root, "sites/sample/content.json");
+  const content = JSON.parse(readFileSync(path, "utf8"));
+  content.chapters[0].blocks[0] = { type: "quiz", questions: ["missing"] };
+  writeFileSync(path, JSON.stringify(content));
+  const check = spawnSync(
+    process.execPath,
+    ["scripts/content.ts", "check", "sites/sample/content.json#start"],
+    {
+      encoding: "utf8",
+      env: { ...process.env, MOLNOTES_CONTENT_DIR: root },
+    },
+  );
+  assert.equal(check.status, 1);
+  await assert.rejects(buildSnapshot(root), (error: Error) => {
+    assert.equal(error.message, check.stderr.trim());
+    return true;
+  });
+});
 
 test("practice requests share validation, preview positions, todo and the snapshot gate", async (t) => {
   const source = chapter(
@@ -301,14 +331,24 @@ test("check accepts a Markdown chapter and a JSON chapter selector", (t) => {
   writeFileSync(join(root, file), chapter(""));
   writeFileSync(
     join(root, "sites/practice/site.json"),
-    JSON.stringify({ group: "练习" }),
+    JSON.stringify({
+      group: "练习",
+      title: "Practice",
+      description: "Sample",
+      order: 1,
+    }),
   );
   writeFileSync(
     join(root, "sites/practice/content.json"),
     JSON.stringify({
       chapters: [
         "chapters/check.md",
-        { id: "json", note: "notes/reader-test/second", blocks: [] },
+        {
+          id: "json",
+          title: "JSON",
+          note: "notes/reader-test/second",
+          blocks: [],
+        },
       ],
     }),
   );

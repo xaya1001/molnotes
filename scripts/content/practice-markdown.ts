@@ -371,7 +371,7 @@ export async function readPracticeChapters(
     validateBlocks(
       blocks,
       isObject(authored.data) ? authored.data : undefined,
-      `${unit}/content.json`,
+      `${unit}/content.json: chapter ${chapter.id}`,
       found,
     );
     for (const id of found.predictionIds)

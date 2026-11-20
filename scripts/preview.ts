@@ -26,11 +26,9 @@ import type {
 } from "../shared/chemical-library/types.ts";
 import { previewNotes } from "./content/notes-preview.ts";
 import { readChemicalLibrary } from "./content/chemical-library.ts";
-import { resolveCompoundSlots } from "./content/compound-slots.ts";
-import { readPracticeChapters } from "./content/practice-markdown.ts";
+import { compileUnit } from "./content/compile-unit.ts";
 import { inspectRequest } from "./content/requests.ts";
 import { parseSiteManifest } from "../shared/site-catalog.ts";
-import { validateTopicContent } from "../shared/topic-content.ts";
 import { layoutProblems } from "../shared/molecule-layout.ts";
 import { setting } from "../shared/settings.ts";
 import type { AddressInfo } from "node:net";
@@ -48,22 +46,23 @@ const widths = [
   [390, 844],
 ];
 async function unitFigures(unit: string, errors: string[]) {
-  const [kind, slug, note] = unit.split("/");
-  if (kind === "sites" && slug && !note) {
+  const [kind, slug] = unit.split("/");
+  if (kind === "sites" && slug) {
+    const siteUnit = `sites/${slug}`;
     const file = `sites/${slug}/content.json`;
     const source = JSON.parse(await readFile(join(content, file), "utf8"));
-    const resolved = resolveCompoundSlots(source, library.entries, file);
     const site = parseSiteManifest(
       slug,
-      JSON.parse(await readFile(join(content, unit, "site.json"), "utf8")),
+      JSON.parse(await readFile(join(content, siteUnit, "site.json"), "utf8")),
     );
     const requests: Figure[] = [];
-    await readPracticeChapters(
-      content,
-      unit,
-      resolved.value,
-      site.group,
-      async (source, file, line) => {
+    const common = {
+      root: content,
+      unit: siteUnit,
+      authored: source,
+      group: site.group,
+      library: library.entries,
+      onRequest: async (source: string, file: string, line: number) => {
         const value: PreviewRequest = {
           ...(await inspectRequest(source, file, line)),
           id: `preview-${file.replaceAll("/", "--").replace(".md", "")}-${line}`,
@@ -75,16 +74,22 @@ async function unitFigures(unit: string, errors: string[]) {
           caption: value.caption,
         });
       },
-    );
-    return [
-      ...topicFigures(
-        validateTopicContent(resolved.value, file),
-        file,
-        errors,
-        library.entries,
-      ),
-      ...requests,
-    ];
+    };
+    const selection = unit.slice(siteUnit.length + 1);
+    const compiled = selection
+      ? await compileUnit({
+          ...common,
+          kind: "chapter",
+          chapter: selection.startsWith("content.json#")
+            ? selection.slice(13)
+            : selection,
+        })
+      : await compileUnit({ ...common, kind: "site" });
+    const topic =
+      "content" in compiled
+        ? compiled.content
+        : { chapters: [compiled.chapter], data: compiled.data };
+    return [...topicFigures(topic, file, errors, library.entries), ...requests];
   }
   if (kind === "notes" && slug) {
     const { previews, assets } = await previewNotes(

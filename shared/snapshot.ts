@@ -40,6 +40,7 @@ export interface SnapshotTopic {
 
 export interface SnapshotDirectory {
   dir: string;
+  practice: string[];
   metadata: DirectoryMetadata;
   citations: Citations;
   compiled: NoteDirectory;
