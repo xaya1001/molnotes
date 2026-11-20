@@ -137,7 +137,7 @@ caption: 样品 B
 
 ```molecule
 smiles: CCOC(=O)C1CCN(CC1)C(=O)OC(C)(C)C
-abbreviations: Boc, CO₂Et
+abbreviations: Boc, CO2Et
 caption: 样品 B 缩写
 smiles: C[C@H](O)/C=C/C(=O)O
 caption: 构型样品

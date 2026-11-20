@@ -65,8 +65,8 @@ test("abbreviations fold only declared complete terminal groups using original i
       [[11, 12, 13, 14, 15, 16, 17]],
     );
     assert.deepEqual(
-      abbreviatedGroups(toolkit, mol, ["Boc", "CO₂Et"]).map((g) => g.name),
-      ["Boc", "CO₂Et"],
+      abbreviatedGroups(toolkit, mol, ["Boc", "CO2Et"]).map((g) => g.name),
+      ["Boc", "CO2Et"],
     );
     assert.throws(
       () => abbreviatedGroups(toolkit, mol, ["Ts"], "sample"),

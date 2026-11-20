@@ -22,7 +22,7 @@ import {
   abbreviationLabel,
   abbreviationFragments,
   defaultFigureAbbreviations,
-  legacyFigureAbbreviations,
+  optionalFigureAbbreviations,
   type AbbreviationName,
   type MoleculeAbbreviation,
 } from "../shared/molecule-abbreviations.ts";
@@ -45,12 +45,10 @@ import { figureDimension } from "./figure-output.ts";
 import { ringHydrogens } from "./figure-scaffolds.ts";
 
 const groupElements = Object.keys(abbreviationFragments);
-// Keep established atom tags for the core alignment of existing figure sources.
-const legacyAlignmentNames: readonly AbbreviationName[] = [
-  ...legacyFigureAbbreviations,
-  "Ph",
-  "Tr",
-  "Bz",
+// Assign distinct element tags to these condensed groups during core alignment.
+const elementAlignmentAbbreviations: readonly AbbreviationName[] = [
+  ...defaultFigureAbbreviations,
+  ...optionalFigureAbbreviations,
 ];
 type CoreComparison = "Elements" | "Isotopes";
 
@@ -244,7 +242,7 @@ function matchingCopy(
   } else {
     for (const [i, name] of labels ?? [])
       data.molecules[0].atoms[i] = {
-        z: 60 + legacyAlignmentNames.indexOf(name),
+        z: 60 + elementAlignmentAbbreviations.indexOf(name),
         impHs: 0,
       };
   }
@@ -437,7 +435,7 @@ function commonCore(
   const list = new rd.MolList();
   const comparison: CoreComparison = molecules.some((mol) =>
     [...(displayAtoms.get(mol)?.labels.values() ?? [])].some(
-      (name) => !legacyAlignmentNames.includes(name),
+      (name) => !elementAlignmentAbbreviations.includes(name),
     ),
   )
     ? "Isotopes"

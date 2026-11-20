@@ -28,12 +28,10 @@ export const abbreviationFragments = {
   Piv: "*C(=O)C(C)(C)C",
   Ph: "*c1ccccc1",
   "CO₂Me": "*C(=O)OC",
-  "CO₂Et": "*C(=O)OCC",
   CO2Et: "*C(=O)OCC",
   "CO₂tBu": "*C(=O)OC(C)(C)C",
   OMe: "*OC",
   OEt: "*OCC",
-  "CF₃": "*C(F)(F)F",
   CF3: "*C(F)(F)F",
   OTBS: "*O[Si](C)(C)C(C)(C)C",
   OTBDPS: "*O[Si](c1ccccc1)(c1ccccc1)C(C)(C)C",
@@ -51,7 +49,6 @@ export const abbreviationFragments = {
   NHBoc: "*NC(=O)OC(C)(C)C",
   CN: "*C#N",
   SCH2Ph: "*SCc1ccccc1",
-  "CO₂H": "*C(=O)[OH]",
   CO2H: "*C(=O)O",
   NO2: "*[N+](=O)[O-]",
   Tr: "*C(c1ccccc1)(c1ccccc1)c1ccccc1",
@@ -123,7 +120,7 @@ export type AbbreviationName = keyof typeof abbreviationFragments;
 export type MoleculeAbbreviation =
   AbbreviationName | { name: AbbreviationName; atom: number };
 
-export const legacyFigureAbbreviations = [
+export const defaultFigureAbbreviations = [
   "OTBS",
   "OTBDPS",
   "OTES",
@@ -143,24 +140,28 @@ export const legacyFigureAbbreviations = [
   "Boc",
   "Ts",
   "CO₂Me",
-  "CO₂Et",
+  "CO2Et",
   "CO₂tBu",
   "CN",
   "SCH2Ph",
-  "CO₂H",
+  "CO2H",
   "Ac",
   "NO2",
-] as const satisfies readonly AbbreviationName[];
-
-export const defaultFigureAbbreviations = [
-  ...legacyFigureAbbreviations,
   "Troc",
   "Teoc",
   "OSEM",
 ] as const satisfies readonly AbbreviationName[];
 
+export const optionalFigureAbbreviations = [
+  "Ph",
+  "Tr",
+  "Bz",
+] as const satisfies readonly AbbreviationName[];
+
 // SMARTS and attachment-facing labels from RDKit GetDefaultAbbreviations().
-const rdkitAbbreviations = {
+const rdkitAbbreviations: Partial<
+  Record<AbbreviationName, readonly [string, string, string]>
+> = {
   CO2Et: [
     "[!#0][C&D3&R0](=[O&D1&R0])[O&D2&R0][C&D2&R0][C&D1&R0]",
     "CO<sub>2</sub>Et",
@@ -245,20 +246,7 @@ const rdkitAbbreviations = {
     "COO<sup>-</sup>",
     "<sup>-</sup>OOC",
   ],
-} as const;
-
-const rdkitAliases = {
-  "CO₂Et": "CO2Et",
-  "CO₂H": "CO2H",
-  "CF₃": "CF3",
-} as const;
-
-function rdkitDefinition(
-  name: AbbreviationName,
-): readonly [string, string, string] | undefined {
-  const key = rdkitAliases[name as keyof typeof rdkitAliases] ?? name;
-  return rdkitAbbreviations[key as keyof typeof rdkitAbbreviations];
-}
+};
 
 const customQueries: Partial<Record<AbbreviationName, string>> = {
   N3: "*[$([N]=[N+]=[N-]),$([N-][N+]#N)]~[N+]~[N-,N]",
@@ -332,7 +320,7 @@ function findGroups(
     const query = toolkit.get_qmol(
       automatic && name === "Ac"
         ? abbreviationFragments.Ac
-        : (rdkitDefinition(name)?.[0] ??
+        : (rdkitAbbreviations[name]?.[0] ??
             customQueries[name] ??
             abbreviationFragments[name]),
     );
@@ -430,7 +418,7 @@ export function abbreviationLabel(
   attachmentIsCarbon: boolean,
 ) {
   if (name === "Boc" && attachmentIsCarbon) name = "CO₂tBu";
-  const standard = rdkitDefinition(name);
+  const standard = rdkitAbbreviations[name];
   if (standard) return standard[left ? 2 : 1];
   const labels: Partial<Record<AbbreviationName, [string, string]>> = {
     OTBS: ["OTBS", "TBSO"],

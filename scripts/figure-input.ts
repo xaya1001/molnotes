@@ -8,6 +8,7 @@ import {
 } from "../shared/chemical-templates/conformation.ts";
 import { isObject } from "../shared/json.ts";
 import {
+  optionalFigureAbbreviations,
   validateAbbreviations,
   type AbbreviationName,
   type MoleculeAbbreviation,
@@ -379,7 +380,7 @@ export function validateFigureInput(value: unknown): {
     forming: bool,
     ring_h: bool,
     footnote: text,
-    abbreviate: list(choice("Ph", "Tr", "Bz")),
+    abbreviate: list(choice(...optionalFigureAbbreviations)),
     mark: string,
   };
   const structureRule: Rule = (v, p) => {
