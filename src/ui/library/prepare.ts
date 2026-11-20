@@ -1536,7 +1536,14 @@ export async function prepareFigure(
               )
             );
           };
-          const facing = arrow && clear(aim) ? aim : angle;
+          const aimed = arrow ? position(aim) : undefined;
+          // Leave a bond length for an arrow departing toward the target.
+          const facing =
+            aimed &&
+            Math.hypot(aimed.x - target.x, aimed.y - target.y) >= B &&
+            clear(aim)
+              ? aim
+              : angle;
           p = position(facing);
           dotAngle = facing + 90;
           if (!clear(facing)) {

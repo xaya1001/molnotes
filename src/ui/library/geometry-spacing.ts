@@ -8,6 +8,8 @@ import type {
 } from "../../../shared/chemical-library/geometry.ts";
 import { inkIntersectsBox, pathContours, samplePath } from "./path-geometry.ts";
 
+export const minimumVisibleBondFraction = 0.2;
+
 export const inkBox = (
   node: FigureNode,
   parent: FigureGroup,
@@ -100,7 +102,13 @@ export function spaceBondEndpoints(
         dy = q.y - p.y;
       const length = Math.hypot(dx, dy);
       const [a, b] = owners.map((id) => atomPoints?.[id]);
-      if (trace.contours.length === 1 && a && b && length) {
+      if (
+        trace.contours.length === 1 &&
+        a &&
+        b &&
+        length &&
+        length < Math.hypot(b.x - a.x, b.y - a.y) * minimumVisibleBondFraction
+      ) {
         const x = dx / length,
           y = dy / length;
         const project = (point: Point) =>

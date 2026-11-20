@@ -25,6 +25,7 @@ import type { FigureStyle } from "./scene-geometry.ts";
 import type { FigureRect } from "../../../shared/chemical-library/geometry.ts";
 import { rectangle } from "./geometry-math.ts";
 import { walkGeometry } from "./geometry-walk.ts";
+import { minimumVisibleBondFraction } from "./geometry-spacing.ts";
 import {
   samplePath,
   pathMetrics,
@@ -355,14 +356,14 @@ export function figureGeometryDiagnostics(
         );
         const visible =
           (Math.max(...projected) - Math.min(...projected)) / length;
-        if (visible < 0.2)
+        if (visible < minimumVisibleBondFraction)
           add(
             "BOND_VISIBLE_TOO_SHORT",
             [id],
             "Restore the visible bond length",
             undefined,
             visible,
-            0.2,
+            minimumVisibleBondFraction,
           );
       }
     }
