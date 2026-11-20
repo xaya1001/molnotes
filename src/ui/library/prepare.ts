@@ -731,7 +731,15 @@ export async function prepareFigure(
         });
         ctx.set(glyphs[0], "data-element-anchor", "true");
       }
-      spaceBondEndpoints(g, ctx);
+      const localPoints: Record<string, Point> = {};
+      positions.forEach((p, i) => {
+        const atom = key({
+          molecule: id,
+          atom: c.atomIds[i] ?? `hydrogen-${i - c.atomIds.length}`,
+        });
+        localPoints[atom] = p;
+      });
+      spaceBondEndpoints(g, ctx, localPoints);
       const rings = atomRings(graph);
       spaceChiralHydrogens(
         g,
@@ -760,7 +768,6 @@ export async function prepareFigure(
         ),
       );
       finishScaffoldGeometry(g, layout, c.atomIds, positions, ctx, mirror);
-      const localPoints: Record<string, Point> = {};
       positions.forEach((p, i) => {
         const atom = key({
           molecule: id,
@@ -857,31 +864,13 @@ export async function prepareFigure(
           const anchorNodes = labelNodes.filter(
             (node) => node.attributes["data-element-anchor"] === "true",
           );
-          let boxes = (anchorNodes.length ? anchorNodes : labelNodes).map(
+          const boxes = (anchorNodes.length ? anchorNodes : labelNodes).map(
             (node) => inkBox(node, g, ctx),
           );
           if (anchorNodes.length)
             for (const [index, node] of labelNodes.entries())
               if (!anchorNodes.includes(node))
                 chargeBoxes[`glyph:${i}:${index}`] = inkBox(node, g, ctx);
-          if (
-            groups.some(
-              (group) => group.name === "PPh3" && group.atoms[0] === i,
-            )
-          )
-            boxes = boxes
-              .sort(
-                (a, b) =>
-                  Math.hypot(
-                    a.x + a.width / 2 - positions[i].x,
-                    a.y + a.height / 2 - positions[i].y,
-                  ) -
-                  Math.hypot(
-                    b.x + b.width / 2 - positions[i].x,
-                    b.y + b.height / 2 - positions[i].y,
-                  ),
-              )
-              .slice(0, 1);
           if (boxes.length)
             chargeBoxes[String(i)] = {
               left: Math.min(...boxes.map((b) => b.left)),
@@ -1421,19 +1410,13 @@ export async function prepareFigure(
     });
     for (const l of labels) {
       if (hidden.has(l.at.molecule)) continue;
-      if (l.kind === "radical") {
-        if (
-          radicalChargeOwners.has(
-            key({ ...l.at, molecule: prefix + l.at.molecule }),
-          )
+      if (
+        l.kind === "radical" &&
+        radicalChargeOwners.has(
+          key({ ...l.at, molecule: prefix + l.at.molecule }),
         )
-          continue;
-        // Reuse RDKit's radical dot when it is already part of the native label.
-        const dots = glyphBoxes(l.at).filter(
-          (b) => Math.max(b.right - b.left, b.bottom - b.top) <= B * 0.1,
-        );
-        if (dots.length) continue;
-      }
+      )
+        continue;
       let p = plus(atom(l.at), mul(l.offset, B));
       let dotAngle = l.angle ?? 0;
       if (
@@ -1553,8 +1536,10 @@ export async function prepareFigure(
               )
             );
           };
-          p = position(angle);
-          if (!clear(angle)) {
+          const facing = arrow && clear(aim) ? aim : angle;
+          p = position(facing);
+          dotAngle = facing + 90;
+          if (!clear(facing)) {
             search: for (let turn = 10; turn <= 180; turn += 10)
               for (const sign of [1, -1]) {
                 const candidate = angle + sign * turn;

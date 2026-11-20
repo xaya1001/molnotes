@@ -66,7 +66,11 @@ export function bondTraces(parent: FigureGroup, ctx: FigureScene) {
 }
 
 /** Clear the endpoint's element glyphs and the final stroke. */
-export function spaceBondEndpoints(parent: FigureGroup, ctx: FigureScene) {
+export function spaceBondEndpoints(
+  parent: FigureGroup,
+  ctx: FigureScene,
+  atomPoints?: Record<string, Point>,
+) {
   const labels = new Map<string, FigureRect[]>();
   const anchors = new Map<string, FigureRect[]>();
   for (const node of ctx.nodes(parent)) {
@@ -83,16 +87,47 @@ export function spaceBondEndpoints(parent: FigureGroup, ctx: FigureScene) {
   for (const trace of bondTraces(parent, ctx)) {
     if (trace.filled || trace.contours.some((c) => c.points.length !== 2))
       continue;
-    const boxes = (ctx.data(trace.el, "atoms") ?? "")
-      .split(" ")
-      .flatMap((id) =>
-        labels.has(id) ? [mainRowBox(anchors.get(id) ?? labels.get(id)!)] : [],
-      );
+    const owners = (ctx.data(trace.el, "atoms") ?? "").split(" ");
+    const boxes = owners.flatMap((id) =>
+      labels.has(id) ? [mainRowBox(anchors.get(id) ?? labels.get(id)!)] : [],
+    );
+    if (!boxes.length) continue;
     let changed = false;
     const segments = trace.contours.map((contour) => {
       const points = contour.points.map((p) => ({ ...p }));
+      const [p, q] = points;
+      const dx = q.x - p.x,
+        dy = q.y - p.y;
+      const length = Math.hypot(dx, dy);
+      const [a, b] = owners.map((id) => atomPoints?.[id]);
+      if (trace.contours.length === 1 && a && b && length) {
+        const x = dx / length,
+          y = dy / length;
+        const project = (point: Point) =>
+          (point.x - p.x) * x + (point.y - p.y) * y;
+        const ends = owners
+          .map((id, i) => ({ id, at: project(i === 0 ? a : b) }))
+          .sort((left, right) => left.at - right.at);
+        // Native parallel strokes can be clipped against the entire label.
+        // Restore the labelled end along its original stroke before clipping to the element ink.
+        if (ends[1].at - ends[0].at > Math.hypot(b.x - a.x, b.y - a.y) * 0.95) {
+          for (const [i, end] of ends.entries()) {
+            if (!anchors.has(end.id)) continue;
+            points[i] = { x: p.x + end.at * x, y: p.y + end.at * y };
+            changed = true;
+          }
+        }
+      }
       for (const box of boxes) {
-        if (!inkIntersectsBox([contour], box, trace.width, false)) continue;
+        if (
+          !inkIntersectsBox(
+            [{ points, box: bounds(points) }],
+            box,
+            trace.width,
+            false,
+          )
+        )
+          continue;
         const pad = trace.width / 2 + 0.1,
           left = box.x - pad,
           right = box.x + box.width + pad,
