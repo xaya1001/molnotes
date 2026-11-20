@@ -168,13 +168,15 @@ function contracted(
   return shown;
 }
 
-function matchingCopy(rd: Toolkit, mol: Mol) {
+function matchingCopy(rd: Toolkit, mol: Mol, compareAbbreviations = false) {
   const data = JSON.parse(mol.get_json());
-  const labels = displayAtoms.get(mol)?.labels;
-  // Compare temporary isotopes so an abbreviation is distinct from every element.
-  for (const [i, atom] of data.molecules[0].atoms.entries()) {
-    const name = labels?.get(i);
-    atom.isotope = name ? 200 + groupElements.indexOf(name) : (atom.z ?? 6);
+  if (compareAbbreviations) {
+    const labels = displayAtoms.get(mol)?.labels;
+    // Temporary isotope numbers distinguish abbreviations from every element.
+    for (const [i, atom] of data.molecules[0].atoms.entries()) {
+      const name = labels?.get(i);
+      atom.isotope = name ? 200 + groupElements.indexOf(name) : (atom.z ?? 6);
+    }
   }
   return descriptionMolecule(rd, data);
 }
@@ -266,12 +268,12 @@ function alignCore(
   rd: Toolkit,
   mol: Mol,
   reference: Mol,
-  smarts: string,
+  core: ReturnType<typeof commonCore>,
   coordgen: boolean,
 ) {
-  const query = rd.get_qmol(smarts)!,
-    currentMatch = matched(rd, mol, query),
-    referenceMatch = matched(rd, reference, query);
+  const query = rd.get_qmol(core.smarts)!,
+    currentMatch = matched(rd, mol, query, core.compareAbbreviations),
+    referenceMatch = matched(rd, reference, query, core.compareAbbreviations);
   query.delete();
   const current = withCoordinates(rd, mol, xy(mol));
   try {
@@ -363,9 +365,12 @@ function commonCore(
   timeout = 2,
 ) {
   const list = new rd.MolList();
+  const compareAbbreviations = molecules.some(
+    (mol) => displayAtoms.get(mol)?.labels.size,
+  );
   try {
     for (const mol of molecules) {
-      const copy = matchingCopy(rd, mol);
+      const copy = matchingCopy(rd, mol, compareAbbreviations);
       list.append(copy);
       copy.delete();
     }
@@ -378,12 +383,12 @@ function commonCore(
             RingMatchesRingOnly: strict,
             CompleteRingsOnly: strict,
             MatchChiralTag: false,
-            AtomCompare: "Isotopes",
+            AtomCompare: compareAbbreviations ? "Isotopes" : "Elements",
             BondCompare: "Any",
           }),
         ),
       );
-    return result;
+    return { ...result, compareAbbreviations };
   } finally {
     list.delete();
   }
@@ -396,8 +401,13 @@ function retainsStereo(rd: Toolkit, mol: Mol, identity: string) {
     drawn.delete();
   }
 }
-function matched(rd: Toolkit, mol: Mol, query: Mol): number[] {
-  const copy = matchingCopy(rd, mol);
+function matched(
+  rd: Toolkit,
+  mol: Mol,
+  query: Mol,
+  compareAbbreviations: boolean,
+): number[] {
+  const copy = matchingCopy(rd, mol, compareAbbreviations);
   try {
     return JSON.parse(copy.get_substruct_match(query)).atoms ?? [];
   } finally {
@@ -423,8 +433,8 @@ function follow(
   if (result.numAtoms < 4) return false;
   const query = rd.get_qmol(result.smarts)!;
   try {
-    const rm = matched(rd, reference, query),
-      mm = matched(rd, mol, query),
+    const rm = matched(rd, reference, query, result.compareAbbreviations),
+      mm = matched(rd, mol, query, result.compareAbbreviations),
       toRef = new Map(mm.map((a, i) => [a, rm[i]]));
     const graph = graphOf(mol),
       referenceRings = rings(reference),
@@ -518,7 +528,7 @@ function orient(
   if (result.numAtoms < 3) return;
   const query = rd.get_qmol(result.smarts)!;
   try {
-    const rm = matched(rd, reference, query),
+    const rm = matched(rd, reference, query, result.compareAbbreviations),
       points = xy(mol),
       rpoints = xy(reference),
       ref = rm.map((i) => rpoints[i]);
@@ -529,7 +539,7 @@ function orient(
     ];
     const rc = center(ref);
     let best: { error: number; flip: number; angle: number } | undefined;
-    const matching = matchingCopy(rd, mol);
+    const matching = matchingCopy(rd, mol, result.compareAbbreviations);
     const matches: { atoms: number[] }[] = JSON.parse(
       matching.get_substruct_matches(
         query,
@@ -588,7 +598,7 @@ function alignDepiction(
     core.numAtoms >=
       0.6 * Math.min(reference.get_num_atoms(), mol.get_num_atoms())
   ) {
-    const candidate = alignCore(rd, mol, reference, core.smarts, coordgen);
+    const candidate = alignCore(rd, mol, reference, core, coordgen);
     if (candidate) {
       if (hasLinearDepiction(graphOf(candidate))) {
         mol.delete();

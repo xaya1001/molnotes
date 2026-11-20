@@ -298,10 +298,7 @@ function findGroups(
     if (!query) throw new Error(`Invalid abbreviation query: ${name}`);
     try {
       const matches: { atoms: number[] }[] = JSON.parse(
-        mol.get_substruct_matches(
-          query,
-          all ? undefined : '{"uniquify":false}',
-        ),
+        mol.get_substruct_matches(query, all ? "{}" : '{"uniquify":false}'),
       );
       for (const match of Array.isArray(matches) ? matches : []) {
         const atoms = match.atoms.slice(1);
