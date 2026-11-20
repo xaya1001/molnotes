@@ -159,6 +159,7 @@ test("publication uses each note's latest commit day in Shanghai when it follows
     execFileAsync("git", ["-C", repo, ...args]);
   await mkdir(notes, { recursive: true });
   await writeFile(join(contentRoot, "glossary.json"), "[]");
+  await writeFile(join(contentRoot, "prose-terms.json"), "[]");
   await writeFile(
     join(notes, "directory.json"),
     JSON.stringify({ title: "Sample", intro: "Notes", order: 1 }),
@@ -823,6 +824,7 @@ test("publication rejects invalid abbreviations and references to collapsed atom
 test("publication rejects a substrate row that differs from its instantiated product", async (t) => {
   const root = await temporary(t);
   await writeFile(join(root, "glossary.json"), "[]");
+  await writeFile(join(root, "prose-terms.json"), "[]");
   await cp(join(fixtures, "sites/minimal"), join(root, "sites/minimal"), {
     recursive: true,
   });

@@ -67,6 +67,7 @@ test("generated chapters compose the shared shell and the block catalogue", asyn
       '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="80"><rect width="160" height="80" fill="teal"/></svg>',
     );
     await writeFile(join(fixture, "glossary.json"), "[]");
+    await writeFile(join(fixture, "prose-terms.json"), "[]");
     await publishSnapshot(releases, async (snapshot) =>
       writeSnapshot(snapshot, await buildSnapshot(fixture)),
     );

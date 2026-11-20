@@ -1,3 +1,4 @@
+import { lintProse, proseTerms } from "./prose-lint.ts";
 import { readChemicalLibrary, libraryUsage } from "./chemical-library.ts";
 import { verifyLibraryFigures } from "./figure-build.ts";
 import { rejectContentRequests } from "./requests.ts";
@@ -376,6 +377,19 @@ async function build(
         citations: {},
       });
   });
+  const terms = await proseTerms(root);
+  for (const input of inputs)
+    if (input.kind === "notes")
+      for (const note of input.notes) {
+        if (note.author) continue;
+        const file = `${input.unit}/${note.slug}.md`;
+        const errors = lintProse(
+          parseNote(note.source, file).body,
+          file,
+          terms,
+        );
+        if (errors.length) throw new Error(errors.join("\n"));
+      }
   const glossary = await readGlossary(root);
   const registry = await readRegistry(root);
   if (!registry && inputs.some((input) => input.occurrences.length))
