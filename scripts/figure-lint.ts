@@ -11,13 +11,23 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { loadFigureStyle } from "./figure-route.ts";
 import { diagnoseFigure } from "./figure-diagnostics.ts";
+import { figureChargeDiagnostics } from "./figure-chemistry-diagnostics.ts";
+import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 
 const args = process.argv.slice(2);
 let count = 0;
+let warnings = 0;
 if (args.length && args[0] !== "--library") {
   for (const source of args) {
     try {
       const compiled = await compileFigureFile(source);
+      for (const diagnostic of figureChargeDiagnostics(
+        compiled.entries,
+        await moleculeToolkit(),
+      )) {
+        console.log(diagnosticLine(source, compiled.reference, diagnostic));
+        warnings++;
+      }
       for await (const rendered of drawFigure(
         compiled.entries,
         compiled.reference,
@@ -38,6 +48,15 @@ if (args.length && args[0] !== "--library") {
     args[0] === "--library" ? args[1] : setting("MOLNOTES_CONTENT_DIR"),
   );
   const { entries } = await readChemicalLibrary(root);
+  for (const diagnostic of figureChargeDiagnostics(
+    entries,
+    await moleculeToolkit(),
+  )) {
+    console.log(
+      diagnosticLine(diagnostic.object, { ref: diagnostic.object }, diagnostic),
+    );
+    warnings++;
+  }
   const css = await readFile(
     new URL("../src/ui/styles/tokens.css", import.meta.url),
     "utf8",
@@ -64,5 +83,5 @@ if (args.length && args[0] !== "--library") {
     await runner.close();
   }
 }
-console.log(`Figure lint: ${count} issues`);
+console.log(`Figure lint: ${count} issues, ${warnings} charge warnings`);
 if (count) process.exitCode = 1;

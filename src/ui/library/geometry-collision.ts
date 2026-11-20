@@ -1,4 +1,5 @@
 import type { Point } from "../../../shared/chemical-library/types.ts";
+import type { FigureRect } from "../../../shared/chemical-library/geometry.ts";
 /** Boundary contact, without treating a closed path's interior as ink. */
 export function polylinesTouch(a: Point[], b: Point[], gap: number) {
   return a
@@ -58,6 +59,18 @@ export function polygonsOverlap(a: Point[], b: Point[], pad = 0) {
   return (
     insidePolygon(a[0], b) ||
     b.some((p, i) => polygonHitsSegment(a, p, b[(i + 1) % b.length], pad))
+  );
+}
+
+export function boxOverlapsPolygon(box: FigureRect, polygon: Point[]) {
+  return polygonsOverlap(
+    [
+      { x: box.left, y: box.top },
+      { x: box.right, y: box.top },
+      { x: box.right, y: box.bottom },
+      { x: box.left, y: box.bottom },
+    ],
+    polygon,
   );
 }
 

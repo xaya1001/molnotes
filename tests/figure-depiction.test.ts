@@ -3,6 +3,49 @@ import test from "node:test";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import { relievedCoordinates } from "../scripts/figure-coordinate-relief.ts";
 
+test("aligned route depictions preserve a linear triple-bond centre", async () => {
+  const { compileFigure } = await import("../scripts/figure-scene.ts");
+  const { graphOf } = await import("../shared/chemical-library/chemistry.ts");
+  const compiled = await compileFigure({
+    kind: "route",
+    compounds: { a: "CCc1ccccc1", b: "C#Cc1ccccc1" },
+    steps: [{ from: "a", to: "b" }],
+  });
+  const reaction = Object.values(compiled.entries).find(
+    (e) => e.kind === "reaction",
+  )!;
+  assert.equal(reaction.kind, "reaction");
+  const participant = reaction.products[0],
+    placement = reaction.scene.molecules.find((m) => m.id === participant.id)!;
+  const compound = compiled.entries[participant.compound];
+  assert.equal(compound.kind, "compound");
+  const layout = placement.variant
+    ? compound.variants![placement.variant]
+    : compound.layout;
+  const mol = (await moleculeToolkit()).get_mol(compound.smiles)!;
+  try {
+    const graph = graphOf(mol),
+      triple = graph.bonds.find((bond) => bond.bo === 3)!;
+    const centre = triple.atoms.find(
+      (i) => graph.bonds.filter((bond) => bond.atoms.includes(i)).length === 2,
+    )!;
+    const neighbours = graph.bonds
+      .filter((bond) => bond.atoms.includes(centre))
+      .map((bond) => bond.atoms.find((i) => i !== centre)!);
+    const point = (i: number) => layout.coords[compound.atomIds[i]];
+    const c = point(centre),
+      [a, b] = neighbours.map(point);
+    const u = { x: a.x - c.x, y: a.y - c.y },
+      v = { x: b.x - c.x, y: b.y - c.y };
+    assert.ok(
+      (u.x * v.x + u.y * v.y) / (Math.hypot(u.x, u.y) * Math.hypot(v.x, v.y)) <
+        -Math.cos((5 * Math.PI) / 180),
+    );
+  } finally {
+    mol.delete();
+  }
+});
+
 test("wide terminal groups clear neighboring atom glyphs while retaining bond length", async () => {
   const rd = await moleculeToolkit();
   const mol = rd.get_mol(

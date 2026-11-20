@@ -2,6 +2,45 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { compileFigure } from "../scripts/figure-scene.ts";
 import type { Mechanism } from "../shared/chemical-library/types.ts";
+import { figureChargeDiagnostics } from "../scripts/figure-chemistry-diagnostics.ts";
+import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
+
+test("compilation rejects an electron arrow from a positive charge", async () => {
+  await assert.rejects(
+    compileFigure({
+      kind: "mechanism",
+      frames: [
+        {
+          id: "event",
+          smiles: "[NH3+:1][CH3:2]",
+          arrows: [{ id: "bad", from: "charge(1)", to: "atom(2)" }],
+        },
+      ],
+    }),
+    /event.*arrow bad.*positive charge/,
+  );
+});
+
+test("lint reports a change in total formal charge between mechanism frames", async () => {
+  const compiled = await compileFigure({
+    kind: "mechanism",
+    frames: [
+      { id: "before", smiles: "[OH-:1]" },
+      { id: "after", smiles: "[OH2:1]" },
+    ],
+  });
+  const diagnostics = figureChargeDiagnostics(
+    compiled.entries,
+    await moleculeToolkit(),
+  );
+  assert.ok(
+    diagnostics.some(
+      (d) =>
+        d.code === "FRAME_CHARGE_CHANGE" &&
+        d.elements.join(",") === "before,after",
+    ),
+  );
+});
 
 test("mechanism frames retain participant identity and electron events", async () => {
   const result = await compileFigure({

@@ -2,6 +2,7 @@ import type {
   ChemicalToolkit,
   ChemicalMolecule as MoleculeHandle,
 } from "./chemical-toolkit.ts";
+import type { Point } from "./chemical-library/types.ts";
 
 type ChemistryToolkit = Pick<ChemicalToolkit, "get_qmol">;
 
@@ -159,6 +160,15 @@ export function abbreviatedGroups(
   return groups;
 }
 
+/** RDKit anchors the first glyph for steep terminal bonds, even when they point left. */
+export function abbreviationFacesLeft(root: Point, attachment: Point) {
+  const dx = attachment.x - root.x;
+  return (
+    dx > 0 &&
+    Math.abs(attachment.y - root.y) <= dx * Math.tan((70 * Math.PI) / 180)
+  );
+}
+
 /** The renderer selects the attachment-facing spelling after applying placement transforms. */
 export function abbreviationLabel(
   name: MoleculeAbbreviation,
@@ -249,3 +259,22 @@ export function validateAbbreviatedReferences(
         }
     });
 }
+
+/** Complete small reagents, written with the arrow-bearing atom in the label. */
+export const reagentAbbreviations = [
+  { smiles: "C[O-]", label: "MeO", atom: 8 },
+  { smiles: "CC[O-]", label: "EtO", atom: 8 },
+  { smiles: "CC(C)(C)[O-]", label: "t-BuO", atom: 8 },
+  { smiles: "[OH-]", label: "HO", atom: 8 },
+  { smiles: "CO", label: "MeOH", atom: 8 },
+  { smiles: "CCO", label: "EtOH", atom: 8 },
+  { smiles: "O", label: "H<sub>2</sub>O", atom: 8 },
+  { smiles: "[OH3+]", label: "H<sub>3</sub>O", atom: 8 },
+  { smiles: "N", label: "NH<sub>3</sub>", atom: 7 },
+  { smiles: "[C-]#N", label: "CN", atom: 6, secondGlyph: 7 },
+  { smiles: "[N-]=[N+]=[N-]", label: "N<sub>3</sub>", atom: 7 },
+  { smiles: "C[S-]", label: "MeS", atom: 16 },
+  { smiles: "CC(=O)[O-]", label: "AcO", atom: 8 },
+  { smiles: "CC(=O)O", label: "AcOH", atom: 8 },
+  { smiles: "CCN(CC)CC", label: "Et<sub>3</sub>N", atom: 7 },
+] as const;

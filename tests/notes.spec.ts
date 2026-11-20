@@ -1,5 +1,126 @@
 import { putRecords } from "./helpers/records.ts";
 import { test, expect } from "./helpers/test.ts";
+test("aligned structures keep a triple-bond centre linear", async ({
+  page,
+}) => {
+  await page.goto("/notes/reader-test/second");
+  const svg = page.getByRole("img", { name: "样品 C二维结构" });
+  await expect(svg.locator("path.bond-6").first()).toBeAttached({
+    timeout: 45_000,
+  });
+  const angle = await svg.evaluate((element) => {
+    const direction = (selector: string) => {
+      const path = element.querySelector(selector)!;
+      const values = [
+        ...path
+          .getAttribute("d")!
+          .matchAll(/[ML]\s+(-?[\d.]+)[,\s]+(-?[\d.]+)/g),
+      ].map((m) => [Number(m[1]), Number(m[2])]);
+      return [values[1][0] - values[0][0], values[1][1] - values[0][1]];
+    };
+    const a = direction("path.bond-5"),
+      b = direction("path.bond-6");
+    return (
+      (Math.acos(
+        Math.min(
+          1,
+          Math.abs(
+            (a[0] * b[0] + a[1] * b[1]) / (Math.hypot(...a) * Math.hypot(...b)),
+          ),
+        ),
+      ) *
+        180) /
+      Math.PI
+    );
+  });
+  expect(angle).toBeLessThan(5);
+});
+
+test("vertical bond to nitrogen retains visible length", async ({ page }) => {
+  await page.goto("/notes/reader-test/second");
+  const svg = page.getByRole("img", { name: "样品 E二维结构" });
+  await expect(svg.locator("path.bond-1").first()).toBeAttached({
+    timeout: 45_000,
+  });
+  const visible = await svg.evaluate((element) => {
+    const points = (selector: string) =>
+      [...element.querySelectorAll(selector)].flatMap((path) =>
+        [
+          ...path
+            .getAttribute("d")!
+            .matchAll(/[ML]\s+(-?[\d.]+)[,\s]+(-?[\d.]+)/g),
+        ].map((m) => ({ x: Number(m[1]), y: Number(m[2]) })),
+      );
+    const wedge = points("path.bond-1"),
+      adjoining = points("path.bond-0");
+    const origin = adjoining.reduce((a, b) => (a.y > b.y ? a : b));
+    return Math.max(...wedge.map((p) => Math.abs(p.y - origin.y))) / 14.4;
+  });
+  expect(visible).toBeGreaterThanOrEqual(0.4);
+});
+
+test("two-letter silicon label is centred on its bonds", async ({ page }) => {
+  await page.goto("/notes/reader-test/second");
+  const svg = page.getByRole("img", { name: "样品 F二维结构" });
+  await expect(svg.locator("text.atom-1").first()).toBeAttached({
+    timeout: 45_000,
+  });
+  const offset = await svg.evaluate((element) => {
+    const lines = [
+      ...element.querySelectorAll(
+        "path.bond-0, path.bond-1, path.bond-2, path.bond-3",
+      ),
+    ].map((path) =>
+      [
+        ...path
+          .getAttribute("d")!
+          .matchAll(/[ML]\s+(-?[\d.]+)[,\s]+(-?[\d.]+)/g),
+      ].map((m) => ({ x: Number(m[1]), y: Number(m[2]) })),
+    );
+    const [a, b] = lines[0];
+    const second = lines.slice(1).sort((first, second) => {
+      const cross = ([c, d]: typeof first) =>
+        Math.abs((b.x - a.x) * (d.y - c.y) - (b.y - a.y) * (d.x - c.x));
+      return cross(second) - cross(first);
+    })[0];
+    const [c, d] = second,
+      ux = b.x - a.x,
+      uy = b.y - a.y,
+      vx = d.x - c.x,
+      vy = d.y - c.y;
+    const t = ((c.x - a.x) * vy - (c.y - a.y) * vx) / (ux * vy - uy * vx);
+    const atom = { x: a.x + t * ux, y: a.y + t * uy };
+    const text = [...element.querySelectorAll<SVGTextElement>("text.atom-1")];
+    const canvas = document.createElement("canvas").getContext("2d")!;
+    canvas.font = `${text[0].style.fontSize} Arial, Helvetica, sans-serif`;
+    const glyphs = text.map((n) => ({
+      node: n,
+      metric: canvas.measureText(n.textContent ?? ""),
+    }));
+    const x =
+      (Math.min(
+        ...glyphs.map(
+          ({ node, metric }) =>
+            Number(node.getAttribute("x")) - metric.actualBoundingBoxLeft,
+        ),
+      ) +
+        Math.max(
+          ...glyphs.map(
+            ({ node, metric }) =>
+              Number(node.getAttribute("x")) + metric.actualBoundingBoxRight,
+          ),
+        )) /
+      2;
+    const y =
+      Number(text[0].getAttribute("y")) +
+      (glyphs[0].metric.actualBoundingBoxDescent -
+        glyphs[0].metric.actualBoundingBoxAscent) /
+        2;
+    return { x: Math.abs(x - atom.x), y: Math.abs(y - atom.y) };
+  });
+  expect(offset.x).toBeLessThan(1);
+  expect(offset.y).toBeLessThan(1);
+});
 test("read, inspect a term and retain reading state across browser contexts", async ({
   page,
   browser,

@@ -112,6 +112,23 @@ caption: 共享前段之后通向两种终态
 ## 结构对照
 
 ```molecule
+smiles: c1ccccc1C#C
+caption: 样品 C
+smiles: c1ccccc1CC
+caption: 样品 D
+```
+
+```molecule
+smiles: C[C@H](N)O |(-1.5,0,;0,0,;0,1.5,;1.5,0,)|
+caption: 样品 E
+```
+
+```molecule
+smiles: C[Si](C)(C)C
+caption: 样品 F
+```
+
+```molecule
 smiles: CCO |(0,0,;3,0,;4.5,2.598,)|
 caption: 样品 A
 smiles: CCOC(=O)C1CCN(CC1)C(=O)OC(C)(C)C

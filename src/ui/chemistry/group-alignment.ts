@@ -1,5 +1,10 @@
 import { shallowRef, watch } from "vue";
 import { loadChemistry, molecule, type MoleculeHandle } from "./rdkit.ts";
+import {
+  graphOf,
+  hasLinearDepiction,
+  linearCentres,
+} from "../../../shared/chemical-library/chemistry.ts";
 
 export function useGroupAlignment(smiles: () => readonly string[]) {
   const template = shallowRef<MoleculeHandle>();
@@ -30,11 +35,14 @@ export function useGroupAlignment(smiles: () => readonly string[]) {
             }
             const minimum =
               Math.min(...molecules.map((mol) => mol.get_num_atoms())) / 2;
+            const linearCentre = molecules.some(
+              (mol) => linearCentres(graphOf(mol)).length,
+            );
             core = toolkit.get_mcs_as_mol(
               list,
               JSON.stringify({
                 AtomCompare: "Any",
-                BondCompare: "Any",
+                BondCompare: linearCentre ? "Order" : "Any",
                 RingMatchesRingOnly: true,
                 CompleteRingsOnly: true,
               }),
@@ -60,14 +68,14 @@ export function useGroupAlignment(smiles: () => readonly string[]) {
 }
 
 export function alignMolecule(mol: MoleculeHandle, template?: MoleculeHandle) {
-  if (JSON.parse(mol.get_json()).molecules[0].conformers?.length) return;
+  if (graphOf(mol).conformers?.length) return;
   if (template) {
     mol.generate_aligned_coords(
       template,
       JSON.stringify({ acceptFailure: true }),
     );
-  } else {
-    mol.set_new_coords();
-    mol.normalize_depiction(1, -1);
+    if (hasLinearDepiction(graphOf(mol))) return;
   }
+  mol.set_new_coords();
+  mol.normalize_depiction(1, -1);
 }

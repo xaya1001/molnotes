@@ -145,8 +145,11 @@ These kinds compile to a `mec_` entry with one static `overview` scene; pages re
 
 ## Endpoint vocabulary
 
+Point a new-bond arrow at the attacked atom with `to: atom(n)`.
+Point an arrow that pushes σ electrons back to form a π bond at that bond’s midpoint with `to: bond(n,m)`.
+
 - Sources: `lp(a1)` is a lone pair, `charge(a1)` a displayed negative charge, `bond(a1,a2)` sigma electrons, `pi(a1,a2)` a multiple-bond line, and `radical(a1)` a single electron.
-- Destinations: `atom(a1)`, `bond(a1,a2)`, or `between(donor:a1,acceptor:a2)` for a new bond; the second atom is the acceptor. Radical endpoints use a half head; `electrons: 1` explicitly selects one for bond electrons.
+- Destinations: `atom(a1)`, `bond(a1,a2)`, or `between(donor:a1,acceptor:a2)` for a forming-bond midpoint; the second atom is the acceptor. Radical endpoints use a half head; `electrons: 1` explicitly selects one for bond electrons.
 - Input arrows use SMILES maps, for example `{from: "pi(2,3)", to: "atom(3)"}`; compiled entries use permanent atom IDs. Keep bond tails at their semantic midpoints. `side: left|right` selects the arc side. Cross-participant arrows belong to saved scenes; the input grammar places arrows within one compound or frame.
 
 ## Identity, references and style
