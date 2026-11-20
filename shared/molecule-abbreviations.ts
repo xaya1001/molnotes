@@ -2,6 +2,7 @@ import type {
   ChemicalToolkit,
   ChemicalMolecule as MoleculeHandle,
 } from "./chemical-toolkit.ts";
+import type { Point } from "./chemical-library/types.ts";
 
 type ChemistryToolkit = Pick<ChemicalToolkit, "get_qmol">;
 
@@ -157,6 +158,15 @@ export function abbreviatedGroups(
         `${where}: abbreviation ${name} has no non-overlapping terminal group in SMILES`,
       );
   return groups;
+}
+
+/** RDKit anchors the first glyph for steep terminal bonds, even when they point left. */
+export function abbreviationFacesLeft(root: Point, attachment: Point) {
+  const dx = attachment.x - root.x;
+  return (
+    dx > 0 &&
+    Math.abs(attachment.y - root.y) <= dx * Math.tan((70 * Math.PI) / 180)
+  );
 }
 
 /** The renderer selects the attachment-facing spelling after applying placement transforms. */

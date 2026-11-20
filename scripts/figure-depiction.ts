@@ -18,6 +18,7 @@ import {
 import {
   abbreviatedGroups,
   matchingAbbreviations,
+  abbreviationFacesLeft,
   abbreviationLabel,
   abbreviationSmarts,
   type MoleculeAbbreviation,
@@ -36,7 +37,7 @@ import {
   mainRowBox,
 } from "../src/ui/library/geometry-math.ts";
 import type { FigureRect } from "../shared/chemical-library/geometry.ts";
-import { insidePolygon } from "../src/ui/library/geometry-collision.ts";
+import { boxOverlapsPolygon } from "../src/ui/library/geometry-collision.ts";
 import { figureDimension } from "./figure-output.ts";
 import { ringHydrogens } from "./figure-scaffolds.ts";
 
@@ -811,7 +812,10 @@ function nativeLabelCost(
     ),
     atomLabels = Object.fromEntries(
       groups.map(({ atoms: [i], attachment: parent, name }) => {
-        const left = placed[parent][0] - placed[i][0] > 0.2;
+        const left = abbreviationFacesLeft(
+          { x: placed[i][0], y: placed[i][1] },
+          { x: placed[parent][0], y: placed[parent][1] },
+        );
         return [
           i,
           abbreviationLabel(name, left, (graph.atoms[parent].z ?? 6) === 6),
@@ -933,17 +937,13 @@ function nativeLabelCost(
           )
         )
           collisions++;
-      const centre = { x: a.x + a.width / 2, y: a.y + a.height / 2 };
       if (
         names.has(i) &&
-        visibleRings.some(
-          (ring) =>
-            !ring.includes(i) &&
-            insidePolygon(
-              centre,
-              ring.map((atom) => positions.get(atom)!),
-            ),
-        )
+        visibleRings.some((ring) => {
+          if (ring.includes(i)) return false;
+          const polygon = ring.map((atom) => positions.get(atom)!);
+          return glyphs.get(i)!.some((box) => boxOverlapsPolygon(box, polygon));
+        })
       )
         collisions++;
     }

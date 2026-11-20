@@ -63,7 +63,10 @@ import {
   validateCompound,
   validateSceneChemistry,
 } from "../../../shared/chemical-library/chemistry.ts";
-import { abbreviationLabel } from "../../../shared/molecule-abbreviations.ts";
+import {
+  abbreviationFacesLeft,
+  abbreviationLabel,
+} from "../../../shared/molecule-abbreviations.ts";
 import { reagentGroups } from "../../../shared/chemical-library/reagents.ts";
 import { routeMetrics } from "../../../shared/chemical-library/routes.ts";
 import type {
@@ -256,7 +259,7 @@ export async function prepareFigure(
           outside = coords[g.attachment];
         atomLabels[g.atoms[0]] = abbreviationLabel(
           g.name,
-          outside.x - root.x > 0.2 / 1.5,
+          abbreviationFacesLeft(root, outside),
           (graph.atoms[g.attachment].z ?? 6) === 6,
         );
       }

@@ -1109,7 +1109,7 @@ test("bond strokes touching the edge of a complete ester label are rejected", as
   assert.ok(diagnostics().some((d) => d.code === "BOND_LABEL_OVERLAP"));
 });
 
-test("a folded terminal group inside a separate ring is rejected", async () => {
+test("a folded terminal label that partly crosses a ring is diagnosed", async () => {
   const c = prepareCompound(toolkit, {
     id: "cmp_example",
     title: "Example",
@@ -1117,11 +1117,12 @@ test("a folded terminal group inside a separate ring is rejected", async () => {
     sources: [{ source: "example", locator: "Structures" }],
   });
   c.layout.abbreviations = ["OTs"];
-  // A terminal O points into its attached ring while all ring atoms stay fixed.
+  // The label sits outside the ring, with only its near edge crossing the ring.
   const ring = c.atomIds.slice(0, 6).map((id) => c.layout.coords[id]);
+  const corner = ring[5];
   c.layout.coords[c.atomIds[6]] = {
-    x: ring.reduce((n, p) => n + p.x, 0) / 6,
-    y: ring.reduce((n, p) => n + p.y, 0) / 6,
+    x: corner.x + (corner.x - ring.reduce((n, p) => n + p.x, 0) / 6) * 0.2,
+    y: corner.y + (corner.y - ring.reduce((n, p) => n + p.y, 0) / 6) * 0.2,
   };
   const geometry = await prepareFigure(
     { [c.id]: c },
@@ -1173,7 +1174,7 @@ test("every saved compiler variant has its final label placement", async () => {
   }
 });
 
-test("folded neutral nitro groups do not display their internal charges", async () => {
+test("a steep nitro bond attaches to nitrogen and hides internal charges", async () => {
   const c = prepareCompound(toolkit, {
     id: "cmp_example",
     title: "Example",
@@ -1181,17 +1182,30 @@ test("folded neutral nitro groups do not display their internal charges", async 
     sources: [{ source: "example", locator: "Structures" }],
   });
   c.layout.abbreviations = ["NO2"];
+  const parent = c.layout.coords[c.atomIds[5]];
+  c.layout.coords[c.atomIds[6]] = { x: parent.x - 0.3, y: parent.y - 1 };
   const geometry = await prepareFigure(
     { [c.id]: c },
     { ref: c.id },
     { toolkit, fonts, style },
   );
   const charges: string[] = [];
+  const glyphs: { label: string; anchor: boolean }[] = [];
   walkGeometry(geometry.root, (node) => {
     if (node.attributes["data-charge-owner"])
       charges.push(node.attributes["data-charge-owner"]);
+    if (node.attributes["data-abbreviation"])
+      glyphs.push({
+        label: node.attributes["data-label-text"],
+        anchor: node.attributes["data-element-anchor"] === "true",
+      });
   });
   assert.deepEqual(charges, []);
+  assert.deepEqual(
+    glyphs.map((glyph) => glyph.anchor),
+    [true, false, false],
+  );
+  assert.ok(glyphs.every((glyph) => glyph.label === "NO<sub>2</sub>"));
 });
 
 test("two-letter element glyphs are centred on their atom", async () => {

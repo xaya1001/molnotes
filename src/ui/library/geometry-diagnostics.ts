@@ -1,5 +1,6 @@
 import {
   angleBetween,
+  boxOverlapsPolygon,
   insidePolygon,
   polygonHitsSegment,
   polygonsOverlap,
@@ -463,17 +464,14 @@ export function figureGeometryDiagnostics(
   for (const id of new Set(
     labels.filter((l) => l.el.data.abbreviation).map((l) => l.id),
   )) {
-    const r = completeLabels.get(id)!;
-    const centre = { x: r.x + r.width / 2, y: r.y + r.height / 2 };
     if (
-      rings.some(
-        (ring) =>
-          !ring.includes(id) &&
-          insidePolygon(
-            centre,
-            ring.map((atom) => atomPoints.get(atom)!),
-          ),
-      )
+      rings.some((ring) => {
+        if (ring.includes(id)) return false;
+        const polygon = ring.map((atom) => atomPoints.get(atom)!);
+        return labelGlyphs
+          .get(id)!
+          .some((box) => boxOverlapsPolygon(box, polygon));
+      })
     )
       add(
         "LABEL_IN_RING",
