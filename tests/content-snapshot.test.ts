@@ -978,7 +978,7 @@ test("content publish uses the configured Python when PATH selects one without P
       "import pymupdf, sys; print(sys.executable)",
     ])
   ).stdout.trim();
-  const shadow = join(root, "bin");
+  const shadow = join(root, "python-bin");
   await mkdir(shadow);
   const quoted = "'" + python.replaceAll("'", "'\\''") + "'";
   await writeFile(
