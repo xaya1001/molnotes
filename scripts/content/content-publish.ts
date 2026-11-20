@@ -3,18 +3,15 @@ import { readChemicalLibrary, libraryUsage } from "./chemical-library.ts";
 import { verifyLibraryFigures } from "./figure-build.ts";
 import { rejectContentRequests } from "./requests.ts";
 import { assetStage, type AssetStage, type AssetBytes } from "./asset-stage.ts";
-import { validateScopeProducts } from "../../shared/reaction-chemistry.ts";
-import { resolveData } from "../../shared/topic-blocks.ts";
 import type { TopicBlock } from "../../src/ui/topic/blocks.ts";
 import {
-  abbreviatedGroups,
-  validateAbbreviations,
-  validateAbbreviatedReferences,
-} from "../../shared/molecule-abbreviations.ts";
+  validateChapterTerms,
+  validateTopicSchemes,
+  validateTopicValues,
+} from "./topic-validation.ts";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { measureStage } from "../../shared/stage-timing.ts";
-import { moleculeToolkit } from "../../shared/molecule-toolkit.ts";
 import { patentRoutePaths } from "../../shared/patent-contract.ts";
 import { validatePatentAssets } from "./patent-assets.ts";
 import { parseNote, type Note } from "../../shared/notes-index.ts";
@@ -83,128 +80,26 @@ function context(data: PublishData) {
   );
   return { routes, terms, assets };
 }
-let toolkit: Awaited<ReturnType<typeof moleculeToolkit>> | undefined;
-const checkedSmiles = new Set<string>();
 async function validateTopics(data: PublishData, ctx: BuildContext) {
+  const terms = new Set(Object.keys(ctx.terms));
   for (const topic of data.topics) {
     const where = `sites/${topic.slug}/content.json`;
     for (const chapter of topic.content.chapters)
-      for (const term of chapter.terms ?? [])
-        if (!Object.hasOwn(ctx.terms, term))
-          throw new Error(
-            `${where}: chapter ${chapter.id} uses unknown term ${term}`,
-          );
+      validateChapterTerms(chapter, terms, where);
     await validatePatentAssets(topic.content, topic.slug, data.assets);
-    async function schemes(blocks: TopicBlock[]) {
-      for (const block of blocks) {
-        if (block.type === "tabs")
-          for (const item of block.items) await schemes(item.blocks);
-        if (block.type === "substrate-scope") {
-          toolkit ??= await moleculeToolkit();
-          validateScopeProducts(
-            toolkit,
-            resolveData(block.scope, topic.content.data, where),
-            where,
-          );
-        }
-      }
-    }
     for (const chapter of topic.content.chapters)
-      await schemes(chapter.blocks ?? []);
-
-    async function visit(
-      value: unknown,
-      path: string,
-      parent?: Record<string, unknown>,
-    ): Promise<void> {
-      if (Array.isArray(value)) {
-        for (const [i, item] of value.entries())
-          await visit(item, `${path}[${i}]`, parent);
-        return;
-      }
-      if (!value || typeof value !== "object") return;
-      const flowEdge =
-        parent &&
-        Array.isArray(parent.nodes) &&
-        Array.isArray(parent.edges) &&
-        parent.edges.includes(value);
-      for (const [key, item] of Object.entries(value)) {
-        const location = `${path}.${key}`;
-        if (
-          key === "smiles" &&
-          typeof item === "string" &&
-          item !== "" &&
-          (!checkedSmiles.has(item) || "abbreviations" in value)
-        ) {
-          toolkit ??= await moleculeToolkit();
-          let mol;
-          try {
-            mol = toolkit.get_mol(item);
-            if (!mol?.is_valid())
-              throw new Error(`${where}:${location}: invalid SMILES`);
-            const data = value as Record<string, unknown>;
-            validateAbbreviations(data.abbreviations, `${where}:${path}`);
-            const groups = abbreviatedGroups(
-              toolkit,
-              mol,
-              data.abbreviations,
-              `${where}:${path}`,
-            );
-            const prediction =
-              parent &&
-              (parent.molecule === value ||
-                (Array.isArray(parent.molecules) &&
-                  parent.molecules.includes(value)))
-                ? parent
-                : {};
-            validateAbbreviatedReferences(
-              mol,
-              groups,
-              { ...prediction, ...data },
-              `${where}:${path}`,
-            );
-          } finally {
-            mol?.delete();
-          }
-          checkedSmiles.add(item);
-        }
-        if (
-          typeof item === "string" &&
-          ["src", "url", "href", "to", "image"].includes(key) &&
-          !(key === "to" && flowEdge)
-        ) {
-          if (
-            item &&
-            !(
-              key === "image" &&
-              Object.values(topic.content.data?.sources ?? {}).some(
-                (source) => source.image === item,
-              )
-            ) &&
-            !/^(https?:|mailto:|\/\/)/i.test(item) &&
-            (key !== "image" || item.includes("/"))
-          ) {
-            const url = new URL(
-              item,
-              `http://content.local/sites/${topic.slug}/`,
-            );
-            if (url.origin !== "http://content.local")
-              throw new Error(`${where}:${location}: unsupported link ${item}`);
-            const pathname = url.pathname;
-            const asset =
-              /^\/(?:sites\/[^/]+\/static|notes\/[^/]+\/assets)\//.test(
-                pathname,
-              );
-            if (!(asset ? ctx.assets : ctx.routes).has(decodeURI(pathname)))
-              throw new Error(
-                `${where}:${location}: unknown ${asset ? "resource" : "internal link"} ${item}`,
-              );
-          }
-        }
-        await visit(item, location, value as Record<string, unknown>);
-      }
-    }
-    await visit(topic.content, "content");
+      await validateTopicSchemes(
+        chapter.blocks ?? [],
+        topic.content.data,
+        where,
+      );
+    await validateTopicValues(
+      topic.content,
+      "content",
+      topic.slug,
+      topic.content.data,
+      ctx,
+    );
     for (const collection of Object.values(
       topic.content.data?.collections ?? {},
     ))
@@ -212,9 +107,12 @@ async function validateTopics(data: PublishData, ctx: BuildContext) {
         if (field.kind === "link")
           for (const record of collection.records)
             if (record[field.key])
-              await visit(
+              await validateTopicValues(
                 { href: record[field.key] },
                 `content.data.${collection.route}/${record.id}.${field.key}`,
+                topic.slug,
+                topic.content.data,
+                ctx,
               );
   }
 }
