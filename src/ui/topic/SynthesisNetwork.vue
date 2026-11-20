@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import type { CompoundRef } from "../../../shared/patent-contract.ts";
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useTopic } from "./context.ts";
-import { patentData, type CompoundRef } from "./patent.ts";
+import { patentData } from "./patent.ts";
 import {
   routeSteps,
   routeStats,

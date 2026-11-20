@@ -1,4 +1,4 @@
-import type { PatentData } from "./patent.ts";
+import type { PatentData } from "../../../shared/patent-contract.ts";
 import {
   chapterRoutePath,
   resolveData,

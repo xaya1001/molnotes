@@ -1,3 +1,4 @@
+import type { PatentBlock } from "../../../shared/patent-contract.ts";
 import type { SubstrateScope } from "../../../shared/reaction-scheme.ts";
 import type { Panels } from "../../../shared/panels.ts";
 // The block catalogue as the runtime reads it. shared/topic-blocks.ts is
@@ -242,13 +243,6 @@ export interface ReadingBlock extends BlockBase {
   scope: "topic" | "chapter";
   title?: string;
 }
-
-export type PatentBlock =
-  | { type: "source-pages"; source: string }
-  | { type: "synthesis-network"; network: string }
-  | { type: "record-collection"; collection: string }
-  | { type: "claims"; set: string }
-  | { type: "sar-cases"; cases: string; collection: string };
 
 export type TopicBlock =
   | (BlockBase &
