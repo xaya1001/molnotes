@@ -14,7 +14,15 @@ if (!source || !root)
     "Usage: npm run figure:compile -- --source <figure.yaml> --library <content-root>",
   );
 const library = await readChemicalLibrary(resolve(root));
-const result = await saveFigureSource(resolve(source), resolve(root), library);
+const result = await saveFigureSource(
+  resolve(source),
+  resolve(root),
+  library,
+).catch((error: unknown) => {
+  throw new Error(
+    `${source}: ${error instanceof Error ? error.message : String(error)}`,
+  );
+});
 for (const warning of result.warnings) console.warn(warning);
 for (const line of result.review) console.log(line);
 console.log(result.reference.ref);

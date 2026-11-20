@@ -30,11 +30,25 @@ export function useGroupAlignment(smiles: () => readonly string[]) {
             }
             const minimum =
               Math.min(...molecules.map((mol) => mol.get_num_atoms())) / 2;
+            const linearCentre = molecules.some((mol) => {
+              const graph = JSON.parse(mol.get_json()).molecules[0] as {
+                atoms: unknown[];
+                bonds: { atoms: number[]; bo?: number }[];
+              };
+              return graph.atoms.some((_, i) => {
+                const bonds = graph.bonds.filter((b) => b.atoms.includes(i));
+                return (
+                  bonds.length === 2 &&
+                  (bonds.some((b) => b.bo === 3) ||
+                    bonds.every((b) => b.bo === 2))
+                );
+              });
+            });
             core = toolkit.get_mcs_as_mol(
               list,
               JSON.stringify({
                 AtomCompare: "Any",
-                BondCompare: "Any",
+                BondCompare: linearCentre ? "Order" : "Any",
                 RingMatchesRingOnly: true,
                 CompleteRingsOnly: true,
               }),

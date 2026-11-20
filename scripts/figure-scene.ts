@@ -568,6 +568,7 @@ export async function compileFigure(
         );
         if (
           compound.smiles.includes(".") ||
+          spec.abbreviate === false ||
           JSON.stringify(abbreviations.abbreviations) !==
             JSON.stringify(compound.layout.abbreviations ?? []) ||
           JSON.stringify(abbreviationAtoms) !==
@@ -578,6 +579,9 @@ export async function compileFigure(
           const layout = {
             ...structuredClone(compound.layout),
             abbreviations: abbreviations.abbreviations,
+            ...(spec.abbreviate === false
+              ? { reagentAbbreviate: false as const }
+              : {}),
           };
           delete layout.abbreviationAtoms;
           if (abbreviationAtoms) layout.abbreviationAtoms = abbreviationAtoms;
@@ -1584,6 +1588,7 @@ export async function compileFigure(
       const localNumber = (key: string, spec: StructureInput) =>
         spec.label === undefined ? key : words(spec.label);
       for (const raw of endpoints(step.from)) {
+        const other = !first;
         const quantity =
           typeof raw === "object" && "equivalents" in raw
             ? { equivalents: raw.equivalents }
@@ -1609,6 +1614,7 @@ export async function compileFigure(
             reactants.push({
               id: participantId("reactants", key),
               sourceKey: key,
+              ...(other ? { other: true } : {}),
               ...quantity,
               compound: r.compound.id,
               number: localNumber(key, spec),
@@ -1622,6 +1628,7 @@ export async function compileFigure(
         const participant: Participant = {
           id: participantId("reactants", key),
           sourceKey: key,
+          ...(other ? { other: true } : {}),
           ...quantity,
           compound: r.compound.id,
           number: localNumber(key, spec),
@@ -1803,10 +1810,22 @@ export async function compileFigure(
     if (e.kind === "compound") validateCompound(rd, e);
     if (e.kind === "route") routeMetrics(e, entries);
     if (e.kind === "reaction")
-      validateSceneChemistry(rd, entries, e.scene, e.id);
+      validateSceneChemistry(
+        rd,
+        entries,
+        e.scene,
+        `${sourceFile ?? e.id}`,
+        true,
+      );
     if (e.kind === "mechanism")
       for (const f of e.frames)
-        validateSceneChemistry(rd, entries, f.scene, `${id}/${f.id}`);
+        validateSceneChemistry(
+          rd,
+          entries,
+          f.scene,
+          `${sourceFile ?? id}/${f.id}`,
+          true,
+        );
   }
   return {
     entries,

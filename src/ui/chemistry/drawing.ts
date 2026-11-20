@@ -138,9 +138,43 @@ export function padAtomLabels(svg: Document, atoms: readonly Point[]) {
   const context = globalThis.document.createElement("canvas").getContext("2d")!;
   type Rect = { left: number; right: number; top: number; bottom: number };
   const rectangles = new Map<number, Rect>();
-  for (const text of svg.querySelectorAll<SVGTextElement>(
-    "text[class*='atom-']",
-  )) {
+  const distances = new Map<number, number>();
+  const texts = [
+    ...svg.querySelectorAll<SVGTextElement>("text[class*='atom-']"),
+  ];
+  const atomIndex = (text: SVGTextElement) =>
+    Number(
+      [...text.classList].find((name) => /^atom-\d+$/.test(name))?.slice(5),
+    );
+  const paired = new Map<SVGTextElement, SVGTextElement>();
+  for (let i = 0; i < texts.length - 1; i++) {
+    const first = texts[i],
+      second = texts[i + 1];
+    if (
+      !/^[A-Z]$/.test(first.textContent ?? "") ||
+      !/^[a-z]$/.test(second.textContent ?? "") ||
+      atomIndex(first) !== atomIndex(second)
+    )
+      continue;
+    context.font = `${first.style.fontSize} Arial, Helvetica, sans-serif`;
+    const a = context.measureText(first.textContent!),
+      b = context.measureText(second.textContent!);
+    const x1 = Number(first.getAttribute("x")),
+      x2 = Number(second.getAttribute("x")),
+      y = Number(first.getAttribute("y"));
+    const dx =
+      atoms[atomIndex(first)].x -
+      (x1 - a.actualBoundingBoxLeft + x2 + b.actualBoundingBoxRight) / 2;
+    const dy =
+      atoms[atomIndex(first)].y -
+      (y - a.actualBoundingBoxAscent + y + a.actualBoundingBoxDescent) / 2;
+    for (const text of [first, second]) {
+      text.setAttribute("x", String(Number(text.getAttribute("x")) + dx));
+      text.setAttribute("y", String(Number(text.getAttribute("y")) + dy));
+    }
+    paired.set(second, first);
+  }
+  for (const text of texts) {
     const index = Number(
       [...text.classList].find((name) => /^atom-\d+$/.test(name))?.slice(5),
     );
@@ -154,18 +188,25 @@ export function padAtomLabels(svg: Document, atoms: readonly Point[]) {
       top: y - m.actualBoundingBoxAscent - 1.6,
       bottom: y + m.actualBoundingBoxDescent + 1.6,
     };
-    const previous = rectangles.get(index);
-    rectangles.set(
-      index,
-      previous
-        ? {
-            left: Math.min(previous.left, b.left),
-            right: Math.max(previous.right, b.right),
-            top: Math.min(previous.top, b.top),
-            bottom: Math.max(previous.bottom, b.bottom),
-          }
-        : b,
+    const first = paired.get(text);
+    if (first && rectangles.has(index)) {
+      const prior = rectangles.get(index)!;
+      rectangles.set(index, {
+        left: Math.min(prior.left, b.left),
+        right: Math.max(prior.right, b.right),
+        top: Math.min(prior.top, b.top),
+        bottom: Math.max(prior.bottom, b.bottom),
+      });
+      continue;
+    }
+    const distance = Math.hypot(
+      (b.left + b.right) / 2 - atoms[index].x,
+      (b.top + b.bottom) / 2 - atoms[index].y,
     );
+    if (distance < (distances.get(index) ?? Infinity)) {
+      rectangles.set(index, b);
+      distances.set(index, distance);
+    }
   }
   const inside = (p: Point, b: Rect) =>
     p.x >= b.left && p.x <= b.right && p.y >= b.top && p.y <= b.bottom;
