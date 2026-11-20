@@ -20,6 +20,10 @@ import { conformationGeometry } from "../src/ui/library/conformation-geometry.ts
 import { createHash } from "node:crypto";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import {
+  abbreviationFragments,
+  type AbbreviationName,
+} from "../shared/molecule-abbreviations.ts";
+import {
   atomMaps,
   graphOf,
   validateCompound,
@@ -392,7 +396,10 @@ export async function compileFigure(
   async function resolveStructure(
     spec: StructureInput,
     where: string,
-    protectedMaps: number[] = [],
+    frameMaps: { electronic: number[]; protected: number[] } = {
+      electronic: [],
+      protected: [],
+    },
     piSources: number[][] = [],
   ): Promise<Resolved> {
     if (spec.template) {
@@ -458,6 +465,18 @@ export async function compileFigure(
             (spec.coordgen ?? input.coordgen) ? m.get_molblock() : undefined,
           ),
         );
+        compound.layout.abbreviations =
+          spec.abbreviate === false
+            ? []
+            : [
+                ...new Set(
+                  [...spec.smiles.matchAll(/\[([A-Za-z][A-Za-z0-9]*)\]/g)].map(
+                    (match) => match[1],
+                  ),
+                ),
+              ].filter((name): name is AbbreviationName =>
+                Object.hasOwn(abbreviationFragments, name),
+              );
         entries[cid] = compound;
         generated.add(cid);
       }
@@ -465,11 +484,22 @@ export async function compileFigure(
       const abbreviations = figureAbbreviations(
         rd,
         m,
-        spec,
+        {
+          ...spec,
+          enclose: [
+            ...(spec.enclose ?? []),
+            ...(input.steps ?? []).flatMap(
+              (step) => step.enclose?.[where.replace(/^compounds\./, "")] ?? [],
+            ),
+          ],
+        },
         input.abbreviate,
-        protectedMaps,
+        frameMaps,
         where,
-        kind === "mechanism",
+        kind === "mechanism" &&
+          (frameMaps.electronic.length > 0 ||
+            !!spec.arrows?.length ||
+            (input.category !== "examples" && input.category !== "comparison")),
       );
       const baseTarget = openMolecule(rd, compound.smiles);
       try {
@@ -542,17 +572,22 @@ export async function compileFigure(
         );
         if (match.atoms?.length !== maps.length)
           throw new Error(`${where}: cannot map compound atoms`);
-        const selectedAbbreviations = abbreviations.map((selection) =>
-          typeof selection === "string"
-            ? selection
-            : { ...selection, atom: match.atoms![selection.atom] },
+        const selectedAbbreviations = abbreviations.abbreviations.map(
+          (selection) =>
+            typeof selection === "string"
+              ? selection
+              : { ...selection, atom: match.atoms![selection.atom] },
+        );
+        const abbreviationAtoms = abbreviations.abbreviationAtoms?.map(
+          (i) => compound.atomIds[match.atoms![i]],
         );
         if (
           compound.smiles.includes(".") ||
           spec.abbreviate !== undefined ||
           JSON.stringify(selectedAbbreviations) !==
             JSON.stringify(compound.layout.abbreviations ?? []) ||
-          compound.layout.abbreviationAtoms
+          JSON.stringify(abbreviationAtoms) !==
+            JSON.stringify(compound.layout.abbreviationAtoms)
         ) {
           variant = `${id}_${figureKey(where)}`;
           compound.variants ??= {};
@@ -563,6 +598,7 @@ export async function compileFigure(
           if (spec.abbreviate === undefined) delete layout.reagentAbbreviate;
           else layout.reagentAbbreviate = spec.abbreviate;
           delete layout.abbreviationAtoms;
+          if (abbreviationAtoms) layout.abbreviationAtoms = abbreviationAtoms;
           compound.variants[variant] = layout;
           generated.add(compound.id);
         }
@@ -1195,17 +1231,28 @@ export async function compileFigure(
           }));
         for (const [local, raw] of Object.entries(specs)) {
           const spec = typeof raw === "string" ? { smiles: raw } : raw;
-          const protectedMaps = [
-            ...(frame.arrows ?? []).flatMap((a) => [
-              ...eventRefs(a.from),
-              ...eventRefs(a.to),
+          const mapsFor = (refs: string[]) =>
+            refs
+              .flatMap(eventRefs)
+              .filter((event) => event.local === local)
+              .map((event) => event.number);
+          const frameMaps = {
+            electronic: mapsFor([
+              ...(frame.arrows ?? []).flatMap(({ from, to }) => [from, to]),
+              ...(frame.labels ?? [])
+                .filter((label) => label.kind !== "text")
+                .map((label) => label.at),
             ]),
-            ...(frame.labels ?? [])
-              .filter((label) => label.kind !== "text")
-              .flatMap((label) => eventRefs(label.at)),
-          ]
-            .filter((a) => a.local === local)
-            .map((a) => a.number);
+            protected: mapsFor([
+              ...(frame.labels ?? [])
+                .filter((label) => label.kind === "text")
+                .map((label) => label.at),
+              ...(frame.partialBonds ?? []).flatMap(({ from, to }) => [
+                from,
+                to,
+              ]),
+            ]),
+          };
           const piSources = (frame.arrows ?? [])
             .filter((a) => a.from.startsWith("pi("))
             .map((a) => eventRefs(a.from))
@@ -1217,7 +1264,7 @@ export async function compileFigure(
           const r = await resolveStructure(
             spec,
             `frames.${fid}.compounds.${local}`,
-            protectedMaps,
+            frameMaps,
             piSources,
           );
           resolved.set(local, r);

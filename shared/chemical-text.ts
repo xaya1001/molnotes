@@ -59,7 +59,7 @@ export function chemicalTextRuns(
 ): ChemicalTextRun[] {
   const runs: ChemicalTextRun[] = [];
   const pattern =
-    /\\.|\^\{[^}]*\}|\^(?:\w+(?:,\w+)*|[+\-–‡])|_\{[^}]*\}|_\w|[₀₁₂₃₄₅₆₇₈₉]+|(?<=[A-Za-z)\]])\d+|(?<![A-Za-z])(?:tert|sec|cis|trans|syn|anti|t|n|p|i|m|o|s|R|S|E|Z)-(?=[A-Za-z])|(?<![A-Za-z])(?:dr|ee|er|cat\.|rac)(?![A-Za-z])/gu;
+    /\\.|\^\{[^}]*\}|\^(?:\w+(?:,\w+)*|[+\-–−‡])|_\{[^}]*\}|_\w|[₀₁₂₃₄₅₆₇₈₉]+|(?<=[A-Za-z)\]])\d+|(?<![A-Za-z])(?:tert|sec|cis|trans|syn|anti|t|n|p|i|m|o|s|R|S|E|Z)-(?=[A-Za-z])|(?<![A-Za-z])(?:dr|ee|er|cat\.|rac)(?![A-Za-z])/gu;
   const append = (
     part: string,
     bold: boolean,
@@ -84,14 +84,16 @@ export function chemicalTextRuns(
       append(content.slice(cursor, match.index), bold, italic);
       const token = match[0];
       if (token.startsWith("\\")) append(token.slice(1), bold, italic);
-      else if (token.startsWith("^") || token.startsWith("_"))
+      else if (token.startsWith("^") || token.startsWith("_")) {
+        const script = token[0] === "^" ? "super" : "sub";
+        const value = token[1] === "{" ? token.slice(2, -1) : token.slice(1);
         append(
-          token[1] === "{" ? token.slice(2, -1) : token.slice(1),
+          script === "super" ? value.replace(/^(\d*)[-–]$/, "$1−") : value,
           bold,
           italic,
-          token[0] === "^" ? "super" : "sub",
+          script,
         );
-      else if (/^[₀₁₂₃₄₅₆₇₈₉]+$/.test(token))
+      } else if (/^[₀₁₂₃₄₅₆₇₈₉]+$/.test(token))
         append(
           [...token].map((ch) => String("₀₁₂₃₄₅₆₇₈₉".indexOf(ch))).join(""),
           bold,

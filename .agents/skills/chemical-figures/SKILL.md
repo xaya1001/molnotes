@@ -123,14 +123,15 @@ Orientation propagates outward from the largest uncrowded compound, or the figur
 
 For other reactants, `others: box|text|plus|none` sets the default; `{id,show}` overrides one. `box` draws a bordered structure above the arrow. `text` uses the compound's `text` or its label/name. `none` omits drawing while retaining the structural participant. Compound `bracket: true` adds brackets; `bracket: ts` adds the transition-state sign. Figure `footnote` sits below the whole diagram. Conditions, labels and footnotes support chemical italic prefixes (`n-`, `t-`, `cis-`), `*italic*`/`**bold**`, Unicode subscripts and `^{superscript}`.
 
-Structural substituents are expanded by default.
-Use `abbreviations: [Boc]` on a structure or mechanism frame to fold all matching Boc groups.
-Use `abbreviations: [{name: NO2, atom: 22}]` to fold just the group whose attachment-side nitrogen has map `:22` in the SMILES.
+The [default figure abbreviation list](../../../shared/molecule-abbreviations.ts) folds common protecting groups and terminal functional groups.
+Use `abbreviate: false` to draw a whole structure in full.
+Use `abbreviations: [Ph]` to fold the matching groups of an opt-in name.
+Use `abbreviations: [{name: NO2, atom: 22}]` to fold just the NO2 group whose attachment-side nitrogen has map `:22`.
+Add `expand: true` to that selection to keep that NO2 group expanded while other defaults continue to apply.
+In mechanism frames, groups automatically expand when their hidden atoms carry electron-arrow endpoints, charges, lone pairs, or unpaired electrons.
+Lint reports any explicit fold that hides the participating group.
+Ordinary reaction schemes can abbreviate a participating group.
 Placement determines the label's attachment-facing spelling.
-Leave a group expanded in a mechanism frame when any atom in it bears an electron-arrow endpoint, charge, lone pair, or unpaired electron.
-Lint reports an explicit abbreviation at such a location.
-In an ordinary reaction scheme, a participating group can be abbreviated.
-Use `abbreviate: false` to keep a small reagent expanded.
 Write conditions as ordinary chemical text (`H2O`, `Pd(PPh3)4`).
 Digits become subscripts, and a backslash keeps the next character literal.
 Reagents retain source order.

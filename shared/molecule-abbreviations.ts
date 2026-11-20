@@ -123,6 +123,42 @@ export type AbbreviationName = keyof typeof abbreviationFragments;
 export type MoleculeAbbreviation =
   AbbreviationName | { name: AbbreviationName; atom: number };
 
+export const legacyFigureAbbreviations = [
+  "OTBS",
+  "OTBDPS",
+  "OTES",
+  "OTIPS",
+  "OPMB",
+  "OBn",
+  "OPiv",
+  "OAc",
+  "OBz",
+  "OMOM",
+  "OTs",
+  "OMs",
+  "OTf",
+  "NHBoc",
+  "TMS",
+  "TBS",
+  "Boc",
+  "Ts",
+  "CO₂Me",
+  "CO₂Et",
+  "CO₂tBu",
+  "CN",
+  "SCH2Ph",
+  "CO₂H",
+  "Ac",
+  "NO2",
+] as const satisfies readonly AbbreviationName[];
+
+export const defaultFigureAbbreviations = [
+  ...legacyFigureAbbreviations,
+  "Troc",
+  "Teoc",
+  "OSEM",
+] as const satisfies readonly AbbreviationName[];
+
 // SMARTS and attachment-facing labels from RDKit GetDefaultAbbreviations().
 const rdkitAbbreviations = {
   CO2Et: [
@@ -270,6 +306,7 @@ function findGroups(
   mol: MoleculeHandle,
   selections: readonly MoleculeAbbreviation[] = [],
   where = "molecule",
+  automatic = false,
 ): AbbreviatedGroup[] {
   validateAbbreviations(selections, where);
   if (!selections.length) return [];
@@ -290,10 +327,14 @@ function findGroups(
           : [],
       ),
     );
+    // Match the historical acetyl orientation when selecting figure defaults.
+    // Explicit selections use RDKit's terminal-methyl constraint.
     const query = toolkit.get_qmol(
-      rdkitDefinition(name)?.[0] ??
-        customQueries[name] ??
-        abbreviationFragments[name],
+      automatic && name === "Ac"
+        ? abbreviationFragments.Ac
+        : (rdkitDefinition(name)?.[0] ??
+            customQueries[name] ??
+            abbreviationFragments[name]),
     );
     if (!query) throw new Error(`Invalid abbreviation query: ${name}`);
     try {
@@ -342,11 +383,9 @@ export function matchingAbbreviations(
   toolkit: ChemistryToolkit,
   mol: MoleculeHandle,
   names: readonly AbbreviationName[],
+  automatic = false,
 ) {
-  return findGroups(toolkit, mol, names).map(({ name, atoms }) => ({
-    name,
-    atom: atoms[0],
-  }));
+  return findGroups(toolkit, mol, names, "molecule", automatic);
 }
 
 export function abbreviatedGroups(

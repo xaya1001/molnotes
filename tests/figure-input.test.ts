@@ -604,10 +604,7 @@ test("bracket abbreviations expand before graph deduplication", async () => {
   );
   assert.equal(cs.length, 1);
   assert.ok(!cs[0].smiles.includes("TBS"));
-  assert.deepEqual(
-    compoundAbbreviations(await moleculeToolkit(), cs[0], cs[0].layout),
-    [],
-  );
+  assert.deepEqual(cs[0].layout.abbreviations, ["TBS"]);
   const ring = await compileFigure({
     compounds: { a: "c1ccc(O[PMB])cc1", b: "c1ccc(OCc2ccc(OC)cc2)cc1" },
     steps: [{ from: "a", to: "b" }],
@@ -987,17 +984,18 @@ test("route depiction propagates from its largest anchor independently of compou
   assert.deepEqual(layouts(forward), layouts(reverse));
 });
 
-test("figure substitutions expand by default and select a mapped instance", async () => {
+test("figure substitutions preserve defaults and override one mapped instance", async () => {
   const toolkit = await moleculeToolkit();
   const smiles = "[N+:11](=O)([O-])c1ccc([N+:22](=O)[O-])cc1";
-  for (const [abbreviations, expected] of [
-    [undefined, []],
-    [["NO2"], [11, 22]],
-    [[{ name: "NO2", atom: 22 }], [22]],
+  for (const [settings, expected] of [
+    [{}, [11, 22]],
+    [{ abbreviate: false }, []],
+    [{ abbreviations: [{ name: "NO2", atom: 22 }] }, [22]],
+    [{ abbreviations: [{ name: "NO2", atom: 22, expand: true }] }, [11]],
   ] as const) {
     const result = await compileFigure({
       kind: "gallery",
-      compounds: { a: { smiles, abbreviations } },
+      compounds: { a: { smiles, ...settings } },
     });
     const gallery = result.entries[result.reference.ref] as Mechanism;
     const placement = gallery.frames[0].scene.molecules[0];
@@ -1030,6 +1028,9 @@ test("conditions retain reagent order and chemical digit typography", async () =
     runs.map((r) => r.text).join(""),
     "NaClO2 Pd(PPh3)4 H2O 25 °C C11",
   );
+  const azide = figureTextRuns("N3^-", 20, fonts);
+  assert.equal(azide.map((run) => run.text).join(""), "N3−");
+  assert.ok(azide.at(-1)!.shift < 0);
   const compiled = await compileFigure({
     compounds: { a: "CCO", b: "CC=O", reagent: { text: "PhB(OH)2" } },
     steps: [{ from: ["a", "reagent"], to: "b", above: "Pd(PPh3)4, K2CO3" }],
@@ -1216,6 +1217,21 @@ test("a mechanism rejects shortening an arrow-bearing group, while a reaction ca
     }),
     /frames\.protonation\.abbreviations: Boc must be expanded at mechanism atom 4/,
   );
+  const mechanism = await compileFigure({ kind: "mechanism", frames: [frame] });
+  const entry = mechanism.entries[mechanism.reference.ref] as Mechanism;
+  const mechanismPlacement = entry.frames[0].scene.molecules[0];
+  const mechanismCompound = mechanism.entries[
+    mechanismPlacement.compound
+  ] as Compound;
+  assert.deepEqual(
+    compoundAbbreviations(
+      await moleculeToolkit(),
+      mechanismCompound,
+      mechanismCompound.variants![mechanismPlacement.variant!],
+    ),
+    [],
+  );
+
   const result = await compileFigure({
     compounds: {
       a: { smiles, abbreviations: ["Boc"] },
@@ -1227,7 +1243,12 @@ test("a mechanism rejects shortening an arrow-bearing group, while a reaction ca
   const placement = reaction.scene.molecules[0];
   const compound = result.entries[placement.compound] as Compound;
   const layout = compound.variants![placement.variant!];
-  assert.deepEqual(layout.abbreviations, ["Boc"]);
+  assert.deepEqual(
+    compoundAbbreviations(await moleculeToolkit(), compound, layout).map(
+      (group) => group.name,
+    ),
+    ["Boc"],
+  );
 });
 
 test("a shared substituent keeps its direction when a ring bond is reduced", async () => {

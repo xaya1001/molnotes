@@ -39,7 +39,10 @@ export interface StructureInput extends Omit<
   coordgen?: boolean;
   drawing?: "flat" | "perspective";
   abbreviate?: boolean;
-  abbreviations?: MoleculeAbbreviation[];
+  abbreviations?: (
+    | MoleculeAbbreviation
+    | { name: AbbreviationName; atom: number; expand: true }
+  )[];
   numbers?: boolean;
   notes?: Record<string, Key>;
   arrows?: PushInput[];
@@ -192,6 +195,17 @@ const either =
     }
     fail(p, "invalid value");
   };
+const figureAbbreviations: Rule = (value, where) => {
+  validateAbbreviations(value, where);
+  for (const selection of value ?? []) {
+    if (
+      typeof selection === "object" &&
+      "expand" in selection &&
+      selection.expand !== true
+    )
+      fail(where, "expand must be true");
+  }
+};
 const styles = new Set(["charges", "dots"]);
 const deferred = new Set(["mark", "notes", "bend"]);
 export function validateFigureInput(value: unknown): {
@@ -261,7 +275,7 @@ export function validateFigureInput(value: unknown): {
     drawing: choice("flat", "perspective"),
     ring_h: bool,
     abbreviate: bool,
-    abbreviations: validateAbbreviations,
+    abbreviations: figureAbbreviations,
     numbers: bool,
     notes: map(text),
     arrows,
@@ -503,7 +517,7 @@ export function validateFigureInput(value: unknown): {
                 drawing: structure.drawing,
                 ring_h: bool,
                 abbreviate: bool,
-                abbreviations: validateAbbreviations,
+                abbreviations: figureAbbreviations,
                 bracket: structure.bracket,
                 scale: structure.scale,
                 numbers: bool,
