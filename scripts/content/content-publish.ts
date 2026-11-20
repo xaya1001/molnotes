@@ -381,7 +381,8 @@ async function build(
   for (const input of inputs)
     if (input.kind === "notes")
       for (const note of input.notes) {
-        const file = `${input.unit}/${note.author ? "author/" : ""}${note.slug}.md`;
+        if (note.author) continue;
+        const file = `${input.unit}/${note.slug}.md`;
         const errors = lintProse(
           parseNote(note.source, file).body,
           file,
