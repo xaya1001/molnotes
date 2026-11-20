@@ -220,9 +220,11 @@ test("check rejects forbidden prose forms", async () => {
   for (const [body, expected] of [
     ["内部术语", /forbidden prose term/],
     ["第 3 篇", /chapter announcement/],
-    ["`{样本}`", /chemical name marked as code/],
+    ["`{苯}`", /chemical name marked as code/],
   ] as const) {
     writeFileSync(join(dir, file), note(body));
     assert.match((await checkNote(dir, file)).errors.join("\n"), expected);
   }
+  writeFileSync(join(dir, file), note("`LUMO{+}` 与第一篇药理论文"));
+  assert.deepEqual((await checkNote(dir, file)).errors, []);
 });

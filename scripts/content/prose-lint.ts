@@ -16,10 +16,10 @@ export function lintProse(body: string, file: string, terms: string[]) {
         for (const term of terms)
           if (child.content.includes(term))
             errors.push(`${file}: forbidden prose term: ${term}`);
-        if (/第\s*[0-9０-９一二三四五六七八九十百]+\s*篇/.test(child.content))
+        if (/第\s*[0-9]+\s*篇/.test(child.content))
           errors.push(`${file}: chapter announcement in prose`);
       }
-      if (child.type === "code_inline" && /\{[^{}]+\}/.test(child.content))
+      if (child.type === "code_inline" && /^\{[^{}]+\}$/.test(child.content))
         errors.push(`${file}: chemical name marked as code`);
     }
   }
