@@ -4,6 +4,7 @@ import { writerCommand } from "./content/writer.ts";
 import { setting } from "../shared/settings.ts";
 import { buildSnapshot } from "./content/content-publish.ts";
 import { contentRequests } from "./content/requests.ts";
+import { confirmServedSnapshot } from "./content/content-health.ts";
 import {
   writeSnapshot,
   publishSnapshot,
@@ -24,6 +25,12 @@ if (!valid) {
   console.error(usage);
   process.exit(1);
 }
+async function reportSnapshot(releases: string, name: string) {
+  console.log(`current: ${name}`);
+  await confirmServedSnapshot(releases, name);
+  console.log(`served: ${name}`);
+}
+
 try {
   const figureCache = join(
     process.env.XDG_CACHE_HOME || join(homedir(), ".cache"),
@@ -46,21 +53,17 @@ try {
     });
     await writeSnapshot(resolve(args[0]), built);
     console.log(`${args[0]}: built`);
-  } else if (args.length) {
-    const name = await rollbackSnapshot(
-      setting("MOLNOTES_CONTENT_RELEASES"),
-      args[1],
-    );
-    console.log(`current: ${name}`);
   } else {
-    const name = await publishSnapshot(
-      setting("MOLNOTES_CONTENT_DIR"),
-      setting("MOLNOTES_CONTENT_RELEASES"),
-      {
+    const releases = setting("MOLNOTES_CONTENT_RELEASES");
+    const confirm = (name: string) => reportSnapshot(releases, name);
+    if (args.length) {
+      await confirm(await rollbackSnapshot(releases, args[1]));
+    } else {
+      await publishSnapshot(setting("MOLNOTES_CONTENT_DIR"), releases, {
         figureCache,
-      },
-    );
-    console.log(`current: ${name}`);
+        confirm,
+      });
+    }
   }
 } catch (error) {
   console.error((error as Error).message);

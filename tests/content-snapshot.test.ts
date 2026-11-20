@@ -7,7 +7,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
+import { once } from "node:events";
+import type { AddressInfo } from "node:net";
+import { readlinkSync, writeFileSync } from "node:fs";
 import {
+  chmod,
   cp,
   mkdtemp,
   mkdir,
@@ -24,6 +28,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { buildSnapshot } from "../scripts/content/content-publish.ts";
+import { createWebServer } from "../server/web/web.ts";
+import { openRecords } from "../server/web/records.ts";
 import {
   keptSnapshots,
   publishSnapshot,
@@ -49,8 +55,123 @@ const content = (root: string, ...args: string[]) =>
       MOLNOTES_MATERIALS_DIR: materials,
       MOLNOTES_MATERIALS_CACHE: join(root, "shelf-cache"),
       XDG_CACHE_HOME: join(root, "cache"),
+      PATH: `${join(root, "bin")}:${process.env.PATH}`,
     },
   });
+
+async function servePublication(t: TestContext, root: string) {
+  const current = join(root, "releases/current");
+  const server = createWebServer({
+    records: openRecords(":memory:"),
+    snapshot: current,
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => {
+    server.closeAllConnections();
+    return new Promise((resolve) => server.close(resolve));
+  });
+  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/healthz`;
+  await mkdir(join(root, "bin"), { recursive: true });
+  await writeFile(
+    join(root, "bin/docker"),
+    `#!${process.execPath}
+if (process.argv[2] === "ps" &&
+    process.argv.includes("volume=" + process.env.MOLNOTES_CONTENT_RELEASES)) {
+  console.log("test-container");
+} else if (process.argv[2] === "exec" &&
+           process.argv[3] === "test-container" &&
+           process.argv.at(-1) === "http://127.0.0.1:8080/healthz") {
+  const response = await fetch(${JSON.stringify(url)});
+  if (!response.ok) process.exit(1);
+  console.log(await response.text());
+} else {
+  process.exit(1);
+}
+`,
+    { mode: 0o755 },
+  );
+  return {
+    async served() {
+      const response = await fetch(url);
+      assert.equal(response.status, 200);
+      return (await response.json()).snapshotId;
+    },
+    breakNextSnapshot() {
+      server.prependOnceListener("request", () => {
+        const target = readlinkSync(current);
+        writeFileSync(join(root, "releases", target, "snapshot.json"), "{");
+      });
+    },
+  };
+}
+
+async function publicationFixture(t: TestContext) {
+  const root = await temporary(t);
+  const repo = join(root, "repo");
+  await mkdir(join(repo, "content"), { recursive: true });
+  await writeFile(join(repo, "content/glossary.json"), "[]");
+  const git = (...args: string[]) =>
+    execFileAsync("git", ["-C", repo, ...args]);
+  await git("init", "-q");
+  await git("add", ".");
+  await git(
+    "-c",
+    "user.name=t",
+    "-c",
+    "user.email=t@example.invalid",
+    "commit",
+    "-qm",
+    "sample",
+  );
+  return root;
+}
+
+test("a prune failure warns after publication and the new snapshot is served", async (t) => {
+  const root = await publicationFixture(t);
+  const releases = join(root, "releases");
+  const web = await servePublication(t, root);
+  const older = await Promise.all(
+    Array.from({ length: keptSnapshots }, async (_, index) => {
+      const name = `${"0".repeat(40)}-20260101T00000000${index}Z`;
+      const snapshot = join(releases, name);
+      await mkdir(snapshot, { recursive: true });
+      return snapshot;
+    }),
+  );
+  await writeFile(join(older[0], "snapshot.json"), "{}");
+  await chmod(older[0], 0o555);
+  try {
+    const { stdout, stderr } = await content(root, "publish");
+    const current = await readlink(join(releases, "current"));
+    assert.match(stdout, new RegExp(`current: ${current}`));
+    assert.match(stdout, new RegExp(`served: ${current}`));
+    assert.match(stderr, /warning:.*prune/i);
+    assert.equal(await web.served(), current);
+  } finally {
+    await chmod(older[0], 0o755);
+  }
+});
+
+test("publication fails when the website keeps serving an older snapshot", async (t) => {
+  const root = await publicationFixture(t);
+  const web = await servePublication(t, root);
+  const current = () => readlink(join(root, "releases/current"));
+  await content(root, "publish");
+  const previous = await current();
+  assert.equal(await web.served(), previous);
+  web.breakNextSnapshot();
+  await assert.rejects(content(root, "publish"), (error) => {
+    const switched = readlinkSync(join(root, "releases/current"));
+    assert.notEqual(switched, previous);
+    assert.match(
+      String(error),
+      new RegExp(`expected ${switched}.*served ${previous}`),
+    );
+    return true;
+  });
+  assert.equal(await web.served(), previous);
+});
 
 test("a snapshot holds every unit's rows and its asset files", async (t) => {
   const root = await temporary(t);
@@ -203,7 +324,9 @@ test("publication uses each note's latest commit day in Shanghai when it follows
   await writeFile(join(repo, "README.md"), "Unrelated change");
   await commit("2026-01-03T00:00:00Z");
 
-  const name = await publishSnapshot(contentRoot, releases);
+  await servePublication(t, root);
+  await content(root, "publish");
+  const name = await readlink(join(releases, "current"));
   const snapshot: Snapshot = JSON.parse(
     await readFile(join(releases, name, "snapshot.json"), "utf8"),
   );
@@ -217,6 +340,7 @@ test("publication uses each note's latest commit day in Shanghai when it follows
 
 test("publish switches current to the committed snapshot, keeps five and rolls back", async (t) => {
   const root = await temporary(t);
+  const web = await servePublication(t, root);
   const repo = join(root, "repo");
   const releases = join(root, "releases");
   const git = (...args: string[]) =>
@@ -286,7 +410,12 @@ test("publish switches current to the committed snapshot, keeps five and rolls b
   // Older snapshots beyond the newest five are removed.
   const shelf = { materials, cache: join(root, "shelf-cache") };
   const publish = () =>
-    publishSnapshot(join(repo, "content"), releases, { shelf });
+    publishSnapshot(join(repo, "content"), releases, {
+      shelf,
+      async confirm(name) {
+        assert.equal(await web.served(), name);
+      },
+    });
   const published = [firstName];
   for (let i = 0; i < keptSnapshots; i++) {
     await commit();
@@ -840,6 +969,7 @@ test("publication rejects a substrate row that differs from its instantiated pro
 
 test("content publish uses the configured Python when PATH selects one without PDF dependencies", async (t) => {
   const root = await temporary(t);
+  await servePublication(t, root);
   const repo = join(root, "repo");
   const python = (
     await execFileAsync("python3", [
@@ -876,7 +1006,7 @@ test("content publish uses the configured Python when PATH selects one without P
     {
       env: {
         ...process.env,
-        PATH: `${shadow}:/usr/bin:/bin`,
+        PATH: `${shadow}:${join(root, "bin")}:/usr/bin:/bin`,
         MOLNOTES_PYTHON: python,
         MOLNOTES_CONTENT_DIR: join(repo, "content"),
         MOLNOTES_CONTENT_RELEASES: join(root, "releases"),

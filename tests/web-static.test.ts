@@ -213,7 +213,9 @@ test("a new snapshot target is served from the next request; a broken one keeps 
     assert.equal((await fetch(base + "/healthz")).status, 503);
     await snapshot(root, "one", directory("First"));
     await point(root, "one");
-    assert.equal((await fetch(base + "/healthz")).status, 200);
+    const firstHealth = await fetch(base + "/healthz");
+    assert.equal(firstHealth.status, 200);
+    assert.equal((await firstHealth.json()).snapshotId, "one");
     assert.equal(await title(), "First");
     await snapshot(root, "two", directory("Second"));
     await point(root, "two");
@@ -223,7 +225,9 @@ test("a new snapshot target is served from the next request; a broken one keeps 
     await point(root, "broken");
     assert.equal(await title(), "Second");
     assert.equal(await title(), "Second");
-    assert.equal((await fetch(base + "/healthz")).status, 200);
+    const fallbackHealth = await fetch(base + "/healthz");
+    assert.equal(fallbackHealth.status, 200);
+    assert.equal((await fallbackHealth.json()).snapshotId, "two");
     assert.equal(errors.filter((e) => e.includes("broken")).length, 1);
     await point(root, "one");
     assert.equal(await title(), "First");

@@ -59,10 +59,10 @@ async function assetHashes(
  * whose hash matches the same path in the `previous` snapshot is hard-linked
  * instead of written, so unchanged files take no extra space.
  */
-export async function writeSnapshot(
+async function writeSnapshotFiles(
   output: string,
-  { snapshot, files, dispose }: BuiltSnapshot,
-  { previous }: { previous?: string } = {},
+  { snapshot, files }: BuiltSnapshot,
+  previous?: string,
 ) {
   const temporary = join(
     dirname(output),
@@ -102,8 +102,14 @@ export async function writeSnapshot(
     if (errorCode(error) === "ENOTEMPTY" || errorCode(error) === "EEXIST")
       throw new Error(`${output}: already exists`);
     throw error;
+  }
+}
+
+export async function writeSnapshot(output: string, built: BuiltSnapshot) {
+  try {
+    await writeSnapshotFiles(output, built);
   } finally {
-    await dispose();
+    await built.dispose();
   }
 }
 
@@ -141,13 +147,22 @@ async function prune(releases: string) {
 
 /**
  * Builds the committed content at `root` into `<releases>/<commit>-<build
- * time>/` and switches `current` to it. The content directory must be clean
- * at HEAD, before and after the build. Returns the snapshot directory name.
+ * time>/`, switches `current`, and confirms that the site loaded it before
+ * pruning older snapshots. The source must be clean at HEAD before and
+ * after the build. Returns the snapshot directory name.
  */
 export async function publishSnapshot(
   root: string,
   releases: string,
-  { shelf, figureCache }: { shelf?: Shelf; figureCache?: string } = {},
+  {
+    shelf,
+    figureCache,
+    confirm,
+  }: {
+    shelf?: Shelf;
+    figureCache?: string;
+    confirm: (name: string) => Promise<void>;
+  },
 ) {
   const source = await committedSource(root, ["."]);
   const built = await buildSnapshot(root, {
@@ -160,14 +175,25 @@ export async function publishSnapshot(
     await mkdir(releases, { recursive: true });
     const name = nameOf(source.commit, built.snapshot.builtAt);
     const current = await currentName(releases);
-    await writeSnapshot(join(releases, name), built, {
-      previous: current && join(releases, current),
-    });
+    await writeSnapshotFiles(
+      join(releases, name),
+      built,
+      current && join(releases, current),
+    );
     await switchCurrent(releases, name);
-    await prune(releases);
+    await confirm(name);
+    await prune(releases).catch((error: Error) =>
+      console.warn(`Warning: could not prune snapshots: ${error.message}`),
+    );
     return name;
   } finally {
-    await built.dispose();
+    await built
+      .dispose()
+      .catch((error: Error) =>
+        console.warn(
+          `Warning: could not remove staged assets: ${error.message}`,
+        ),
+      );
   }
 }
 

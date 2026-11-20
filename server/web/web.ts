@@ -10,7 +10,7 @@ import { contentSnapshot } from "./content-cache.ts";
 import { createServer, request as httpRequest } from "node:http";
 import { pipeline } from "node:stream/promises";
 import { open, readFile, stat } from "node:fs/promises";
-import { resolve, extname, sep } from "node:path";
+import { basename, resolve, extname, sep } from "node:path";
 import { setting } from "../../shared/settings.ts";
 import { contentType, byteRange } from "../../shared/assets.ts";
 import {
@@ -81,9 +81,9 @@ export function createWebServer({
         return;
       }
       if (path === "/healthz") {
-        await content();
+        const loaded = await content();
         recordsReady(records);
-        send(res, 200, { status: "ok" });
+        send(res, 200, { status: "ok", snapshotId: basename(loaded.root) });
         return;
       }
       const topicMatch = /^\/api\/topics\/([a-z0-9-]+)$/.exec(path);
