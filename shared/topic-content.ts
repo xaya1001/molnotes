@@ -74,9 +74,17 @@ export function validateTopicChapter(
   data: Record<string, unknown> | undefined,
   name: string,
   found: BlockReferences,
+  chapterIds?: Set<unknown>,
 ): asserts chapter is ChapterHead & { title: string; blocks: TopicBlock[] } {
   assert(isObject(chapter), `${name}: each chapter must be an object`);
   text(chapter.id, `${name}: chapter id`);
+  if (chapterIds) {
+    assert(
+      !chapterIds.has(chapter.id),
+      `${name}: duplicate chapter ${chapter.id}`,
+    );
+    chapterIds.add(chapter.id);
+  }
   const where = `${name}: chapter ${chapter.id}`;
   text(chapter.title, `${where} title`);
   if (chapter.note !== undefined) {
@@ -120,12 +128,7 @@ function checkTopicContent(
   };
   const chapters: ChapterHead[] = [];
   for (const chapter of content.chapters) {
-    validateTopicChapter(chapter, content.data, name, found);
-    assert(
-      !chapterIds.has(chapter.id),
-      `${name}: duplicate chapter ${chapter.id}`,
-    );
-    chapterIds.add(chapter.id);
+    validateTopicChapter(chapter, content.data, name, found, chapterIds);
     chapters.push(chapter);
   }
 
