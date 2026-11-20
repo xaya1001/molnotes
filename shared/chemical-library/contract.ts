@@ -534,6 +534,7 @@ export function validateLibraryEntry(
       "title",
       "sources",
       "sourceFile",
+      "sourceHash",
       "sourceKey",
       "owner",
       "footnote",

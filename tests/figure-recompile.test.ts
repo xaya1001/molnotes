@@ -1,12 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile, rename } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { promisify } from "node:util";
 import { execFile } from "node:child_process";
 import { parse, stringify } from "yaml";
 import { readChemicalLibrary } from "../scripts/content/chemical-library.ts";
+import { buildSnapshot } from "../scripts/content/content-publish.ts";
 import { saveFigureSource } from "../scripts/figure-save.ts";
 
 const run = promisify(execFile);
@@ -135,18 +136,76 @@ test("selected sources report new entries and remove only obsolete owned reactio
   ]);
   assert.match(
     result.stdout,
-    /2 sources, 1 added, 2 modified, 1 deleted, 0 failed/,
+    /2 sources, 1 added, 3 modified, 1 deleted, 0 failed/,
   );
   assert.ok(result.stdout.includes(`deleted: ${removed}`));
   const current = await readChemicalLibrary(root);
   assert.ok(current.entries[retained]);
   assert.equal(current.entries[removed], undefined);
   assert.equal(current.entries[route.id].id, route.id);
-  assert.deepEqual(current.entries[retained], saved.entries[retained]);
+  assert.deepEqual(
+    {
+      ...current.entries[retained],
+      sourceHash: saved.entries[retained].sourceHash,
+    },
+    saved.entries[retained],
+  );
+  assert.notEqual(
+    current.entries[retained].sourceHash,
+    saved.entries[retained].sourceHash,
+  );
   assert.ok(
     Object.values(current.entries).some(
       (entry) => entry.kind === "conformation",
     ),
   );
   assert.equal(parse(await readFile(selected, "utf8")).steps.length, 1);
+});
+
+test("changing between conformation and mechanism rejects without writing entries", async () => {
+  for (const [first, second] of [
+    [
+      "kind: mechanism\nframes: [{id: event, smiles: CCO}]\n",
+      "kind: conformation\ntemplate: chair\n",
+    ],
+    [
+      "kind: conformation\ntemplate: chair\n",
+      "kind: mechanism\nframes: [{id: event, smiles: CCO}]\n",
+    ],
+  ]) {
+    const root = await mkdtemp(join(tmpdir(), "figure-kind-"));
+    const source = join(root, "input.yaml");
+    await writeFile(source, first);
+    const library = await readChemicalLibrary(root);
+    const saved = await saveFigureSource(source, root, library);
+    const before = await readFile(library.files[saved.reference.ref], "utf8");
+    const savedSource = join(root, saved.sourceFile);
+    await writeFile(savedSource, second);
+    await assert.rejects(
+      saveFigureSource(savedSource, root, library),
+      /Changing figure kind/,
+    );
+    assert.equal(
+      await readFile(library.files[saved.reference.ref], "utf8"),
+      before,
+    );
+    assert.equal(await readFile(savedSource, "utf8"), second);
+  }
+});
+
+test("publication rejects a changed or missing figure source", async () => {
+  const root = await mkdtemp(join(tmpdir(), "figure-source-gate-"));
+  const source = join(root, "input.yaml");
+  await writeFile(source, "kind: conformation\ntemplate: chair\n");
+  await writeFile(join(root, "glossary.json"), "[]");
+  const saved = await saveFigureSource(
+    source,
+    root,
+    await readChemicalLibrary(root),
+  );
+  const stored = join(root, saved.sourceFile);
+  await writeFile(stored, "kind: conformation\ntemplate: boat\n");
+  await assert.rejects(buildSnapshot(root), new RegExp(saved.reference.ref));
+  await unlink(stored);
+  await assert.rejects(buildSnapshot(root), new RegExp(saved.reference.ref));
 });

@@ -675,7 +675,16 @@ Run `npm run figure:lint -- [<figure.yaml>... | --library <content-root>]` to li
 
 ### Figure YAML compilation
 
-Run `npm run figure:compile -- --source <figure.yaml> --library <content-root>`. One document describes a route (default), mechanism, gallery, grouped substrate scope, catalytic cycle, Markush formula or standalone `kind: conformation` drawing. The compiler stores the exact input in `library/sources/<figure-id>.yaml`; each generated figure records `sourceFile` relative to the content root, and route reactions also record `owner`. The first compilation derives its stable ID from the original source path. Recompiling that path or the saved source retains the ID, including after edits; unchanged input produces no file changes. A one-step route creates `rxn_…`, a longer route creates `rte_…` and owned `rxn_…` steps, and mechanisms, galleries, scopes and cycles create `mec_…`. Generated geometry uses three decimal places; optional empty arrays and empty focus groups are omitted. Step IDs and frame IDs are stable within a source; omitted route step IDs use their one-based position. Start a new source when changing between a single reaction, a multi-step route and a mechanism.
+Run `npm run figure:compile -- --source <figure.yaml> --library <content-root>`.
+One document describes a route (default), mechanism, gallery, grouped substrate scope, catalytic cycle, Markush formula or standalone `kind: conformation` drawing.
+The compiler stores the exact input in `library/sources/<figure-id>.yaml`; each generated figure records `sourceFile` relative to the content root and `sourceHash` of the source bytes, and route reactions also record `owner`.
+Publication verifies the saved source against the digest.
+The first compilation derives its stable ID from the original source path.
+Recompiling that path or the saved source retains the ID, including after edits; unchanged input produces no file changes.
+A one-step route creates `rxn_…`, a longer route creates `rte_…` and owned `rxn_…` steps, and mechanisms, galleries, scopes and cycles create `mec_…`.
+Generated geometry uses three decimal places; optional empty arrays and empty focus groups are omitted.
+Step IDs and frame IDs are stable within a source; omitted route step IDs use their one-based position.
+Start a new source when changing between a single reaction, a multi-step route and a mechanism.
 
 A SMILES structure or mechanism frame can select `drawing: perspective|flat`. The compiler matches the largest registered skeleton and constrains it to the saved view, then lays out external substituents. An explicit drawing request with no matching skeleton fails. Omitting `drawing` uses the ordinary layout. The selected layout stores its scaffold identity, matched bonds, projected depths or declared flat overpasses. Perspective depth changes plain single-bond weight and leaves gaps in rear bonds at crossings; native stereochemical wedges and the molecular graph remain authoritative. Template cores and bridges attached at both ends retain their projected lengths; singly attached external groups retain ordinary bond-length checks. Skeleton preparation adds the required ring stereocentre H before constraining and tidying the view, and saves their coordinates and wedge bonds. The native renderer draws those saved hydrogens without adding another set.
 

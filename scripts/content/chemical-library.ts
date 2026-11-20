@@ -176,3 +176,24 @@ export function libraryUsage(
   };
   return { snapshot: { entries, uses, audit }, references };
 }
+
+/** Verify saved figure sources before publishing their generated entries. */
+export async function verifyFigureSources(root: string, entries: Library) {
+  for (const entry of Object.values(entries)) {
+    if (!entry.sourceFile) continue;
+    let source: Buffer;
+    try {
+      source = await readFile(join(root, entry.sourceFile));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT")
+        throw new Error(
+          `${entry.id}: missing figure source ${entry.sourceFile}`,
+        );
+      throw error;
+    }
+    if (entry.sourceHash !== sha256(source))
+      throw new Error(
+        `${entry.id}: figure source differs from generated entry ${entry.sourceFile}`,
+      );
+  }
+}

@@ -84,6 +84,7 @@ async function fixture(t: TestContext) {
     directory,
     renderer: "renderer-one",
     diagnostics: "diagnostics-one",
+    thumbnailRenderer: "browser-one",
     templates: {},
     async createRunner() {
       starts++;
@@ -384,4 +385,13 @@ test("template changes rebuild only the views that consume that template", async
   const cached = await run();
   assert.equal(f.calls.length, 0);
   assert.equal(cached.stats.inputHits, 6);
+});
+
+test("a thumbnail renderer change renders thumbnails again", async (t) => {
+  const f = await fixture(t);
+  await f.run();
+  const thumbnails = f.thumbnails();
+  f.options.thumbnailRenderer = "browser-two";
+  await f.run();
+  assert.equal(f.thumbnails(), thumbnails * 2);
 });

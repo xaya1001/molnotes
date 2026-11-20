@@ -89,28 +89,48 @@ export async function figureBuildVersions(css: string) {
       .update(file)
       .update(await readFile(new URL(import.meta.resolve(file))));
   fonts.update(await readFile(await nativeFigureFontFile()));
-  const [preparation, diagnostics, dependencies, diagnosticDependencies] =
-    await Promise.all([
-      figureRendererFingerprint(root, [
-        "src/ui/library/prepare.ts",
-        "scripts/figure-worker.ts",
-        "src/ui/library/geometry-tree.ts",
-        "shared/molecule-toolkit.ts",
-        "scripts/figure-fonts.ts",
-        "scripts/chemical-toolkit.py",
-        "scripts/chemical-toolkit-io.ts",
-        "scripts/requirements-material.txt",
-      ]),
-      figureRendererFingerprint(root, ["scripts/figure-diagnostics.ts"]),
-      figureDependencyFingerprint(root, [
-        "fontkit",
-        "svg-parser",
-        "svgpath",
-        "svg-path-properties",
-      ]),
-      figureDependencyFingerprint(root, ["svgpath", "svg-path-properties"]),
-    ]);
+  const [
+    preparation,
+    diagnostics,
+    dependencies,
+    diagnosticDependencies,
+    thumbnailRenderer,
+    thumbnailDependencies,
+  ] = await Promise.all([
+    figureRendererFingerprint(root, [
+      "src/ui/library/prepare.ts",
+      "scripts/figure-worker.ts",
+      "src/ui/library/geometry-tree.ts",
+      "shared/molecule-toolkit.ts",
+      "scripts/figure-fonts.ts",
+      "scripts/chemical-toolkit.py",
+      "scripts/chemical-toolkit-io.ts",
+      "scripts/requirements-material.txt",
+    ]),
+    figureRendererFingerprint(root, ["scripts/figure-diagnostics.ts"]),
+    figureDependencyFingerprint(root, [
+      "fontkit",
+      "svg-parser",
+      "svgpath",
+      "svg-path-properties",
+    ]),
+    figureDependencyFingerprint(root, ["svgpath", "svg-path-properties"]),
+    figureRendererFingerprint(root, [
+      "scripts/figure-browser.ts",
+      "src/ui/library/image-svg.ts",
+      "src/ui/styles/tokens.css",
+      "src/ui/styles/base.css",
+    ]),
+    figureDependencyFingerprint(root, [
+      "@playwright/test",
+      "vite",
+      "@vitejs/plugin-vue",
+    ]),
+  ]);
   return {
+    thumbnailRenderer: sha256(
+      stableFigureValue({ thumbnailRenderer, thumbnailDependencies }),
+    ),
     templates: Object.fromEntries(
       [...conformations].map(([id, data]) => [
         id,

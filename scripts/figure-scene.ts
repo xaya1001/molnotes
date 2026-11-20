@@ -239,7 +239,14 @@ export async function compileFigure(
   sourceKey = "example",
   options: { style?: FigureStyle } = {},
 ) {
-  if (isObject(inputValue) && inputValue.kind === "conformation") {
+  const previous = Object.values(existing).find(
+    (e) => e.sourceKey === sourceKey && !e.owner,
+  );
+  const conformation =
+    isObject(inputValue) && inputValue.kind === "conformation";
+  if (previous && (previous.kind === "conformation") !== conformation)
+    throw new Error("Changing figure kind requires a new source file");
+  if (conformation) {
     validateConformationSpec(inputValue, "figure", [
       "kind",
       "title",
@@ -292,9 +299,6 @@ export async function compileFigure(
     entries: Library = structuredClone(existing),
     generated = new Set<string>();
   for (const entry of Object.values(entries)) finishFigureEntry(entry);
-  const previous = Object.values(entries).find(
-    (e) => e.sourceKey === sourceKey && !e.owner,
-  );
   const kind = input.kind ?? "route",
     count = input.steps?.length ?? 0;
   const routeGraph =

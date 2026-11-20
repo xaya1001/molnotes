@@ -16,6 +16,7 @@ export type ArrowKind =
 export interface EntryBase {
   style?: { bond?: number; width?: number };
   sourceFile?: string;
+  sourceHash?: string;
   sourceKey?: string;
   owner?: string;
   footnote?: string;

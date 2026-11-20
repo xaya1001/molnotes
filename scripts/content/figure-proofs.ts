@@ -42,6 +42,7 @@ export interface ProofOptions {
   directory: string;
   renderer: string;
   diagnostics: string;
+  thumbnailRenderer: string;
   templates: Record<string, string>;
   stage?: AssetStage;
   createRunner(): Promise<ProofRunner>;
@@ -193,7 +194,13 @@ export async function verifyFigureProofs(
             }
             let bytes: Buffer | undefined;
             if (job.thumbnail) {
-              bytes = await cache.thumbnail(prepared.meta.geometryKey);
+              const thumbnailKey = sha256(
+                stableFigureValue({
+                  geometry: prepared.meta.geometryKey,
+                  renderer: options.thumbnailRenderer,
+                }),
+              );
+              bytes = await cache.thumbnail(thumbnailKey);
               if (!bytes) {
                 const { meta, svg } = prepared;
                 stats.thumbnails++;
@@ -211,7 +218,7 @@ export async function verifyFigureProofs(
                     slot,
                   ),
                 );
-                await cache.saveThumbnail(meta.geometryKey, bytes);
+                await cache.saveThumbnail(thumbnailKey, bytes);
               }
             }
             return { ...job, prepared, diagnostics, bytes };

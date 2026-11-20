@@ -1,5 +1,6 @@
 import { readFile, writeFile, mkdir, unlink } from "node:fs/promises";
 import { resolve, join, dirname } from "node:path";
+import { sha256 } from "../shared/assets.ts";
 import { parse, stringify } from "yaml";
 import { compileFigure, figureKey } from "./figure-scene.ts";
 import type { Library } from "../shared/chemical-library/types.ts";
@@ -51,6 +52,7 @@ export async function saveFigureSource(
   const changes: EntryChange[] = [];
   for (const id of result.generated) {
     const entry = result.entries[id];
+    if (entry.sourceFile) entry.sourceHash = sha256(text);
     const path =
       files[id] ?? join(root, "library", folders[entry.kind], id + ".yaml");
     const after = path.endsWith(".json")

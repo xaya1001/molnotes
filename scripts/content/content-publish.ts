@@ -1,4 +1,8 @@
-import { readChemicalLibrary, libraryUsage } from "./chemical-library.ts";
+import {
+  readChemicalLibrary,
+  verifyFigureSources,
+  libraryUsage,
+} from "./chemical-library.ts";
 import { verifyLibraryFigures } from "./figure-build.ts";
 import { rejectContentRequests } from "./requests.ts";
 import { assetStage, type AssetStage, type AssetBytes } from "./asset-stage.ts";
@@ -369,6 +373,7 @@ async function build(
   const library = await measureStage("publish.library", () =>
     readChemicalLibrary(root, stage),
   );
+  await verifyFigureSources(root, library.entries);
   await measureStage("publish.read", async () => {
     for (const unit of await contentUnits(root))
       inputs.push({
