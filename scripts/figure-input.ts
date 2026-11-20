@@ -7,6 +7,12 @@ import {
   type ConformationSpec,
 } from "../shared/chemical-templates/conformation.ts";
 import { isObject } from "../shared/json.ts";
+import {
+  optionalFigureAbbreviations,
+  validateAbbreviations,
+  type AbbreviationName,
+  type MoleculeAbbreviation,
+} from "../shared/molecule-abbreviations.ts";
 import type { ArrowKind } from "../shared/chemical-library/types.ts";
 
 type Key = string | number;
@@ -34,6 +40,10 @@ export interface StructureInput extends Omit<
   coordgen?: boolean;
   drawing?: "flat" | "perspective";
   abbreviate?: boolean;
+  abbreviations?: (
+    | MoleculeAbbreviation
+    | { name: AbbreviationName; atom: number; expand: true }
+  )[];
   numbers?: boolean;
   notes?: Record<string, Key>;
   arrows?: PushInput[];
@@ -102,7 +112,7 @@ export interface FigureInput {
   bond?: number;
   width?: number;
   scale?: number;
-  abbreviate?: ("Ph" | "Trt" | "Bz")[];
+  abbreviate?: AbbreviationName[];
   kind?: "route" | "mechanism" | "markush" | "gallery" | "scope" | "cycle";
   core?: MarkushFigureData["core"];
   groups?: MarkushFigureData["groups"];
@@ -186,6 +196,17 @@ const either =
     }
     fail(p, "invalid value");
   };
+const figureAbbreviations: Rule = (value, where) => {
+  validateAbbreviations(value, where);
+  for (const selection of value ?? []) {
+    if (
+      typeof selection === "object" &&
+      "expand" in selection &&
+      selection.expand !== true
+    )
+      fail(where, "expand must be true");
+  }
+};
 const styles = new Set(["charges", "dots"]);
 const deferred = new Set(["mark", "notes", "bend"]);
 export function validateFigureInput(value: unknown): {
@@ -255,6 +276,7 @@ export function validateFigureInput(value: unknown): {
     drawing: choice("flat", "perspective"),
     ring_h: bool,
     abbreviate: bool,
+    abbreviations: figureAbbreviations,
     numbers: bool,
     notes: map(text),
     arrows,
@@ -358,7 +380,7 @@ export function validateFigureInput(value: unknown): {
     forming: bool,
     ring_h: bool,
     footnote: text,
-    abbreviate: list(choice("Ph", "Trt", "Bz")),
+    abbreviate: list(choice(...optionalFigureAbbreviations)),
     mark: string,
   };
   const structureRule: Rule = (v, p) => {
@@ -495,6 +517,8 @@ export function validateFigureInput(value: unknown): {
                 coordgen: bool,
                 drawing: structure.drawing,
                 ring_h: bool,
+                abbreviate: bool,
+                abbreviations: figureAbbreviations,
                 bracket: structure.bracket,
                 scale: structure.scale,
                 numbers: bool,

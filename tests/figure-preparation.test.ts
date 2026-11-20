@@ -1920,7 +1920,10 @@ test("compiled ester labels clear bonds and adjacent labels after saving aligned
     title: "Aligned ester",
     anchor: "b",
     compounds: {
-      a: "CCC(c1ccccc1)(C(=O)OCC)CCC(=O)N",
+      a: {
+        smiles: "CCC(c1ccccc1)(C(=O)OCC)CCC(=O)N",
+        abbreviations: ["CO2Et"],
+      },
       b: "CCC1(c2ccccc2)CCC(=O)NC1=O",
     },
     steps: [{ from: "a", to: "b" }],

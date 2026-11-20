@@ -1,3 +1,4 @@
+import type { AbbreviatedGroup } from "../shared/molecule-abbreviations.ts";
 import {
   Worker,
   MessageChannel,
@@ -22,8 +23,7 @@ export interface PythonToolkit extends ChemicalToolkit {
   ): [number, number][];
   condense(
     mol: ChemicalMolecule,
-    definitions: string,
-    roots: number[],
+    groups: readonly AbbreviatedGroup[],
   ): { mol: ChemicalMolecule; original: number[] };
   alignAtomMap(
     mol: ChemicalMolecule,
@@ -268,12 +268,8 @@ export function pythonToolkit(connection: ChemicalConnection): PythonToolkit {
         return [values[0], values[1]];
       });
     },
-    condense: (mol, definitions, roots) => {
-      const value = call("condense_abbreviations", [
-        handle(mol),
-        definitions,
-        roots,
-      ]);
+    condense: (mol, groups) => {
+      const value = call("condense_abbreviations", [handle(mol), groups]);
       if (!isObject(value))
         throw new Error("Invalid native abbreviation result");
       const shown = molecule(value.molecule);

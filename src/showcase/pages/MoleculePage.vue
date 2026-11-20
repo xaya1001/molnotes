@@ -64,7 +64,7 @@ const excerpt = {
       <MoleculeView
         name="缩写样品"
         smiles="CCOC(=O)C1CCN(CC1)C(=O)OC(C)(C)C"
-        :abbreviations="['Boc', 'CO₂Et']"
+        :abbreviations="['Boc', 'CO2Et']"
         selectable="atoms"
         v-model:selected="abbreviatedSelection"
       />

@@ -344,12 +344,13 @@ test("condensed reacting groups retain the source orientation across frames", as
       {
         id: "first",
         smiles: "CC(C)([O-:3])C#N.[H:4][O+:5]([H])[H]",
+        abbreviations: ["CN"],
         arrows: [
           { from: "lp(3)", to: "atom(4)" },
           { from: "bond(4,5)", to: "atom(5)" },
         ],
       },
-      { id: "second", smiles: "CC(C)(O)C#N" },
+      { id: "second", smiles: "CC(C)(O)C#N", abbreviations: ["CN"] },
     ],
   });
   const frames = (compiled.entries[compiled.reference.ref] as Mechanism).frames;
@@ -983,67 +984,32 @@ test("route depiction propagates from its largest anchor independently of compou
   assert.deepEqual(layouts(forward), layouts(reverse));
 });
 
-test("figure abbreviations follow defaults, optional groups and arrow-visible atoms", async () => {
+test("figure substitutions preserve defaults and override one mapped instance", async () => {
   const toolkit = await moleculeToolkit();
-  const input = {
-    compounds: { a: "CCNC(=O)OC(C)(C)C", b: "CCC(=O)OC(C)(C)C" },
-    steps: [{ from: "a", to: "b" }],
-  };
-  const compiled = await compileFigure(input);
-  const reaction = compiled.entries[compiled.reference.ref] as Reaction;
-  const active = (
-    result: typeof compiled,
-    placement: Reaction["scene"]["molecules"][number],
-  ) => {
+  const smiles = "[N+:11](=O)([O-])c1ccc([N+:22](=O)[O-])cc1";
+  for (const [settings, expected] of [
+    [{}, [11, 22]],
+    [{ abbreviate: false }, []],
+    [{ abbreviations: [{ name: "NO2", atom: 22 }] }, [22]],
+    [{ abbreviations: [{ name: "NO2", atom: 22, expand: true }] }, [11]],
+  ] as const) {
+    const result = await compileFigure({
+      kind: "gallery",
+      compounds: { a: { smiles, ...settings } },
+    });
+    const gallery = result.entries[result.reference.ref] as Mechanism;
+    const placement = gallery.frames[0].scene.molecules[0];
     const compound = result.entries[placement.compound] as Compound;
     const layout = placement.variant
       ? compound.variants![placement.variant]
       : compound.layout;
-    return compoundAbbreviations(toolkit, compound, layout).map((g) => g.name);
-  };
-  assert.deepEqual(active(compiled, reaction.scene.molecules[0]), ["NHBoc"]);
-  const off = await compileFigure({
-    ...input,
-    compounds: {
-      ...input.compounds,
-      a: { smiles: input.compounds.a, abbreviate: false },
-    },
-  });
-  assert.deepEqual(
-    active(
-      off,
-      (off.entries[off.reference.ref] as Reaction).scene.molecules[0],
-    ),
-    [],
-  );
-  const optional = await compileFigure({
-    abbreviate: ["Ph"],
-    compounds: { a: "CCc1ccccc1", b: "CCOc1ccccc1" },
-    steps: input.steps,
-  });
-  assert.ok(
-    active(
-      optional,
-      (optional.entries[optional.reference.ref] as Reaction).scene.molecules[0],
-    )!.includes("Ph"),
-  );
-  const arrows = await compileFigure({
-    compounds: {
-      a: {
-        smiles: "[CH3:1][NH:2][C:3](=[O:4])OC(C)(C)C",
-        arrows: [{ from: "pi(3,4)", to: "atom(4)" }],
-      },
-      b: input.compounds.b,
-    },
-    steps: input.steps,
-  });
-  assert.deepEqual(
-    active(
-      arrows,
-      (arrows.entries[arrows.reference.ref] as Reaction).scene.molecules[0],
-    ),
-    [],
-  );
+    const groups = compoundAbbreviations(toolkit, compound, layout);
+    // The second written nitro substituent is rooted at the N following the ring.
+    assert.deepEqual(
+      groups.map((group) => (group.atoms[0] === 0 ? 11 : 22)),
+      [...expected],
+    );
+  }
 });
 
 test("conditions retain reagent order and chemical digit typography", async () => {
@@ -1062,6 +1028,9 @@ test("conditions retain reagent order and chemical digit typography", async () =
     runs.map((r) => r.text).join(""),
     "NaClO2 Pd(PPh3)4 H2O 25 °C C11",
   );
+  const azide = figureTextRuns("N3^-", 20, fonts);
+  assert.equal(azide.map((run) => run.text).join(""), "N3−");
+  assert.ok(azide.at(-1)!.shift < 0);
   const compiled = await compileFigure({
     compounds: { a: "CCO", b: "CC=O", reagent: { text: "PhB(OH)2" } },
     steps: [{ from: ["a", "reagent"], to: "b", above: "Pd(PPh3)4, K2CO3" }],
@@ -1208,8 +1177,8 @@ test("compiled reactions include boxed structures, placement brackets and styled
 test("contracted CoordGen layouts retain the shared bond length", async () => {
   const result = await compileFigure({
     compounds: {
-      a: { smiles: "N#CC1CCCCCCCCCCC1", coordgen: true },
-      b: "N#CC1CCCCCCCCCCC1",
+      a: { smiles: "N#CC1CCCCCCCCCCC1", coordgen: true, abbreviations: ["CN"] },
+      b: { smiles: "N#CC1CCCCCCCCCCC1", abbreviations: ["CN"] },
     },
     steps: [{ from: "a", to: "b" }],
   });
@@ -1234,45 +1203,52 @@ test("contracted CoordGen layouts retain the shared bond length", async () => {
   }
 });
 
-test("electron endpoints retain root abbreviations and expand only targeted interiors", async () => {
-  const { abbreviatedGroups } =
-    await import("../shared/molecule-abbreviations.ts");
-  const toolkit = await moleculeToolkit();
-  for (const [smiles, arrows, expected] of [
-    [
-      "C[CH:1]([O:2]S(=O)(=O)c1ccc(C)cc1)N(C(=O)C)[CH:3]=[CH:4]C(=O)OC",
-      [
-        { from: "bond(1,2)", to: "atom(2)" },
-        { from: "pi(3,4)", to: "bond(3,4)" },
-      ],
-      ["Ac", "CO₂Me", "OTs"],
-    ],
-    ["CC(=O)NCCNC(=[O:2])C", [{ from: "lp(2)", to: "atom(2)" }], ["Ac"]],
-  ] as const) {
-    const result = await compileFigure({
-      compounds: { a: { smiles, arrows: [...arrows] }, b: "CCO" },
-      steps: [{ from: "a", to: "b" }],
-    });
-    const reaction = result.entries[result.reference.ref] as Reaction,
-      p = reaction.scene.molecules[0],
-      c = result.entries[p.compound] as Compound,
-      layout = c.variants![p.variant!],
-      mol = toolkit.get_mol(c.smiles)!;
-    try {
-      const groups = abbreviatedGroups(
-        toolkit,
-        mol,
-        layout.abbreviations,
-      ).filter(
-        (g) =>
-          !layout.abbreviationAtoms ||
-          layout.abbreviationAtoms.includes(c.atomIds[g.atoms[0]]),
-      );
-      assert.deepEqual(groups.map((g) => g.name).sort(), [...expected].sort());
-    } finally {
-      mol.delete();
-    }
-  }
+test("a mechanism rejects shortening an arrow-bearing group, while a reaction can abbreviate it", async () => {
+  const smiles = "CCN[C:3](=[O:4])OC(C)(C)C";
+  const frame = {
+    id: "protonation",
+    smiles,
+    arrows: [{ from: "lp(4)", to: "atom(4)" }],
+  };
+  await assert.rejects(
+    compileFigure({
+      kind: "mechanism",
+      frames: [{ ...frame, abbreviations: ["Boc"] }],
+    }),
+    /frames\.protonation\.abbreviations: Boc must be expanded at mechanism atom 4/,
+  );
+  const mechanism = await compileFigure({ kind: "mechanism", frames: [frame] });
+  const entry = mechanism.entries[mechanism.reference.ref] as Mechanism;
+  const mechanismPlacement = entry.frames[0].scene.molecules[0];
+  const mechanismCompound = mechanism.entries[
+    mechanismPlacement.compound
+  ] as Compound;
+  assert.deepEqual(
+    compoundAbbreviations(
+      await moleculeToolkit(),
+      mechanismCompound,
+      mechanismCompound.variants![mechanismPlacement.variant!],
+    ),
+    [],
+  );
+
+  const result = await compileFigure({
+    compounds: {
+      a: { smiles, abbreviations: ["Boc"] },
+      b: "CCN",
+    },
+    steps: [{ from: "a", to: "b" }],
+  });
+  const reaction = result.entries[result.reference.ref] as Reaction;
+  const placement = reaction.scene.molecules[0];
+  const compound = result.entries[placement.compound] as Compound;
+  const layout = compound.variants![placement.variant!];
+  assert.deepEqual(
+    compoundAbbreviations(await moleculeToolkit(), compound, layout).map(
+      (group) => group.name,
+    ),
+    ["Boc"],
+  );
 });
 
 test("a shared substituent keeps its direction when a ring bond is reduced", async () => {
@@ -1280,8 +1256,14 @@ test("a shared substituent keeps its direction when a ring bond is reduced", asy
     coordgen: true,
     anchor: "a",
     compounds: {
-      a: "COC(=O)C1=CC[C@]2([H])CCN(C(C)=O)[C@@]12[H]",
-      b: "COC(=O)[C@]1([H])CC[C@]2([H])CCN(C(C)=O)[C@@]12[H]",
+      a: {
+        smiles: "COC(=O)C1=CC[C@]2([H])CCN(C(C)=O)[C@@]12[H]",
+        abbreviations: ["CO₂Me", "Ac"],
+      },
+      b: {
+        smiles: "COC(=O)[C@]1([H])CC[C@]2([H])CCN(C(C)=O)[C@@]12[H]",
+        abbreviations: ["CO₂Me", "Ac"],
+      },
     },
     steps: [{ from: "a", to: "b" }],
   });

@@ -73,7 +73,20 @@ def svg(mol, options):
 
 
 def mcs(molecules, options):
-    return rdFMCS.FindMCS(molecules, timeout=options.get("Timeout", 1), ringMatchesRingOnly=options.get("RingMatchesRingOnly", False), completeRingsOnly=options.get("CompleteRingsOnly", False), matchValences=options.get("MatchValences", False), bondCompare={"Any": rdFMCS.BondCompare.CompareAny, "OrderExact": rdFMCS.BondCompare.CompareOrderExact}.get(options.get("BondCompare"), rdFMCS.BondCompare.CompareOrder))
+    return rdFMCS.FindMCS(
+        molecules,
+        timeout=options.get("Timeout", 1),
+        ringMatchesRingOnly=options.get("RingMatchesRingOnly", False),
+        completeRingsOnly=options.get("CompleteRingsOnly", False),
+        matchValences=options.get("MatchValences", False),
+        atomCompare={
+            "Isotopes": rdFMCS.AtomCompare.CompareIsotopes,
+        }.get(options.get("AtomCompare"), rdFMCS.AtomCompare.CompareElements),
+        bondCompare={
+            "Any": rdFMCS.BondCompare.CompareAny,
+            "OrderExact": rdFMCS.BondCompare.CompareOrderExact,
+        }.get(options.get("BondCompare"), rdFMCS.BondCompare.CompareOrder),
+    )
 
 
 def invoke(op, args):
@@ -172,21 +185,14 @@ def invoke(op, args):
         products = mol.RunReactants(tuple(objects[h] for h in rest[0]), maxProducts=rest[1])
         return [[store(product) for product in group] for group in products]
     if op == "condense_abbreviations":
-        definitions = rdAbbreviations.ParseAbbreviations(rest[0])
-        labelled = rdAbbreviations.LabelMolAbbreviations(mol, definitions, maxCoverage=1)
-        groups = list(Chem.GetMolSubstanceGroups(labelled))
-        allowed = set(rest[1])
-        if all(list(group.GetAtoms())[0] in allowed for group in groups):
-            shown = rdAbbreviations.CondenseMolAbbreviations(mol, definitions, maxCoverage=1)
-        else:
-            selected = [(list(group.GetAtoms()), list(group.GetBonds()), group.GetProp("LABEL")) for group in groups if list(group.GetAtoms())[0] in allowed]
-            Chem.ClearMolSubstanceGroups(labelled)
-            for atoms, bonds, label in selected:
-                group = Chem.CreateMolSubstanceGroup(labelled, "SUP")
-                group.SetAtoms(atoms)
-                group.SetBonds(bonds)
-                group.SetProp("LABEL", label)
-            shown = rdAbbreviations.CondenseAbbreviationSubstanceGroups(labelled)
+        labelled = Chem.Mol(mol)
+        Chem.ClearMolSubstanceGroups(labelled)
+        for match in rest[0]:
+            group = Chem.CreateMolSubstanceGroup(labelled, "SUP")
+            group.SetAtoms(match["atoms"])
+            group.SetBonds([match["bond"]])
+            group.SetProp("LABEL", match["name"])
+        shown = rdAbbreviations.CondenseAbbreviationSubstanceGroups(labelled)
         mapping = list(shown.GetPropsAsDict(includePrivate=True, includeComputed=False)["_origAtomMapping"]) if shown.HasProp("_origAtomMapping") else list(range(mol.GetNumAtoms()))
         return {"molecule": store(shown), "atoms": mapping}
     if op == "constrain_coordinates":

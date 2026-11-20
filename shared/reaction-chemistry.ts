@@ -3,7 +3,7 @@ import type {
   ChemicalToolkit as MainModule,
   ChemicalMolecule as Mol,
 } from "./chemical-toolkit.ts";
-import { abbreviationSmarts } from "./molecule-abbreviations.ts";
+import { abbreviationFragments } from "./molecule-abbreviations.ts";
 import type { SubstrateScope, SynthesisRoute } from "./reaction-scheme.ts";
 
 export type SchemeToolkit = Pick<
@@ -153,7 +153,7 @@ export function substituteProduct(
   let current = parse(toolkit, template.replace(/\[\*:(\d+)\]/g, "[$1*]"));
   try {
     for (const [key, value] of Object.entries(groups)) {
-      const abbreviation = Object.entries(abbreviationSmarts).find(
+      const abbreviation = Object.entries(abbreviationFragments).find(
         ([name]) => name === value,
       )?.[1];
       let fragment = abbreviation ?? value;

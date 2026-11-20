@@ -20,7 +20,10 @@ import {
   matchingAbbreviations,
   abbreviationFacesLeft,
   abbreviationLabel,
-  abbreviationSmarts,
+  abbreviationFragments,
+  defaultFigureAbbreviations,
+  optionalFigureAbbreviations,
+  type AbbreviationName,
   type MoleculeAbbreviation,
 } from "../shared/molecule-abbreviations.ts";
 import type { Compound } from "../shared/chemical-library/types.ts";
@@ -41,65 +44,107 @@ import { boxOverlapsPolygon } from "../src/ui/library/geometry-collision.ts";
 import { figureDimension } from "./figure-output.ts";
 import { ringHydrogens } from "./figure-scaffolds.ts";
 
-const defaults: MoleculeAbbreviation[] = [
-  "OTBS",
-  "OTBDPS",
-  "OTES",
-  "OTIPS",
-  "OPMB",
-  "OBn",
-  "OPiv",
-  "OAc",
-  "OBz",
-  "OMOM",
-  "OTs",
-  "OMs",
-  "OTf",
-  "NHBoc",
-  "TMS",
-  "TBS",
-  "Boc",
-  "Ts",
-  "CO₂Me",
-  "CO₂Et",
-  "CO₂tBu",
-  "CN",
-  "SCH2Ph",
-  "CO₂H",
-  "Ac",
-  "NO2",
+const groupElements = Object.keys(abbreviationFragments);
+// Assign distinct element tags to these condensed groups during core alignment.
+const elementAlignmentAbbreviations: readonly AbbreviationName[] = [
+  ...defaultFigureAbbreviations,
+  ...optionalFigureAbbreviations,
 ];
+type CoreComparison = "Elements" | "Isotopes";
+
 export function figureAbbreviations(
   rd: Toolkit,
   mol: Mol,
   spec: StructureInput,
   extra: FigureInput["abbreviate"],
-  protectedMaps: number[] = [],
-) {
+  frameMaps: { electronic: number[]; protected: number[] },
+  where: string,
+  mechanism: boolean,
+): { abbreviations: MoleculeAbbreviation[]; abbreviationAtoms?: number[] } {
   if (spec.abbreviate === false) return { abbreviations: [] };
-  const names = matchingAbbreviations(rd, mol, [...defaults, ...(extra ?? [])]);
+  const maps = atomMaps(mol);
+  const fold: MoleculeAbbreviation[] = [];
+  const expand: MoleculeAbbreviation[] = [];
+  for (const selection of spec.abbreviations ?? []) {
+    if (typeof selection === "string") {
+      fold.push(selection);
+      continue;
+    }
+    const atom = selection.atom > 0 ? maps.indexOf(selection.atom) : -1;
+    if (atom < 0)
+      throw new Error(
+        `${where}.abbreviations: unknown atom map ${selection.atom}`,
+      );
+    ("expand" in selection ? expand : fold).push({
+      name: selection.name,
+      atom,
+    });
+  }
+  const selected = abbreviatedGroups(rd, mol, fold, `${where}.abbreviations`);
+  const expanded = abbreviatedGroups(rd, mol, expand, `${where}.abbreviations`);
   const targets = new Set([
-    ...protectedMaps,
+    ...frameMaps.electronic,
     ...(spec.arrows ?? []).flatMap((arrow) =>
       [arrow.from, arrow.to].flatMap((s) =>
         [...s.matchAll(/\d+/g)].map((m) => Number(m[0])),
       ),
     ),
-    ...(spec.enclose ?? []).flatMap((e) => [
-      ...(e.atoms ?? []),
-      ...(e.bonds ?? []).flat(),
+  ]);
+  const protectedMaps = new Set([
+    ...frameMaps.protected,
+    ...(spec.enclose ?? []).flatMap((entry) => [
+      ...(entry.atoms ?? []),
+      ...(entry.bonds ?? []).flat(),
     ]),
   ]);
-  const maps = atomMaps(mol),
-    groups = abbreviatedGroups(rd, mol, names),
-    retained = groups.filter(
-      (g) => !g.atoms.slice(1).some((a) => targets.has(maps[a])),
-    );
+  const { atoms } = graphOf(mol);
+  const electronic = (index: number) =>
+    targets.has(maps[index]) ||
+    (mechanism && (atoms[index].chg || atoms[index].nRad));
+  if (mechanism)
+    for (const group of selected) {
+      const index = group.atoms.find(electronic);
+      if (index !== undefined)
+        throw new Error(
+          `${where}.abbreviations: ${group.name} must be expanded at mechanism atom ${maps[index] || index + 1}`,
+        );
+    }
+
+  const explicitNames = [...new Set(selected.map((group) => group.name))];
+  const explicitAtoms = new Set(
+    [
+      ...selected,
+      ...expanded,
+      ...matchingAbbreviations(rd, mol, explicitNames),
+    ].flatMap((group) => group.atoms),
+  );
+  const candidates = matchingAbbreviations(
+    rd,
+    mol,
+    [...defaultFigureAbbreviations, ...(extra ?? [])],
+    true,
+  );
+  const retained = candidates.filter(
+    (group) =>
+      !group.atoms.some((index) => explicitAtoms.has(index)) &&
+      !group.atoms
+        .slice(1)
+        .some((index) => electronic(index) || protectedMaps.has(maps[index])),
+  );
+  if (fold.length || expand.length)
+    return {
+      abbreviations: [...selected, ...retained].map(({ name, atoms }) => ({
+        name,
+        atom: atoms[0],
+      })),
+    };
+  const abbreviations = [...new Set(candidates.map((group) => group.name))];
+  const all = abbreviatedGroups(rd, mol, abbreviations);
   return {
-    abbreviations: names,
-    ...(retained.length === groups.length
+    abbreviations,
+    ...(retained.length === all.length
       ? {}
-      : { abbreviationAtoms: retained.map((g) => g.atoms[0]) }),
+      : { abbreviationAtoms: retained.map((group) => group.atoms[0]) }),
   };
 }
 interface Structure {
@@ -151,24 +196,21 @@ function descriptionMolecule(
 }
 interface DisplayAtoms {
   original: number[];
-  labels: Map<number, MoleculeAbbreviation>;
+  labels: Map<number, AbbreviationName>;
 }
 const displayAtoms = new WeakMap<Mol, DisplayAtoms>();
 function contracted(
   rd: Toolkit,
   full: Mol,
-  names: readonly MoleculeAbbreviation[] = [],
+  selections: readonly MoleculeAbbreviation[] = [],
   allowed?: number[],
 ) {
-  const groups = abbreviatedGroups(rd, full, names).filter(
+  const groups = abbreviatedGroups(rd, full, selections).filter(
     (g) => !allowed || allowed.includes(g.atoms[0]),
   );
   const roots = new Map(groups.map((g) => [g.atoms[0], g.name]));
-  const definitions = [...new Set(groups.map((g) => g.name))]
-    .map((name) => `${name} ${abbreviationSmarts[name]} ${name} ${name}`)
-    .join("\n");
-  const { mol: shown, original } = definitions
-    ? rd.condense(full, definitions, [...roots.keys()])
+  const { mol: shown, original } = groups.length
+    ? rd.condense(full, groups)
     : {
         mol: full.copy()!,
         original: graphOf(full).atoms.map((_, i) => i),
@@ -185,15 +227,25 @@ function contracted(
   return shown;
 }
 
-function matchingCopy(rd: Toolkit, mol: Mol) {
+function matchingCopy(
+  rd: Toolkit,
+  mol: Mol,
+  comparison: CoreComparison = "Elements",
+) {
   const data = JSON.parse(mol.get_json());
-  for (const [i, name] of displayAtoms.get(mol)?.labels ?? [])
-    data.molecules[0].atoms[i] = {
-      z:
-        60 +
-        [...defaults, "Ph", "Trt", "Bz"].indexOf(name as MoleculeAbbreviation),
-      impHs: 0,
-    };
+  const labels = displayAtoms.get(mol)?.labels;
+  if (comparison === "Isotopes") {
+    for (const [i, atom] of data.molecules[0].atoms.entries()) {
+      const name = labels?.get(i);
+      atom.isotope = name ? 200 + groupElements.indexOf(name) : (atom.z ?? 6);
+    }
+  } else {
+    for (const [i, name] of labels ?? [])
+      data.molecules[0].atoms[i] = {
+        z: 60 + elementAlignmentAbbreviations.indexOf(name),
+        impHs: 0,
+      };
+  }
   return descriptionMolecule(rd, data);
 }
 function ringBondSet(atomRings: number[][]) {
@@ -284,12 +336,12 @@ function alignCore(
   rd: Toolkit,
   mol: Mol,
   reference: Mol,
-  smarts: string,
+  core: ReturnType<typeof commonCore>,
   coordgen: boolean,
 ) {
-  const query = rd.get_qmol(smarts)!,
-    currentMatch = matched(rd, mol, query),
-    referenceMatch = matched(rd, reference, query);
+  const query = rd.get_qmol(core.smarts)!,
+    currentMatch = matched(rd, mol, query, core.comparison),
+    referenceMatch = matched(rd, reference, query, core.comparison);
   query.delete();
   const current = withCoordinates(rd, mol, xy(mol));
   try {
@@ -381,9 +433,16 @@ function commonCore(
   timeout = 2,
 ) {
   const list = new rd.MolList();
+  const comparison: CoreComparison = molecules.some((mol) =>
+    [...(displayAtoms.get(mol)?.labels.values() ?? [])].some(
+      (name) => !elementAlignmentAbbreviations.includes(name),
+    ),
+  )
+    ? "Isotopes"
+    : "Elements";
   try {
     for (const mol of molecules) {
-      const copy = matchingCopy(rd, mol);
+      const copy = matchingCopy(rd, mol, comparison);
       list.append(copy);
       copy.delete();
     }
@@ -396,11 +455,12 @@ function commonCore(
             RingMatchesRingOnly: strict,
             CompleteRingsOnly: strict,
             MatchChiralTag: false,
+            AtomCompare: comparison,
             BondCompare: "Any",
           }),
         ),
       );
-    return result;
+    return { ...result, comparison };
   } finally {
     list.delete();
   }
@@ -413,8 +473,13 @@ function retainsStereo(rd: Toolkit, mol: Mol, identity: string) {
     drawn.delete();
   }
 }
-function matched(rd: Toolkit, mol: Mol, query: Mol): number[] {
-  const copy = matchingCopy(rd, mol);
+function matched(
+  rd: Toolkit,
+  mol: Mol,
+  query: Mol,
+  comparison: CoreComparison,
+): number[] {
+  const copy = matchingCopy(rd, mol, comparison);
   try {
     return JSON.parse(copy.get_substruct_match(query)).atoms ?? [];
   } finally {
@@ -440,8 +505,8 @@ function follow(
   if (result.numAtoms < 4) return false;
   const query = rd.get_qmol(result.smarts)!;
   try {
-    const rm = matched(rd, reference, query),
-      mm = matched(rd, mol, query),
+    const rm = matched(rd, reference, query, result.comparison),
+      mm = matched(rd, mol, query, result.comparison),
       toRef = new Map(mm.map((a, i) => [a, rm[i]]));
     const graph = graphOf(mol),
       referenceRings = rings(reference),
@@ -535,7 +600,7 @@ function orient(
   if (result.numAtoms < 3) return;
   const query = rd.get_qmol(result.smarts)!;
   try {
-    const rm = matched(rd, reference, query),
+    const rm = matched(rd, reference, query, result.comparison),
       points = xy(mol),
       rpoints = xy(reference),
       ref = rm.map((i) => rpoints[i]);
@@ -546,7 +611,7 @@ function orient(
     ];
     const rc = center(ref);
     let best: { error: number; flip: number; angle: number } | undefined;
-    const matching = matchingCopy(rd, mol);
+    const matching = matchingCopy(rd, mol, result.comparison);
     const matches: { atoms: number[] }[] = JSON.parse(
       matching.get_substruct_matches(
         query,
@@ -605,7 +670,7 @@ function alignDepiction(
     core.numAtoms >=
       0.6 * Math.min(reference.get_num_atoms(), mol.get_num_atoms())
   ) {
-    const candidate = alignCore(rd, mol, reference, core.smarts, coordgen);
+    const candidate = alignCore(rd, mol, reference, core, coordgen);
     if (candidate) {
       if (hasLinearDepiction(graphOf(candidate))) {
         mol.delete();
@@ -802,8 +867,10 @@ function nativeLabelCost(
         name,
       ]),
     ),
-    groups = abbreviatedGroups(rd, full, [...new Set(names.values())]).filter(
-      (g) => names.has(g.atoms[0]),
+    groups = abbreviatedGroups(
+      rd,
+      full,
+      [...names].map(([atom, name]) => ({ name, atom })),
     ),
     drawn = abbreviatedDrawing(
       rd,
@@ -954,6 +1021,23 @@ function nativeLabelCost(
   }
 }
 
+function contractedFor(rd: Toolkit, r: Structure, full: Mol) {
+  const layout = r.variant
+    ? r.compound.variants![r.variant]
+    : r.compound.layout;
+  return contracted(
+    rd,
+    full,
+    layout.abbreviations?.map((selection) =>
+      typeof selection === "string"
+        ? selection
+        : { ...selection, atom: r.depiction.atoms.indexOf(selection.atom) },
+    ),
+    layout.abbreviationAtoms?.map((a) =>
+      r.depiction.atoms.indexOf(r.compound.atomIds.indexOf(a)),
+    ),
+  );
+}
 /** Depict outward from the largest uncrowded anchor, preserving one core orientation. */
 export function depictRoute(
   rd: Toolkit,
@@ -1022,14 +1106,7 @@ export function depictRoute(
       const layout = r.variant
         ? r.compound.variants![r.variant]
         : r.compound.layout;
-      const shown = contracted(
-        rd,
-        initial,
-        layout.abbreviations,
-        layout.abbreviationAtoms?.map((a) =>
-          r.depiction.atoms.indexOf(r.compound.atomIds.indexOf(a)),
-        ),
-      );
+      const shown = contractedFor(rd, r, initial);
       expected.set(key, graphSignature(rd, shown));
       if (r.spec.drawing) {
         const coords = r.depiction.atoms.map(
@@ -1091,24 +1168,7 @@ export function depictRoute(
             reference,
             coordgen,
             expected.get(key)!,
-            () =>
-              free(
-                contracted(
-                  rd,
-                  fulls.get(key)!,
-                  (r.variant
-                    ? r.compound.variants![r.variant]
-                    : r.compound.layout
-                  ).abbreviations,
-                  (r.variant
-                    ? r.compound.variants![r.variant]
-                    : r.compound.layout
-                  ).abbreviationAtoms?.map((a) =>
-                    r.depiction.atoms.indexOf(r.compound.atomIds.indexOf(a)),
-                  ),
-                ),
-                coordgen,
-              ),
+            () => free(contractedFor(rd, r, fulls.get(key)!), coordgen),
           );
           mols.set(key, mol);
         }

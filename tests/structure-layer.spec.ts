@@ -244,7 +244,7 @@ test("published notes keep authored coordinates at the shared scale and render t
     exact: true,
   });
   await expect(a).toBeVisible({ timeout: 45_000 });
-  for (const abbreviation of ["Boc", "CO₂Et"])
+  for (const abbreviation of ["Boc", "CO2Et"])
     await expect(
       short.locator(`.abbreviation-label[data-abbreviation="${abbreviation}"]`),
     ).toHaveCount(1);

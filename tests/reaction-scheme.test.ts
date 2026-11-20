@@ -204,12 +204,13 @@ test("a constrained acyl-urea scheme falls back when chlorine and oxygen labels 
 test("R columns use shared abbreviations or content display text and superscript maps", () => {
   assert.equal(substituentDisplay("C"), "Me");
   assert.equal(substituentDisplay("*OC"), "OMe");
-  assert.equal(substituentDisplay("C1CCCCC1", "cyclohexyl"), "cyclohexyl");
-  assert.throws(() => substituentDisplay("C1CCCCC1"), /display label/);
+  assert.equal(substituentDisplay("C1CCCCC1"), "Cy");
+  assert.equal(substituentDisplay("C1CCC1", "cyclobutyl"), "cyclobutyl");
+  assert.throws(() => substituentDisplay("C1CCC1"), /display label/);
   assert.equal(rGroupLabel(12), "R¹²");
   const scope = structuredClone(scopeExample);
-  scope.rows[0].substituents["1"] = "C1CCCCC1";
+  scope.rows[0].substituents["1"] = "C1CCC1";
   assert.throws(() => validateSubstrateScope(scope, "scope"), /display label/);
-  scope.rows[0].labels = { "1": "cyclohexyl" };
+  scope.rows[0].labels = { "1": "cyclobutyl" };
   validateSubstrateScope(scope, "scope");
 });

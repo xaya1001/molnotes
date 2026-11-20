@@ -2,9 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   abbreviatedGroups,
-  abbreviationSmarts,
+  abbreviationFragments,
   validateAbbreviations,
-  type MoleculeAbbreviation,
+  type AbbreviationName,
 } from "../shared/molecule-abbreviations.ts";
 import { moleculeSvg } from "../src/ui/chemistry/drawing.ts";
 import init from "@rdkit/rdkit";
@@ -65,8 +65,8 @@ test("abbreviations fold only declared complete terminal groups using original i
       [[11, 12, 13, 14, 15, 16, 17]],
     );
     assert.deepEqual(
-      abbreviatedGroups(toolkit, mol, ["Boc", "CO₂Et"]).map((g) => g.name),
-      ["Boc", "CO₂Et"],
+      abbreviatedGroups(toolkit, mol, ["Boc", "CO2Et"]).map((g) => g.name),
+      ["Boc", "CO2Et"],
     );
     assert.throws(
       () => abbreviatedGroups(toolkit, mol, ["Ts"], "sample"),
@@ -79,7 +79,7 @@ test("abbreviations fold only declared complete terminal groups using original i
   } finally {
     mol.delete();
   }
-  for (const [name, pattern] of Object.entries(abbreviationSmarts)) {
+  for (const [name, pattern] of Object.entries(abbreviationFragments)) {
     // Query atoms/bonds are not SMILES; use a real phosphine oxide for this group.
     const smiles =
       name === "PPh3"
@@ -89,7 +89,7 @@ test("abbreviations fold only declared complete terminal groups using original i
     assert.ok(mol, name);
     try {
       assert.equal(
-        abbreviatedGroups(toolkit, mol, [name as MoleculeAbbreviation]).length,
+        abbreviatedGroups(toolkit, mol, [name as AbbreviationName]).length,
         1,
         name,
       );

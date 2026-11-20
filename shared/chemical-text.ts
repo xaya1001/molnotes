@@ -1,4 +1,4 @@
-import { abbreviationSmarts } from "./molecule-abbreviations.ts";
+import { abbreviationFragments } from "./molecule-abbreviations.ts";
 
 export interface ChemicalTextRun {
   text: string;
@@ -11,7 +11,9 @@ const formulaSymbols = [
   ..."H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr Rb Sr Y Zr Nb Mo Tc Ru Rh Pd Ag Cd In Sn Sb Te I Xe Cs Ba La Ce Pr Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu Hf Ta W Re Os Ir Pt Au Hg Tl Pb Bi Po At Rn Fr Ra Ac Th Pa U Np Pu Am Cm Bk Cf Es Fm Md No Lr Rf Db Sg Bh Hs Mt Ds Rg Cn Nh Fl Mc Lv Ts Og".split(
     " ",
   ),
-  ...Object.keys(abbreviationSmarts).filter((name) => /^[A-Za-z]+$/.test(name)),
+  ...Object.keys(abbreviationFragments).filter((name) =>
+    /^[A-Za-z]+$/.test(name),
+  ),
   "Et",
   "Me",
   "Pr",
@@ -57,7 +59,7 @@ export function chemicalTextRuns(
 ): ChemicalTextRun[] {
   const runs: ChemicalTextRun[] = [];
   const pattern =
-    /\\.|\^\{[^}]*\}|\^(?:\w+(?:,\w+)*|[+\-–‡])|_\{[^}]*\}|_\w|[₀₁₂₃₄₅₆₇₈₉]+|(?<=[A-Za-z)\]])\d+|(?<![A-Za-z])(?:tert|sec|cis|trans|syn|anti|t|n|p|i|m|o|s|R|S|E|Z)-(?=[A-Za-z])|(?<![A-Za-z])(?:dr|ee|er|cat\.|rac)(?![A-Za-z])/gu;
+    /\\.|\^\{[^}]*\}|\^(?:\w+(?:,\w+)*|[+\-–−‡])|_\{[^}]*\}|_\w|[₀₁₂₃₄₅₆₇₈₉]+|(?<=[A-Za-z)\]])\d+|(?<![A-Za-z])(?:tert|sec|cis|trans|syn|anti|t|n|p|i|m|o|s|R|S|E|Z)-(?=[A-Za-z])|(?<![A-Za-z])(?:dr|ee|er|cat\.|rac)(?![A-Za-z])/gu;
   const append = (
     part: string,
     bold: boolean,
@@ -82,14 +84,18 @@ export function chemicalTextRuns(
       append(content.slice(cursor, match.index), bold, italic);
       const token = match[0];
       if (token.startsWith("\\")) append(token.slice(1), bold, italic);
-      else if (token.startsWith("^") || token.startsWith("_"))
+      else if (token.startsWith("^") || token.startsWith("_")) {
+        const script = token[0] === "^" ? "super" : "sub";
+        const value = token[1] === "{" ? token.slice(2, -1) : token.slice(1);
         append(
-          token[1] === "{" ? token.slice(2, -1) : token.slice(1),
+          context === "figure" && script === "super"
+            ? value.replace(/^(\d*)[-–]$/, "$1−")
+            : value,
           bold,
           italic,
-          token[0] === "^" ? "super" : "sub",
+          script,
         );
-      else if (/^[₀₁₂₃₄₅₆₇₈₉]+$/.test(token))
+      } else if (/^[₀₁₂₃₄₅₆₇₈₉]+$/.test(token))
         append(
           [...token].map((ch) => String("₀₁₂₃₄₅₆₇₈₉".indexOf(ch))).join(""),
           bold,
