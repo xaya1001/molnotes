@@ -1,4 +1,3 @@
-import type { TopicContent } from "../src/ui/topic/content.ts";
 import type { TopicBlock } from "../src/ui/topic/blocks.ts";
 import type { MoleculeData } from "../src/ui/chemistry/types.ts";
 import { validateSubstrateScope } from "./reaction-scheme.ts";
@@ -74,7 +73,10 @@ const define = {
 /** The figures of a topic's blocks, tabs included. */
 // `topic` is a content.json the preview reads as written; it is not validated.
 export function topicFigures(
-  topic: TopicContent,
+  topic: {
+    chapters: { title: string; blocks: TopicBlock[] }[];
+    data?: Record<string, unknown>;
+  },
   file: string,
   errors: string[],
   library: Library,

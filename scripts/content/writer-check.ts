@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
-  compileNotes,
   parseNote,
   noteCitations,
   noteMarkdown,
@@ -16,7 +15,7 @@ import { resolveCitations } from "./citations.ts";
 import { readRegistry, readGlossary } from "./content-files.ts";
 import { parseRequest } from "./requests.ts";
 import { writerFiles } from "./writer-context.ts";
-import { lintProse, proseTerms } from "./prose-lint.ts";
+import { compileUnit } from "./compile-unit.ts";
 
 const normalized = (text: string) => text.replace(/\s/g, "").toLowerCase();
 const markdown = noteMarkdown();
@@ -40,7 +39,7 @@ export async function checkNote(
   const hintTerms = glossary.filter((term) =>
     /\p{Script=Han}/u.test(term.term),
   );
-  const errors: string[] = lintProse(parsed.body, file, await proseTerms(root));
+  const errors: string[] = [];
   const hints = new Map<string, string>();
   const seen = new Set<string>();
   const additions = additionsFile
@@ -172,25 +171,29 @@ export async function checkNote(
       if (path.startsWith(`notes/${dir}/assets/`))
         assets.add(path.slice(`notes/${dir}/`.length));
     for (const asset of resolved.assets) assets.add(asset.path);
-    await compileNotes({
-      directories: [],
-      notes: [
-        {
-          ...parsed,
-          file,
-          directory: dir,
-          directoryTitle: dir,
-          slug: name.slice(0, -3),
-          path: `/${file.slice(0, -3)}`,
+    await compileUnit({
+      kind: "notes",
+      root,
+      input: {
+        directories: [],
+        notes: [
+          {
+            ...parsed,
+            file,
+            directory: dir,
+            directoryTitle: dir,
+            slug: name.slice(0, -3),
+            path: `/${file.slice(0, -3)}`,
+          },
+        ],
+        terms,
+        routes,
+        assetExists: (_dir, path) => assets.has(path),
+        citations: { [dir]: resolved.citations },
+        renderRequest: async (source, file, line) => {
+          await parseRequest(source, file, line);
+          return "";
         },
-      ],
-      terms,
-      routes,
-      assetExists: (_dir, path) => assets.has(path),
-      citations: { [dir]: resolved.citations },
-      renderRequest: async (source, file, line) => {
-        await parseRequest(source, file, line);
-        return "";
       },
     });
   } catch (e) {

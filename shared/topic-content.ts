@@ -60,6 +60,45 @@ export function validateTopicContent(
 /** A chapter whose id, title and path the first pass has checked. */
 type ChapterHead = JsonObject & { id: string; path?: string };
 
+export function validateBlockReferences(
+  references: [string, string][],
+  ids: ReadonlySet<unknown>,
+  kind: string,
+) {
+  for (const [id, where] of references)
+    assert(ids.has(id), `${where} refers to unknown ${kind} ${id}`);
+}
+
+export function validateTopicChapter(
+  chapter: unknown,
+  data: Record<string, unknown> | undefined,
+  name: string,
+  found: BlockReferences,
+): asserts chapter is ChapterHead & { title: string; blocks: TopicBlock[] } {
+  assert(isObject(chapter), `${name}: each chapter must be an object`);
+  text(chapter.id, `${name}: chapter id`);
+  const where = `${name}: chapter ${chapter.id}`;
+  text(chapter.title, `${where} title`);
+  if (chapter.note !== undefined) {
+    assert(isObject(chapter.note), `${where} note must be an object`);
+    assert(
+      typeof chapter.note.href === "string" &&
+        /^\/notes\/[a-z0-9]+(?:-[a-z0-9]+)*\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(
+          chapter.note.href,
+        ),
+      `${where} note href must name /notes/<dir>/<slug>`,
+    );
+    text(chapter.note.title, `${where} note title`);
+  }
+  assert(
+    chapter.path === undefined ||
+      (typeof chapter.path === "string" && chapter.path.startsWith("/")),
+    `${where} path must start with /`,
+  );
+  const blocks = { id: chapter.id, blocks: chapter.blocks };
+  validateBlocks(blocks, data, where, found);
+}
+
 // `content` is parsed JSON; the checks below are its boundary.
 function checkTopicContent(
   content: unknown,
@@ -79,43 +118,15 @@ function checkTopicContent(
     predictionIds: new Set(),
     pathPicker: false,
   };
-  function chapterHead(chapter: unknown): asserts chapter is ChapterHead {
-    assert(isObject(chapter), `${name}: each chapter must be an object`);
-    text(chapter.id, `${name}: chapter id`);
+  const chapters: ChapterHead[] = [];
+  for (const chapter of content.chapters) {
+    validateTopicChapter(chapter, content.data, name, found);
     assert(
       !chapterIds.has(chapter.id),
       `${name}: duplicate chapter ${chapter.id}`,
     );
     chapterIds.add(chapter.id);
-    const where = `${name}: chapter ${chapter.id}`;
-    text(chapter.title, `${where} title`);
-    if (chapter.note !== undefined) {
-      assert(isObject(chapter.note), `${where} note must be an object`);
-      assert(
-        typeof chapter.note.href === "string" &&
-          /^\/notes\/[a-z0-9]+(?:-[a-z0-9]+)*\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(
-            chapter.note.href,
-          ),
-        `${where} note href must name /notes/<dir>/<slug>`,
-      );
-      text(chapter.note.title, `${where} note title`);
-    }
-    assert(
-      chapter.path === undefined ||
-        (typeof chapter.path === "string" && chapter.path.startsWith("/")),
-      `${where} path must start with /`,
-    );
-  }
-  const chapters: ChapterHead[] = [];
-  for (const chapter of content.chapters) {
-    chapterHead(chapter);
     chapters.push(chapter);
-    validateBlocks(
-      { id: chapter.id, blocks: chapter.blocks },
-      content.data,
-      `${name}: chapter ${chapter.id}`,
-      found,
-    );
   }
 
   // Learning paths: named chapter orders a reader can choose; the first is
@@ -265,8 +276,7 @@ function checkTopicContent(
     if (excerpt.figure !== undefined)
       validateFigureReference(excerpt.figure, `${name}: excerpt ${excerpt.id}`);
   }
-  for (const [id, where] of found.excerpts)
-    assert(excerptIds.has(id), `${where} refers to unknown excerpt ${id}`);
+  validateBlockReferences(found.excerpts, excerptIds, "excerpt");
   for (const chapter of chapters) {
     if (chapter.excerpts === undefined) continue;
     assert(
@@ -322,8 +332,7 @@ function checkTopicContent(
       );
     refs(question.refs, where);
   });
-  for (const [id, where] of found.quiz)
-    assert(quizIds.has(id), `${where} refers to unknown quiz question ${id}`);
+  validateBlockReferences(found.quiz, quizIds, "quiz question");
 
   // The terms a chapter uses; their definitions live in the site glossary.
   for (const chapter of chapters) {

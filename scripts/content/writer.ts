@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { readPracticeChapters } from "./practice-markdown.ts";
-import { isObject } from "../../shared/json.ts";
-import { validateBlocks } from "../../shared/topic-blocks.ts";
+import { compileUnit } from "./compile-unit.ts";
+import { readChemicalLibrary } from "./chemical-library.ts";
+import { parseSiteManifest } from "../../shared/site-catalog.ts";
 import { checkNote } from "./writer-check.ts";
 import { readSeriesNotes } from "./writer-context.ts";
 
@@ -20,35 +20,31 @@ export async function writerCommand(
         "check <notes/directory/note.md> [--glossary-additions <json>]",
       );
     const target =
-      /^(sites\/[a-z0-9-]+)\/(chapters\/[a-z0-9-]+\.md|content\.json#([a-z0-9-]+))$/.exec(
+      /^(sites\/[a-z0-9-]+)(?:\/(chapters\/[a-z0-9-]+\.md|content\.json#([a-z0-9-]+)))?$/.exec(
         args[0].replace(/^content\//, ""),
       );
     if (target) {
       if (args.length !== 1)
-        throw new Error("practice check does not accept glossary additions");
+        throw new Error("site check does not accept glossary additions");
       const [, unit, path, id] = target;
       const content = JSON.parse(
         await readFile(join(root, unit, "content.json"), "utf8"),
       );
-      const entry = id
-        ? content.chapters.find((c: unknown) => isObject(c) && c.id === id)
-        : path;
-      if (!entry || !content.chapters.includes(entry))
-        throw new Error(`${args[0]}: chapter not found`);
-      const site = JSON.parse(
-        await readFile(join(root, unit, "site.json"), "utf8"),
+      const site = parseSiteManifest(
+        unit.split("/")[1],
+        JSON.parse(await readFile(join(root, unit, "site.json"), "utf8")),
       );
-      if (site.group !== "练习")
-        throw new Error(`${unit}: expected practice site`);
-      const selected = { ...content, chapters: [entry] };
-      await readPracticeChapters(root, unit, selected, site.group);
-      for (const chapter of selected.chapters)
-        validateBlocks(chapter, content.data, args[0], {
-          excerpts: [],
-          quiz: [],
-          predictionIds: new Set(),
-          pathPicker: false,
-        });
+      const library = (await readChemicalLibrary(root)).entries;
+      const common = {
+        root,
+        unit,
+        authored: content,
+        group: site.group,
+        library,
+      };
+      if (path)
+        await compileUnit({ ...common, kind: "chapter", chapter: id ?? path });
+      else await compileUnit({ ...common, kind: "site" });
       console.log(`${args[0]}: 0 errors`);
       return;
     }

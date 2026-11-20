@@ -11,10 +11,7 @@ import {
 } from "../../shared/source-citations.ts";
 import { validateGlossary } from "../../shared/glossary.ts";
 import { parseSiteManifest } from "../../shared/site-catalog.ts";
-import { validateTopicContent } from "../../shared/topic-content.ts";
-import { compileTableStructures } from "./table-structures.ts";
-import { readPracticeChapters } from "./practice-markdown.ts";
-import { resolveCompoundSlots } from "./compound-slots.ts";
+import { compileUnit } from "./compile-unit.ts";
 import type {
   Library,
   FigureReference,
@@ -153,26 +150,14 @@ export async function readUnit(
       }
     }
     const authored = await json(join(folder, "content.json"));
-    await compileTableStructures(authored, library, `${unit}/content.json`);
-    const resolved = resolveCompoundSlots(
+    const { content, references } = await compileUnit({
+      kind: "site",
+      root,
+      unit,
       authored,
+      group: site.group,
       library,
-      `${unit}/content.json`,
-    );
-    await readPracticeChapters(root, unit, resolved.value, site.group);
-    const content = validateTopicContent(
-      resolved.value,
-      `${unit}/content.json`,
-    );
-    if ("glossary" in content && content.glossary !== undefined)
-      throw new Error(
-        `${unit}/content.json: define terms in glossary.json and list them in chapter terms`,
-      );
-    for (const source of content.sources ?? [])
-      if ("file" in source && source.file !== undefined)
-        throw new Error(
-          `${unit}/content.json: source ${source.id} names a shelf file; register it in sources.json and cite it`,
-        );
+    });
     const occurrences = contentCitations(content, `${unit}/content.json`);
     return {
       unit,
@@ -182,7 +167,7 @@ export async function readUnit(
       content,
       assets,
       occurrences,
-      compoundReferences: resolved.references,
+      compoundReferences: references,
     };
   }
   const metadata = await json(join(folder, "directory.json"));

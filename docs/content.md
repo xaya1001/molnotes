@@ -369,6 +369,8 @@ explanation: 两个加一个是三个。
 直接从内容目录计算；首次定义按正文的“术语（全称）”标记识别，同一术语按目录 order、篇目 order 与路径排序取首次。
 
 `npm run content -- check notes/<目录>/<篇名>.md [--glossary-additions <json>]` 复用笔记编译、引用和资源请求校验，只检查该篇，格式错误时退出 1。
+`npm run content -- check sites/<slug>` 检查专题；使用 `sites/<slug>/chapters/<id>.md` 或 `sites/<slug>/content.json#<id>` 检查单章。
+`content:preview` 同样接受上述单章路径。
 待补全的请求可通过格式检查；正文的未知术语与附带 JSON 数组里的新增术语会与全站 glossary 比较，名称忽略大小写和空格后相同、或全称相同的条目会报错并建议链接已有术语。
 正文已有术语首次出现未用 `[[术语]]` 链接时给出提示，每篇每个术语只提示一处；前文已经链接的术语后续不提示。
 仅对含中文字符的术语给出未链接提示，纯 ASCII 术语不提示。
