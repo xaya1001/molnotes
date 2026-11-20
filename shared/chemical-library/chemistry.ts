@@ -1,9 +1,6 @@
 import type { ChemicalMolecule as Mol } from "../chemical-toolkit.ts";
 import { ionPairCoordinates } from "./ion-layout.ts";
-import {
-  validateAbbreviations,
-  abbreviatedGroups,
-} from "../molecule-abbreviations.ts";
+import { abbreviatedGroups } from "../molecule-abbreviations.ts";
 import type { Compound, CompoundLayout, Point } from "./types.ts";
 export type Toolkit = Pick<
   import("../chemical-toolkit.ts").ChemicalToolkit,
@@ -425,6 +422,7 @@ export function validateCompound(toolkit: Toolkit, c: Compound) {
             throw new Error(
               `${c.id}: indexed input graph or stereochemistry differs`,
             );
+          abbreviatedGroups(toolkit, input, layout.abbreviations, c.id);
         } finally {
           input.delete();
         }
@@ -492,8 +490,8 @@ export function validateCompound(toolkit: Toolkit, c: Compound) {
       ])
         if (!view.atomIds.includes(id))
           throw new Error(`${c.id}: unknown layout atom ${id}`);
-      validateAbbreviations(layout.abbreviations, c.id);
-      abbreviatedGroups(toolkit, mol, layout.abbreviations, c.id);
+      if (!layout.inputSmiles)
+        abbreviatedGroups(toolkit, mol, layout.abbreviations, c.id);
     }
     const g = graphOf(mol);
     const dummies = c.atomIds.filter((_, i) => g.atoms[i].z === 0);
@@ -560,7 +558,28 @@ export function compoundAbbreviations(
 ) {
   const mol = openMolecule(toolkit, c.smiles);
   try {
-    return abbreviatedGroups(toolkit, mol, layout.abbreviations).filter(
+    let selections = layout.abbreviations;
+    if (
+      layout.inputSmiles &&
+      !layout.explicitHydrogens &&
+      selections?.some((a) => typeof a !== "string")
+    ) {
+      const input = openMolecule(toolkit, layout.inputSmiles);
+      try {
+        const match: { atoms: number[] } = JSON.parse(
+          mol.get_substruct_match(
+            input,
+            JSON.stringify({ useChirality: true }),
+          ),
+        );
+        selections = selections.map((a) =>
+          typeof a === "string" ? a : { ...a, atom: match.atoms[a.atom] },
+        );
+      } finally {
+        input.delete();
+      }
+    }
+    return abbreviatedGroups(toolkit, mol, selections).filter(
       (g) =>
         !layout.abbreviationAtoms ||
         layout.abbreviationAtoms.includes(c.atomIds[g.atoms[0]]),

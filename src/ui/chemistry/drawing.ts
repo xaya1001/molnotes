@@ -1,4 +1,8 @@
-import type { AbbreviatedGroup } from "../../../shared/molecule-abbreviations.ts";
+import {
+  abbreviationFacesLeft,
+  abbreviationLabel,
+  type AbbreviatedGroup,
+} from "../../../shared/molecule-abbreviations.ts";
 import type { MoleculeHandle } from "./rdkit.ts";
 // Draw in ACS document units, then use one screen scale for every consumer.
 // This is the one screen-size setting; all ACS proportions follow it.
@@ -62,15 +66,6 @@ export function moleculeSvg(
 
 type Point = { x: number; y: number };
 type Atom = { z?: number; impHs?: number; chg?: number; isotope?: number };
-const reversedLabels: Record<string, string> = {
-  "CO₂Me": "MeO₂C",
-  "CO₂Et": "EtO₂C",
-  "CO₂tBu": "tBuO₂C",
-  OMe: "MeO",
-  OEt: "EtO",
-  "CF₃": "F₃C",
-};
-
 /** Place an abbreviation on its attachment glyph using actual font metrics. */
 export function labelAbbreviations(
   svg: Document,
@@ -96,22 +91,29 @@ export function labelAbbreviations(
       groups.filter((item) => item.attachment === attachment).length === 1;
     const atom = merge ? attachment : root;
     const point = atoms[atom];
-    const right = atoms[root].x >= atoms[attachment].x;
+    const left = abbreviationFacesLeft(atoms[root], atoms[attachment]);
+    const facing = abbreviationLabel(group.name, left, (element.z ?? 6) === 6)
+      .replace(/<sub>(\d+)<\/sub>/g, (_, digits: string) =>
+        digits.replace(/\d/g, (digit) => "₀₁₂₃₄₅₆₇₈₉"[Number(digit)]),
+      )
+      .replace(/<sup>-<\/sup>/g, "⁻");
     let label: string, prefix: string, glyph: string;
     if (merge) {
       const hydrogen = element.impHs
         ? `H${element.impHs > 1 ? String(element.impHs).replace(/[0-9]/g, (c) => "₀₁₂₃₄₅₆₇₈₉"[Number(c)]) : ""}`
         : "";
-      prefix = right ? "" : group.name + hydrogen;
+      prefix = left ? facing + hydrogen : "";
       glyph = symbol;
-      label = right ? symbol + hydrogen + group.name : prefix + symbol;
+      label = left ? prefix + symbol : symbol + hydrogen + facing;
       svg
         .querySelectorAll(`.bond-${group.bond}`)
         .forEach((node) => node.remove());
     } else {
-      label = right ? group.name : (reversedLabels[group.name] ?? group.name);
-      glyph = right ? label[0] : label.at(-1)!;
-      prefix = right ? "" : label.slice(0, -1);
+      label = facing;
+      glyph = (left ? /(?:Cl|Br|Si|Sn|.)$/ : /^(?:Cl|Br|Si|Sn|.)/).exec(
+        label,
+      )![0];
+      prefix = left ? label.slice(0, -glyph.length) : "";
     }
     svg.querySelectorAll(`text.atom-${atom}`).forEach((node) => node.remove());
     const anchor = context.measureText(glyph);

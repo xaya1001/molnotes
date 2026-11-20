@@ -7,6 +7,11 @@ import {
   type ConformationSpec,
 } from "../shared/chemical-templates/conformation.ts";
 import { isObject } from "../shared/json.ts";
+import {
+  validateAbbreviations,
+  type AbbreviationName,
+  type MoleculeAbbreviation,
+} from "../shared/molecule-abbreviations.ts";
 import type { ArrowKind } from "../shared/chemical-library/types.ts";
 
 type Key = string | number;
@@ -34,6 +39,7 @@ export interface StructureInput extends Omit<
   coordgen?: boolean;
   drawing?: "flat" | "perspective";
   abbreviate?: boolean;
+  abbreviations?: MoleculeAbbreviation[];
   numbers?: boolean;
   notes?: Record<string, Key>;
   arrows?: PushInput[];
@@ -102,7 +108,7 @@ export interface FigureInput {
   bond?: number;
   width?: number;
   scale?: number;
-  abbreviate?: ("Ph" | "Trt" | "Bz")[];
+  abbreviate?: AbbreviationName[];
   kind?: "route" | "mechanism" | "markush" | "gallery" | "scope" | "cycle";
   core?: MarkushFigureData["core"];
   groups?: MarkushFigureData["groups"];
@@ -255,6 +261,7 @@ export function validateFigureInput(value: unknown): {
     drawing: choice("flat", "perspective"),
     ring_h: bool,
     abbreviate: bool,
+    abbreviations: validateAbbreviations,
     numbers: bool,
     notes: map(text),
     arrows,
@@ -358,7 +365,7 @@ export function validateFigureInput(value: unknown): {
     forming: bool,
     ring_h: bool,
     footnote: text,
-    abbreviate: list(choice("Ph", "Trt", "Bz")),
+    abbreviate: list(choice("Ph", "Tr", "Bz")),
     mark: string,
   };
   const structureRule: Rule = (v, p) => {
@@ -495,6 +502,8 @@ export function validateFigureInput(value: unknown): {
                 coordgen: bool,
                 drawing: structure.drawing,
                 ring_h: bool,
+                abbreviate: bool,
+                abbreviations: validateAbbreviations,
                 bracket: structure.bracket,
                 scale: structure.scale,
                 numbers: bool,

@@ -1,7 +1,7 @@
 import type { MoleculeData } from "../src/ui/chemistry/types.ts";
 import {
   validateAbbreviations,
-  abbreviationSmarts,
+  abbreviationFragments,
 } from "./molecule-abbreviations.ts";
 import { isObject } from "./json.ts";
 
@@ -39,7 +39,7 @@ export interface SubstrateScope {
 }
 /** Display fragments as journal notation; unfamiliar SMILES need content text. */
 export function substituentDisplay(smiles: string, label?: string) {
-  if (Object.hasOwn(abbreviationSmarts, smiles)) return smiles;
+  if (Object.hasOwn(abbreviationFragments, smiles)) return smiles;
   const rooted = smiles.startsWith("*") ? smiles : `*${smiles}`;
   const known: Record<string, string> = {
     "*C": "Me",
@@ -54,7 +54,7 @@ export function substituentDisplay(smiles: string, label?: string) {
   };
   const name =
     known[rooted] ??
-    Object.entries(abbreviationSmarts).find(
+    Object.entries(abbreviationFragments).find(
       ([, fragment]) => fragment === rooted,
     )?.[0];
   if (name) return name;

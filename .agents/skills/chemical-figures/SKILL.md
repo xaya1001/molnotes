@@ -123,7 +123,19 @@ Orientation propagates outward from the largest uncrowded compound, or the figur
 
 For other reactants, `others: box|text|plus|none` sets the default; `{id,show}` overrides one. `box` draws a bordered structure above the arrow. `text` uses the compound's `text` or its label/name. `none` omits drawing while retaining the structural participant. Compound `bracket: true` adds brackets; `bracket: ts` adds the transition-state sign. Figure `footnote` sits below the whole diagram. Conditions, labels and footnotes support chemical italic prefixes (`n-`, `t-`, `cis-`), `*italic*`/`**bold**`, Unicode subscripts and `^{superscript}`.
 
-Common protecting groups and terminal functional groups fold by default, using attachment-facing label spelling. A compound's `abbreviate: false` keeps it expanded; figure-level `abbreviate: [Ph, Trt, Bz]` enables optional groups. A group stays expanded when its hidden interior contains an electron-arrow endpoint; its root can remain a label and receive an arrow. Other groups keep their abbreviations. Write conditions as ordinary chemical text (`H2O`, `Pd(PPh3)4`); digits become subscripts, and a backslash keeps the next character literal. Reagents retain source order. Numbers and names use `number: name`, with a bold number; yields use parentheses.
+Structural substituents are expanded by default.
+Use `abbreviations: [Boc]` on a structure or mechanism frame to fold all matching Boc groups.
+Use `abbreviations: [{name: NO2, atom: 22}]` to fold just the group whose attachment-side nitrogen has map `:22` in the SMILES.
+Placement determines the label's attachment-facing spelling.
+Leave a group expanded in a mechanism frame when any atom in it bears an electron-arrow endpoint, charge, lone pair, or unpaired electron.
+Lint reports an explicit abbreviation at such a location.
+In an ordinary reaction scheme, a participating group can be abbreviated.
+Use `abbreviate: false` to keep a small reagent expanded.
+Write conditions as ordinary chemical text (`H2O`, `Pd(PPh3)4`).
+Digits become subscripts, and a backslash keeps the next character literal.
+Reagents retain source order.
+Numbers and names use `number: name`, with a bold number.
+Yields use parentheses.
 
 CXSMILES repeat units such as `CCCOCC |Sg:n:2:n:ht|` retain their crossing-bond brackets and multiplier in a figure-owned layout. Set a compound's `coordgen: true` to use CoordGen for its own depiction, including a macrocyclic anchor; expanded and folded structures share the same bond length. A compound's `scale` enlarges structure coordinates while retaining the atom font size.
 

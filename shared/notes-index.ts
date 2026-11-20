@@ -426,16 +426,21 @@ export async function compileNotes({
             env.line + n + 1,
             "abbreviations must follow smiles, before caption",
           );
-        const names = match[2].split(",").map((name) => name.trim());
+        const selections = match[2].split(",").map((entry) => {
+          const indexed = /^(.*?)@(\d+)$/.exec(entry.trim());
+          return indexed
+            ? { name: indexed[1], atom: Number(indexed[2]) }
+            : entry.trim();
+        });
         const where = `${env.file}:${env.line + n + 1}`;
-        validateAbbreviations(names, where);
+        validateAbbreviations(selections, where);
         const mol = toolkit!.get_mol(current.smiles)!;
         try {
-          abbreviatedGroups(toolkit!, mol, names, where);
+          abbreviatedGroups(toolkit!, mol, selections, where);
         } finally {
           mol.delete();
         }
-        current.abbreviations = names;
+        current.abbreviations = selections;
       } else {
         if (!molecules.length || molecules[molecules.length - 1].caption)
           fail(env.file, env.line + n + 1, "caption must follow smiles");

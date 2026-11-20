@@ -20,7 +20,8 @@ import {
   matchingAbbreviations,
   abbreviationFacesLeft,
   abbreviationLabel,
-  abbreviationSmarts,
+  abbreviationFragments,
+  type AbbreviationName,
   type MoleculeAbbreviation,
 } from "../shared/molecule-abbreviations.ts";
 import type { Compound } from "../shared/chemical-library/types.ts";
@@ -41,66 +42,51 @@ import { boxOverlapsPolygon } from "../src/ui/library/geometry-collision.ts";
 import { figureDimension } from "./figure-output.ts";
 import { ringHydrogens } from "./figure-scaffolds.ts";
 
-const defaults: MoleculeAbbreviation[] = [
-  "OTBS",
-  "OTBDPS",
-  "OTES",
-  "OTIPS",
-  "OPMB",
-  "OBn",
-  "OPiv",
-  "OAc",
-  "OBz",
-  "OMOM",
-  "OTs",
-  "OMs",
-  "OTf",
-  "NHBoc",
-  "TMS",
-  "TBS",
-  "Boc",
-  "Ts",
-  "CO₂Me",
-  "CO₂Et",
-  "CO₂tBu",
-  "CN",
-  "SCH2Ph",
-  "CO₂H",
-  "Ac",
-  "NO2",
-];
+const groupElements = Object.keys(abbreviationFragments);
+
 export function figureAbbreviations(
   rd: Toolkit,
   mol: Mol,
   spec: StructureInput,
   extra: FigureInput["abbreviate"],
-  protectedMaps: number[] = [],
-) {
-  if (spec.abbreviate === false) return { abbreviations: [] };
-  const names = matchingAbbreviations(rd, mol, [...defaults, ...(extra ?? [])]);
-  const targets = new Set([
-    ...protectedMaps,
-    ...(spec.arrows ?? []).flatMap((arrow) =>
-      [arrow.from, arrow.to].flatMap((s) =>
-        [...s.matchAll(/\d+/g)].map((m) => Number(m[0])),
+  protectedMaps: number[],
+  where: string,
+  mechanism: boolean,
+): MoleculeAbbreviation[] {
+  const maps = atomMaps(mol);
+  const selections =
+    spec.abbreviations?.map((selection) => {
+      if (typeof selection === "string") return selection;
+      const atom = selection.atom > 0 ? maps.indexOf(selection.atom) : -1;
+      if (atom < 0)
+        throw new Error(
+          `${where}.abbreviations: unknown atom map ${selection.atom}`,
+        );
+      return { name: selection.name, atom };
+    }) ??
+    (spec.abbreviate === false
+      ? []
+      : matchingAbbreviations(rd, mol, extra ?? []));
+  if (mechanism && selections.length) {
+    const endpoints = new Set([
+      ...protectedMaps,
+      ...(spec.arrows ?? []).flatMap((arrow) =>
+        [arrow.from, arrow.to].flatMap((s) =>
+          [...s.matchAll(/\d+/g)].map((m) => Number(m[0])),
+        ),
       ),
-    ),
-    ...(spec.enclose ?? []).flatMap((e) => [
-      ...(e.atoms ?? []),
-      ...(e.bonds ?? []).flat(),
-    ]),
-  ]);
-  const maps = atomMaps(mol),
-    groups = abbreviatedGroups(rd, mol, names),
-    retained = groups.filter(
-      (g) => !g.atoms.slice(1).some((a) => targets.has(maps[a])),
-    );
-  return {
-    abbreviations: names,
-    ...(retained.length === groups.length
-      ? {}
-      : { abbreviationAtoms: retained.map((g) => g.atoms[0]) }),
-  };
+    ]);
+    const { atoms } = graphOf(mol);
+    for (const group of abbreviatedGroups(rd, mol, selections, where))
+      for (const index of group.atoms) {
+        const atom = atoms[index];
+        if (endpoints.has(maps[index]) || atom.chg || atom.nRad)
+          throw new Error(
+            `${where}.abbreviations: ${group.name} must be expanded at mechanism atom ${maps[index] || index + 1}`,
+          );
+      }
+  }
+  return selections;
 }
 interface Structure {
   compound: Compound;
@@ -151,24 +137,21 @@ function descriptionMolecule(
 }
 interface DisplayAtoms {
   original: number[];
-  labels: Map<number, MoleculeAbbreviation>;
+  labels: Map<number, AbbreviationName>;
 }
 const displayAtoms = new WeakMap<Mol, DisplayAtoms>();
 function contracted(
   rd: Toolkit,
   full: Mol,
-  names: readonly MoleculeAbbreviation[] = [],
+  selections: readonly MoleculeAbbreviation[] = [],
   allowed?: number[],
 ) {
-  const groups = abbreviatedGroups(rd, full, names).filter(
+  const groups = abbreviatedGroups(rd, full, selections).filter(
     (g) => !allowed || allowed.includes(g.atoms[0]),
   );
   const roots = new Map(groups.map((g) => [g.atoms[0], g.name]));
-  const definitions = [...new Set(groups.map((g) => g.name))]
-    .map((name) => `${name} ${abbreviationSmarts[name]} ${name} ${name}`)
-    .join("\n");
-  const { mol: shown, original } = definitions
-    ? rd.condense(full, definitions, [...roots.keys()])
+  const { mol: shown, original } = groups.length
+    ? rd.condense(full, groups)
     : {
         mol: full.copy()!,
         original: graphOf(full).atoms.map((_, i) => i),
@@ -187,13 +170,12 @@ function contracted(
 
 function matchingCopy(rd: Toolkit, mol: Mol) {
   const data = JSON.parse(mol.get_json());
-  for (const [i, name] of displayAtoms.get(mol)?.labels ?? [])
-    data.molecules[0].atoms[i] = {
-      z:
-        60 +
-        [...defaults, "Ph", "Trt", "Bz"].indexOf(name as MoleculeAbbreviation),
-      impHs: 0,
-    };
+  const labels = displayAtoms.get(mol)?.labels;
+  // Compare temporary isotopes so an abbreviation is distinct from every element.
+  for (const [i, atom] of data.molecules[0].atoms.entries()) {
+    const name = labels?.get(i);
+    atom.isotope = name ? 200 + groupElements.indexOf(name) : (atom.z ?? 6);
+  }
   return descriptionMolecule(rd, data);
 }
 function ringBondSet(atomRings: number[][]) {
@@ -396,6 +378,7 @@ function commonCore(
             RingMatchesRingOnly: strict,
             CompleteRingsOnly: strict,
             MatchChiralTag: false,
+            AtomCompare: "Isotopes",
             BondCompare: "Any",
           }),
         ),
@@ -802,8 +785,10 @@ function nativeLabelCost(
         name,
       ]),
     ),
-    groups = abbreviatedGroups(rd, full, [...new Set(names.values())]).filter(
-      (g) => names.has(g.atoms[0]),
+    groups = abbreviatedGroups(
+      rd,
+      full,
+      [...names].map(([atom, name]) => ({ name, atom })),
     ),
     drawn = abbreviatedDrawing(
       rd,
@@ -954,6 +939,23 @@ function nativeLabelCost(
   }
 }
 
+function contractedFor(rd: Toolkit, r: Structure, full: Mol) {
+  const layout = r.variant
+    ? r.compound.variants![r.variant]
+    : r.compound.layout;
+  return contracted(
+    rd,
+    full,
+    layout.abbreviations?.map((selection) =>
+      typeof selection === "string"
+        ? selection
+        : { ...selection, atom: r.depiction.atoms.indexOf(selection.atom) },
+    ),
+    layout.abbreviationAtoms?.map((a) =>
+      r.depiction.atoms.indexOf(r.compound.atomIds.indexOf(a)),
+    ),
+  );
+}
 /** Depict outward from the largest uncrowded anchor, preserving one core orientation. */
 export function depictRoute(
   rd: Toolkit,
@@ -1022,14 +1024,7 @@ export function depictRoute(
       const layout = r.variant
         ? r.compound.variants![r.variant]
         : r.compound.layout;
-      const shown = contracted(
-        rd,
-        initial,
-        layout.abbreviations,
-        layout.abbreviationAtoms?.map((a) =>
-          r.depiction.atoms.indexOf(r.compound.atomIds.indexOf(a)),
-        ),
-      );
+      const shown = contractedFor(rd, r, initial);
       expected.set(key, graphSignature(rd, shown));
       if (r.spec.drawing) {
         const coords = r.depiction.atoms.map(
@@ -1091,24 +1086,7 @@ export function depictRoute(
             reference,
             coordgen,
             expected.get(key)!,
-            () =>
-              free(
-                contracted(
-                  rd,
-                  fulls.get(key)!,
-                  (r.variant
-                    ? r.compound.variants![r.variant]
-                    : r.compound.layout
-                  ).abbreviations,
-                  (r.variant
-                    ? r.compound.variants![r.variant]
-                    : r.compound.layout
-                  ).abbreviationAtoms?.map((a) =>
-                    r.depiction.atoms.indexOf(r.compound.atomIds.indexOf(a)),
-                  ),
-                ),
-                coordgen,
-              ),
+            () => free(contractedFor(rd, r, fulls.get(key)!), coordgen),
           );
           mols.set(key, mol);
         }

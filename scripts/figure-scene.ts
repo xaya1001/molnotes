@@ -20,10 +20,6 @@ import { conformationGeometry } from "../src/ui/library/conformation-geometry.ts
 import { createHash } from "node:crypto";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import {
-  abbreviationSmarts,
-  type MoleculeAbbreviation,
-} from "../shared/molecule-abbreviations.ts";
-import {
   atomMaps,
   graphOf,
   validateCompound,
@@ -462,17 +458,6 @@ export async function compileFigure(
             (spec.coordgen ?? input.coordgen) ? m.get_molblock() : undefined,
           ),
         );
-        const abbrevs = [
-          ...new Set(
-            [...spec.smiles.matchAll(/\[([A-Za-z][A-Za-z0-9]*)\]/g)].map(
-              (m) => m[1],
-            ),
-          ),
-        ].filter((key): key is MoleculeAbbreviation =>
-          Object.hasOwn(abbreviationSmarts, key),
-        );
-        compound.layout.abbreviations =
-          spec.abbreviate === false ? [] : abbrevs;
         entries[cid] = compound;
         generated.add(cid);
       }
@@ -480,17 +465,11 @@ export async function compileFigure(
       const abbreviations = figureAbbreviations(
         rd,
         m,
-        {
-          ...spec,
-          enclose: [
-            ...(spec.enclose ?? []),
-            ...(input.steps ?? []).flatMap(
-              (step) => step.enclose?.[where.replace(/^compounds\./, "")] ?? [],
-            ),
-          ],
-        },
+        spec,
         input.abbreviate,
         protectedMaps,
+        where,
+        kind === "mechanism",
       );
       const baseTarget = openMolecule(rd, compound.smiles);
       try {
@@ -563,27 +542,27 @@ export async function compileFigure(
         );
         if (match.atoms?.length !== maps.length)
           throw new Error(`${where}: cannot map compound atoms`);
-        const abbreviationAtoms = abbreviations.abbreviationAtoms?.map(
-          (i) => compound.atomIds[match.atoms![i]],
+        const selectedAbbreviations = abbreviations.map((selection) =>
+          typeof selection === "string"
+            ? selection
+            : { ...selection, atom: match.atoms![selection.atom] },
         );
         if (
           compound.smiles.includes(".") ||
           spec.abbreviate !== undefined ||
-          JSON.stringify(abbreviations.abbreviations) !==
+          JSON.stringify(selectedAbbreviations) !==
             JSON.stringify(compound.layout.abbreviations ?? []) ||
-          JSON.stringify(abbreviationAtoms) !==
-            JSON.stringify(compound.layout.abbreviationAtoms)
+          compound.layout.abbreviationAtoms
         ) {
           variant = `${id}_${figureKey(where)}`;
           compound.variants ??= {};
           const layout = {
             ...structuredClone(compound.layout),
-            abbreviations: abbreviations.abbreviations,
+            abbreviations: selectedAbbreviations,
           };
           if (spec.abbreviate === undefined) delete layout.reagentAbbreviate;
           else layout.reagentAbbreviate = spec.abbreviate;
           delete layout.abbreviationAtoms;
-          if (abbreviationAtoms) layout.abbreviationAtoms = abbreviationAtoms;
           compound.variants[variant] = layout;
           generated.add(compound.id);
         }
@@ -1221,11 +1200,9 @@ export async function compileFigure(
               ...eventRefs(a.from),
               ...eventRefs(a.to),
             ]),
-            ...(frame.labels ?? []).flatMap((l) => eventRefs(l.at)),
-            ...(frame.partialBonds ?? []).flatMap((b) => [
-              ...eventRefs(b.from),
-              ...eventRefs(b.to),
-            ]),
+            ...(frame.labels ?? [])
+              .filter((label) => label.kind !== "text")
+              .flatMap((label) => eventRefs(label.at)),
           ]
             .filter((a) => a.local === local)
             .map((a) => a.number);
