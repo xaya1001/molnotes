@@ -21,6 +21,7 @@ function fixture(name: string) {
     JSON.stringify({ title: "观察", intro: "样本", order: 1 }),
   );
   writeFileSync(join(dir, "glossary.json"), JSON.stringify([term]));
+  writeFileSync(join(dir, "prose-terms.json"), "[]");
   return dir;
 }
 const note = (body: string, order = 1) =>
@@ -210,4 +211,18 @@ test("check resolves sparse note and practice links without compiling unrelated 
   );
   git("sparse-checkout", "set", "--cone", "notes/sample");
   assert.deepEqual((await checkNote(dir, "notes/sample/first.md")).errors, []);
+});
+
+test("check rejects forbidden prose forms", async () => {
+  const dir = fixture("prose-rules");
+  const file = "notes/sample/first.md";
+  writeFileSync(join(dir, "prose-terms.json"), JSON.stringify(["内部术语"]));
+  for (const [body, expected] of [
+    ["内部术语", /forbidden prose term/],
+    ["第 3 篇", /chapter announcement/],
+    ["`{样本}`", /chemical name marked as code/],
+  ] as const) {
+    writeFileSync(join(dir, file), note(body));
+    assert.match((await checkNote(dir, file)).errors.join("\n"), expected);
+  }
 });

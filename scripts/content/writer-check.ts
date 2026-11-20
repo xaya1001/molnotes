@@ -16,6 +16,7 @@ import { resolveCitations } from "./citations.ts";
 import { readRegistry, readGlossary } from "./content-files.ts";
 import { parseRequest } from "./requests.ts";
 import { writerFiles } from "./writer-context.ts";
+import { lintProse, proseTerms } from "./prose-lint.ts";
 
 const normalized = (text: string) => text.replace(/\s/g, "").toLowerCase();
 const markdown = noteMarkdown();
@@ -39,7 +40,7 @@ export async function checkNote(
   const hintTerms = glossary.filter((term) =>
     /\p{Script=Han}/u.test(term.term),
   );
-  const errors: string[] = [];
+  const errors: string[] = lintProse(parsed.body, file, await proseTerms(root));
   const hints = new Map<string, string>();
   const seen = new Set<string>();
   const additions = additionsFile

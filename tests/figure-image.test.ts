@@ -16,6 +16,7 @@ test("image registration builds readable assets and reuses identical bytes", asy
   );
   await writeFile(file, bytes);
   await writeFile(join(root, "glossary.json"), "[]");
+  await writeFile(join(root, "prose-terms.json"), "[]");
   const metadata = {
     title: "Sample counts",
     sources: [

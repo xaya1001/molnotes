@@ -1,4 +1,5 @@
 import test from "node:test";
+import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
 import {
   compilePracticeChapter,
@@ -254,4 +255,72 @@ test("Markdown and JSON chapters keep their authored order in one topic", async 
     ),
     /written\.md:\d+: Duplicate question id written-choice/,
   );
+});
+
+test("practice chapter checks referenced note headings and explanations", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "practice-lint-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, "sites/practice/chapters"), { recursive: true });
+  mkdirSync(join(root, "notes/reader-test"), { recursive: true });
+  writeFileSync(
+    join(root, "notes/reader-test/second.md"),
+    "---\ntitle: Sample\nsummary: Sample\ndate: 2026-01-01\norder: 1\n---\n\n## Existing\n",
+  );
+  const run = async (q: string) => {
+    writeFileSync(join(root, file), chapter(fence(q)));
+    await readPracticeChapters(
+      root,
+      "sites/practice",
+      { chapters: ["chapters/check.md"] },
+      "练习",
+    );
+  };
+  const q = prediction(
+    "choice",
+    "options: [A, B]\nanswer: 0\noptionExplanations: [A, B]",
+  );
+  await assert.rejects(
+    run(q + "\nsource: 依据笔记「Missing」"),
+    /question choice: unknown note section Missing/,
+  );
+  await assert.rejects(
+    run(q.replace("Use the given values.", "映射号")),
+    /forbidden explanation term/,
+  );
+});
+
+test("check accepts a Markdown chapter and a JSON chapter selector", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "practice-cli-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, "sites/practice/chapters"), { recursive: true });
+  mkdirSync(join(root, "notes/reader-test"), { recursive: true });
+  writeFileSync(
+    join(root, "notes/reader-test/second.md"),
+    "---\ntitle: Sample\nsummary: Sample\ndate: 2026-01-01\norder: 1\n---\n\n## Existing\n",
+  );
+  writeFileSync(join(root, file), chapter(""));
+  writeFileSync(
+    join(root, "sites/practice/site.json"),
+    JSON.stringify({ group: "练习" }),
+  );
+  writeFileSync(
+    join(root, "sites/practice/content.json"),
+    JSON.stringify({
+      chapters: [
+        "chapters/check.md",
+        { id: "json", note: "notes/reader-test/second", blocks: [] },
+      ],
+    }),
+  );
+  for (const target of [
+    "content/sites/practice/chapters/check.md",
+    "sites/practice/content.json#json",
+  ]) {
+    const result = spawnSync(
+      process.execPath,
+      ["scripts/content.ts", "check", target],
+      { encoding: "utf8", env: { ...process.env, MOLNOTES_CONTENT_DIR: root } },
+    );
+    assert.equal(result.status, 0, result.stderr);
+  }
 });

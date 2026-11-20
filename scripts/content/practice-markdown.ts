@@ -10,7 +10,7 @@ import {
   type BlockReferences,
 } from "../../shared/topic-blocks.ts";
 import type { TopicBlock } from "../../src/ui/topic/blocks.ts";
-import { parseNote } from "../../shared/notes-index.ts";
+import { noteMarkdown, parseNote } from "../../shared/notes-index.ts";
 import { parseRequest } from "./requests.ts";
 import { proseMarkdown } from "../../shared/prose-markdown.ts";
 import type { ProsePart } from "../../shared/prose-format.ts";
@@ -401,15 +401,69 @@ export async function readPracticeChapters(
     );
   }
   for (const chapter of chapters) {
-    if (!isObject(chapter) || chapter.note === undefined) continue;
-    if (
-      typeof chapter.note !== "string" ||
-      !new RegExp(`^notes/${slug}/${slug}$`).test(chapter.note)
-    )
-      fail(`${unit}/content.json:1`, "note must name notes/<dir>/<slug>");
-    const file = `${chapter.note}.md`;
-    const note = parseNote(await readFile(join(root, file), "utf8"), file);
-    chapter.note = { href: `/${chapter.note}`, title: note.title };
+    if (!isObject(chapter)) continue;
+    let headings: Set<string> | undefined;
+    let note: ReturnType<typeof parseNote> | undefined;
+    if (chapter.note !== undefined) {
+      if (
+        typeof chapter.note !== "string" ||
+        !new RegExp(`^notes/${slug}/${slug}$`).test(chapter.note)
+      )
+        fail(`${unit}/content.json:1`, "note must name notes/<dir>/<slug>");
+      const file = `${chapter.note}.md`;
+      note = parseNote(await readFile(join(root, file), "utf8"), file);
+      const tokens = noteMarkdown().parse(note.body, { file });
+      headings = new Set(
+        tokens.flatMap((token, i) =>
+          token.type === "heading_open" ? [tokens[i + 1].content] : [],
+        ),
+      );
+    }
+    const visit = (value: unknown) => {
+      if (Array.isArray(value)) {
+        value.forEach(visit);
+        return;
+      }
+      if (!isObject(value)) return;
+      if (typeof value.id === "string") {
+        if (typeof value.source === "string")
+          for (const match of value.source.matchAll(/笔记「([^」]+)」/g))
+            if (
+              ![...(headings ?? [])].some((heading) =>
+                heading.includes(match[1]),
+              )
+            )
+              fail(
+                `${unit}/content.json`,
+                `question ${value.id}: unknown note section ${match[1]}`,
+              );
+        if (
+          [
+            value.explanation,
+            value.optionExplanations,
+            isObject(value.answer) ? value.answer.text : undefined,
+          ].some(
+            (part) =>
+              (typeof part === "string" && part.includes("映射号")) ||
+              (Array.isArray(part) &&
+                part.some(
+                  (text) => typeof text === "string" && text.includes("映射号"),
+                )),
+          )
+        )
+          fail(
+            `${unit}/content.json`,
+            `question ${value.id}: forbidden explanation term`,
+          );
+      }
+      Object.values(value).forEach(visit);
+    };
+    if (group === "练习") visit(chapter.blocks);
+    if (group === "练习" && Array.isArray(authored.quiz))
+      visit(
+        authored.quiz.filter((q) => isObject(q) && q.chapter === chapter.id),
+      );
+    if (note) chapter.note = { href: `/${chapter.note}`, title: note.title };
   }
   authored.chapters = chapters;
 }
