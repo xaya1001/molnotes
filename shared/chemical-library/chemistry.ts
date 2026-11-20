@@ -13,6 +13,7 @@ export interface ChemicalGraph {
   atoms: {
     z?: number;
     chg?: number;
+    nRad?: number;
     impHs?: number;
     isotope?: number;
     stereo?: string;
@@ -750,6 +751,7 @@ export function validateSceneChemistry(
   library: import("./types.ts").Library,
   scene: import("./types.ts").Scene,
   where: string,
+  rejectPositiveChargeSource = false,
 ) {
   const molecules = new Map(
     scene.molecules
@@ -819,6 +821,14 @@ export function validateSceneChemistry(
         const a = atom(anchor.at);
         if (!a.graph.atoms[a.index].chg)
           throw new Error(`${where}: charge anchor requires a charged atom`);
+        if (
+          rejectPositiveChargeSource &&
+          anchor === arrow.from &&
+          a.graph.atoms[a.index].chg! > 0
+        )
+          throw new Error(
+            `${where}: arrow ${arrow.id} cannot start at a positive charge`,
+          );
       } else if (anchor.kind === "bond" || anchor.kind === "pi") {
         bond(anchor.atoms);
         if (anchor.kind === "pi") {

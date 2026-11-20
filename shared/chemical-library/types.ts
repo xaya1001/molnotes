@@ -24,6 +24,8 @@ export interface EntryBase {
   sources: Evidence[];
 }
 export interface CompoundLayout {
+  /** An author's explicit request to keep complete small reagents expanded. */
+  reagentAbbreviate?: false;
   /** Input for indexed molecule controls, preserving authored atom/bond order and depiction. */
   inputSmiles?: string;
   /** Additional ordinary H atoms, keyed by stable atom ID and attached to a base atom. */
@@ -156,6 +158,7 @@ export interface Scene {
   partialBonds?: { atoms: [AtomRef, AtomRef]; order: number }[];
 }
 export interface Participant {
+  other?: boolean;
   /** Compound key in the figure source; participant id remains stable across recompilation. */
   sourceKey?: string;
   position?: "inline" | "above-arrow" | "below-arrow" | "text" | "none";

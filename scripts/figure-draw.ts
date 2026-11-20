@@ -30,7 +30,7 @@ export function diagnosticLine(
   reference: FigureReference,
   diagnostic: Diagnostic,
 ) {
-  return `${location}${reference.frame ? ` [${reference.frame}]` : ""}: ${diagnostic.code} ${diagnostic.message} (${diagnostic.elements.join(", ")})`;
+  return `${location}${reference.frame ? ` [${reference.frame}]` : ""}${reference.variant ? ` [variant ${reference.variant}]` : ""}: ${diagnostic.code} ${diagnostic.message} (${diagnostic.elements.join(", ")})`;
 }
 
 export async function* drawFigure(

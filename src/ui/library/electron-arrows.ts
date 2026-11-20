@@ -259,15 +259,7 @@ export function electronArrowShapes(
   }
   function lonePair(c: Candidate, intent: ArrowIntent) {
     const source = intent.from;
-    if (
-      source.kind !== "lonePair" ||
-      (source.mark &&
-        !(
-          intent.to.atoms.length === 2 &&
-          intent.to.atoms.includes(source.atoms[0])
-        ))
-    )
-      return;
+    if (source.kind !== "lonePair" || source.mark) return;
     const direction = unit(sub(c.s, xy(source.atoms[0]))),
       radius = Math.max(1, B * 0.06);
     const nearestDistance = lonePairDistance(
@@ -367,7 +359,8 @@ export function electronArrowShapes(
     }
     const fromMark =
       from.kind === "charge" ||
-      (from.kind === "lonePair" && !(ta.length === 2 && ta.includes(fa[0])))
+      from.kind === "lonePair" ||
+      from.kind === "radical"
         ? from.mark
         : undefined;
     if (fromMark) s0 = fromMark.point;
@@ -973,7 +966,7 @@ export function electronArrowShapes(
   });
 }
 
-/** A2 circled charges: eight positions, free space first, then the arrow destination. */
+/** Place circled charges in open sectors around their atom. */
 export function chargeMarks(
   points: Record<string, Point>,
   bonds: [string, string][],
@@ -987,16 +980,6 @@ export function chargeMarks(
 ) {
   const radius = atomFont * 0.3,
     placed: Record<string, { point: Point; radius: number }> = {};
-  const obstacles = Object.entries(points).map(([id, point]) => ({
-    point,
-    id,
-  }));
-  for (const [a, b] of bonds)
-    for (const fraction of [0.3, 0.5, 0.7])
-      obstacles.push({
-        point: add(points[a], mul(sub(points[b], points[a]), fraction)),
-        id: "",
-      });
   for (const id of Object.keys(charges)) {
     const p = points[id],
       box = boxes[id] ?? {
@@ -1005,16 +988,59 @@ export function chargeMarks(
         top: p.y - B * 0.1,
         bottom: p.y + B * 0.1,
       };
+    const directions = bonds.flatMap(([a, b]) => {
+      if (a !== id && b !== id) return [];
+      const q = points[a === id ? b : a];
+      return [Math.atan2(q.y - p.y, q.x - p.x)];
+    });
+    for (const [other, r] of Object.entries(boxes)) {
+      if (other === id) continue;
+      const q = { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 };
+      if (dist(p, q) < B) directions.push(Math.atan2(q.y - p.y, q.x - p.x));
+    }
+    const circular = directions
+      .map((a) => (a + 2 * Math.PI) % (2 * Math.PI))
+      .sort((a, b) => a - b);
+    const gaps = circular.map((a, i) => {
+      const size = (circular[i + 1] ?? circular[0] + 2 * Math.PI) - a;
+      return { angle: a + size / 2, size };
+    });
+    const defaultAngle = -Math.PI / 4;
+    const blocked = directions.some(
+      (a) =>
+        Math.abs(
+          Math.atan2(Math.sin(a - defaultAngle), Math.cos(a - defaultAngle)),
+        ) <=
+        Math.PI / 6,
+    );
+    const preferred = (a: number) => {
+      const x = Math.cos(a),
+        y = Math.sin(a);
+      return y < 0 ? (x >= 0 ? 3 : 2) : x >= 0 ? 1 : 0;
+    };
+    gaps.sort((a, b) =>
+      Math.abs(a.size - b.size) > Math.PI / 36
+        ? b.size - a.size
+        : preferred(b.angle) - preferred(a.angle),
+    );
+    const aim = aims[id];
+    const candidates =
+      angles[id] !== undefined
+        ? [(angles[id] * Math.PI) / 180]
+        : aim
+          ? [
+              defaultAngle,
+              ...gaps.map((gap) => gap.angle),
+              Math.atan2(aim.y - p.y, aim.x - p.x),
+            ]
+          : blocked
+            ? gaps.map((gap) => gap.angle)
+            : [defaultAngle, ...gaps.map((gap) => gap.angle)];
     let bestScore = -Infinity,
       bestCollisions = Infinity,
-      bestFacesAway = true,
       best: Point | undefined;
-    for (const [index, degrees] of (angles[id] === undefined
-      ? [-45, -135, 45, 135, -90, 90, 0, 180]
-      : [angles[id]]
-    ).entries()) {
-      const a = (degrees * Math.PI) / 180,
-        dx = Math.cos(a),
+    for (const [index, a] of candidates.entries()) {
+      const dx = Math.cos(a),
         dy = Math.sin(a);
       const kx = dx > 0 ? box.right - p.x : p.x - box.left,
         ky = dy > 0 ? box.bottom - p.y : p.y - box.top;
@@ -1024,28 +1050,10 @@ export function chargeMarks(
           Math.abs(dy) > 1e-6 ? ky / Math.abs(dy) : 1e9,
         ) +
         radius +
-        1;
+        B * 0.09;
       const point = add(p, { x: dx * k, y: dy * k });
-      let clear = Math.min(
-        ...obstacles
-          .filter((o) => o.id !== id)
-          .map((o) => dist(point, o.point)),
-        ...Object.values(placed).map((z) => dist(point, z.point) - z.radius),
-      );
-      for (const [other, r] of Object.entries(boxes))
-        if (
-          other !== id &&
-          point.x > r.left - radius &&
-          point.x < r.right + radius &&
-          point.y > r.top - radius &&
-          point.y < r.bottom + radius
-        )
-          clear = 0;
-      let score = Math.min(clear, B * 0.8) - index * B * 0.012;
-      const aim = aims[id];
       const facing = aim ? dot({ x: dx, y: dy }, unit(sub(aim, p))) : 0;
-      const facesAway = charges[id] < 0 && facing < -0.1;
-      score += facing * B * 0.2;
+      const score = aim ? facing : -index;
       const outer = radius + 0.8,
         rectangle = [
           { x: point.x - outer, y: point.y - outer },
@@ -1060,6 +1068,8 @@ export function chargeMarks(
         bottom: Math.max(box.bottom, point.y + outer),
       };
       let collisions = 0;
+      for (const mark of Object.values(placed))
+        if (dist(point, mark.point) < radius + mark.radius) collisions++;
       for (const [other, b] of Object.entries(boxes))
         if (
           other !== id &&
@@ -1087,11 +1097,9 @@ export function chargeMarks(
           collisions++;
       if (
         collisions < bestCollisions ||
-        (collisions === bestCollisions &&
-          (facesAway === bestFacesAway ? score > bestScore : !facesAway))
+        (collisions === bestCollisions && score > bestScore)
       ) {
         bestCollisions = collisions;
-        bestFacesAway = facesAway;
         bestScore = score;
         best = point;
       }

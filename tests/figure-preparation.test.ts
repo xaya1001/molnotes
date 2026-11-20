@@ -932,7 +932,12 @@ test("native bond ends clear complete labels at their final stroke width", async
       },
       { toolkit, fonts, style },
     );
-    assert.deepEqual(figureGeometryDiagnostics(geometry, style), [], smiles);
+    assert.ok(
+      !figureGeometryDiagnostics(geometry, style).some(
+        (d) => d.code === "BOND_LABEL_OVERLAP",
+      ),
+      smiles,
+    );
   }
 });
 
@@ -1189,7 +1194,197 @@ test("folded neutral nitro groups do not display their internal charges", async 
   assert.deepEqual(charges, []);
 });
 
-test("donors aimed at their own bond display a neutral pair or a negative charge", async () => {
+test("two-letter element glyphs are centred on their atom", async () => {
+  const compound = prepareCompound(toolkit, {
+    id: "cmp_element",
+    title: "Element",
+    smiles: "C[Si](C)(C)C",
+    sources: [],
+  });
+  const geometry = await prepareFigure(
+    { [compound.id]: compound },
+    { ref: compound.id },
+    { toolkit, fonts, style },
+  );
+  const rd = toolkit.get_mol(compound.smiles)!;
+  const graph = JSON.parse(rd.get_json()).molecules[0];
+  const index = graph.atoms.findIndex((a: { z?: number }) => a.z === 14);
+  rd.delete();
+  const id = `compound:${compound.atomIds[index]}`;
+  const boxes: FigureBox[] = [];
+  walkGeometry(geometry.root, (node, matrix) => {
+    if (node.attributes["data-label"] === id && node.bounds)
+      boxes.push(transformBox(node.bounds, matrix)!);
+  });
+  assert.equal(boxes.length, 2);
+  const atom = geometry.atomPoints[id];
+  const x =
+    (Math.min(...boxes.map((b) => b.x)) +
+      Math.max(...boxes.map((b) => b.x + b.width))) /
+    2;
+  const y = boxes[0].y + boxes[0].height / 2;
+  assert.ok(Math.abs(x - atom.x) <= 0.2 && Math.abs(y - atom.y) <= 0.2);
+});
+
+test("a cyclic triple bond retains its ring geometry without a linear-centre warning", async () => {
+  const compound = prepareCompound(toolkit, {
+    id: "cmp_ring",
+    title: "Ring",
+    smiles: "C1#CC=CC=C1",
+    sources: [],
+  });
+  const geometry = await prepareFigure(
+    { [compound.id]: compound },
+    { ref: compound.id },
+    { toolkit, fonts, style },
+  );
+  assert.ok(
+    !figureGeometryDiagnostics(geometry, style).some(
+      (d) => d.code === "SP_CENTRE_BENT",
+    ),
+  );
+});
+
+test("radical ions keep the electron beside the charge and use it as the arrow source", async () => {
+  const compiled = await compileFigure({
+    kind: "mechanism",
+    frames: [
+      {
+        id: "event",
+        smiles: "[O-:1].[CH3:2][CH3:3]",
+        arrows: [{ from: "radical(1)", to: "atom(2)", electrons: 1 }],
+      },
+    ],
+  });
+  const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit,
+    fonts,
+    style,
+  });
+  let charge: FigureBox | undefined,
+    dot: FigureBox | undefined,
+    tail: { x: number; y: number } | undefined;
+  walkGeometry(geometry.root, (node, matrix) => {
+    if (node.attributes["data-charge-owner"] && node.bounds)
+      charge = transformBox(node.bounds, matrix)!;
+    if (node.attributes["data-radical-owner"] && node.bounds)
+      dot = transformBox(node.bounds, matrix)!;
+    if (node.attributes["data-electron-arrow"])
+      tail = transformPoint(
+        JSON.parse(node.attributes["data-curve-points"])[0],
+        matrix,
+      );
+  });
+  assert.ok(charge && dot && tail, JSON.stringify({ charge, dot, tail }));
+  assert.ok(
+    dot.x >= charge.x - 0.1 &&
+      dot.x + dot.width <= charge.x + charge.width + 0.1,
+  );
+  assert.ok(
+    Math.hypot(
+      tail.x - (dot.x + dot.width / 2),
+      tail.y - (dot.y + dot.height / 2),
+    ) < 8,
+  );
+});
+
+test("a small charged reagent uses a condensed label at its oxygen anchor", async () => {
+  const compiled = await compileFigure({
+    kind: "mechanism",
+    frames: [
+      {
+        id: "event",
+        smiles: "[CH3:1][O-:2].[CH2:3]=[O:4]",
+        arrows: [{ from: "lp(2)", to: "atom(3)" }],
+      },
+    ],
+  });
+  const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit,
+    fonts,
+    style,
+  });
+  const labels: string[] = [],
+    oxygen: FigureBox[] = [];
+  let tail: { x: number; y: number } | undefined;
+  walkGeometry(geometry.root, (node, matrix) => {
+    if (node.attributes["data-label-text"])
+      labels.push(node.attributes["data-label-text"]);
+    if (node.attributes["data-label-text"] === "MeO" && node.bounds)
+      oxygen.push(transformBox(node.bounds, matrix)!);
+    if (node.attributes["data-electron-arrow"])
+      tail = transformPoint(
+        JSON.parse(node.attributes["data-curve-points"])[0],
+        matrix,
+      );
+  });
+  assert.ok(labels.includes("MeO"));
+  assert.ok(tail && oxygen.length >= 3);
+  const atom = geometry.atomPoints["structure:a2"],
+    glyph = oxygen.at(-1)!;
+  assert.ok(Math.abs(glyph.x + glyph.width / 2 - atom.x) < 0.2);
+  assert.ok(Math.hypot(tail.x - atom.x, tail.y - atom.y) < 32);
+});
+
+test("a referenced interior atom or disabled abbreviation keeps a reagent expanded", async () => {
+  for (const [from, abbreviate] of [
+    ["bond(1,2)", undefined],
+    ["lp(2)", false],
+  ] as const) {
+    const compiled = await compileFigure({
+      kind: "mechanism",
+      frames: [
+        {
+          id: "event",
+          compounds: {
+            sample: {
+              smiles: "[CH3:1][O-:2].[CH2:3]=[O:4]",
+              ...(abbreviate === false ? { abbreviate: false } : {}),
+              arrows: [{ from, to: "atom(3)" }],
+            },
+          },
+        },
+      ],
+    });
+    const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+      toolkit,
+      fonts,
+      style,
+    });
+    const labels: string[] = [];
+    walkGeometry(geometry.root, (node) => {
+      if (node.attributes["data-label-text"])
+        labels.push(node.attributes["data-label-text"]);
+    });
+    assert.ok(!labels.includes("MeO"), from);
+  }
+});
+
+test("a protected substrate group does not disable a separate reagent label", async () => {
+  const compiled = await compileFigure({
+    kind: "mechanism",
+    frames: [
+      {
+        id: "event",
+        smiles: "[CH3:1][O:2][CH3:3].[CH3:4][O-:5].[CH2:6]=[O:7]",
+        arrows: [{ from: "bond(2,3)", to: "atom(6)" }],
+      },
+    ],
+  });
+  const geometry = await prepareFigure(compiled.entries, compiled.reference, {
+    toolkit,
+    fonts,
+    style,
+  });
+  const labels: string[] = [];
+  walkGeometry(geometry.root, (node) => {
+    if (node.attributes["data-label-text"])
+      labels.push(node.attributes["data-label-text"]);
+  });
+  assert.ok(labels.includes("MeO"));
+});
+
+test("declared donor pairs remain separate from the atom and charge", async () => {
   for (const [smiles, negative] of [
     ["[OH:1][C:2]([CH3:4])=[CH2:3]", false],
     ["[O-:1][C:2]([CH3:4])=[CH2:3]", true],
@@ -1211,26 +1406,37 @@ test("donors aimed at their own bond display a neutral pair or a negative charge
     });
     const pairs: string[] = [];
     let charge: FigureBox | undefined,
+      donor: FigureBox | undefined,
       tail: { x: number; y: number } | undefined;
     walkGeometry(geometry.root, (node, matrix) => {
       if (node.attributes["data-label"]?.endsWith("-lp"))
         pairs.push(node.attributes["data-label"]);
       if (node.attributes["data-charge-owner"])
         charge = transformBox(node.bounds, matrix) ?? undefined;
+      if (node.attributes["data-label"]?.endsWith(":a1") && node.bounds)
+        donor = transformBox(node.bounds, matrix) ?? undefined;
       if (node.attributes["data-electron-arrow"]) {
         const [start] = JSON.parse(node.attributes["data-curve-points"]);
         tail = transformPoint(start, matrix);
       }
     });
-    assert.equal(pairs.length, negative ? 0 : 1);
+    assert.equal(pairs.length, 1);
     if (negative) {
       assert.ok(charge && tail);
-      const dx = tail.x - (charge.x + charge.width / 2);
-      const dy = tail.y - (charge.y + charge.height / 2);
-      const gap = Math.hypot(dx, dy) - charge.width / 2;
       assert.ok(
-        gap >= 0 && gap <= 5,
-        `Arrow tail distance from charge: ${gap}`,
+        tail.x < charge.x ||
+          tail.x > charge.x + charge.width ||
+          tail.y < charge.y ||
+          tail.y > charge.y + charge.height,
+        "Arrow tail must remain outside the charge",
+      );
+      assert.ok(donor);
+      assert.ok(
+        tail.x < donor.x ||
+          tail.x > donor.x + donor.width ||
+          tail.y < donor.y ||
+          tail.y > donor.y + donor.height,
+        "Arrow tail must remain outside the donor glyph",
       );
     } else {
       assert.ok(

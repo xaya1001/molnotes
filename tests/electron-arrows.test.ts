@@ -9,6 +9,51 @@ import type { Point } from "../shared/chemical-library/types.ts";
 const B = 32;
 const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 
+test("charge marks use the upper-right and open bond sectors", () => {
+  const box = { left: -5, right: 5, top: -7, bottom: 7 };
+  const points = { a: { x: 0, y: 0 }, b: { x: 0, y: 32 } };
+  const mark = chargeMarks(
+    points,
+    [["a", "b"]],
+    { a: box },
+    { a: -1 },
+    {},
+    B,
+    20,
+  ).a.point;
+  assert.ok(mark.x > 0 && mark.y < 0);
+  assert.ok(Math.abs(mark.x + mark.y) < 1e-6);
+  const blocked = {
+    a: { x: 0, y: 0 },
+    b: { x: 24, y: -24 },
+    c: { x: -24, y: 24 },
+  };
+  const free = chargeMarks(
+    blocked,
+    [
+      ["a", "b"],
+      ["a", "c"],
+    ],
+    { a: box },
+    { a: -1 },
+    {},
+    B,
+    20,
+  ).a.point;
+  assert.ok(free.x < 0 && free.y < 0);
+  const pinned = chargeMarks(
+    points,
+    [["a", "b"]],
+    { a: box },
+    { a: -1 },
+    {},
+    B,
+    20,
+    { a: 90 },
+  ).a.point;
+  assert.ok(Math.abs(pinned.x) < 1e-6 && pinned.y > 0);
+});
+
 test("circled donor charges use the reaction direction in an open surrounding", () => {
   const box = { left: -5, right: 5, top: -7, bottom: 7 };
   const marks = chargeMarks(

@@ -155,7 +155,7 @@ if (input) {
             await browser.prepareBatch();
             result = await browser.render(ref, width);
           }
-          const name = `${ref.ref}${"frame" in ref ? "-" + ref.frame : ""}-${width}`;
+          const name = `${ref.ref}${"frame" in ref ? "-" + ref.frame : ""}${"variant" in ref && ref.variant ? "-" + ref.variant : ""}-${width}`;
           if (!args.includes("--check") && result.svg !== null)
             await writeFile(join(out, name + ".svg"), result.svg);
           await writeFile(

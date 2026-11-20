@@ -65,20 +65,29 @@ export function bondTraces(parent: FigureGroup, ctx: FigureScene) {
     }));
 }
 
-/** Native endpoints clear individual glyphs; reserve the complete main row and final stroke. */
+/** Clear the endpoint's element glyphs and the final stroke. */
 export function spaceBondEndpoints(parent: FigureGroup, ctx: FigureScene) {
   const labels = new Map<string, FigureRect[]>();
+  const anchors = new Map<string, FigureRect[]>();
   for (const node of ctx.nodes(parent)) {
     const id = ctx.data(node, "label");
-    if (id)
+    if (id) {
       labels.set(id, [...(labels.get(id) ?? []), inkBox(node, parent, ctx)]);
+      if (node.attributes["data-element-anchor"] === "true")
+        anchors.set(id, [
+          ...(anchors.get(id) ?? []),
+          inkBox(node, parent, ctx),
+        ]);
+    }
   }
   for (const trace of bondTraces(parent, ctx)) {
     if (trace.filled || trace.contours.some((c) => c.points.length !== 2))
       continue;
     const boxes = (ctx.data(trace.el, "atoms") ?? "")
       .split(" ")
-      .flatMap((id) => (labels.has(id) ? [mainRowBox(labels.get(id)!)] : []));
+      .flatMap((id) =>
+        labels.has(id) ? [mainRowBox(anchors.get(id) ?? labels.get(id)!)] : [],
+      );
     let changed = false;
     const segments = trace.contours.map((contour) => {
       const points = contour.points.map((p) => ({ ...p }));

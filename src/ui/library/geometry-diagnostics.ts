@@ -159,7 +159,7 @@ export function figureGeometryDiagnostics(
     }));
   const groups = new Map<string, { id: string; r: FigureRect }>();
   for (const l of labels) {
-    const id = l.el.data.chargeOwner ?? l.id;
+    const id = l.id;
     const prior = groups.get(id);
     if (!prior) groups.set(id, { id, r: l.r });
     else {
@@ -301,6 +301,38 @@ export function figureGeometryDiagnostics(
     for (const [id, p] of Object.entries(points))
       atomPoints.set(id, transformPoint({ x: p.x, y: p.y }, matrix));
   }
+  for (const molecule of elements.filter(
+    (node) => node.data.linearCentres !== undefined,
+  )) {
+    const centres: [string, string, string][] = JSON.parse(
+      molecule.data.linearCentres!,
+    );
+    for (const [a, b, centre] of centres) {
+      const p = atomPoints.get(centre)!,
+        x = atomPoints.get(a)!,
+        y = atomPoints.get(b)!;
+      const u = { x: x.x - p.x, y: x.y - p.y },
+        v = { x: y.x - p.x, y: y.y - p.y };
+      const cosine = Math.max(
+        -1,
+        Math.min(
+          1,
+          (u.x * v.x + u.y * v.y) /
+            (Math.hypot(u.x, u.y) * Math.hypot(v.x, v.y)),
+        ),
+      );
+      const deviation = 180 - (Math.acos(cosine) * 180) / Math.PI;
+      if (deviation > 5)
+        add(
+          "SP_CENTRE_BENT",
+          [centre],
+          "Restore the linear centre",
+          p,
+          deviation,
+          5,
+        );
+    }
+  }
   const drawnBonds = new Map<string, typeof bonds>();
   for (const bond of bonds)
     drawnBonds.set(bond.id, [...(drawnBonds.get(bond.id) ?? []), bond]);
@@ -308,6 +340,32 @@ export function figureGeometryDiagnostics(
   // leave up to a fraction of a bond between the visible ink and its owner.
   const maximumGap = bondLength * scale * 0.3;
   for (const [id, parts] of drawnBonds) {
+    const owners = parts[0].own;
+    if (owners.length === 2) {
+      const a = atomPoints.get(owners[0]),
+        b = atomPoints.get(owners[1]);
+      if (a && b) {
+        const dx = b.x - a.x,
+          dy = b.y - a.y,
+          length = Math.hypot(dx, dy);
+        const projected = parts.flatMap((part) =>
+          part.points.map(
+            (p) => ((p.x - a.x) * dx + (p.y - a.y) * dy) / length,
+          ),
+        );
+        const visible =
+          (Math.max(...projected) - Math.min(...projected)) / length;
+        if (visible < 0.2)
+          add(
+            "BOND_VISIBLE_TOO_SHORT",
+            [id],
+            "Restore the visible bond length",
+            undefined,
+            visible,
+            0.2,
+          );
+      }
+    }
     // A solid wedge has a tip and a broad end, represented by its contour.
     // Ordinary lines and hash strokes are checked at their actual endpoints.
     const ends = parts.flatMap((b) =>
@@ -350,6 +408,7 @@ export function figureGeometryDiagnostics(
   }
   const completeLabels = new Map<string, FigureRect>();
   const labelGlyphs = new Map<string, FigureRect[]>();
+  const elementGlyphs = new Map<string, FigureRect[]>();
   for (const { id, r: layoutBox, el } of labels) {
     const ink =
       el.node.kind === "text"
@@ -357,6 +416,8 @@ export function figureGeometryDiagnostics(
         : null;
     const r = ink ? rectangle(ink.x, ink.y, ink.width, ink.height) : layoutBox;
     labelGlyphs.set(id, [...(labelGlyphs.get(id) ?? []), r]);
+    if (el.data.elementAnchor === "true")
+      elementGlyphs.set(id, [...(elementGlyphs.get(id) ?? []), r]);
     const previous = completeLabels.get(id);
     const x = Math.min(previous?.left ?? r.left, r.left),
       y = Math.min(previous?.top ?? r.top, r.top);
@@ -371,7 +432,10 @@ export function figureGeometryDiagnostics(
     );
   }
   const mainLabels = new Map(
-    [...labelGlyphs].map(([id, glyphs]) => [id, mainRowBox(glyphs)]),
+    [...labelGlyphs].map(([id, glyphs]) => [
+      id,
+      mainRowBox(elementGlyphs.get(id) ?? glyphs),
+    ]),
   );
   for (const b of bonds)
     for (const [id, r] of completeLabels) {
@@ -603,6 +667,15 @@ export function figureGeometryDiagnostics(
           chord < 1.2 * bondLength * scale ||
           ((source.kind === "bond" || source.kind === "pi") &&
             target.kind === "bond");
+      if (chord > 0 && length > chord * 3.5)
+        add(
+          "ARROW_BACKTRACKS",
+          [a.id],
+          "Adjust the arrow to avoid doubling back",
+          undefined,
+          length / chord,
+          3.5,
+        );
       if (short) {
         const height = Math.max(
           ...a.points.map(

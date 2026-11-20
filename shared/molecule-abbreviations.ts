@@ -249,3 +249,25 @@ export function validateAbbreviatedReferences(
         }
     });
 }
+
+/** Complete small reagents, written with the arrow-bearing atom in the label. */
+export const reagentAbbreviations = [
+  { smiles: "C[O-]", label: "MeO", atom: 8 },
+  { smiles: "CC[O-]", label: "EtO", atom: 8 },
+  { smiles: "CC(C)(C)[O-]", label: "t-BuO", atom: 8 },
+  { smiles: "[OH-]", label: "HO", atom: 8 },
+  { smiles: "CO", label: "MeOH", atom: 8 },
+  { smiles: "CCO", label: "EtOH", atom: 8 },
+  { smiles: "O", label: "H<sub>2</sub>O", atom: 8 },
+  { smiles: "[OH3+]", label: "H<sub>3</sub>O", atom: 8 },
+  { smiles: "N", label: "NH<sub>3</sub>", atom: 7 },
+  { smiles: "[C-]#N", label: "CN", atom: 6 },
+  { smiles: "[N-]=[N+]=[N-]", label: "N<sub>3</sub>", atom: 7 },
+  { smiles: "C[S-]", label: "MeS", atom: 16 },
+  { smiles: "CC(=O)[O-]", label: "AcO", atom: 8 },
+  { smiles: "CC(=O)O", label: "AcOH", atom: 8 },
+  { smiles: "CCN(CC)CC", label: "Et<sub>3</sub>N", atom: 7 },
+  ...["[Br-]", "[Cl-]", "[I-]", "[F-]", "[H+]", "[Na+]", "[K+]", "[Li+]"].map(
+    (smiles) => ({ smiles, label: "", atom: 0 }),
+  ),
+] as const;
