@@ -88,7 +88,9 @@ export function chemicalTextRuns(
         const script = token[0] === "^" ? "super" : "sub";
         const value = token[1] === "{" ? token.slice(2, -1) : token.slice(1);
         append(
-          script === "super" ? value.replace(/^(\d*)[-–]$/, "$1−") : value,
+          context === "figure" && script === "super"
+            ? value.replace(/^(\d*)[-–]$/, "$1−")
+            : value,
           bold,
           italic,
           script,

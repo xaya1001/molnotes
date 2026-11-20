@@ -101,7 +101,6 @@ test("selected sources report new entries and remove only obsolete owned reactio
   const root = await mkdtemp(join(tmpdir(), "figure-recompile-selected-"));
   const source = join(root, "route.yaml");
   const input = {
-    anchor: "a",
     compounds: { a: "CCO", b: "CC=O", c: "CC(=O)O" },
     steps: [
       { id: "first", from: "a", to: "b" },
@@ -136,7 +135,7 @@ test("selected sources report new entries and remove only obsolete owned reactio
   ]);
   assert.match(
     result.stdout,
-    /2 sources, 1 added, 1 modified, 1 deleted, 0 failed/,
+    /2 sources, 1 added, 2 modified, 1 deleted, 0 failed/,
   );
   assert.ok(result.stdout.includes(`deleted: ${removed}`));
   const current = await readChemicalLibrary(root);
