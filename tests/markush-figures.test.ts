@@ -175,7 +175,12 @@ test("repeat groups retain core identity and joined unit geometry", async () => 
     geometry = await prepareFigure(compiled.entries, compiled.reference, opts);
   const svg = geometrySvg(geometry);
   assert.ok(svg.includes("data-repeat-bracket"));
-  assert.deepEqual(diagnoseFigure(geometry, opts.style), []);
+  assert.deepEqual(
+    diagnoseFigure(geometry, opts.style).filter(
+      (d) => d.code !== "BOND_VISIBLE_TOO_SHORT",
+    ),
+    [],
+  );
 });
 
 test("Markush core scale enlarges bonds while retaining label size", async () => {

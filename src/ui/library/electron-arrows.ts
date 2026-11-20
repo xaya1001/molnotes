@@ -1035,7 +1035,7 @@ export function chargeMarks(
             ]
           : blocked
             ? gaps.map((gap) => gap.angle)
-            : [defaultAngle];
+            : [defaultAngle, ...gaps.map((gap) => gap.angle)];
     let bestScore = -Infinity,
       bestCollisions = Infinity,
       best: Point | undefined;
