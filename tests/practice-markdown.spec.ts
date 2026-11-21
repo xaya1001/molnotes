@@ -68,16 +68,23 @@ for (const width of [1366, 390]) {
     const choice = page.getByTestId("prediction-written-choice");
     const open = page.getByTestId("problem-written-open");
     const atom = page.getByTestId("prediction-written-atom");
-    await expect(
-      atom.getByRole("button", { name: "原子 2", exact: true }),
-    ).toBeVisible();
+    const oxygen = atom.getByRole("button", { name: "原子 8", exact: true });
+    await expect(oxygen).toBeVisible();
+    await expect(atom.locator("text.atom-9, text.atom-10")).toHaveText([
+      "H",
+      "H",
+    ]);
+    await expect(atom.locator("path.atom-9, path.atom-10")).toHaveCount(2);
+    await expect(atom.getByRole("button", { name: /^原子 \d+$/ })).toHaveCount(
+      9,
+    );
     await screenshot("markdown");
     await choice.getByRole("radio", { name: "B", exact: true }).check();
     await choice.getByRole("button", { name: "提交预测" }).click();
     await open.getByRole("textbox").fill("A 比 B 多一个。");
     await open.getByRole("button").first().click();
     await open.getByRole("group").getByRole("button").nth(1).click();
-    await atom.getByRole("button", { name: "原子 2", exact: true }).click();
+    await oxygen.click();
     await atom.getByRole("button", { name: "提交预测" }).click();
     await expect
       .poll(async () => {
@@ -92,7 +99,7 @@ for (const width of [1366, 390]) {
       })
       .toEqual({
         choice: { option: 1 },
-        atom: { selected: [2] },
+        atom: { selected: [8] },
         open: { response: "A 比 B 多一个。", rating: "unknown" },
       });
     await screenshot("answered");
