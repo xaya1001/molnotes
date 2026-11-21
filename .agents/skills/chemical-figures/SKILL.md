@@ -15,7 +15,8 @@ Use this as the authoring entrypoint. Read the current [content contract](../../
    ```sh
    heavy npm run figure:render -- --library <content-root> --entry <id> --out <output>
    ```
-   The default renders width 1366; add `--width 390` for a phone proof. Inspect the PNG and JSON diagnostics; a clean diagnostic report does not establish chemical correctness.
+   The default renders at 1366 px; use `--width 1366,390` to render desktop and phone proofs in one call.
+   Inspect the PNG and JSON diagnostics; a clean diagnostic report does not establish chemical correctness.
    `content:preview` collects topic `figure-ref`, panels and flow blocks, including tabs, and reports the website renderer's diagnostics. Use `npm run figure:lint -- [<figure.yaml>... | --library <content-root>]` to list diagnostics with files or entries, frames and totals. Run lint for a single YAML directly; use `heavy` for the library, including when no arguments are given. Lint exits nonzero for issues and remains an independent inspection tool. Content publication retains diagnostics and prints their total; drawing failures stop publication.
 4. Adjust `rot`, `flip` or common-core `align` in source and recompile; routes compute their arrow geometry. For a saved scene, adjust coordinates and semantic endpoint placement, then render and inspect again. Check normal-size labels, visible gaps, arrow origins and heads, and mobile scrolling.
 5. Make the requested comparison HTML, publish it with `artifact publish --task <task> --name <name> <directory>`, run `artifact shot <published-index>`, and inspect that screenshot before returning `artifact url <published-index>`. Artifact review and product/content publication follow the task's separate permissions.
@@ -97,9 +98,9 @@ heavy npm run figure:render -- --library "$content_root" --entry <affected-figur
 npm run figure:lint -- <single.yaml> <affected-source.yaml> [<another-source.yaml>...]
 ```
 
-Inspect the changed-entry list from recompilation and render each affected figure with `--entry`.
-For page-specific variants, numbers or focus, save those references as a JSON array and render with `--references <references.json>`.
-The default proof is 1366px wide; add `--width 390` for a phone proof.
+Inspect the changed-entry list from recompilation and render the affected figures.
+For a page with several figures, save its library references as a JSON array, keeping any `variant`, `frame`, `numbers` or `focus` fields.
+Render the whole array in one call with `--references <references.json> --width 1366,390`.
 Inspect the resulting PNGs and diagnostics, and publish the requested side-by-side comparison through Artifact.
 Whole-library rendering requires explicit `--all`; `--prepare` and `--inventory` are separate operations.
 

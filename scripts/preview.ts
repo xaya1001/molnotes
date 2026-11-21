@@ -38,7 +38,7 @@ const repo = resolve(import.meta.dirname, "..");
 const content = setting("MOLNOTES_CONTENT_DIR");
 const library = await readChemicalLibrary(content);
 const cache = join(
-  process.env.XDG_CACHE_HOME || join(homedir(), ".cache"),
+  process.env.XDG_CACHE_HOME || process.env.TMPDIR || join(homedir(), ".cache"),
   "molnotes",
 );
 const widths = [
