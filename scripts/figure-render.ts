@@ -38,7 +38,7 @@ if (
     !args.includes("--all"))
 )
   throw new Error(
-    "Usage: npm run figure:render -- --library <content-root> --out <directory> (--entry <id> | --all | --references <json-file> | --prepare <compound-json> | --inventory)",
+    "Usage: npm run figure:render -- --library <content-root> --out <directory> (--entry <id> | --all | --references <json-file> | --prepare <compound-json> | --inventory) [--width 1366,390]",
   );
 await mkdir(out, { recursive: true });
 if (input) {
@@ -88,6 +88,7 @@ if (input) {
   );
 } else {
   const started = performance.now();
+  const widths = value("--width")?.split(",").map(Number) ?? [1366];
   const entries = (await readChemicalLibrary(resolve(root))).entries;
   const references: import("../shared/chemical-library/types.ts").FigureReference[] =
     [];
@@ -121,11 +122,9 @@ if (input) {
               ...entry.frames.map((f) => ({ ref: entry.id, frame: f.id })),
             ]
           : [{ ref: entry.id }];
-      for (const ref of refs)
-        for (const width of value("--width")
-          ? [Number(value("--width"))]
-          : [1366]) {
-          const prepared = await runner.prepare(ref, 0);
+      for (const ref of refs) {
+        const prepared = await runner.prepare(ref, 0);
+        for (const width of widths) {
           let result;
           if (prepared.kind === "chemical") {
             const geometry = prepared.geometry;
@@ -173,6 +172,7 @@ if (input) {
           failed ||= result.diagnostics.some((d) => d.severity === "error");
           console.log(`${name}: ${result.diagnostics.length} diagnostics`);
         }
+      }
     }
     for (const ref of references)
       if (!entries[ref.ref]) throw new Error(`Unknown entry ${ref.ref}`);

@@ -149,7 +149,13 @@ marks:
 > 终态的高低与能垒分别比较。
 ```
 
-`npm run content:preview -- notes/<dir>[/<slug>] | sites/<slug>` 不发布，用当前 checkout 的组件把内容工作目录里这些单元的时间线、流程图、能量图和结构式在 1366 px 与 390 px 下各截一张图，输出截图路径（默认在 `~/.cache/molnotes/preview/`，可用 `MOLNOTES_PREVIEW_DIR` 指定）、写法错误（文件与行号）和版面警告：标签或框重叠、引线穿过标签、标签离它的点过远、竖线穿过标签、图例与图重叠、连线穿过框或文字、连线文字与框重叠、框过窄（含文字每行平均不到约 5 个字或超过 6 行）、文字溢出、字号过小、图比版面宽、结构式渲染失败。专题中的 `figure-ref` 也参与预览；图库机理未指定 `frame` 时与页面内机理一起逐帧出图，保留箭头与解释。图库图示使用网站的诊断器，出现任一诊断或渲染失败时命令返回非零。写好或改过一张图后先预览，警告清零再发布。选写法、各种形状的模板与每条警告的改法见 [时间线与流程图](../toolbox/recipes/figures.md)。
+`npm run content:preview -- notes/<dir>[/<slug>] | sites/<slug>` 不发布，用当前 checkout 的组件把内容工作目录里这些单元的时间线、流程图、能量图和结构式在 1366 px 与 390 px 下各截一张图。
+缓存位于 `${XDG_CACHE_HOME:-${TMPDIR:-$HOME/.cache}}/molnotes`；截图默认写入其中的 `preview/`，也可用 `MOLNOTES_PREVIEW_DIR` 指定输出位置。
+命令输出截图路径、写法错误（文件与行号）和版面警告：标签或框重叠、引线穿过标签、标签离它的点过远、竖线穿过标签、图例与图重叠、连线穿过框或文字、连线文字与框重叠、框过窄（含文字每行平均不到约 5 个字或超过 6 行）、文字溢出、字号过小、图比版面宽、结构式渲染失败。
+专题中的 `figure-ref` 也参与预览；图库机理未指定 `frame` 时与页面内机理一起逐帧出图，保留箭头与解释。
+图库图示使用网站的诊断器，出现任一诊断或渲染失败时命令返回非零。
+写好或改过一张图后先预览，警告清零再发布。
+选写法、各种形状的模板与每条警告的改法见 [时间线与流程图](../toolbox/recipes/figures.md)。
 
 图片写 `![说明](assets/<file>)`，说明显示在图下方作为图注（可带图号，如"图 1　……"），为空时不显示图注；文件名使用字母、数字、下划线、点和连字符。源文件放 `notes/<dir>/assets/`，网站以 `/notes/<dir>/assets/<file>` 提供；缺图拒绝发布。生成的图在 `notes/<dir>/prompts/<file>.md` 保存生成它的 prompt，`<file>` 与 `assets/` 中的图片文件名相同；prompt 随资源记录进入快照，网站不提供，没有对应图片或内容为空时拒绝发布。资源原样复制进快照，快照记录路径、SHA-256、大小与内容类型。
 
@@ -667,7 +673,8 @@ Coverage counts, source assignments and gap combinations are authored chemical-s
 
 For figure authoring and semantic arrow selectors, use the [chemical-figures project skill](../.agents/skills/chemical-figures/SKILL.md).
 
-Use `npm run figure:render -- --library <content-root> --entry <id> --out <output-directory>` to render desktop SVGs, PNGs, context screenshots and JSON geometry/diagnostics (use `--width` for an explicit viewport).
+Use `npm run figure:render -- --library <content-root> --entry <id> --out <output-directory>` to render desktop SVGs, PNGs, context screenshots and JSON geometry/diagnostics.
+Use `--width 390` for a phone proof or `--width 1366,390` for both widths in one call.
 Pass `--all` instead of `--entry <id>` to render the whole library.
 Rendering requires `--entry`, `--all` or `--references`; omitting a selection exits with usage before reading the library or creating output.
 The command and website use the same renderer.
