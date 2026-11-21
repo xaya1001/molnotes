@@ -138,6 +138,7 @@ export function labelAbbreviations(
 /** MinimalLib's text metrics differ from Arial. Trim bonds against the actual glyphs. */
 export function padAtomLabels(svg: Document, atoms: readonly Point[]) {
   const context = globalThis.document.createElement("canvas").getContext("2d")!;
+  const drawingPoints = [...atoms];
   type Rect = { left: number; right: number; top: number; bottom: number };
   const rectangles = new Map<number, Rect>();
   const distances = new Map<number, number>();
@@ -177,9 +178,7 @@ export function padAtomLabels(svg: Document, atoms: readonly Point[]) {
     paired.set(second, first);
   }
   for (const text of texts) {
-    const index = Number(
-      [...text.classList].find((name) => /^atom-\d+$/.test(name))?.slice(5),
-    );
+    const index = atomIndex(text);
     context.font = `${text.style.fontSize} Arial, Helvetica, sans-serif`;
     const m = context.measureText(text.textContent ?? "");
     const x = Number(text.getAttribute("x")),
@@ -201,10 +200,12 @@ export function padAtomLabels(svg: Document, atoms: readonly Point[]) {
       });
       continue;
     }
-    const distance = Math.hypot(
-      (b.left + b.right) / 2 - atoms[index].x,
-      (b.top + b.bottom) / 2 - atoms[index].y,
-    );
+    const center = { x: (b.left + b.right) / 2, y: (b.top + b.bottom) / 2 };
+    // RDKit adds wedge hydrogens to the SVG with their own glyph positions.
+    // Their indices belong only to the drawing, beyond the molecular graph.
+    if (index >= atoms.length) drawingPoints[index] = center;
+    const anchor = drawingPoints[index];
+    const distance = Math.hypot(center.x - anchor.x, center.y - anchor.y);
     if (distance < (distances.get(index) ?? Infinity)) {
       rectangles.set(index, b);
       distances.set(index, distance);
@@ -267,7 +268,8 @@ export function padAtomLabels(svg: Document, atoms: readonly Point[]) {
             if (inside(point, rect))
               point = clip(
                 point,
-                opposite ?? atoms[indices.find((other) => other !== i)!],
+                opposite ??
+                  drawingPoints[indices.find((other) => other !== i)!],
                 rect,
               );
           }

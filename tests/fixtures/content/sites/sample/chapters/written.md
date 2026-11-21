@@ -44,7 +44,7 @@ id: written-atom
 question: 选择氧原子。
 molecule:
   name: 样品结构
-  smiles: '[CH3:30][CH2:10][OH:20]'
+  smiles: 'C1C[C@H]2CCC[C@H]2C1[OH:20]'
 answer: [20]
 explanation: 氧原子连接碳与氢。
 ```
