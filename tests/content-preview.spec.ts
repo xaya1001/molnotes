@@ -97,7 +97,41 @@ for (const width of [1366, 390]) {
       ],
     };
     const errors: string[] = [];
-    const figures = topicFigures(topic, "example", errors, library);
+    const figures = [
+      ...topicFigures(topic, "example", errors, library),
+      {
+        kind: "note" as const,
+        where: "notes/example/demo.md",
+        caption: "",
+        value: {
+          note: {
+            path: "/notes/example/demo",
+            directory: "example",
+            slug: "demo",
+            title: "Example note",
+            summary: "",
+            order: 1,
+            html: '<div style="height:8000px"></div><div id="note-diagram-0" class="note-diagram"></div>',
+            sections: [],
+            molecules: [],
+            diagrams: [
+              {
+                id: "note-diagram-0",
+                kind: "library" as const,
+                reference: {
+                  ref: "img_example",
+                  presentation: "note" as const,
+                },
+              },
+            ],
+            terms: [],
+            citations: {},
+          },
+          terms: {},
+          requests: [],
+        },
+      },
+    ];
     expect(errors).toEqual([]);
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await page.route(`**/library/assets/${asset}`, (route) =>
@@ -119,6 +153,9 @@ for (const width of [1366, 390]) {
       entries: library,
       uses: {},
     });
+    await page.route("**/api/library", (route) =>
+      route.fulfill({ json: snapshot }),
+    );
     await page.addInitScript(
       ({ figures, library }) => {
         window.__previewFigures = figures;
@@ -128,7 +165,7 @@ for (const width of [1366, 390]) {
     );
     await page.goto("/showcase/preview");
     await page.waitForFunction(() => window.__previewResult);
-    await expect(page.locator("[data-preview]")).toHaveCount(5);
+    await expect(page.locator("[data-preview]")).toHaveCount(6);
     await expect(page.locator(".library-canvas svg")).toHaveCount(4);
     const result = (await page.evaluate(() => window.__previewResult))!;
     await expect(page.locator('[data-frame="first"]')).toBeVisible();
@@ -140,7 +177,12 @@ for (const width of [1366, 390]) {
       true,
     );
     expect(result[4].errors ?? []).toEqual([]);
+    expect(result[5].errors ?? []).toEqual([]);
     await expect(page.locator('[data-preview="4"] img')).toHaveJSProperty(
+      "naturalWidth",
+      120,
+    );
+    await expect(page.locator('[data-preview="5"] img')).toHaveJSProperty(
       "naturalWidth",
       120,
     );

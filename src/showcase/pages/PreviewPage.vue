@@ -26,6 +26,7 @@ import type {
 import { validateFigureReference } from "../../../shared/chemical-library/contract.ts";
 import { figureViewKey } from "../../../shared/chemical-library/views.ts";
 import LibraryFigure from "../../ui/library/LibraryFigure.vue";
+import { loadLibrary } from "../../ui/library/client.ts";
 import CompiledProse from "../../ui/CompiledProse.vue";
 import type {
   PreviewNote,
@@ -131,31 +132,48 @@ const settle = () =>
   );
 onMounted(async () => {
   await nextTick();
-  for (const image of document.querySelectorAll<HTMLImageElement>(
-    ".preview-figure img",
-  ))
-    image.loading = "eager";
+  if (
+    shown.some(
+      (f) =>
+        f.kind === "note" &&
+        (f.preview.note.diagrams ?? []).some(
+          (d) =>
+            d.kind === "library" ||
+            (d.kind === "panels" && d.panels.items.some((item) => item.ref)),
+        ),
+    )
+  ) {
+    await loadLibrary();
+    await nextTick();
+  }
   // Structures draw once RDKit has loaded; timelines measure their labels first.
   const deadline = Date.now() + 30_000;
-  while (
-    Date.now() < deadline &&
-    (readyNotes.value < shown.filter((f) => f.kind === "note").length ||
-      document.querySelector(
-        ".molecule-group [role='status'], .molecule [role='status']",
+  while (Date.now() < deadline) {
+    const images = [
+      ...document.querySelectorAll<HTMLImageElement>(".preview-figure img"),
+    ];
+    for (const img of images) img.loading = "eager";
+    const waiting =
+      readyNotes.value < shown.filter((f) => f.kind === "note").length ||
+      Boolean(
+        document.querySelector(
+          ".molecule-group [role='status'], .molecule [role='status']",
+        ),
       ) ||
-      [...document.querySelectorAll(".library-canvas")].some(
+      [...document.querySelectorAll(".library-canvas, .library-image")].some(
         (node) =>
           !node.querySelector("svg") &&
           !node.closest("figure")?.querySelector('[role="alert"]'),
       ) ||
-      [
-        ...document.querySelectorAll<HTMLImageElement>(".preview-figure img"),
-      ].some((img) => {
-        img.loading = "eager";
-        return !img.complete;
-      }))
-  )
+      images.some((img) => !img.complete);
+    if (!waiting) break;
     await new Promise((done) => setTimeout(done, 100));
+  }
+  await Promise.all(
+    [...document.querySelectorAll<HTMLImageElement>(".preview-figure img")].map(
+      (img) => img.decode().catch(() => undefined),
+    ),
+  );
   for (let i = 0; i < 3; i++) await settle();
   window.__previewResult = shown.map((figure, i) => {
     const host = figures.value[i];
