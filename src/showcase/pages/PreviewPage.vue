@@ -143,7 +143,7 @@ onMounted(async () => {
         ),
     )
   ) {
-    await loadLibrary().catch(() => undefined);
+    await loadLibrary();
     await nextTick();
   }
   // Structures draw once RDKit has loaded; timelines measure their labels first.
