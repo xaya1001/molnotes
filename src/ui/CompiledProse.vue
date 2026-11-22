@@ -164,9 +164,9 @@ async function render() {
   await nextTick();
   await document.fonts.ready;
   await Promise.all(
-    Array.from(body.value?.querySelectorAll("img") ?? []).map((img) =>
-      img.decode().catch(() => undefined),
-    ),
+    Array.from(body.value?.querySelectorAll("img") ?? [])
+      .filter((img) => img.loading !== "lazy" || img.complete)
+      .map((img) => img.decode().catch(() => undefined)),
   );
   if (!body.value) return;
   highlight();
