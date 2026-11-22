@@ -15,6 +15,7 @@ import {
 import { basename, dirname, join } from "node:path";
 import { buildSnapshot, type BuiltSnapshot } from "./content-publish.ts";
 import { committedSource } from "./content-files.ts";
+import { formatFigureDiagnosticDeltas } from "./figure-diagnostic-deltas.ts";
 import type { Shelf } from "./citations.ts";
 import type { Snapshot } from "../../shared/snapshot.ts";
 import { measureStage } from "../../shared/stage-timing.ts";
@@ -37,18 +38,14 @@ async function snapshots(releases: string) {
     .sort((a, b) => b.built.localeCompare(a.built));
 }
 
-/** Asset hashes by file path in the snapshot at `directory`, empty when there is none. */
-async function assetHashes(
-  directory: string | undefined,
-): Promise<Map<string, string>> {
-  if (!directory) return new Map();
+async function previousSnapshot(directory: string) {
   try {
-    const { assets }: Snapshot = JSON.parse(
+    const snapshot: Snapshot = JSON.parse(
       await readFile(join(directory, "snapshot.json"), "utf8"),
     );
-    return new Map(assets.map((a) => [`${a.scope}/${a.path}`, a.sha256]));
+    return { directory, snapshot };
   } catch (error) {
-    if (errorCode(error) === "ENOENT") return new Map();
+    if (errorCode(error) === "ENOENT") return undefined;
     throw error;
   }
 }
@@ -62,14 +59,16 @@ async function assetHashes(
 export async function writeSnapshot(
   output: string,
   { snapshot, files, dispose }: BuiltSnapshot,
-  { previous }: { previous?: string } = {},
+  { previous }: { previous?: { directory: string; snapshot: Snapshot } } = {},
 ) {
   const temporary = join(
     dirname(output),
     `.${basename(output)}.${randomUUID()}`,
   );
   try {
-    const earlier = await assetHashes(previous);
+    const earlier = new Map(
+      previous?.snapshot.assets.map((a) => [`${a.scope}/${a.path}`, a.sha256]),
+    );
     const hashes = new Map(
       snapshot.assets.map((a) => [`${a.scope}/${a.path}`, a.sha256]),
     );
@@ -78,8 +77,12 @@ export async function writeSnapshot(
       for (const [path, bytes] of files) {
         const file = join(temporary, "files", path);
         await mkdir(dirname(file), { recursive: true });
-        if (earlier.get(path) && earlier.get(path) === hashes.get(path))
-          await link(join(previous!, "files", path), file);
+        if (
+          previous &&
+          earlier.get(path) &&
+          earlier.get(path) === hashes.get(path)
+        )
+          await link(join(previous.directory, "files", path), file);
         else if (Buffer.isBuffer(bytes)) await writeFile(file, bytes);
         else
           try {
@@ -160,11 +163,27 @@ export async function publishSnapshot(
     await mkdir(releases, { recursive: true });
     const name = nameOf(source.commit, built.snapshot.builtAt);
     const current = await currentName(releases);
-    await writeSnapshot(join(releases, name), built, {
-      previous: current && join(releases, current),
-    });
+    const previous = current
+      ? await previousSnapshot(join(releases, current))
+      : undefined;
+    const changes = previous
+      ? formatFigureDiagnosticDeltas(
+          previous.snapshot.library,
+          built.snapshot.library,
+        )
+      : undefined;
+    await writeSnapshot(join(releases, name), built, { previous });
     await switchCurrent(releases, name);
     await prune(releases);
+    if (changes)
+      console.log(
+        changes.length
+          ? [
+              "Figure diagnostic changes:",
+              ...changes.map((line) => `  ${line}`),
+            ].join("\n")
+          : "Figure diagnostic changes: none.",
+      );
     return name;
   } finally {
     await built.dispose();

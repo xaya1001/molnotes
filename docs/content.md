@@ -681,6 +681,7 @@ The command and website use the same renderer.
 `--prepare <compound-json> [--molfile <file>]` writes a prepared compound entry to the output directory.
 Content builds check default figures, variants, mechanism frames and distinct SVG-affecting reference instances at 1366×900; rendering failures reject publication.
 Geometry diagnostics remain on each published render; the build prints their total and points to `figure:lint` without blocking publication.
+When a previous snapshot is available, publication also logs the number of added and removed diagnostics and their figure IDs for each affected page.
 Chemical interpretation still requires the source evidence recorded on each entry.
 `--references <json-file>` renders an array of page references with local numbers and focus.
 `--check` writes diagnostics without screenshots.

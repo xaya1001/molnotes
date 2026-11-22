@@ -48,7 +48,10 @@ export function linearCentres(graph: ChemicalGraph) {
     if (bonds.length !== 2) continue;
     const [a, b] = bonds;
     if (a.order === 2 && b.order === 2) {
-      centres.push([a.index, b.index, centre]);
+      const { z = 6, chg = 0 } = graph.atoms[centre];
+      // Cumulated double bonds are linear at neutral carbon and isoelectronic N⁺.
+      if ((z === 6 && chg === 0) || (z === 7 && chg === 1))
+        centres.push([a.index, b.index, centre]);
       continue;
     }
     const triple = bonds.find(({ order }) => order === 3);
