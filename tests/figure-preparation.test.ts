@@ -1259,6 +1259,38 @@ test("a cyclic triple bond retains its ring geometry without a linear-centre war
   );
 });
 
+test("the linear-centre rule distinguishes bent double-bond centres", async () => {
+  for (const [smiles, expected] of [
+    ["O=S=O", 0],
+    ["O=C=O", 1],
+    ["O=[N+]=[N-]", 1],
+  ] as const) {
+    const compound = prepareCompound(toolkit, {
+      id: "cmp_example",
+      title: "Example",
+      smiles,
+      sources: [],
+    });
+    compound.layout.coords = {
+      a1: { x: -1, y: 0 },
+      a2: { x: 0, y: 0 },
+      a3: { x: 0.5, y: Math.sqrt(3) / 2 },
+    };
+    const geometry = await prepareFigure(
+      { [compound.id]: compound },
+      { ref: compound.id },
+      { toolkit, fonts, style },
+    );
+    assert.equal(
+      figureGeometryDiagnostics(geometry, style).filter(
+        (d) => d.code === "SP_CENTRE_BENT",
+      ).length,
+      expected,
+      smiles,
+    );
+  }
+});
+
 test("radical ions keep the electron beside the charge and use it as the arrow source", async () => {
   const compiled = await compileFigure({
     kind: "mechanism",
