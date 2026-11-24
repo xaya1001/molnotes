@@ -15,29 +15,18 @@ permissions:
   packages: write
 
 jobs:
-  check:
+  plan:
     runs-on: ubuntu-24.04-arm
-    env:
-      PLAYWRIGHT_BROWSERS_PATH: /tmp/playwright-browsers
+    outputs:
+      mode: ${{ steps.plan.outputs.mode }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: Scan for secrets
-        run: docker run --rm -v "${GITHUB_WORKSPACE}:/repo:ro" zricethezav/gitleaks:v8.24.0@sha256:2bcceac45179b3a91bff11a824d0fb952585b429e54fc928728b1d4d5c3e5176 dir /repo --no-banner --redact
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "26"
-          cache: npm
-      - name: Install pinned Python dependencies for the materials shelf
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y fonts-liberation
-          python3 -m venv "${RUNNER_TEMP}/python"
-          "${RUNNER_TEMP}/python/bin/pip" install --quiet -r scripts/requirements-material.txt
-          echo "${RUNNER_TEMP}/python/bin" >> "${GITHUB_PATH}"
-          echo "MOLNOTES_PYTHON=${RUNNER_TEMP}/python/bin/python3" >> "${GITHUB_ENV}"
       - name: Plan browser checks
         id: plan
         env:
@@ -52,56 +41,116 @@ jobs:
             git diff --name-only -z "${BASE_SHA}" "${HEAD_SHA}" > "${RUNNER_TEMP}/changed-files"
           fi
           node scripts/ci-plan.ts "${RUNNER_TEMP}/changed-files" >> "${GITHUB_OUTPUT}"
+
+  check:
+    needs: plan
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Scan for secrets
+        run: docker run --rm -v "${GITHUB_WORKSPACE}:/repo:ro" zricethezav/gitleaks:v8.24.0@sha256:2bcceac45179b3a91bff11a824d0fb952585b429e54fc928728b1d4d5c3e5176 dir /repo --no-banner --redact
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+          cache: npm
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: python
+        if: needs.plan.outputs.mode != 'docs'
+        with:
+          path: ${{ runner.temp }}/python
+          key: python-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/requirements-material.txt') }}
+      - name: Install pinned Python dependencies for the materials shelf
+        if: needs.plan.outputs.mode != 'docs'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-liberation
+          if test "${{ steps.python.outputs.cache-hit }}" != "true"; then
+            python3 -m venv "${RUNNER_TEMP}/python"
+            "${RUNNER_TEMP}/python/bin/pip" install --quiet -r scripts/requirements-material.txt
+          fi
+          echo "${RUNNER_TEMP}/python/bin" >> "${GITHUB_PATH}"
+          echo "MOLNOTES_PYTHON=${RUNNER_TEMP}/python/bin/python3" >> "${GITHUB_ENV}"
       - run: npm ci
       - run: npm run format:check
+      - run: npm run check
+        if: needs.plan.outputs.mode != 'docs'
+      - run: node --test tests/ci-plan.test.ts tests/checked-workflow.test.ts
+        if: needs.plan.outputs.mode == 'docs'
+
+  e2e:
+    needs: plan
+    if: needs.plan.outputs.mode != 'docs'
+    runs-on: ubuntu-24.04-arm
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /tmp/playwright-browsers
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+          cache: npm
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: python
+        with:
+          path: ${{ runner.temp }}/python
+          key: python-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/requirements-material.txt') }}
+      - name: Install pinned Python dependencies
+        run: |
+          if test "${{ steps.python.outputs.cache-hit }}" != "true"; then
+            python3 -m venv "${RUNNER_TEMP}/python"
+            "${RUNNER_TEMP}/python/bin/pip" install --quiet -r scripts/requirements-material.txt
+          fi
+          echo "${RUNNER_TEMP}/python/bin" >> "${GITHUB_PATH}"
+          echo "MOLNOTES_PYTHON=${RUNNER_TEMP}/python/bin/python3" >> "${GITHUB_ENV}"
+      - run: npm ci
       - name: Read the Playwright version
         id: playwright
-        if: steps.plan.outputs.mode != 'docs'
         run: echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "${GITHUB_OUTPUT}"
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: browsers
-        if: steps.plan.outputs.mode != 'docs'
         with:
           path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
           key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
       - run: npx playwright install --with-deps chromium
-        if: steps.plan.outputs.mode != 'docs' && steps.browsers.outputs.cache-hit != 'true'
+        if: steps.browsers.outputs.cache-hit != 'true'
       - run: npx playwright install-deps chromium
-        if: steps.plan.outputs.mode != 'docs' && steps.browsers.outputs.cache-hit == 'true'
-      - run: npm run check
-        if: steps.plan.outputs.mode != 'docs'
-      - run: node --test tests/ci-plan.test.ts tests/checked-workflow.test.ts
-        if: steps.plan.outputs.mode == 'docs'
+        if: steps.browsers.outputs.cache-hit == 'true'
       - run: npm run build
-        if: steps.plan.outputs.mode != 'docs'
-      - name: Start building the image from this build
-        if: github.event_name == 'push' && steps.plan.outputs.mode != 'docs'
-        run: |
-          # Builds while the browser tests run; it is published only after they pass.
-          (
-            status=0
-            docker build \
-              --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
-              --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
-              -t "ghcr.io/${GITHUB_REPOSITORY,,}:${GITHUB_SHA}" . || status=$?
-            echo "${status}" > "${RUNNER_TEMP}/image-build.status"
-          ) > "${RUNNER_TEMP}/image-build.log" 2>&1 &
       - run: npm run test:e2e
-        if: steps.plan.outputs.mode != 'docs'
       - name: Summarize browser timings
         if: always() && hashFiles('test-results/results.json') != ''
         run: node scripts/test-timings.ts test-results/results.json >> "${GITHUB_STEP_SUMMARY}"
+
+  publish:
+    needs: [plan, check, e2e]
+    if: always() && github.event_name == 'push' && needs.plan.result == 'success' && needs.check.result == 'success' && (needs.e2e.result == 'success' || needs.e2e.result == 'skipped')
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+          cache: npm
+      - run: npm ci
+        if: needs.plan.outputs.mode != 'docs'
+      - run: npm run build
+        if: needs.plan.outputs.mode != 'docs'
       - name: Verify the parent image passed Check
-        if: github.event_name == 'push' && steps.plan.outputs.mode == 'docs'
+        if: needs.plan.outputs.mode == 'docs'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PARENT_SHA: ${{ github.event.before }}
         run: node scripts/checked-workflow.ts "${PARENT_SHA}"
       - name: Build, publish, and verify the exact image
-        if: github.event_name == 'push'
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MODE: ${{ steps.plan.outputs.mode }}
+          MODE: ${{ needs.plan.outputs.mode }}
           PARENT_SHA: ${{ github.event.before }}
         run: |
           set -euo pipefail
@@ -125,9 +174,10 @@ jobs:
             printf 'FROM %s\n' "${parent}" | docker build \
               --label "org.opencontainers.image.revision=${GITHUB_SHA}" -t "${tag}" -
           else
-            until test -s "${RUNNER_TEMP}/image-build.status"; do sleep 1; done
-            cat "${RUNNER_TEMP}/image-build.log"
-            test "$(cat "${RUNNER_TEMP}/image-build.status")" = 0
+            docker build \
+              --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+              --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+              -t "${tag}" .
           fi
           docker push "${tag}"
           docker pull "${tag}"

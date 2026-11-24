@@ -56,15 +56,20 @@ export function loadFigureFonts() {
         const fonts = await Promise.all(files.map(load));
         faces.set(`${weight}:${italic}`, fonts);
       }
+    const cache = new Map<string, FigureFont>();
     return (run: FigureTextRun, character: string) => {
       const code = character.codePointAt(0)!;
-      const face = faces
+      const key = `${run.weight}:${run.italic}:${code}`;
+      let face = cache.get(key);
+      if (face) return face;
+      face = faces
         .get(`${run.weight}:${run.italic}`)!
         .find(({ font }) => font.hasGlyphForCodePoint(code));
       if (!face)
         throw new Error(
           `Figure fonts lack U+${code.toString(16).toUpperCase()}`,
         );
+      cache.set(key, face);
       return face;
     };
   })());

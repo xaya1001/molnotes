@@ -529,22 +529,41 @@ export function electronArrowShapes(
       const polygon = head(candidate, single).vertices;
       for (const box of boxes) {
         const rect = rectPoints(box);
-        clear = Math.min(
-          clear,
-          ...polygon.flatMap((p) =>
-            rect.map((q, i) =>
-              segmentDistance(p, q, rect[(i + 1) % rect.length]),
-            ),
-          ),
-          ...rect.flatMap((p) =>
-            polygon.map((q, i) =>
-              segmentDistance(p, q, polygon[(i + 1) % polygon.length]),
-            ),
-          ),
-        );
+        for (let pi = 0; pi < polygon.length; pi++) {
+          const p = polygon[pi];
+          for (let i = 0; i < rect.length; i++) {
+            const d = segmentDistance(p, rect[i], rect[(i + 1) % rect.length]);
+            if (d < clear) clear = d;
+          }
+        }
+        for (let ri = 0; ri < rect.length; ri++) {
+          const p = rect[ri];
+          for (let i = 0; i < polygon.length; i++) {
+            const d = segmentDistance(
+              p,
+              polygon[i],
+              polygon[(i + 1) % polygon.length],
+            );
+            if (d < clear) clear = d;
+          }
+        }
       }
       return { ...candidate, clear };
     }
+    const inkBounds = ink.map((trace) => {
+      let minX = Infinity,
+        maxX = -Infinity,
+        minY = Infinity,
+        maxY = -Infinity;
+      for (let i = 0; i < trace.points.length; i++) {
+        const p = trace.points[i];
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+      }
+      return { minX, maxX, minY, maxY };
+    });
     function trouble(c: Candidate) {
       const pts = c.points,
         visible = visiblePoints(c, single),
@@ -561,39 +580,69 @@ export function electronArrowShapes(
         );
       if (angleBetween(sub(p1, p0), departure) >= 11.5) count++;
       const tip = polygon[0],
-        chord = dist(c.s, tip),
-        length = visible
-          .slice(1)
-          .reduce(
-            (sum, p, i) => sum + dist(visible[i], p),
-            dist(visible.at(-1)!, tip),
-          );
+        chord = dist(c.s, tip);
+      let length = dist(visible[visible.length - 1], tip);
+      let vMinX = visible[0].x,
+        vMaxX = visible[0].x,
+        vMinY = visible[0].y,
+        vMaxY = visible[0].y;
+      for (let i = 1; i < visible.length; i++) {
+        const p = visible[i];
+        length += dist(visible[i - 1], p);
+        if (p.x < vMinX) vMinX = p.x;
+        if (p.x > vMaxX) vMaxX = p.x;
+        if (p.y < vMinY) vMinY = p.y;
+        if (p.y > vMaxY) vMaxY = p.y;
+      }
       if (length < B * 1.25) count++;
       if (length > chord * 3.5) count++;
       if (chord < B * 1.2 || (fa.length === 2 && to.kind === "bond")) {
-        const height = Math.max(
-          ...visible.map(
-            (p) =>
-              Math.abs(
-                (tip.x - c.s.x) * (p.y - c.s.y) -
-                  (tip.y - c.s.y) * (p.x - c.s.x),
-              ) / (chord || 1),
-          ),
-        );
+        let height = -Infinity;
+        const denom = chord || 1;
+        const dx = tip.x - c.s.x,
+          dy = tip.y - c.s.y;
+        for (let i = 0; i < visible.length; i++) {
+          const p = visible[i];
+          const hVal =
+            Math.abs(dx * (p.y - c.s.y) - dy * (p.x - c.s.x)) / denom;
+          if (hVal > height) height = hVal;
+        }
         if (height < B * 0.36) count++;
       }
-      for (const box of boxes)
+      for (const box of boxes) {
         if (
-          visible.some(
-            (p) =>
-              p.x > box.left + 0.4 &&
-              p.x < box.right - 0.4 &&
-              p.y > box.top + 0.4 &&
-              p.y < box.bottom - 0.4,
-          )
+          vMaxX <= box.left + 0.4 ||
+          vMinX >= box.right - 0.4 ||
+          vMaxY <= box.top + 0.4 ||
+          vMinY >= box.bottom - 0.4
         )
-          count++;
-      for (const trace of ink) {
+          continue;
+        for (let i = 0; i < visible.length; i++) {
+          const p = visible[i];
+          if (
+            p.x > box.left + 0.4 &&
+            p.x < box.right - 0.4 &&
+            p.y > box.top + 0.4 &&
+            p.y < box.bottom - 0.4
+          ) {
+            count++;
+            break;
+          }
+        }
+      }
+      const v0 = visible[0],
+        vLast = visible[visible.length - 1],
+        nearLimit = B * 0.25;
+      for (let ti = 0; ti < ink.length; ti++) {
+        const tb = inkBounds[ti];
+        if (
+          vMaxX < tb.minX ||
+          vMinX > tb.maxX ||
+          vMaxY < tb.minY ||
+          vMinY > tb.maxY
+        )
+          continue;
+        const trace = ink[ti];
         const owns = (endpoint: ArrowEndpoint) =>
           endpoint.kind === "bond" || endpoint.kind === "pi"
             ? endpoint.atoms.every((id) => trace.atoms?.includes(id))
@@ -602,19 +651,37 @@ export function electronArrowShapes(
                 endpoint.kind === "radical"
               ? trace.atoms?.includes(endpoint.atoms[0])
               : false;
-        if (
-          visible.slice(1).some((p, i) => {
-            if (
-              (owns(from) && dist(p, visible[0]) < B * 0.25) ||
-              (owns(to) && dist(p, visible.at(-1)!) < B * 0.25)
-            )
-              return false;
-            return trace.points
-              .slice(1)
-              .some((q, j) => crosses(visible[i], p, trace.points[j], q));
-          })
-        )
-          count++;
+        const ownsFrom = owns(from),
+          ownsTo = owns(to),
+          tpts = trace.points;
+        let hit = false;
+        for (let i = 1; i < visible.length && !hit; i++) {
+          const p = visible[i],
+            prev = visible[i - 1];
+          if (
+            (ownsFrom && dist(p, v0) < nearLimit) ||
+            (ownsTo && dist(p, vLast) < nearLimit)
+          )
+            continue;
+          const sMinX = prev.x < p.x ? prev.x : p.x,
+            sMaxX = prev.x > p.x ? prev.x : p.x,
+            sMinY = prev.y < p.y ? prev.y : p.y,
+            sMaxY = prev.y > p.y ? prev.y : p.y;
+          if (
+            sMaxX < tb.minX ||
+            sMinX > tb.maxX ||
+            sMaxY < tb.minY ||
+            sMinY > tb.maxY
+          )
+            continue;
+          for (let j = 1; j < tpts.length; j++) {
+            if (crosses(prev, p, tpts[j - 1], tpts[j])) {
+              hit = true;
+              break;
+            }
+          }
+        }
+        if (hit) count++;
       }
       if (pair) {
         const rectangle = rectPoints(pair.box);

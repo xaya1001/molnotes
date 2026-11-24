@@ -350,7 +350,6 @@ async function build(
     `Figure diagnostics: ${diagnosticCount}. Run npm run figure:lint to list issues.`,
   );
   data.assets.push(...proofs.assets);
-  usage.snapshot.previews = proofs.previews;
   usage.snapshot.renders = proofs.renders;
   const directories = new Map(compiled.directories.map((d) => [d.slug, d]));
   // Author identity belongs to the row key, not the reader-facing compiled body.

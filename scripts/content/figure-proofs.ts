@@ -18,16 +18,8 @@ import type { AssetStage } from "./asset-stage.ts";
 import { logTiming } from "../../shared/stage-timing.ts";
 
 export interface ProofRunner {
-  prepareBatch?(): Promise<void>;
   prepare(reference: FigureReference, slot: number): Promise<PreparedFigure>;
   diagnose(geometry: FigureGeometry, slot: number): Promise<Diagnostic[]>;
-  thumbnail(
-    reference: FigureReference,
-    render:
-      | { svg: string; width: number; height: number; minimumScale: number }
-      | undefined,
-    slot: number,
-  ): Promise<Buffer>;
   close(): Promise<void>;
 }
 export interface ProofStats {
@@ -35,7 +27,6 @@ export interface ProofStats {
   proofHits: number;
   prepared: number;
   diagnosed: number;
-  thumbnails: number;
   total: number;
 }
 export interface ProofOptions {
@@ -53,7 +44,6 @@ export async function verifyFigureProofs(
   options: ProofOptions,
 ) {
   const assets: UnitAsset[] = [],
-    previews: Record<string, string> = {},
     renders: Record<string, LibraryFigureRender> = {};
   const cache = figureProofCache(options.directory),
     digests = new Map<string, string>();
@@ -81,11 +71,10 @@ export async function verifyFigureProofs(
     proofHits: 0,
     prepared: 0,
     diagnosed: 0,
-    thumbnails: 0,
     total: 0,
   };
   // Worker times are accumulated across the two slots, rather than wall time.
-  const durations = { prepare: 0, proof: 0, thumbnail: 0 };
+  const durations = { prepare: 0, proof: 0 };
   async function timed<T>(
     kind: keyof typeof durations,
     operation: () => Promise<T>,
@@ -98,32 +87,25 @@ export async function verifyFigureProofs(
     }
   }
   const unique = figureProofReferences(library, references),
-    thumbnailRefs = new Set<string>(),
     failures: string[] = [];
-  const jobs = unique.map((reference) => {
-    const thumbnail = !thumbnailRefs.has(reference.ref);
-    thumbnailRefs.add(reference.ref);
-    const kind = library[reference.ref]?.kind;
-    return {
-      reference,
-      thumbnail,
-      key: sha256(
-        stableFigureValue({
-          format: 2,
-          renderer: kind === "image" ? "image" : options.renderer,
-          entry: digest(reference.ref),
-          reference,
-        }),
-      ),
-    };
-  });
+  const jobs = unique.map((reference) => ({
+    reference,
+    key: sha256(
+      stableFigureValue({
+        format: 2,
+        renderer: options.renderer,
+        entry: digest(reference.ref),
+        reference,
+      }),
+    ),
+  }));
   stats.total = jobs.length;
   let runner: Promise<ProofRunner> | undefined;
   const active = () => (runner ??= options.createRunner());
   const savedAssets = new Set<string>();
-  const asset = async (bytes: Buffer, extension: "png" | "svg") => {
+  const asset = async (bytes: Buffer) => {
     const hash = sha256(bytes),
-      path = `assets/${hash}.${extension}`;
+      path = `assets/${hash}.svg`;
     if (savedAssets.has(path)) return `/library/${path}`;
     savedAssets.add(path);
     assets.push({
@@ -132,125 +114,103 @@ export async function verifyFigureProofs(
       bytes: options.stage ? await options.stage.save(bytes, hash) : bytes,
       sha256: hash,
       size: bytes.length,
-      content_type: extension === "svg" ? "image/svg+xml" : "image/png",
+      content_type: "image/svg+xml",
       prompt: null,
     });
     return `/library/${path}`;
   };
   try {
-    const batchSize = 16;
-    for (let offset = 0; offset < jobs.length; offset += batchSize) {
-      if (runner) await (await runner).prepareBatch?.();
-      const batch = jobs.slice(offset, offset + batchSize);
-      const render = async (job: (typeof batch)[number], slot: number) => {
-        try {
-          let prepared = await cache.preparation(job.key),
-            geometry: FigureGeometry | undefined;
-          const prepare = async () => {
-            stats.prepared++;
-            const result = await cache.savePreparation(
-              job.key,
-              await timed("prepare", async () =>
-                (await active()).prepare(job.reference, slot),
-              ),
-            );
-            geometry = result.geometry;
-            return result;
-          };
-          if (prepared) stats.inputHits++;
-          else prepared = await prepare();
-          let proofKey = sha256(
-            stableFigureValue({
-              geometry: prepared.meta.geometryKey,
-              diagnostics: options.diagnostics,
-              viewport: { width: 1366, height: 900 },
-            }),
+    const render = async (job: (typeof jobs)[number], slot: number) => {
+      try {
+        let prepared = await cache.preparation(job.key),
+          geometry: FigureGeometry | undefined,
+          preparedDiagnostics: Diagnostic[] | undefined;
+        const prepare = async () => {
+          stats.prepared++;
+          const result = await cache.savePreparation(
+            job.key,
+            await timed("prepare", async () =>
+              (await active()).prepare(job.reference, slot),
+            ),
           );
-          let diagnostics = await cache.proof(proofKey);
-          if (diagnostics) stats.proofHits++;
-          else {
-            if (prepared.meta.kind === "chemical") {
-              geometry ??= await cache.geometry(prepared.meta);
-              if (!geometry) {
-                prepared = await prepare();
-                proofKey = sha256(
-                  stableFigureValue({
-                    geometry: prepared.meta.geometryKey,
-                    diagnostics: options.diagnostics,
-                    viewport: { width: 1366, height: 900 },
-                  }),
-                );
-              }
-              if (!geometry)
-                throw new Error(
-                  "Chemical preparation did not produce geometry",
-                );
-              stats.diagnosed++;
-              diagnostics = await timed("proof", async () =>
-                (await active()).diagnose(geometry!, slot),
-              );
-            } else diagnostics = [];
-            await cache.saveProof(proofKey, diagnostics);
+          geometry = result.geometry;
+          preparedDiagnostics = result.diagnostics;
+          return result;
+        };
+        if (prepared) stats.inputHits++;
+        else prepared = await prepare();
+        let proofKey = sha256(
+          stableFigureValue({
+            geometry: prepared.meta.geometryKey,
+            diagnostics: options.diagnostics,
+            viewport: { width: 1366, height: 900 },
+          }),
+        );
+        let diagnostics = await cache.proof(proofKey);
+        if (diagnostics) stats.proofHits++;
+        else if (preparedDiagnostics) {
+          stats.diagnosed++;
+          diagnostics = preparedDiagnostics;
+          await cache.saveProof(proofKey, diagnostics);
+        } else {
+          geometry ??= await cache.geometry(prepared.meta);
+          if (!geometry) {
+            prepared = await prepare();
+            proofKey = sha256(
+              stableFigureValue({
+                geometry: prepared.meta.geometryKey,
+                diagnostics: options.diagnostics,
+                viewport: { width: 1366, height: 900 },
+              }),
+            );
           }
-          let bytes: Buffer | undefined;
-          if (job.thumbnail) {
-            bytes = await cache.thumbnail(prepared.meta.geometryKey);
-            if (!bytes) {
-              const { meta, svg } = prepared;
-              stats.thumbnails++;
-              bytes = await timed("thumbnail", async () =>
-                (await active()).thumbnail(
-                  job.reference,
-                  meta.kind === "chemical"
-                    ? {
-                        svg: svg!.toString(),
-                        width: meta.width,
-                        height: meta.height,
-                        minimumScale: meta.minimumScale,
-                      }
-                    : undefined,
-                  slot,
-                ),
-              );
-              await cache.saveThumbnail(meta.geometryKey, bytes);
-            }
+          if (preparedDiagnostics) {
+            stats.diagnosed++;
+            diagnostics = preparedDiagnostics;
+          } else {
+            if (!geometry)
+              throw new Error("Chemical preparation did not produce geometry");
+            stats.diagnosed++;
+            diagnostics = await timed("proof", async () =>
+              (await active()).diagnose(geometry!, slot),
+            );
           }
-          return { ...job, prepared, diagnostics, bytes };
-        } catch (error) {
-          return {
-            ...job,
-            error: `${job.reference.ref}: ${error instanceof Error ? error.message : String(error)} (${stableFigureValue(job.reference)})`,
-          };
+          await cache.saveProof(proofKey, diagnostics);
         }
-      };
-      const results: Awaited<ReturnType<typeof render>>[] = [];
-      let next = 0;
-      await Promise.all(
-        [0, 1].map(async (slot) => {
-          while (next < batch.length) {
-            const index = next++;
-            results[index] = await render(batch[index], slot);
-          }
-        }),
-      );
-      // Preserve reference order regardless of worker completion order.
-      for (const result of results) {
-        if ("error" in result) {
-          failures.push(result.error);
-          continue;
-        }
-        if (result.thumbnail)
-          previews[result.reference.ref] = await asset(result.bytes!, "png");
-        const { meta, svg } = result.prepared;
-        if (meta.kind === "chemical")
-          renders[figureViewKey(result.reference)] = {
-            asset: await asset(svg!, "svg"),
-            width: meta.width,
-            height: meta.height,
-            minimumScale: meta.minimumScale,
-            diagnostics: result.diagnostics,
-          };
+        return { ...job, prepared, diagnostics };
+      } catch (error) {
+        return {
+          ...job,
+          error: `${job.reference.ref}: ${error instanceof Error ? error.message : String(error)} (${stableFigureValue(job.reference)})`,
+        };
       }
+    };
+    const results: Awaited<ReturnType<typeof render>>[] = new Array(
+      jobs.length,
+    );
+    let next = 0;
+    await Promise.all(
+      [0, 1].map(async (slot) => {
+        while (next < jobs.length) {
+          const index = next++;
+          results[index] = await render(jobs[index], slot);
+        }
+      }),
+    );
+    // Preserve reference order regardless of worker completion order.
+    for (const result of results) {
+      if ("error" in result) {
+        failures.push(result.error);
+        continue;
+      }
+      const { meta, svg } = result.prepared;
+      renders[figureViewKey(result.reference)] = {
+        asset: await asset(svg),
+        width: meta.width,
+        height: meta.height,
+        minimumScale: meta.minimumScale,
+        diagnostics: result.diagnostics,
+      };
     }
   } finally {
     for (const [stage, durationMs] of Object.entries(durations))
@@ -268,7 +228,7 @@ export async function verifyFigureProofs(
   }
   if (failures.length)
     throw new Error(`Figure proofs failed:\n${failures.join("\n")}`);
-  return { assets, previews, renders, stats };
+  return { assets, renders, stats };
 }
 
 export function figureProofReferences(
@@ -277,25 +237,29 @@ export function figureProofReferences(
 ): FigureReference[] {
   const refs: FigureReference[] = [
     ...Object.values(library).flatMap((entry) =>
-      entry.kind === "mechanism"
-        ? [
-            { ref: entry.id },
-            ...entry.frames.map((frame) => ({
-              ref: entry.id,
-              frame: frame.id,
-            })),
-          ]
-        : entry.kind === "compound"
+      entry.kind === "image"
+        ? []
+        : entry.kind === "mechanism"
           ? [
               { ref: entry.id },
-              ...Object.keys(entry.variants ?? {}).map((variant) => ({
+              ...entry.frames.map((frame) => ({
                 ref: entry.id,
-                variant,
+                frame: frame.id,
               })),
             ]
-          : [{ ref: entry.id }],
+          : entry.kind === "compound"
+            ? [
+                { ref: entry.id },
+                ...Object.keys(entry.variants ?? {}).map((variant) => ({
+                  ref: entry.id,
+                  variant,
+                })),
+              ]
+            : [{ ref: entry.id }],
     ),
-    ...references,
+    ...references.filter(
+      (reference) => library[reference.ref]?.kind !== "image",
+    ),
   ];
   return [
     ...new Map(
@@ -303,13 +267,11 @@ export function figureProofReferences(
         const entry = library[reference.ref];
         const kind = entry?.kind;
         const instance: FigureReference = { ref: reference.ref };
-        if (kind !== "image") {
-          if (kind === "compound") instance.variant = reference.variant;
-          if (entry?.kind === "mechanism" && reference.frame)
-            instance.frame = reference.frame;
-          instance.numbers = reference.numbers;
-          instance.focus = reference.focus;
-        }
+        if (kind === "compound") instance.variant = reference.variant;
+        if (entry?.kind === "mechanism" && reference.frame)
+          instance.frame = reference.frame;
+        instance.numbers = reference.numbers;
+        instance.focus = reference.focus;
         return [stableFigureValue(instance), instance];
       }),
     ).values(),

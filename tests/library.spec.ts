@@ -47,6 +47,12 @@ async function fixture(): Promise<LibrarySnapshot> {
   };
 }
 
+async function openPreviews(page: import("@playwright/test").Page) {
+  const previews = page.locator(".entry .preview");
+  await previews.first().waitFor();
+  while ((await previews.count()) > 0) await previews.first().click();
+}
+
 test("library previews keep saved geometry and readable bonds on phones", async ({
   page,
 }) => {
@@ -57,6 +63,7 @@ test("library previews keep saved geometry and readable bonds on phones", async 
   );
   await page.goto("/library/");
   await expect(page.locator(".entry")).toHaveCount(2);
+  await openPreviews(page);
   await expect(
     page.locator('[data-molecule][data-compound="cmp_example"]'),
   ).toHaveCount(3);
@@ -86,6 +93,7 @@ test("library previews keep saved geometry and readable bonds on phones", async 
     },
   };
   await page.reload();
+  await openPreviews(page);
   await expect(
     page.locator('[data-molecule][data-compound="cmp_example"]'),
   ).toHaveCount(3);
@@ -167,6 +175,7 @@ test("wrapped reaction conditions leave visible space between CJK and Latin line
   );
   await page.goto("/library/");
   const entry = page.locator("#rxn_example");
+  await entry.locator(".preview").click();
   await expect(entry.locator("[data-check]")).toHaveAttribute(
     "data-check",
     /passed|error/,
@@ -216,6 +225,7 @@ test("published labelled ions show one circled charge", async ({ page }) => {
   );
   await page.goto("/library/");
   const entry = page.locator("#cmp_ion");
+  await entry.locator(".preview").click();
   await expect(entry.locator('[data-check="passed"]')).toHaveCount(1);
   // N and a are the only native glyphs; the charge is drawn by the shared renderer.
   await expect(
@@ -265,6 +275,7 @@ test("published separate components retain labels and readable bonds", async ({
     }),
   );
   await page.goto("/library/");
+  await openPreviews(page);
   await expect(page.locator("#cmp_chain svg")).toBeVisible();
   await expect(page.locator('[data-check="passed"]')).toHaveCount(6);
   await expect(
@@ -329,6 +340,7 @@ test("fused stereocentres use explicit H wedges and salts keep counterions near 
     }),
   );
   await page.goto("/library/");
+  await openPreviews(page);
   for (const width of [1366, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await expect(page.locator('#cmp_fused [data-check="passed"]')).toHaveCount(
@@ -500,11 +512,6 @@ test("wrapped route connections clear quantities and reaction heads at every row
     };
   }
   for (const id of Object.keys(library.entries)) library.uses[id] ??= [];
-  library.previews = Object.fromEntries(
-    Object.keys(library.entries)
-      .filter((id) => !id.startsWith("rte_"))
-      .map((id) => [id, "/sites/minimal/static/sample.svg"]),
-  );
   await serveFigureViews(page, library);
   await page.route("**/api/library", (route) =>
     route.fulfill({ json: library }),
@@ -512,6 +519,7 @@ test("wrapped route connections clear quantities and reaction heads at every row
   await page.goto("/library/");
   for (const id of ["rte_two", "rte_seven", "rte_quantity"]) {
     const entry = page.locator(`#${id}`);
+    await entry.locator(".preview").click();
     await expect(entry.locator("[data-check]")).toHaveAttribute(
       "data-check",
       /passed|error/,
@@ -678,6 +686,7 @@ test("adjacent bond transfers use a readable arc when space is available", async
     route.fulfill({ json: library }),
   );
   await page.goto("/library/");
+  await page.locator(`#${reference.ref} .preview`).click();
   const svg = page.locator(`[data-figure="${reference.ref}"]`);
   await expect(svg.locator('[data-electron-arrow="electron-1"]')).toBeVisible();
   const height = await svg.evaluate((svg) => {

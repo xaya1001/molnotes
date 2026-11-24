@@ -2,13 +2,29 @@
 import { computed, ref, onMounted } from "vue";
 import { SiteBar } from "@ui";
 import LibraryFigure from "../ui/library/LibraryFigure.vue";
-import type { LibrarySnapshot } from "../../shared/chemical-library/types.ts";
+import type {
+  Diagnostic,
+  LibraryEntry,
+  LibrarySnapshot,
+} from "../../shared/chemical-library/types.ts";
+import { figureViewKey } from "../../shared/chemical-library/views.ts";
 import { routeMetrics } from "../../shared/chemical-library/routes.ts";
 const props = defineProps<{ library: LibrarySnapshot }>();
-const statuses = ref<
-  Record<string, import("../../shared/chemical-library/types.ts").Diagnostic[]>
->({});
+const statuses = ref<Record<string, Diagnostic[]>>({});
 const opened = ref<Record<string, boolean>>({});
+const coverSrc = (entry: LibraryEntry) =>
+  entry.kind === "image"
+    ? entry.crop
+      ? undefined
+      : `/library/assets/${entry.asset}`
+    : props.library.renders?.[figureViewKey({ ref: entry.id })]?.asset;
+const entryDiagnostics = (entry: LibraryEntry): Diagnostic[] | undefined =>
+  statuses.value[entry.id] ??
+  (entry.kind === "image"
+    ? entry.crop
+      ? undefined
+      : []
+    : props.library.renders?.[figureViewKey({ ref: entry.id })]?.diagnostics);
 const query = ref("");
 const kind = ref("");
 const names = {
@@ -88,30 +104,23 @@ onMounted(() => {
         {{ library.uses[entry.id]?.length ?? 0 }} 处引用
       </p>
       <button
-        v-if="library.previews?.[entry.id] && !opened[entry.id]"
+        v-if="coverSrc(entry) && !opened[entry.id]"
         class="preview"
         type="button"
         :aria-label="`查看：${entry.title}`"
         @click="opened[entry.id] = true"
       >
-        <img
-          :src="library.previews[entry.id]"
-          :alt="entry.title"
-          loading="lazy"
-        />
+        <img :src="coverSrc(entry)" :alt="entry.title" loading="lazy" />
       </button>
       <LibraryFigure
-        v-if="!library.previews?.[entry.id] || opened[entry.id]"
+        v-if="!coverSrc(entry) || opened[entry.id]"
         :library="library"
         :reference="{ ref: entry.id }"
         @diagnostics="statuses[entry.id] = $event"
       />
-      <p
-        v-if="statuses[entry.id] || library.previews?.[entry.id]"
-        class="check-status"
-      >
+      <p v-if="entryDiagnostics(entry)" class="check-status">
         {{
-          statuses[entry.id]?.some((d) => d.severity === "error")
+          entryDiagnostics(entry)?.some((d) => d.severity === "error")
             ? "布局待修正"
             : "布局通过"
         }}
@@ -120,28 +129,24 @@ onMounted(() => {
         <summary>来源与引用</summary>
         <p
           :data-check="
-            statuses[entry.id] === undefined
-              ? library.previews?.[entry.id]
-                ? 'passed'
-                : 'pending'
-              : statuses[entry.id]?.some((d) => d.severity === 'error')
+            entryDiagnostics(entry) === undefined
+              ? 'pending'
+              : entryDiagnostics(entry)?.some((d) => d.severity === 'error')
                 ? 'error'
                 : 'passed'
           "
         >
           {{
-            statuses[entry.id] === undefined
-              ? library.previews?.[entry.id]
-                ? "布局通过"
-                : "检查中"
-              : statuses[entry.id].length
-                ? `${statuses[entry.id].length} 项诊断`
+            entryDiagnostics(entry) === undefined
+              ? "检查中"
+              : entryDiagnostics(entry)!.length
+                ? `${entryDiagnostics(entry)!.length} 项诊断`
                 : "布局通过"
           }}
         </p>
-        <ul v-if="statuses[entry.id]?.length">
+        <ul v-if="entryDiagnostics(entry)?.length">
           <li
-            v-for="(d, i) in statuses[entry.id]"
+            v-for="(d, i) in entryDiagnostics(entry)"
             :key="i"
             :data-diagnostic="d.code"
           >
@@ -178,7 +183,10 @@ onMounted(() => {
   cursor: pointer;
 }
 .preview img {
-  max-width: 100%;
+  display: block;
+  max-width: min(100%, 320px);
+  max-height: 180px;
+  width: auto;
   height: auto;
 }
 main {

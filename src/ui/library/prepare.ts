@@ -60,7 +60,6 @@ import {
   graphOf,
   linearCentres,
   placedCoordinates,
-  validateCompound,
   validateSceneChemistry,
 } from "../../../shared/chemical-library/chemistry.ts";
 import {
@@ -138,9 +137,9 @@ export async function prepareFigure(
     style: FigureStyle;
     canvas?: "scene";
     cardWidth?: number;
+    cardWidths?: number[];
     cardScale?: number;
     cardRoute?: Route;
-    validatedCompounds?: WeakSet<Compound>;
   },
 ): Promise<FigureGeometry> {
   options = {
@@ -223,10 +222,6 @@ export async function prepareFigure(
     allowReagents = false,
     protectedAtoms = new Map<string, "atom" | "bond">(),
   ) {
-    if (!options.validatedCompounds?.has(c)) {
-      validateCompound(toolkit, c);
-      options.validatedCompounds?.add(c);
-    }
     c = compoundView(toolkit, c, layout);
     const coords = placedCoordinates(toolkit, c, layout, rotate, mirror);
     const mol = drawingMolecule(toolkit, c, coords, layout, rotate, mirror);
@@ -2243,6 +2238,82 @@ export async function prepareFigure(
               ctx.remove(child);
       }
   }
+  const finalizeGeometry = (
+    targetSvg: FigureGroup,
+    targetWidth: number,
+    targetHeight: number,
+    targetAtomPoints: Record<string, Point>,
+    targetCardPlan?: FigureGeometry["cardPlan"],
+    targetCardWidth?: number,
+  ): FigureGeometry => {
+    let w = targetWidth;
+    let h = targetHeight;
+    if (entry.footnote) {
+      const lines = wrapFigureText(
+        entry.footnote.split("\n"),
+        w - 3 * B,
+        (text) => ctx.textWidth(text, "var(--chemical-caption-font)"),
+      );
+      let cursor = h + B * 0.4;
+      for (const [index, text] of lines.entries()) {
+        const note = label(
+            { x: B * 1.5, y: 0 },
+            text,
+            "var(--chemical-caption-font)",
+            "start",
+          ),
+          bounds = ctx.box(note);
+        ctx.set(note, "y", String(cursor - bounds.y));
+        ctx.setData(note, "label", `${entry.id}:footnote:${index}`);
+        ctx.append(targetSvg, note);
+        cursor += bounds.height + B * 0.2;
+      }
+      h = cursor + B * 0.4;
+    }
+    ctx.set(targetSvg, "viewBox", `0 0 ${w} ${h}`);
+    ctx.set(targetSvg, "width", String(w));
+    ctx.set(targetSvg, "height", String(h));
+    const minimumScale = Math.max(
+      token("--chemical-min-bond") / B,
+      ...[
+        ...ctx
+          .nodes(
+            targetSvg,
+            (node) => ctx.data(node, "bondLengths") !== undefined,
+          )
+          .filter((node) => node.kind === "group"),
+      ].flatMap((molecule) => {
+        const lengths: number[] = JSON.parse(
+          ctx.data(molecule, "bondLengths")!,
+        );
+        return lengths.length
+          ? [token("--chemical-min-bond") / Math.min(...lengths)]
+          : [];
+      }),
+      ...[...ctx.nodes(targetSvg).filter((node) => node.kind === "text")].map(
+        (e) =>
+          token(
+            ctx.data(e, "script") !== undefined
+              ? "--chemical-min-script"
+              : "--chemical-min-text",
+          ) / e.fontSize,
+      ),
+    );
+    refreshGeometry(targetSvg);
+    const geometry: FigureGeometry = {
+      format: 1 as const,
+      root: targetSvg,
+      width: w,
+      height: h,
+      minimumScale,
+      atomPoints: targetAtomPoints,
+      ...(targetCardPlan && { cardPlan: targetCardPlan }),
+    };
+    return options.canvas === "scene"
+      ? geometry
+      : fitFigureCanvas(geometry, targetCardWidth ? 0 : B);
+  };
+  let cardPlans: FigureGeometry["cardPlans"];
   if (entry.kind === "conformation") {
     const group = conformationGeometry(entry, ctx);
     ctx.append(svg, group);
@@ -2344,6 +2415,17 @@ export async function prepareFigure(
           structure: true,
         };
       }
+      const basePanels = options.cardWidths?.length
+        ? new Map(
+            [...panels.entries()].map(([id, p]) => [
+              id,
+              { group: structuredClone(p.group), box: p.box },
+            ]),
+          )
+        : undefined;
+      const baseAtomPoints = options.cardWidths?.length
+        ? structuredClone(atomPoints)
+        : undefined;
       const limit = token("--chemical-route-width");
       const steps = entry.frames.slice(0, -1).map((frame, index) => ({
         id: frame.id,
@@ -2352,130 +2434,197 @@ export async function prepareFigure(
         above: [frame.title, ...(frame.above ?? [])],
         below: frame.below ?? [],
       }));
-      const cardWidth = options.cardWidth;
-      const phone = cardWidth === phoneCardWidth;
-      // Preserve the approved line lengths for the standalone, reading and wide drawings.
-      const captionWidth =
-        cardWidth === undefined
-          ? 576
-          : phone
-            ? phoneArtworkWidth
-            : cardWidth === 680
-              ? 290.7
-              : 320;
-      const text = (
-        lines: string[],
-        scale?: number,
-        remainingWidth?: number,
+      const assembleMechanism = async (
+        targetSvg: FigureGroup,
+        targetPanels: Map<string, { group: FigureGroup; box: FigureRect }>,
+        targetAtomPoints: Record<string, Point>,
+        targetCardWidth?: number,
       ) => {
-        const font = scale
-          ? cardConditionFont(scale)
-          : "var(--chemical-caption-font)";
-        const maxWidth = remainingWidth ?? captionWidth / (scale ?? 1);
-        const wrapped = wrapFigureText(
-          lines,
-          maxWidth,
-          (text) => ctx.textWidth(text, font),
-          { balance: true, breakHan: remainingWidth !== undefined },
-        );
-        const nodes = wrapped.map((line) => label({ x: 0, y: 0 }, line, font));
-        return {
-          lines: wrapped,
-          width: Math.max(0, ...nodes.map((node) => node.advance)),
-          height: nodes.reduce(
-            (sum, node) => sum + ctx.box(node).height + B * 0.15,
-            0,
-          ),
+        const phone = targetCardWidth === phoneCardWidth;
+        // Preserve the approved line lengths for the standalone, reading and wide drawings.
+        const captionWidth =
+          targetCardWidth === undefined
+            ? 576
+            : phone
+              ? phoneArtworkWidth
+              : targetCardWidth === 680
+                ? 290.7
+                : 320;
+        const text = (
+          lines: string[],
+          scale?: number,
+          remainingWidth?: number,
+        ) => {
+          const font = scale
+            ? cardConditionFont(scale)
+            : "var(--chemical-caption-font)";
+          const maxWidth = remainingWidth ?? captionWidth / (scale ?? 1);
+          const wrapped = wrapFigureText(
+            lines,
+            maxWidth,
+            (text) => ctx.textWidth(text, font),
+            { balance: true, breakHan: remainingWidth !== undefined },
+          );
+          const nodes = wrapped.map((line) =>
+            label({ x: 0, y: 0 }, line, font),
+          );
+          return {
+            lines: wrapped,
+            width: Math.max(0, ...nodes.map((node) => node.advance)),
+            height: nodes.reduce(
+              (sum, node) => sum + ctx.box(node).height + B * 0.15,
+              0,
+            ),
+          };
         };
-      };
-      const plan = cardWidth
-        ? chemicalCardLayout(
-            steps,
-            measures,
-            cardWidth,
-            B,
-            text,
-            phone ? phoneArtworkWidth : undefined,
-          )
-        : undefined;
-      if (plan)
-        cardPlan = {
-          rows: plan.layout.rows,
-          scale: plan.scale,
-          oversizedFrame: Object.values(measures).some(
-            ({ width }) => width * (20 / B) > cardWidth! - cardInset(phone),
-          ),
-        };
-      const layout =
-        plan?.layout ??
-        layoutRoute(steps, measures, {
-          width: entry.frames.length === 2 ? Infinity : limit,
-          bond: B,
-          gap: token("--chemical-route-gap"),
-          serpentine: true,
-          text: (lines) => text(lines),
-        });
-      width = layout.width;
-      height = layout.height;
-      for (const item of layout.items) {
-        if (item.kind === "molecule") {
-          const { group, box } = panels.get(item.key!)!;
-          const dx = item.at.x - box.x,
-            dy = item.at.y - box.height / 2 - box.y;
-          ctx.set(group, "transform", `translate(${dx} ${dy})`);
-          for (const [id, point] of Object.entries(atomPoints))
-            if (id.startsWith(item.key + "/")) {
-              point.x += dx;
-              point.y += dy;
+        const plan = targetCardWidth
+          ? chemicalCardLayout(
+              steps,
+              measures,
+              targetCardWidth,
+              B,
+              text,
+              phone ? phoneArtworkWidth : undefined,
+            )
+          : undefined;
+        const resolvedCardPlan = plan
+          ? {
+              rows: plan.layout.rows,
+              scale: plan.scale,
+              oversizedFrame: Object.values(measures).some(
+                ({ width }) =>
+                  width * (20 / B) > targetCardWidth! - cardInset(phone),
+              ),
             }
-        } else if (item.kind === "arrow") {
-          const frame = entry.frames.find((frame) => frame.id === item.step)!;
-          const points = item.points!;
-          await scene({
-            width: width / B,
-            height: height / B,
-            molecules: [],
-            reactionArrows: [
-              {
-                id: `next-${frame.id}`,
-                from: mul(points.at(-2)!, 1 / B),
-                to: mul(points.at(-1)!, 1 / B),
-                kind: frame.arrow ?? "forward",
-              },
-            ],
+          : undefined;
+        const layout =
+          plan?.layout ??
+          layoutRoute(steps, measures, {
+            width: entry.frames.length === 2 ? Infinity : limit,
+            bond: B,
+            gap: token("--chemical-route-gap"),
+            serpentine: true,
+            text: (lines) => text(lines),
           });
-          const vertical = points[0].x === points.at(-1)!.x;
-          const side = item.side === "left" ? -1 : 1;
-          const labelX = vertical
-            ? points[0].x + side * verticalArrowLabelOffset(B)
-            : item.at.x;
-          const labelAlign = vertical ? (side < 0 ? "end" : "start") : "middle";
-          let cursor = points[0].y + B * 0.3;
-          for (const [lines, sign] of [
-            [item.above ?? [], -1],
-            [item.below ?? [], 1],
-          ] as const) {
-            if (!vertical) cursor = item.at.y + sign * B * 0.4;
-            for (const text of sign < 0 && !vertical
-              ? [...lines].reverse()
-              : lines) {
-              const node = label(
-                { x: labelX, y: 0 },
-                text,
-                plan
-                  ? cardConditionFont(plan.scale)
-                  : "var(--chemical-caption-font)",
-                labelAlign,
-              );
-              const box = ctx.box(node);
-              const y =
-                cursor - box.y - (sign < 0 && !vertical ? box.height : 0);
-              ctx.set(node, "y", String(y));
-              ctx.setData(node, "label", `${frame.id}:step:${sign}:${text}`);
-              ctx.append(svg, node);
-              cursor += (vertical ? 1 : sign) * (box.height + B * 0.15);
+        const w = layout.width;
+        const h = layout.height;
+        for (const item of layout.items) {
+          if (item.kind === "molecule") {
+            const { group, box } = targetPanels.get(item.key!)!;
+            const dx = item.at.x - box.x,
+              dy = item.at.y - box.height / 2 - box.y;
+            ctx.set(group, "transform", `translate(${dx} ${dy})`);
+            for (const [id, point] of Object.entries(targetAtomPoints))
+              if (id.startsWith(item.key + "/")) {
+                point.x += dx;
+                point.y += dy;
+              }
+          } else if (item.kind === "arrow") {
+            const frame = entry.frames.find((frame) => frame.id === item.step)!;
+            const points = item.points!;
+            await scene(
+              {
+                width: w / B,
+                height: h / B,
+                molecules: [],
+                reactionArrows: [
+                  {
+                    id: `next-${frame.id}`,
+                    from: mul(points.at(-2)!, 1 / B),
+                    to: mul(points.at(-1)!, 1 / B),
+                    kind: frame.arrow ?? "forward",
+                  },
+                ],
+              },
+              "",
+              targetSvg,
+            );
+            const vertical = points[0].x === points.at(-1)!.x;
+            const side = item.side === "left" ? -1 : 1;
+            const labelX = vertical
+              ? points[0].x + side * verticalArrowLabelOffset(B)
+              : item.at.x;
+            const labelAlign = vertical
+              ? side < 0
+                ? "end"
+                : "start"
+              : "middle";
+            let cursor = points[0].y + B * 0.3;
+            for (const [lines, sign] of [
+              [item.above ?? [], -1],
+              [item.below ?? [], 1],
+            ] as const) {
+              if (!vertical) cursor = item.at.y + sign * B * 0.4;
+              for (const text of sign < 0 && !vertical
+                ? [...lines].reverse()
+                : lines) {
+                const node = label(
+                  { x: labelX, y: 0 },
+                  text,
+                  plan
+                    ? cardConditionFont(plan.scale)
+                    : "var(--chemical-caption-font)",
+                  labelAlign,
+                );
+                const box = ctx.box(node);
+                const y =
+                  cursor - box.y - (sign < 0 && !vertical ? box.height : 0);
+                ctx.set(node, "y", String(y));
+                ctx.setData(node, "label", `${frame.id}:step:${sign}:${text}`);
+                ctx.append(targetSvg, node);
+                cursor += (vertical ? 1 : sign) * (box.height + B * 0.15);
+              }
             }
           }
+        }
+        return { width: w, height: h, cardPlan: resolvedCardPlan };
+      };
+      const mainLayout = await assembleMechanism(
+        svg,
+        panels,
+        atomPoints,
+        options.cardWidth,
+      );
+      width = mainLayout.width;
+      height = mainLayout.height;
+      cardPlan = mainLayout.cardPlan;
+      if (options.cardWidths?.length && basePanels && baseAtomPoints) {
+        cardPlans = [];
+        for (const cw of options.cardWidths) {
+          const cardSvg = element("g", {
+            role: "img",
+            "aria-label": entry.title,
+            "data-figure": entry.id,
+          });
+          const clonedPanels = new Map<
+            string,
+            { group: FigureGroup; box: FigureRect }
+          >();
+          for (const [id, p] of basePanels.entries()) {
+            const clonedGroup = structuredClone(p.group);
+            ctx.append(cardSvg, clonedGroup);
+            clonedPanels.set(id, { group: clonedGroup, box: p.box });
+          }
+          const clonedPoints = structuredClone(baseAtomPoints);
+          const cardLayout = await assembleMechanism(
+            cardSvg,
+            clonedPanels,
+            clonedPoints,
+            cw,
+          );
+          const drawing = finalizeGeometry(
+            cardSvg,
+            cardLayout.width,
+            cardLayout.height,
+            clonedPoints,
+            cardLayout.cardPlan,
+            cw,
+          );
+          cardPlans.push({
+            width: cw,
+            ...drawing.cardPlan!,
+            geometry: drawing,
+          });
         }
       }
     }
@@ -2512,63 +2661,14 @@ export async function prepareFigure(
         ),
       );
   }
-  if (entry.footnote) {
-    const lines = wrapFigureText(
-      entry.footnote.split("\n"),
-      width - 3 * B,
-      (text) => ctx.textWidth(text, "var(--chemical-caption-font)"),
-    );
-    let cursor = height + B * 0.4;
-    for (const [index, text] of lines.entries()) {
-      const note = label(
-          { x: B * 1.5, y: 0 },
-          text,
-          "var(--chemical-caption-font)",
-          "start",
-        ),
-        bounds = ctx.box(note);
-      ctx.set(note, "y", String(cursor - bounds.y));
-      ctx.setData(note, "label", `${entry.id}:footnote:${index}`);
-      ctx.append(svg, note);
-      cursor += bounds.height + B * 0.2;
-    }
-    height = cursor + B * 0.4;
-  }
-  ctx.set(svg, "viewBox", `0 0 ${width} ${height}`);
-  ctx.set(svg, "width", String(width));
-  ctx.set(svg, "height", String(height));
-  const minimumScale = Math.max(
-    token("--chemical-min-bond") / B,
-    ...[
-      ...ctx
-        .nodes(svg, (node) => ctx.data(node, "bondLengths") !== undefined)
-        .filter((node) => node.kind === "group"),
-    ].flatMap((molecule) => {
-      const lengths: number[] = JSON.parse(ctx.data(molecule, "bondLengths")!);
-      return lengths.length
-        ? [token("--chemical-min-bond") / Math.min(...lengths)]
-        : [];
-    }),
-    ...[...ctx.nodes(svg).filter((node) => node.kind === "text")].map(
-      (e) =>
-        token(
-          ctx.data(e, "script") !== undefined
-            ? "--chemical-min-script"
-            : "--chemical-min-text",
-        ) / e.fontSize,
-    ),
-  );
-  refreshGeometry(svg);
-  const geometry = {
-    format: 1 as const,
-    root: svg,
+  const geometry = finalizeGeometry(
+    svg,
     width,
     height,
-    minimumScale,
     atomPoints,
-    ...(cardPlan && { cardPlan }),
-  };
-  return options.canvas === "scene"
-    ? geometry
-    : fitFigureCanvas(geometry, options.cardWidth ? 0 : B);
+    cardPlan,
+    options.cardWidth,
+  );
+  if (cardPlans) geometry.cardPlans = cardPlans;
+  return geometry;
 }

@@ -10,36 +10,65 @@ import {
 import type { FigureGeometry } from "../../shared/chemical-library/geometry.ts";
 import type { Diagnostic } from "../../shared/chemical-library/types.ts";
 
-export const stableFigureValue = (value: unknown): string =>
-  JSON.stringify(value, (_key, item) =>
-    isObject(item)
-      ? Object.fromEntries(
-          Object.entries(item).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
-        )
-      : item,
-  );
-export type PreparedFigure =
-  | { kind: "chemical"; geometry: FigureGeometry; svg: string }
-  | { kind: "illustration"; geometryKey: string };
-export type PreparationMeta =
-  | { kind: "illustration"; geometryKey: string }
-  | {
-      kind: "chemical";
-      geometryKey: string;
-      geometryHash: string;
-      geometrySize: number;
-      svgHash: string;
-      svgSize: number;
-      width: number;
-      height: number;
-      minimumScale: number;
-    };
+export const stableFigureValue = (
+  value: unknown,
+  omit?: ReadonlySet<string>,
+): string => {
+  const encode = (v: unknown): string | undefined => {
+    if (v === null || typeof v !== "object") return JSON.stringify(v);
+    if (Array.isArray(v)) {
+      let out = "[";
+      for (let i = 0; i < v.length; i++) {
+        if (i) out += ",";
+        const item = encode(v[i]);
+        out += item === undefined ? "null" : item;
+      }
+      return out + "]";
+    }
+    const keys = Object.keys(v as Record<string, unknown>).sort();
+    let out = "{";
+    let first = true;
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      if (omit?.has(k)) continue;
+      const encoded = encode((v as Record<string, unknown>)[k]);
+      if (encoded === undefined) continue;
+      if (!first) out += ",";
+      first = false;
+      out += JSON.stringify(k) + ":" + encoded;
+    }
+    return out + "}";
+  };
+  return encode(value) ?? "undefined";
+};
+export const geometryKeyOmit = new Set(["font", "glyph"]);
+export interface PreparedFigure {
+  kind: "chemical";
+  geometry?: FigureGeometry;
+  geometryBytes?: Uint8Array;
+  geometryKey?: string;
+  width?: number;
+  height?: number;
+  minimumScale?: number;
+  svg: string;
+  diagnostics?: Diagnostic[];
+}
+export interface PreparationMeta {
+  kind: "chemical";
+  geometryKey: string;
+  geometryHash: string;
+  geometrySize: number;
+  svgHash: string;
+  svgSize: number;
+  width: number;
+  height: number;
+  minimumScale: number;
+}
 const finite = (v: unknown) => typeof v === "number" && Number.isFinite(v);
 const hash = (v: unknown): v is string =>
   typeof v === "string" && /^[a-f0-9]{64}$/.test(v);
 function meta(v: unknown): v is PreparationMeta {
   if (!isObject(v) || !hash(v.geometryKey)) return false;
-  if (v.kind === "illustration") return true;
   return (
     v.kind === "chemical" &&
     hash(v.geometryHash) &&
@@ -47,25 +76,28 @@ function meta(v: unknown): v is PreparationMeta {
     [v.geometrySize, v.svgSize, v.width, v.height, v.minimumScale].every(finite)
   );
 }
-async function atomic(path: string, bytes: Buffer | string) {
-  await mkdir(dirname(path), { recursive: true });
-  const temporary = path + "." + randomUUID() + ".tmp";
-  try {
-    await writeFile(temporary, bytes);
-    await rename(temporary, path);
-  } finally {
-    await rm(temporary, { force: true });
-  }
-}
 
 export function figureProofCache(directory: string) {
   let writable = true;
   const file = (hash: string, extension: string) =>
     join(directory, "data", hash + extension);
+  const dirs = new Set<string>();
+  const ensureDir = async (dir: string) => {
+    if (dirs.has(dir)) return;
+    await mkdir(dir, { recursive: true });
+    dirs.add(dir);
+  };
   const write = async (path: string, value: Buffer | string) => {
     if (!writable) return;
     try {
-      await atomic(path, value);
+      await ensureDir(dirname(path));
+      const temporary = path + "." + randomUUID() + ".tmp";
+      try {
+        await writeFile(temporary, value);
+        await rename(temporary, path);
+      } finally {
+        await rm(temporary, { force: true });
+      }
     } catch {
       writable = false;
       console.warn(
@@ -102,10 +134,9 @@ export function figureProofCache(directory: string) {
   return {
     async preparation(
       key: string,
-    ): Promise<{ meta: PreparationMeta; svg?: Buffer } | undefined> {
+    ): Promise<{ meta: PreparationMeta; svg: Buffer } | undefined> {
       const value = await read(join(directory, "inputs", key + ".json"), key);
       if (!meta(value)) return;
-      if (value.kind === "illustration") return { meta: value };
       try {
         const svg = await readFile(file(value.svgHash, ".svg"));
         if (
@@ -125,22 +156,22 @@ export function figureProofCache(directory: string) {
       prepared: PreparedFigure,
     ): Promise<{
       meta: PreparationMeta;
-      svg?: Buffer;
+      svg: Buffer;
       geometry?: FigureGeometry;
+      diagnostics?: Diagnostic[];
     }> {
-      if (prepared.kind === "illustration") {
-        const meta: PreparationMeta = prepared;
-        await store(join(directory, "inputs", key + ".json"), key, meta);
-        return { meta };
-      }
-      const bytes = Buffer.from(stableFigureValue(prepared.geometry)),
+      const bytes = prepared.geometryBytes
+          ? Buffer.from(
+              prepared.geometryBytes.buffer,
+              prepared.geometryBytes.byteOffset,
+              prepared.geometryBytes.byteLength,
+            )
+          : Buffer.from(stableFigureValue(prepared.geometry!)),
         svg = Buffer.from(prepared.svg);
       // Font lookup IDs locate outlines during preparation; only the outlines affect the proof.
-      const geometryKey = sha256(
-        JSON.stringify(JSON.parse(bytes.toString()), (key, value) =>
-          key === "font" || key === "glyph" ? undefined : value,
-        ),
-      );
+      const geometryKey =
+        prepared.geometryKey ??
+        sha256(stableFigureValue(prepared.geometry!, geometryKeyOmit));
       const meta: PreparationMeta = {
         kind: "chemical",
         geometryKey,
@@ -148,18 +179,23 @@ export function figureProofCache(directory: string) {
         geometrySize: bytes.length,
         svgHash: sha256(svg),
         svgSize: svg.length,
-        width: prepared.geometry.width,
-        height: prepared.geometry.height,
-        minimumScale: prepared.geometry.minimumScale,
+        width: prepared.width ?? prepared.geometry!.width,
+        height: prepared.height ?? prepared.geometry!.height,
+        minimumScale: prepared.minimumScale ?? prepared.geometry!.minimumScale,
       };
-      await write(file(meta.geometryHash, ".geometry.json"), bytes);
-      await write(file(meta.svgHash, ".svg"), svg);
-      await store(join(directory, "inputs", key + ".json"), key, meta);
-      return { meta, svg, geometry: prepared.geometry };
+      await Promise.all([
+        write(file(meta.geometryHash, ".geometry.json"), bytes),
+        write(file(meta.svgHash, ".svg"), svg),
+        store(join(directory, "inputs", key + ".json"), key, meta),
+      ]);
+      return {
+        meta,
+        svg,
+        geometry: prepared.geometry,
+        diagnostics: prepared.diagnostics,
+      };
     },
-    async geometry(
-      meta: Extract<PreparationMeta, { kind: "chemical" }>,
-    ): Promise<FigureGeometry | undefined> {
+    async geometry(meta: PreparationMeta): Promise<FigureGeometry | undefined> {
       try {
         const bytes = await readFile(file(meta.geometryHash, ".geometry.json"));
         if (
@@ -185,23 +221,5 @@ export function figureProofCache(directory: string) {
     },
     saveProof: (key: string, diagnostics: Diagnostic[]) =>
       store(join(directory, "proofs", key + ".json"), key, { diagnostics }),
-    async thumbnail(key: string) {
-      const value = await read(
-        join(directory, "thumbnails", key + ".json"),
-        key,
-      );
-      if (!isObject(value) || !hash(value.hash)) return;
-      try {
-        const bytes = await readFile(file(value.hash, ".png"));
-        return sha256(bytes) === value.hash ? bytes : undefined;
-      } catch {
-        return;
-      }
-    },
-    async saveThumbnail(key: string, bytes: Buffer) {
-      const hash = sha256(bytes);
-      await write(file(hash, ".png"), bytes);
-      await store(join(directory, "thumbnails", key + ".json"), key, { hash });
-    },
   };
 }

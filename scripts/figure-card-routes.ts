@@ -1,5 +1,4 @@
 import type {
-  Compound,
   FigureReference,
   Library,
   Participant,
@@ -14,7 +13,6 @@ export async function prepareCardRoutes(
   library: Library,
   reference: FigureReference,
   style: FigureStyle,
-  validatedCompounds: WeakSet<Compound>,
 ) {
   const entry = library[reference.ref];
   if (entry.kind !== "route" && entry.kind !== "reaction") return;
@@ -101,6 +99,5 @@ export async function prepareCardRoutes(
     steps,
     style,
     { ...reference, numbers },
-    validatedCompounds,
   );
 }
