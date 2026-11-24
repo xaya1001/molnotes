@@ -92,11 +92,8 @@ export async function figureBuildVersions(css: string) {
   const [preparation, diagnostics, dependencies, diagnosticDependencies] =
     await Promise.all([
       figureRendererFingerprint(root, [
-        "src/ui/library/prepare.ts",
-        "scripts/figure-worker.ts",
+        "scripts/figure-preparation.ts",
         "src/ui/library/geometry-tree.ts",
-        "shared/molecule-toolkit.ts",
-        "scripts/figure-fonts.ts",
         "scripts/chemical-toolkit.py",
         "scripts/chemical-toolkit-io.ts",
         "scripts/requirements-material.txt",
