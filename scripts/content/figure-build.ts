@@ -137,6 +137,10 @@ export async function prepareFigureViews(
   references: FigureReference[],
   root: string,
 ) {
+  const chemicalReferences = references.filter(
+    (reference) => library[reference.ref]?.kind !== "image",
+  );
+  if (!chemicalReferences.length) return { renders: {}, assets: [] };
   const css = await readFile(
     new URL("../../src/ui/styles/tokens.css", import.meta.url),
     "utf8",
@@ -145,7 +149,7 @@ export async function prepareFigureViews(
   const renders: Record<string, LibraryFigureRender> = {};
   const assets = new Map<string, UnitAsset & { bytes: Buffer }>();
   try {
-    for (const reference of references) {
+    for (const reference of chemicalReferences) {
       const key = figureViewKey(reference);
       if (renders[key]) continue;
       const prepared = await runner.prepare(reference, 0);
