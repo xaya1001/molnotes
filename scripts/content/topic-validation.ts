@@ -6,11 +6,12 @@ import {
   validateAbbreviations,
   validateAbbreviatedReferences,
 } from "../../shared/molecule-abbreviations.ts";
+import { smilesWithDefaultCoords } from "../../shared/molecule-layout.ts";
 import { moleculeToolkit } from "../../shared/molecule-toolkit.ts";
 import { isObject } from "../../shared/json.ts";
 
 let toolkit: Awaited<ReturnType<typeof moleculeToolkit>> | undefined;
-const checkedSmiles = new Set<string>();
+const checkedSmiles = new Map<string, string>();
 
 export function validateChapterTerms(
   chapter: { id: string; terms?: readonly string[] },
@@ -73,43 +74,45 @@ export async function validateTopicValues(
       parent.edges.includes(value);
     for (const [key, item] of Object.entries(value)) {
       const location = `${path}.${key}`;
-      if (
-        key === "smiles" &&
-        typeof item === "string" &&
-        item !== "" &&
-        (!checkedSmiles.has(item) || "abbreviations" in value)
-      ) {
-        toolkit ??= await moleculeToolkit();
-        let mol;
-        try {
-          mol = toolkit.get_mol(item);
-          if (!mol?.is_valid())
-            throw new Error(`${where}:${location}: invalid SMILES`);
-          const data = value as Record<string, unknown>;
-          validateAbbreviations(data.abbreviations, `${where}:${path}`);
-          const groups = abbreviatedGroups(
-            toolkit,
-            mol,
-            data.abbreviations,
-            `${where}:${path}`,
-          );
-          const prediction =
-            parent &&
-            (parent.molecule === value ||
-              (Array.isArray(parent.molecules) &&
-                parent.molecules.includes(value)))
-              ? parent
-              : {};
-          validateAbbreviatedReferences(
-            mol,
-            groups,
-            { ...prediction, ...data },
-            `${where}:${path}`,
-          );
-        } finally {
-          mol?.delete();
+      if (key === "smiles" && typeof item === "string" && item !== "") {
+        let compiledSmiles = checkedSmiles.get(item);
+        if (compiledSmiles === undefined || "abbreviations" in value) {
+          toolkit ??= await moleculeToolkit();
+          let mol;
+          try {
+            mol = toolkit.get_mol(item);
+            if (!mol?.is_valid())
+              throw new Error(`${where}:${location}: invalid SMILES`);
+            const data = value as Record<string, unknown>;
+            validateAbbreviations(data.abbreviations, `${where}:${path}`);
+            const groups = abbreviatedGroups(
+              toolkit,
+              mol,
+              data.abbreviations,
+              `${where}:${path}`,
+            );
+            const prediction =
+              parent &&
+              (parent.molecule === value ||
+                (Array.isArray(parent.molecules) &&
+                  parent.molecules.includes(value)))
+                ? parent
+                : {};
+            validateAbbreviatedReferences(
+              mol,
+              groups,
+              { ...prediction, ...data },
+              `${where}:${path}`,
+            );
+            compiledSmiles ??= smilesWithDefaultCoords(toolkit, mol, item);
+          } finally {
+            mol?.delete();
+          }
+          checkedSmiles.set(item, compiledSmiles);
         }
-        checkedSmiles.add(item);
+        if (!path.startsWith("content.data.collections.")) {
+          (value as Record<string, unknown>).smiles = compiledSmiles;
+        }
       }
       if (
         typeof item === "string" &&

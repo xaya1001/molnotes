@@ -3,6 +3,7 @@ import {
   abbreviationLabel,
   type AbbreviatedGroup,
 } from "../../../shared/molecule-abbreviations.ts";
+import { computeDefaultCoords } from "../../../shared/chemical-toolkit.ts";
 import type { MoleculeHandle } from "./rdkit.ts";
 // Draw in ACS document units, then use one screen scale for every consumer.
 // This is the one screen-size setting; all ACS proportions follow it.
@@ -33,14 +34,14 @@ export function moleculeSvg(
     MoleculeHandle,
     | "normalize_depiction"
     | "set_new_coords"
+    | "straighten_depiction"
     | "get_json"
     | "get_svg_with_highlights"
   >,
   options: Record<string, unknown> = {},
 ) {
   if (mol.normalize_depiction(0, -1) < 0) {
-    mol.set_new_coords();
-    mol.normalize_depiction(0, -1);
+    computeDefaultCoords(mol);
   }
   const graph: {
     molecules: { conformers: { coords: [number, number][] }[] }[];

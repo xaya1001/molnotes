@@ -1,4 +1,5 @@
 import { shallowRef, watch } from "vue";
+import { computeDefaultCoords } from "../../../shared/chemical-toolkit.ts";
 import { loadChemistry, molecule, type MoleculeHandle } from "./rdkit.ts";
 import {
   graphOf,
@@ -48,8 +49,7 @@ export function useGroupAlignment(smiles: () => readonly string[]) {
               }),
             );
             if (core && core.get_num_atoms() >= minimum) {
-              core.set_new_coords();
-              core.normalize_depiction(1, -1);
+              computeDefaultCoords(core);
               template.value = core;
             }
           } finally {
@@ -76,6 +76,5 @@ export function alignMolecule(mol: MoleculeHandle, template?: MoleculeHandle) {
     );
     if (hasLinearDepiction(graphOf(mol))) return;
   }
-  mol.set_new_coords();
-  mol.normalize_depiction(1, -1);
+  computeDefaultCoords(mol);
 }

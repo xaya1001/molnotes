@@ -1,7 +1,8 @@
 import { layoutProblems } from "./molecule-layout.ts";
-import type {
-  ChemicalToolkit as MainModule,
-  ChemicalMolecule as Mol,
+import {
+  computeDefaultCoords,
+  type ChemicalToolkit as MainModule,
+  type ChemicalMolecule as Mol,
 } from "./chemical-toolkit.ts";
 import { abbreviationFragments } from "./molecule-abbreviations.ts";
 import type { SubstrateScope, SynthesisRoute } from "./reaction-scheme.ts";
@@ -47,7 +48,7 @@ export function alignScheme(toolkit: SchemeToolkit, route: SynthesisRoute) {
         if (saved.has(compound.number)) continue;
         let mol = parse(toolkit, compound.smiles);
         saved.set(compound.number, mol);
-        if (!mol.has_coords()) mol.set_new_coords();
+        if (!mol.has_coords()) computeDefaultCoords(mol);
         if (!reference) {
           reference = mol;
           continue;

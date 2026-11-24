@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { computeDefaultCoords } from "../shared/chemical-toolkit.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import {
   prepareCompound,
@@ -120,7 +121,7 @@ test("saved molecular identity survives 2D import and rejects a different stereo
   };
   const mol = rd.get_mol(input.smiles)!;
   try {
-    mol.set_new_coords();
+    computeDefaultCoords(mol);
     const c = prepareCompound(rd, input, mol.get_molblock());
     validateCompound(rd, c);
     assert.equal(Object.keys(c.layout.coords).length, c.atomIds.length);
@@ -145,7 +146,7 @@ test("imported coordinates retain explicit stereochemical hydrogen atoms", async
     smiles = "C[C@]([H])(O)CO";
   const mol = rd.get_mol(smiles, JSON.stringify({ removeHs: false }))!;
   try {
-    mol.set_new_coords(true);
+    computeDefaultCoords(mol, true);
     const compound = prepareCompound(
       rd,
       { id: "cmp_example", title: "Example", smiles, sources },

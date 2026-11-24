@@ -11,6 +11,7 @@ import {
   validateAbbreviations,
   type MoleculeAbbreviation,
 } from "./molecule-abbreviations.ts";
+import { smilesWithDefaultCoords } from "./molecule-layout.ts";
 import { moleculeToolkit } from "./molecule-toolkit.ts";
 import {
   defineEnergy,
@@ -303,7 +304,7 @@ export async function compileNotes({
     katex.renderToString(tokens[i].content.replaceAll("\\_", "_"), {
       throwOnError: true,
     });
-  const validatedSmiles = new Set();
+  const validatedSmiles = new Map<string, string>();
   const originalFence = md.renderer.rules.fence;
   md.renderer.rules.fence = (tokens, i, options, rawEnv, self) => {
     const env = noteEnv(rawEnv);
@@ -405,19 +406,21 @@ export async function compileNotes({
       if (match[1] === "smiles") {
         if (molecules.length && !molecules[molecules.length - 1].caption)
           fail(env.file, env.line + n, "Missing caption");
-        if (!validatedSmiles.has(match[2])) {
+        let compiledSmiles = validatedSmiles.get(match[2]);
+        if (compiledSmiles === undefined) {
           let mol;
           try {
             mol = toolkit?.get_mol(match[2]);
             if (!mol || !mol.is_valid()) throw new Error();
-            validatedSmiles.add(match[2]);
+            compiledSmiles = smilesWithDefaultCoords(toolkit!, mol, match[2]);
+            validatedSmiles.set(match[2], compiledSmiles);
           } catch {
             fail(env.file, env.line + n + 1, `Invalid SMILES ${match[2]}`);
           } finally {
             mol?.delete();
           }
         }
-        molecules.push({ smiles: match[2], caption: "" });
+        molecules.push({ smiles: compiledSmiles, caption: "" });
       } else if (match[1] === "abbreviations") {
         const current = molecules.at(-1);
         if (!current || current.caption || current.abbreviations)
