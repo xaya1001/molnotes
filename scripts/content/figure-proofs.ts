@@ -138,88 +138,98 @@ export async function verifyFigureProofs(
     return `/library/${path}`;
   };
   try {
-    for (let offset = 0; offset < jobs.length; offset += 2) {
+    const batchSize = 16;
+    for (let offset = 0; offset < jobs.length; offset += batchSize) {
       if (runner) await (await runner).prepareBatch?.();
-      const results = await Promise.all(
-        jobs.slice(offset, offset + 2).map(async (job, slot) => {
-          try {
-            let prepared = await cache.preparation(job.key),
-              geometry: FigureGeometry | undefined;
-            const prepare = async () => {
-              stats.prepared++;
-              const result = await cache.savePreparation(
-                job.key,
-                await timed("prepare", async () =>
-                  (await active()).prepare(job.reference, slot),
+      const batch = jobs.slice(offset, offset + batchSize);
+      const render = async (job: (typeof batch)[number], slot: number) => {
+        try {
+          let prepared = await cache.preparation(job.key),
+            geometry: FigureGeometry | undefined;
+          const prepare = async () => {
+            stats.prepared++;
+            const result = await cache.savePreparation(
+              job.key,
+              await timed("prepare", async () =>
+                (await active()).prepare(job.reference, slot),
+              ),
+            );
+            geometry = result.geometry;
+            return result;
+          };
+          if (prepared) stats.inputHits++;
+          else prepared = await prepare();
+          let proofKey = sha256(
+            stableFigureValue({
+              geometry: prepared.meta.geometryKey,
+              diagnostics: options.diagnostics,
+              viewport: { width: 1366, height: 900 },
+            }),
+          );
+          let diagnostics = await cache.proof(proofKey);
+          if (diagnostics) stats.proofHits++;
+          else {
+            if (prepared.meta.kind === "chemical") {
+              geometry ??= await cache.geometry(prepared.meta);
+              if (!geometry) {
+                prepared = await prepare();
+                proofKey = sha256(
+                  stableFigureValue({
+                    geometry: prepared.meta.geometryKey,
+                    diagnostics: options.diagnostics,
+                    viewport: { width: 1366, height: 900 },
+                  }),
+                );
+              }
+              if (!geometry)
+                throw new Error(
+                  "Chemical preparation did not produce geometry",
+                );
+              stats.diagnosed++;
+              diagnostics = await timed("proof", async () =>
+                (await active()).diagnose(geometry!, slot),
+              );
+            } else diagnostics = [];
+            await cache.saveProof(proofKey, diagnostics);
+          }
+          let bytes: Buffer | undefined;
+          if (job.thumbnail) {
+            bytes = await cache.thumbnail(prepared.meta.geometryKey);
+            if (!bytes) {
+              const { meta, svg } = prepared;
+              stats.thumbnails++;
+              bytes = await timed("thumbnail", async () =>
+                (await active()).thumbnail(
+                  job.reference,
+                  meta.kind === "chemical"
+                    ? {
+                        svg: svg!.toString(),
+                        width: meta.width,
+                        height: meta.height,
+                        minimumScale: meta.minimumScale,
+                      }
+                    : undefined,
+                  slot,
                 ),
               );
-              geometry = result.geometry;
-              return result;
-            };
-            if (prepared) stats.inputHits++;
-            else prepared = await prepare();
-            let proofKey = sha256(
-              stableFigureValue({
-                geometry: prepared.meta.geometryKey,
-                diagnostics: options.diagnostics,
-                viewport: { width: 1366, height: 900 },
-              }),
-            );
-            let diagnostics = await cache.proof(proofKey);
-            if (diagnostics) stats.proofHits++;
-            else {
-              if (prepared.meta.kind === "chemical") {
-                geometry ??= await cache.geometry(prepared.meta);
-                if (!geometry) {
-                  prepared = await prepare();
-                  proofKey = sha256(
-                    stableFigureValue({
-                      geometry: prepared.meta.geometryKey,
-                      diagnostics: options.diagnostics,
-                      viewport: { width: 1366, height: 900 },
-                    }),
-                  );
-                }
-                if (!geometry)
-                  throw new Error(
-                    "Chemical preparation did not produce geometry",
-                  );
-                stats.diagnosed++;
-                diagnostics = await timed("proof", async () =>
-                  (await active()).diagnose(geometry!, slot),
-                );
-              } else diagnostics = [];
-              await cache.saveProof(proofKey, diagnostics);
+              await cache.saveThumbnail(meta.geometryKey, bytes);
             }
-            let bytes: Buffer | undefined;
-            if (job.thumbnail) {
-              bytes = await cache.thumbnail(prepared.meta.geometryKey);
-              if (!bytes) {
-                const { meta, svg } = prepared;
-                stats.thumbnails++;
-                bytes = await timed("thumbnail", async () =>
-                  (await active()).thumbnail(
-                    job.reference,
-                    meta.kind === "chemical"
-                      ? {
-                          svg: svg!.toString(),
-                          width: meta.width,
-                          height: meta.height,
-                          minimumScale: meta.minimumScale,
-                        }
-                      : undefined,
-                    slot,
-                  ),
-                );
-                await cache.saveThumbnail(meta.geometryKey, bytes);
-              }
-            }
-            return { ...job, prepared, diagnostics, bytes };
-          } catch (error) {
-            return {
-              ...job,
-              error: `${job.reference.ref}: ${error instanceof Error ? error.message : String(error)} (${stableFigureValue(job.reference)})`,
-            };
+          }
+          return { ...job, prepared, diagnostics, bytes };
+        } catch (error) {
+          return {
+            ...job,
+            error: `${job.reference.ref}: ${error instanceof Error ? error.message : String(error)} (${stableFigureValue(job.reference)})`,
+          };
+        }
+      };
+      const results: Awaited<ReturnType<typeof render>>[] = [];
+      let next = 0;
+      await Promise.all(
+        [0, 1].map(async (slot) => {
+          while (next < batch.length) {
+            const index = next++;
+            results[index] = await render(batch[index], slot);
           }
         }),
       );

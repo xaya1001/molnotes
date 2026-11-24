@@ -4,6 +4,7 @@ import {
 } from "../src/ui/library/text-runs.ts";
 import { readFile } from "node:fs/promises";
 import type {
+  Compound,
   Library,
   FigureReference,
   Point,
@@ -107,6 +108,7 @@ export async function compileRouteLayout(
   rawSteps: Map<string, StepInput>,
   style?: FigureStyle,
   card?: FigureReference,
+  validatedCompounds?: WeakSet<Compound>,
 ) {
   style ??= await loadFigureStyle();
   const fonts = await loadFigureFonts(),
@@ -167,7 +169,7 @@ export async function compileRouteLayout(
           ]),
         ),
       },
-      { toolkit, fonts, style, canvas: "scene" },
+      { toolkit, fonts, style, canvas: "scene", validatedCompounds },
     );
     const reservations = new Map<
       string,
@@ -192,6 +194,7 @@ export async function compileRouteLayout(
         fonts,
         style,
         canvas: "scene",
+        validatedCompounds,
       },
     );
     walkGeometry(geometry.root, (node, matrix) => {
