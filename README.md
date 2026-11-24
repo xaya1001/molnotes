@@ -12,7 +12,7 @@
 | ---------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | `MOLNOTES_RECORDS_FILE`                              | 学习记录的 SQLite 文件，目录须已存在，文件不存在时创建；镜像默认 `/data/records.sqlite` |
 | `MOLNOTES_CONTENT_SNAPSHOT`                          | 网站读取的内容快照目录，通常是指向当前快照的软链，默认 `/content/current`               |
-| `MOLNOTES_CONTENT_DIR`                               | 内容工作目录，见 [内容手册](docs/content.md)                                            |
+| `MOLNOTES_CONTENT_DIR`                               | 内容工作目录，默认仓库的 `private/content`，见 [内容手册](docs/content.md)              |
 | `MOLNOTES_CONTENT_RELEASES`                          | `content publish` 写入快照并维护 `current` 软链的发布根                                 |
 | `MOLNOTES_MATERIALS_DIR`、`MOLNOTES_MATERIALS_CACHE` | 原始资料书架与渲染缓存，默认仓库的 `materials/`（不进入 Git）                           |
 | `MOLNOTES_SYSTEM_SOCKET`                             | 可选：`/system/api/` 转发到的更新服务 Unix socket，未设置时该接口返回 503               |
