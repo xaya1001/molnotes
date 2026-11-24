@@ -374,7 +374,7 @@ explanation: 两个加一个是三个。
 
 引用素材的 Python 解释器默认使用 `~/miniconda3/bin/python3`，与调用终端的 PATH 无关。其他安装方式通过 `MOLNOTES_PYTHON`（或 `MOLNOTES_PYTHON_FILE`）指定已安装 `scripts/requirements-material.txt` 依赖的解释器绝对路径；CI 使用其创建的虚拟环境。
 
-`MOLNOTES_CONTENT_DIR` 指定内容目录，未设置时内容命令报错。构建与发布每次读取内容目录里的全部单元，校验整站的站内链接、术语、SMILES、引用与资源完整性并编译笔记；校验错误给出文件与位置。删除单元就是在内容仓库删除并提交它，仍有内容引用它时发布拒绝并指出引用文件与位置。
+`MOLNOTES_CONTENT_DIR` 指定内容目录，未设置时默认使用仓库根下的 `private/content`。构建与发布每次读取内容目录里的全部单元，校验整站的站内链接、术语、SMILES、引用与资源完整性并编译笔记；校验错误给出文件与位置。删除单元就是在内容仓库删除并提交它，仍有内容引用它时发布拒绝并指出引用文件与位置。
 
 `npm run content -- series <目录>` 按篇目 order 列出已写笔记的标题、二三级小节与该篇首次定义的术语，不读取 `author/` 规划。
 直接从内容目录计算；首次定义按正文的“术语（全称）”标记识别，同一术语按目录 order、篇目 order 与路径排序取首次。
