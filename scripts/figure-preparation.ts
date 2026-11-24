@@ -5,6 +5,7 @@ import { chemicalCardWidths } from "../src/ui/library/card-layout.ts";
 import { prepareFigure } from "../src/ui/library/prepare.ts";
 import type { FigureStyle } from "../src/ui/library/scene-geometry.ts";
 import type {
+  Compound,
   Library,
   FigureReference,
 } from "../shared/chemical-library/types.ts";
@@ -18,10 +19,16 @@ export async function prepareLibraryFigure(
     toolkit: await moleculeToolkit(),
     fonts: await loadFigureFonts(),
     style,
+    validatedCompounds: new WeakSet<Compound>(),
   };
   const geometry = await prepareFigure(library, reference, options);
   const entry = library[reference.ref];
-  const routes = await prepareCardRoutes(library, reference, style);
+  const routes = await prepareCardRoutes(
+    library,
+    reference,
+    style,
+    options.validatedCompounds,
+  );
   if (routes) {
     geometry.cardPlans = [];
     for (const { route, width, rows, scale } of routes) {

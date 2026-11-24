@@ -50,8 +50,8 @@ import {imageSvg} from '/src/ui/library/image-svg.ts';
 const reset=()=>{const canvas=document.getElementById('canvas');canvas.style.cssText='';canvas.replaceChildren();return canvas;};
 const scaleSvg=(svg,render)=>{const scale=Math.max(render.minimumScale,Math.min(1,(innerWidth-48)/render.width));svg.style.width=render.width*scale+'px';svg.style.height=render.height*scale+'px';};
 window.frozen=(render)=>{const canvas=reset();canvas.innerHTML=render.svg;document.getElementById('title').textContent='';scaleSvg(canvas.querySelector('svg'),render);};
-window.proof=async(library,ref)=>{
-  const canvas=reset(),entry=library[ref.ref];
+window.proof=async(entry)=>{
+  const canvas=reset();
   document.getElementById('title').textContent=entry.title;
   if(entry.kind!=='image')throw new Error('Chemical figures require prepared SVG');
   const result=await imageSvg(entry);canvas.replaceChildren(result.svg);scaleSvg(result.svg,result);
@@ -123,10 +123,6 @@ window.proof=async(library,ref)=>{
             target.off("console", onConsole);
             target.off("pageerror", onPageError);
           }
-          await target.evaluate((value) => {
-            (window as unknown as { figureLibrary: Library }).figureLibrary =
-              value;
-          }, library);
           return target;
         }),
       );
@@ -162,13 +158,10 @@ window.proof=async(library,ref)=>{
       rendered++;
       const page = pages[slot];
       await page.setViewportSize({ width, height: width === 1366 ? 900 : 844 });
-      return page.evaluate(async (reference) => {
+      return page.evaluate(async (entry) => {
         const proof = (
           window as unknown as {
-            proof: (
-              l: Library,
-              r: FigureReference,
-            ) => Promise<{
+            proof: (entry: Library[string]) => Promise<{
               svg: string | null;
               diagnostics: Diagnostic[];
               width: number;
@@ -178,11 +171,8 @@ window.proof=async(library,ref)=>{
             }>;
           }
         ).proof;
-        return proof(
-          (window as unknown as { figureLibrary: Library }).figureLibrary,
-          reference,
-        );
-      }, reference);
+        return proof(entry);
+      }, library[reference.ref]);
     },
     async mount(
       render: {
@@ -228,18 +218,28 @@ window.proof=async(library,ref)=>{
         });
         return canvas.screenshot({ omitBackground: true });
       }
-      const svg = page.locator("#canvas > svg");
-      await svg.evaluate((node: SVGSVGElement) => {
-        const box = node.viewBox.baseVal;
-        const scale = Math.min(1, 320 / box.width, 180 / box.height);
-        node.style.width = box.width * scale + "px";
-        node.style.height = box.height * scale + "px";
-      });
-      await page.evaluate(
-        () => (document.body.style.background = "transparent"),
-      );
+      const clip = await page
+        .locator("#canvas > svg")
+        .evaluate((node: SVGSVGElement) => {
+          const box = node.viewBox.baseVal;
+          const scale = Math.min(1, 320 / box.width, 180 / box.height);
+          node.style.width = box.width * scale + "px";
+          node.style.height = box.height * scale + "px";
+          document.body.style.background = "transparent";
+          node.scrollIntoView({ block: "nearest", inline: "nearest" });
+          const bounds = node.getBoundingClientRect();
+          // Include the same partial pixels as a Playwright element screenshot.
+          const x = Math.floor(bounds.left + 1e-3);
+          const y = Math.floor(bounds.top + 1e-3);
+          return {
+            x,
+            y,
+            width: Math.ceil(bounds.right - 1e-3) - x,
+            height: Math.ceil(bounds.bottom - 1e-3) - y,
+          };
+        });
       try {
-        return await svg.screenshot({ omitBackground: true });
+        return await page.screenshot({ clip, omitBackground: true });
       } finally {
         await page.evaluate(() => (document.body.style.background = ""));
       }

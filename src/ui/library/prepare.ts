@@ -140,6 +140,7 @@ export async function prepareFigure(
     cardWidth?: number;
     cardScale?: number;
     cardRoute?: Route;
+    validatedCompounds?: WeakSet<Compound>;
   },
 ): Promise<FigureGeometry> {
   options = {
@@ -222,7 +223,10 @@ export async function prepareFigure(
     allowReagents = false,
     protectedAtoms = new Map<string, "atom" | "bond">(),
   ) {
-    validateCompound(toolkit, c);
+    if (!options.validatedCompounds?.has(c)) {
+      validateCompound(toolkit, c);
+      options.validatedCompounds?.add(c);
+    }
     c = compoundView(toolkit, c, layout);
     const coords = placedCoordinates(toolkit, c, layout, rotate, mirror);
     const mol = drawingMolecule(toolkit, c, coords, layout, rotate, mirror);

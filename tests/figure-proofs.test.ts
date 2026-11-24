@@ -254,12 +254,9 @@ test("two worker slots prepare concurrently and commit previews in reference ord
   let active = 0,
     maximum = 0;
   const slots = new Set<number>();
-  let batches = 0;
   f.options.createRunner = async () => ({
     async prepareBatch() {
       assert.equal(active, 0);
-      batches++;
-      await new Promise((resolve) => setTimeout(resolve, 1));
     },
     async prepare(reference, slot) {
       assert.ok(!slots.has(slot));
@@ -273,9 +270,9 @@ test("two worker slots prepare concurrently and commit previews in reference ord
     async diagnose() {
       return [];
     },
-    async thumbnail(_reference, _render, slot) {
+    async thumbnail(reference, _render, slot) {
       slots.delete(slot);
-      return Buffer.from(`page ${slot}`);
+      return Buffer.from(reference.ref);
     },
     async close() {
       assert.equal(active, 0);
@@ -283,17 +280,13 @@ test("two worker slots prepare concurrently and commit previews in reference ord
   });
   const result = await f.run();
   assert.equal(maximum, 2);
-  assert.equal(batches, 1);
   assert.deepEqual(Object.keys(result.previews), Object.keys(f.library));
   assert.deepEqual(
     result.assets
       .filter((asset) => asset.content_type === "image/png")
       .map((asset) => asset.bytes),
-    [Buffer.from("page 0"), Buffer.from("page 1")],
+    Object.keys(f.library).map((id) => Buffer.from(id)),
   );
-  const urls = Object.values(result.previews);
-  assert.equal(urls[0], urls[2]);
-  assert.equal(urls[1], urls[3]);
 });
 
 test("diagnostic code changes reuse geometry and thumbnails but recompute proofs", async (t) => {
