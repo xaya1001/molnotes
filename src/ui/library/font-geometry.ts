@@ -37,6 +37,41 @@ export function figureTextMetrics(font: Font, size: number) {
   };
 }
 
+const glyphOutlineCache = new Map<
+  string,
+  { path: string; bbox: FigureBox | null }
+>();
+function glyphOutline(
+  faceId: string,
+  glyph: {
+    id: number;
+    path: {
+      toSVG(): string;
+      bbox: { minX: number; minY: number; maxX: number; maxY: number };
+    };
+  },
+) {
+  const key = `${faceId}:${glyph.id}`;
+  let cached = glyphOutlineCache.get(key);
+  if (!cached) {
+    const path = glyph.path.toSVG();
+    const b = path ? glyph.path.bbox : null;
+    cached = {
+      path,
+      bbox: b
+        ? {
+            x: b.minX,
+            y: b.minY,
+            width: b.maxX - b.minX,
+            height: b.maxY - b.minY,
+          }
+        : null,
+    };
+    glyphOutlineCache.set(key, cached);
+  }
+  return cached;
+}
+
 export function shapeFigureText(
   runs: FigureTextRun[],
   resolve: FigureFontResolver,
@@ -79,22 +114,9 @@ export function shapeFigureText(
           at.x + cursor + position.xOffset * scale,
           y - vertical - position.yOffset * scale,
         ];
-        const path = glyph.path.toSVG();
+        const { path, bbox } = glyphOutline(face.id, glyph);
         glyphs.push({ font: face.id, glyph: glyph.id, path, transform });
-        if (path) {
-          const b = glyph.path.bbox;
-          inks.push(
-            transformBox(
-              {
-                x: b.minX,
-                y: b.minY,
-                width: b.maxX - b.minX,
-                height: b.maxY - b.minY,
-              },
-              transform,
-            ),
-          );
-        }
+        if (bbox) inks.push(transformBox(bbox, transform));
         cursor += position.xAdvance * scale;
         vertical += position.yAdvance * scale;
       });

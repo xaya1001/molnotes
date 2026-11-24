@@ -212,6 +212,8 @@ def invoke(op, args):
 
 for line in sys.stdin:
     request = json.loads(line)
+    for h in request.get("del", ()):
+        objects.pop(h, None)
     try:
         response = {"id": request["id"], "ok": True, "value": invoke(request["op"], request["args"])}
     except Exception as error:

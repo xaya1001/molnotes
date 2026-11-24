@@ -277,7 +277,6 @@ export interface Diagnostic {
 }
 export interface LibrarySnapshot {
   renders?: Record<string, LibraryFigureRender>;
-  previews?: Record<string, string>;
   audit?: { orphans: string[]; duplicates: string[][] };
   entries: Library;
   uses: Record<string, { path: string; title: string }[]>;

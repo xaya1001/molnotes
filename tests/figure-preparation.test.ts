@@ -1591,7 +1591,7 @@ test("worker preparation and diagnostics agree with direct Node execution", asyn
     .join("\n");
   const pool = figureWorkerPool(css);
   try {
-    const geometry = await pool.prepare(
+    const prepared = await pool.prepare(
       {
         kind: "prepare",
         library: compiled.entries,
@@ -1599,6 +1599,8 @@ test("worker preparation and diagnostics agree with direct Node execution", asyn
       },
       0,
     );
+    const geometry: import("../shared/chemical-library/geometry.ts").FigureGeometry =
+      JSON.parse(Buffer.from(prepared.geometryBytes).toString());
     const { cardPlans, ...standard } = geometry;
     assert.deepEqual(
       cardPlans?.map(({ width }) => width),
@@ -1612,14 +1614,13 @@ test("worker preparation and diagnostics agree with direct Node execution", asyn
         style,
       }),
     );
-    assert.deepEqual(
-      await pool.diagnose(geometry, 0),
-      figureGeometryDiagnostics(
-        geometry,
-        style,
-        Math.max(geometry.minimumScale, Math.min(1, 1318 / geometry.width)),
-      ),
+    const expectedDiagnostics = figureGeometryDiagnostics(
+      geometry,
+      style,
+      Math.max(geometry.minimumScale, Math.min(1, 1318 / geometry.width)),
     );
+    assert.deepEqual(prepared.diagnostics, expectedDiagnostics);
+    assert.deepEqual(await pool.diagnose(geometry, 0), expectedDiagnostics);
   } finally {
     await pool.close();
   }

@@ -1,23 +1,37 @@
 import { Worker } from "node:worker_threads";
-import { chemicalConnection } from "../chemical-toolkit.ts";
-import type { FigureWork } from "../figure-worker.ts";
+import { dedicatedChemicalConnection } from "../chemical-toolkit.ts";
+import type { FigureWork, PreparedWorkerResult } from "../figure-worker.ts";
 import type { FigureGeometry } from "../../shared/chemical-library/geometry.ts";
 import type { Diagnostic } from "../../shared/chemical-library/types.ts";
-import {
-  isFigureGeometry,
-  isFigureDiagnostic,
-} from "../../src/ui/library/geometry-contract.ts";
+import { isFigureDiagnostic } from "../../src/ui/library/geometry-contract.ts";
 import { isObject } from "../../shared/json.ts";
+
+function isPreparedWorkerResult(v: unknown): v is PreparedWorkerResult {
+  return (
+    isObject(v) &&
+    typeof v.svg === "string" &&
+    v.geometryBytes instanceof Uint8Array &&
+    typeof v.geometryKey === "string" &&
+    typeof v.width === "number" &&
+    typeof v.height === "number" &&
+    typeof v.minimumScale === "number" &&
+    Array.isArray(v.diagnostics) &&
+    v.diagnostics.every(isFigureDiagnostic)
+  );
+}
 
 export function figureWorkerPool(css: string) {
   const workers: Array<Worker | undefined> = [];
+  const toolkits: Array<(() => Promise<void>) | undefined> = [];
   async function work(
     command: FigureWork,
     slot: number,
-  ): Promise<FigureGeometry | Diagnostic[]> {
+  ): Promise<PreparedWorkerResult | Diagnostic[]> {
     let worker = workers[slot];
     if (!worker) {
-      const chemical = await chemicalConnection();
+      const { connection: chemical, close } =
+        await dedicatedChemicalConnection();
+      toolkits[slot] = close;
       worker = new Worker(new URL("../figure-worker.ts", import.meta.url), {
         workerData: { css, chemical },
         transferList: [chemical.port],
@@ -51,7 +65,7 @@ export function figureWorkerPool(css: string) {
           );
           return;
         }
-        if (command.kind === "prepare" && isFigureGeometry(reply.value))
+        if (command.kind === "prepare" && isPreparedWorkerResult(reply.value))
           resolve(reply.value);
         else if (
           command.kind === "diagnose" &&
@@ -82,7 +96,10 @@ export function figureWorkerPool(css: string) {
       return result;
     },
     async close() {
-      await Promise.all(workers.map((worker) => worker?.terminate()));
+      await Promise.all([
+        ...workers.map((worker) => worker?.terminate()),
+        ...toolkits.map((close) => close?.()),
+      ]);
     },
   };
 }

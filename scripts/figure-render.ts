@@ -127,7 +127,11 @@ if (input) {
         for (const width of widths) {
           let result;
           if (prepared.kind === "chemical") {
-            const geometry = prepared.geometry;
+            const geometry =
+              prepared.geometry ??
+              (JSON.parse(
+                Buffer.from(prepared.geometryBytes!).toString(),
+              ) as import("../shared/chemical-library/geometry.ts").FigureGeometry);
             const diagnostics = diagnoseFigure(geometry, style, width);
             result = {
               svg: prepared.svg,

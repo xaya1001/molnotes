@@ -5,7 +5,6 @@ import { chemicalCardWidths } from "../src/ui/library/card-layout.ts";
 import { prepareFigure } from "../src/ui/library/prepare.ts";
 import type { FigureStyle } from "../src/ui/library/scene-geometry.ts";
 import type {
-  Compound,
   Library,
   FigureReference,
 } from "../shared/chemical-library/types.ts";
@@ -19,16 +18,17 @@ export async function prepareLibraryFigure(
     toolkit: await moleculeToolkit(),
     fonts: await loadFigureFonts(),
     style,
-    validatedCompounds: new WeakSet<Compound>(),
   };
-  const geometry = await prepareFigure(library, reference, options);
   const entry = library[reference.ref];
-  const routes = await prepareCardRoutes(
-    library,
-    reference,
-    style,
-    options.validatedCompounds,
-  );
+  const mechanismCardWidths =
+    entry?.kind === "mechanism" && !reference.frame && entry.frames.length > 1
+      ? chemicalCardWidths
+      : undefined;
+  const geometry = await prepareFigure(library, reference, {
+    ...options,
+    ...(mechanismCardWidths && { cardWidths: mechanismCardWidths }),
+  });
+  const routes = await prepareCardRoutes(library, reference, style);
   if (routes) {
     geometry.cardPlans = [];
     for (const { route, width, rows, scale } of routes) {
@@ -39,23 +39,6 @@ export async function prepareLibraryFigure(
         cardRoute: route,
       });
       geometry.cardPlans.push({ width, rows, scale, geometry: drawing });
-    }
-  } else if (
-    entry.kind === "mechanism" &&
-    !reference.frame &&
-    entry.frames.length > 1
-  ) {
-    geometry.cardPlans = [];
-    for (const width of chemicalCardWidths) {
-      const drawing = await prepareFigure(library, reference, {
-        ...options,
-        cardWidth: width,
-      });
-      geometry.cardPlans.push({
-        width,
-        ...drawing.cardPlan!,
-        geometry: drawing,
-      });
     }
   }
   return geometry;

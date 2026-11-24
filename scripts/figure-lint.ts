@@ -68,7 +68,9 @@ if (args.length && args[0] !== "--library") {
       try {
         const result = await runner.prepare(reference, 0);
         if (result.kind !== "chemical") continue;
-        for (const diagnostic of diagnoseFigure(result.geometry, style)) {
+        const diagnostics =
+          result.diagnostics ?? diagnoseFigure(result.geometry!, style);
+        for (const diagnostic of diagnostics) {
           console.log(diagnosticLine(reference.ref, reference, diagnostic));
           count++;
         }

@@ -12,10 +12,8 @@ import { figureViewKey } from "../../shared/chemical-library/views.ts";
 import type { UnitAsset } from "./content-files.ts";
 import { libraryDependencies } from "../../shared/chemical-library/contract.ts";
 import { sha256 } from "../../shared/assets.ts";
-import { geometrySvg } from "../../src/ui/library/geometry-tree.ts";
 import { parseFigureStyle } from "../../src/ui/library/scene-geometry.ts";
 import { figureFontFiles, nativeFigureFontFile } from "../figure-fonts.ts";
-import { figureBrowser } from "../figure-browser.ts";
 import { figureWorkerPool } from "./figure-worker-pool.ts";
 import { verifyFigureProofs, type ProofRunner } from "./figure-proofs.ts";
 import { stableFigureValue } from "./figure-proof-cache.ts";
@@ -27,30 +25,12 @@ import type { AssetStage } from "./asset-stage.ts";
 
 export function figureBuildRunner(
   library: Library,
-  root: string,
+  _root: string,
   css: string,
-  stage?: AssetStage,
 ): ProofRunner {
   const pool = figureWorkerPool(css);
-  let browser: Promise<Awaited<ReturnType<typeof figureBrowser>>> | undefined;
   return {
-    async prepareBatch() {
-      if (browser) await (await browser).prepareBatch();
-    },
     async prepare(reference, slot) {
-      const entry = library[reference.ref];
-      if (entry.kind === "image")
-        return {
-          kind: "illustration",
-          geometryKey: sha256(
-            stableFigureValue({
-              asset: entry.asset,
-              width: entry.width,
-              height: entry.height,
-              crop: entry.crop,
-            }),
-          ),
-        };
       const subset: Library = {};
       const add = (id: string) => {
         if (subset[id]) return;
@@ -58,26 +38,14 @@ export function figureBuildRunner(
         libraryDependencies(library[id]).forEach(add);
       };
       add(reference.ref);
-      const geometry = await pool.prepare(
+      const result = await pool.prepare(
         { kind: "prepare", library: subset, reference },
         slot,
       );
-      return { kind: "chemical", geometry, svg: geometrySvg(geometry) };
+      return { kind: "chemical", ...result };
     },
     diagnose: (geometry, slot) => pool.diagnose(geometry, slot),
-    async thumbnail(reference, render, slot) {
-      const active = await (browser ??= figureBrowser(library, root, stage, 2));
-      if (render) await active.mount(render, slot);
-      else await active.render(reference, 1366, slot);
-      return active.thumbnail(slot);
-    },
-    async close() {
-      try {
-        if (browser) await (await browser).close();
-      } finally {
-        await pool.close();
-      }
-    },
+    close: () => pool.close(),
   };
 }
 export async function figureBuildVersions(css: string) {
@@ -138,8 +106,7 @@ export async function verifyLibraryFigures(
   cacheDirectory?: string,
   stage?: AssetStage,
 ) {
-  if (!Object.keys(library).length)
-    return { assets: [], previews: {}, renders: {} };
+  if (!Object.keys(library).length) return { assets: [], renders: {} };
   const css = await readFile(
     new URL("../../src/ui/styles/tokens.css", import.meta.url),
     "utf8",
@@ -153,10 +120,10 @@ export async function verifyLibraryFigures(
       directory: cacheDirectory ?? temporary!,
       stage,
       ...versions,
-      createRunner: async () => figureBuildRunner(library, root, css, stage),
+      createRunner: async () => figureBuildRunner(library, root, css),
       onStats: (stats) =>
         console.log(
-          `Figure proofs: ${stats.inputHits} inputs cached, ${stats.proofHits} proofs cached, ${stats.prepared} prepared, ${stats.diagnosed} diagnosed, ${stats.thumbnails} thumbnails, ${stats.total} total`,
+          `Figure proofs: ${stats.inputHits} inputs cached, ${stats.proofHits} proofs cached, ${stats.prepared} prepared, ${stats.diagnosed} diagnosed, ${stats.total} total`,
         ),
     });
   } finally {
@@ -183,8 +150,7 @@ export async function prepareFigureViews(
       if (renders[key]) continue;
       const prepared = await runner.prepare(reference, 0);
       if (prepared.kind !== "chemical") continue;
-      const { geometry, svg } = prepared;
-      const bytes = Buffer.from(svg),
+      const bytes = Buffer.from(prepared.svg),
         hash = sha256(bytes),
         path = `assets/${hash}.svg`;
       assets.set(path, {
@@ -198,10 +164,12 @@ export async function prepareFigureViews(
       });
       renders[key] = {
         asset: `/library/${path}`,
-        width: geometry.width,
-        height: geometry.height,
-        minimumScale: geometry.minimumScale,
-        diagnostics: await runner.diagnose(geometry, 0),
+        width: prepared.width ?? prepared.geometry!.width,
+        height: prepared.height ?? prepared.geometry!.height,
+        minimumScale: prepared.minimumScale ?? prepared.geometry!.minimumScale,
+        diagnostics:
+          prepared.diagnostics ??
+          (await runner.diagnose(prepared.geometry!, 0)),
       };
     }
     return { renders, assets: [...assets.values()] };

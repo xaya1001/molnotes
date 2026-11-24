@@ -61,8 +61,7 @@ async function fixture(t: TestContext) {
   const calls: { ref: string; width: number }[] = [],
     blocked = new Set<string>();
   let starts = 0,
-    diagnosed = 0,
-    thumbnails = 0;
+    diagnosed = 0;
   const geometry = (ref: string): FigureGeometry => {
     const root = figureGroup([]);
     root.attributes["data-figure"] = ref;
@@ -108,10 +107,6 @@ async function fixture(t: TestContext) {
               ]
             : [];
         },
-        async thumbnail(reference) {
-          thumbnails++;
-          return Buffer.from(`example preview ${reference.ref}`);
-        },
         async close() {},
       };
     },
@@ -126,12 +121,11 @@ async function fixture(t: TestContext) {
     run,
     starts: () => starts,
     diagnosed: () => diagnosed,
-    thumbnails: () => thumbnails,
     geometry,
   };
 }
 
-test("unchanged proofs reuse the thumbnail without starting a renderer", async (t) => {
+test("unchanged proofs reuse cached renders without starting a renderer", async (t) => {
   const f = await fixture(t);
   await f.run();
   assert.equal(f.calls.length, 4);
@@ -149,19 +143,17 @@ test("a changed compound invalidates its dependent figure and preserves unrelate
   await f.run();
   assert.deepEqual(f.calls.map((r) => r.ref).sort(), ["cmp_a", "rxn_example"]);
 });
-test("a renderer change recomputes geometry and reuses unchanged proofs and thumbnails", async (t) => {
+test("a renderer change recomputes geometry and reuses unchanged proofs", async (t) => {
   const f = await fixture(t);
   await f.run();
   f.calls.length = 0;
   await f.run();
   assert.equal(f.calls.length, 0);
-  const diagnosed = f.diagnosed(),
-    thumbnails = f.thumbnails();
+  const diagnosed = f.diagnosed();
   f.options.renderer = "renderer-two";
   await f.run();
   assert.equal(f.calls.length, 4);
   assert.equal(f.diagnosed(), diagnosed);
-  assert.equal(f.thumbnails(), thumbnails);
 });
 test("a corrupt cache record is rendered again", async (t) => {
   const f = await fixture(t);
@@ -249,15 +241,12 @@ test("all failures are reported after successful proofs have been cached", async
   assert.equal(result.stats.prepared, 2);
 });
 
-test("two worker slots prepare concurrently and commit previews in reference order", async (t) => {
+test("two worker slots prepare concurrently and commit renders in reference order", async (t) => {
   const f = await fixture(t);
   let active = 0,
     maximum = 0;
   const slots = new Set<number>();
   f.options.createRunner = async () => ({
-    async prepareBatch() {
-      assert.equal(active, 0);
-    },
     async prepare(reference, slot) {
       assert.ok(!slots.has(slot));
       slots.add(slot);
@@ -267,12 +256,9 @@ test("two worker slots prepare concurrently and commit previews in reference ord
       const geometry = f.geometry(reference.ref);
       return { kind: "chemical", geometry, svg: geometrySvg(geometry) };
     },
-    async diagnose() {
-      return [];
-    },
-    async thumbnail(reference, _render, slot) {
+    async diagnose(_geometry, slot) {
       slots.delete(slot);
-      return Buffer.from(reference.ref);
+      return [];
     },
     async close() {
       assert.equal(active, 0);
@@ -280,25 +266,20 @@ test("two worker slots prepare concurrently and commit previews in reference ord
   });
   const result = await f.run();
   assert.equal(maximum, 2);
-  assert.deepEqual(Object.keys(result.previews), Object.keys(f.library));
   assert.deepEqual(
-    result.assets
-      .filter((asset) => asset.content_type === "image/png")
-      .map((asset) => asset.bytes),
-    Object.keys(f.library).map((id) => Buffer.from(id)),
+    Object.keys(result.renders),
+    Object.keys(f.library).map((id) => JSON.stringify({ ref: id })),
   );
 });
 
-test("diagnostic code changes reuse geometry and thumbnails but recompute proofs", async (t) => {
+test("diagnostic code changes reuse geometry and recompute proofs", async (t) => {
   const f = await fixture(t);
   const first = await f.run();
   f.calls.length = 0;
-  const thumbnails = f.thumbnails();
   f.options.diagnostics = "diagnostics-two";
   const result = await f.run();
   assert.equal(f.calls.length, 0);
   assert.equal(result.stats.diagnosed, 4);
-  assert.equal(f.thumbnails(), thumbnails);
   assert.deepEqual(result.renders, first.renders);
   assert.equal(Object.keys(result.renders).length, 4);
   assert.ok(

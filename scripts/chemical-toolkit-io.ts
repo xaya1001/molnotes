@@ -60,15 +60,18 @@ parentPort!.on(
   (message: { port: MessagePort; flag: SharedArrayBuffer; client: number }) => {
     const { port, flag, client } = message;
     clients.set(client, { port, flag: new Int32Array(flag) });
-    port.on("message", (request: { op: string; args: unknown[] }) => {
-      if (failed) {
-        reply(client, { ok: false, error: failed });
-        return;
-      }
-      const id = ++sequence;
-      pending.set(id, client);
-      python.stdin.write(JSON.stringify({ id, ...request }) + "\n");
-    });
+    port.on(
+      "message",
+      (request: { op: string; args: unknown[]; del?: number[] }) => {
+        if (failed) {
+          reply(client, { ok: false, error: failed });
+          return;
+        }
+        const id = ++sequence;
+        pending.set(id, client);
+        python.stdin.write(JSON.stringify({ id, ...request }) + "\n");
+      },
+    );
     port.on("close", () => clients.delete(client));
   },
 );

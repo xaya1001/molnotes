@@ -44,56 +44,50 @@ export async function readChemicalLibrary(root: string, stage?: AssetStage) {
         throw e;
       },
     );
-    for (const f of files.sort((a, b) => a.name.localeCompare(b.name))) {
+    const sorted = files.sort((a, b) => a.name.localeCompare(b.name));
+    for (const f of sorted) {
       const extension = extname(f.name);
       if (!f.isFile() || ![".json", ".yaml", ".yml"].includes(extension))
         throw new Error(`library/${dir}/${f.name}: expected JSON or YAML file`);
-      const path = join(base, dir, f.name),
-        text = await readFile(path, "utf8");
-      const value: unknown =
-        extension === ".json" ? JSON.parse(text) : parseYaml(text);
-      validateLibraryEntry(value, `library/${dir}/${f.name}`);
-      if (f.name !== value.id + extension || entries[value.id])
-        throw new Error(`library: duplicate or mismatched ID ${value.id}`);
-      if (
-        {
-          compound: "compounds",
-          reaction: "reactions",
-          route: "routes",
-          mechanism: "mechanisms",
-          image: "images",
-          markush: "markush",
-          conformation: "conformations",
-        }[value.kind] !== dir
-      )
-        throw new Error(`${value.id}: wrong library directory`);
-      entries[value.id] = value;
-      entryFiles[value.id] = path;
+    }
+    const readChunk = 64;
+    for (let i = 0; i < sorted.length; i += readChunk) {
+      const slice = sorted.slice(i, i + readChunk);
+      const loaded = await Promise.all(
+        slice.map(async (f) => {
+          const extension = extname(f.name);
+          const path = join(base, dir, f.name);
+          const text = await readFile(path, "utf8");
+          const value: unknown =
+            extension === ".json" ? JSON.parse(text) : parseYaml(text);
+          return { f, extension, path, value };
+        }),
+      );
+      for (const { f, extension, path, value } of loaded) {
+        validateLibraryEntry(value, `library/${dir}/${f.name}`);
+        if (f.name !== value.id + extension || entries[value.id])
+          throw new Error(`library: duplicate or mismatched ID ${value.id}`);
+        if (
+          {
+            compound: "compounds",
+            reaction: "reactions",
+            route: "routes",
+            mechanism: "mechanisms",
+            image: "images",
+            markush: "markush",
+            conformation: "conformations",
+          }[value.kind] !== dir
+        )
+          throw new Error(`${value.id}: wrong library directory`);
+        entries[value.id] = value;
+        entryFiles[value.id] = path;
+      }
     }
   }
   validateLibrary(entries);
   const toolkit = Object.keys(entries).length ? await moleculeToolkit() : null;
   const seen = new Set<string>();
-  async function registerAsset(id: string, asset: string, mime: string) {
-    if (seen.has(asset)) return;
-    const file = join(base, "assets", asset);
-    if (!(await lstat(file)).isFile())
-      throw new Error(`${id}: expected regular image asset`);
-    if (contentType(asset) !== mime)
-      throw new Error(`${id}: image MIME differs from extension`);
-    const bytes = await readFile(file);
-    const hash = sha256(bytes);
-    if (!asset.startsWith(hash + "."))
-      throw new Error(`${id}: image hash mismatch`);
-    seen.add(asset);
-    assets.push({
-      scope: "library",
-      path: `assets/${asset}`,
-      ...(await assetResource(bytes, stage)),
-      content_type: mime,
-      prompt: null,
-    });
-  }
+  const imagesToRegister: { id: string; asset: string; mime: string }[] = [];
   for (const e of Object.values(entries)) {
     if (e.kind === "compound") validateCompound(toolkit!, e);
     if (e.kind === "route") routeMetrics(e, entries);
@@ -107,7 +101,36 @@ export async function readChemicalLibrary(root: string, stage?: AssetStage) {
           frame.scene,
           `${e.id}/${frame.id}`,
         );
-    if (e.kind === "image") await registerAsset(e.id, e.asset, e.mime);
+    if (e.kind === "image" && !seen.has(e.asset)) {
+      seen.add(e.asset);
+      imagesToRegister.push({ id: e.id, asset: e.asset, mime: e.mime });
+    }
+  }
+  const assetChunk = 32;
+  for (let i = 0; i < imagesToRegister.length; i += assetChunk) {
+    const batch = await Promise.all(
+      imagesToRegister
+        .slice(i, i + assetChunk)
+        .map(async ({ id, asset, mime }) => {
+          const file = join(base, "assets", asset);
+          if (!(await lstat(file)).isFile())
+            throw new Error(`${id}: expected regular image asset`);
+          if (contentType(asset) !== mime)
+            throw new Error(`${id}: image MIME differs from extension`);
+          const bytes = await readFile(file);
+          const hash = sha256(bytes);
+          if (!asset.startsWith(hash + "."))
+            throw new Error(`${id}: image hash mismatch`);
+          return {
+            scope: "library" as const,
+            path: `assets/${asset}`,
+            ...(await assetResource(bytes, stage)),
+            content_type: mime,
+            prompt: null,
+          };
+        }),
+    );
+    assets.push(...batch);
   }
   return { entries, assets, files: entryFiles };
 }
