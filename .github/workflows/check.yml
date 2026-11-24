@@ -100,8 +100,6 @@ jobs:
           key: python-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/requirements-material.txt') }}
       - name: Install pinned Python dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y fonts-liberation
           if test "${{ steps.python.outputs.cache-hit }}" != "true"; then
             python3 -m venv "${RUNNER_TEMP}/python"
             "${RUNNER_TEMP}/python/bin/pip" install --quiet -r scripts/requirements-material.txt
