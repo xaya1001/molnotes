@@ -4,6 +4,7 @@ import {
 } from "../src/ui/library/text-runs.ts";
 import { readFile } from "node:fs/promises";
 import type {
+  Compound,
   Library,
   FigureReference,
   Point,
