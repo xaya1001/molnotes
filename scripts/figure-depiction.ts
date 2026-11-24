@@ -1,4 +1,7 @@
-import type { ChemicalMolecule as Mol } from "../shared/chemical-toolkit.ts";
+import {
+  computeDefaultCoords,
+  type ChemicalMolecule as Mol,
+} from "../shared/chemical-toolkit.ts";
 import type { PythonToolkit as Toolkit } from "./chemical-toolkit.ts";
 import {
   relaxedCoordinates,
@@ -487,9 +490,7 @@ function matched(
   }
 }
 function free(mol: Mol, coordgen: boolean) {
-  mol.set_new_coords(coordgen);
-  mol.straighten_depiction();
-  mol.normalize_depiction(0);
+  computeDefaultCoords(mol, coordgen);
   return mol;
 }
 function rings(mol: Mol): number[][] {

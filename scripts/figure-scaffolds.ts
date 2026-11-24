@@ -1,4 +1,7 @@
-import type { ChemicalMolecule as Mol } from "../shared/chemical-toolkit.ts";
+import {
+  computeDefaultCoords,
+  type ChemicalMolecule as Mol,
+} from "../shared/chemical-toolkit.ts";
 import type { PythonToolkit as MainModule } from "./chemical-toolkit.ts";
 import { scaffolds } from "./figure-template-data.ts";
 import { graphOf, openMolecule } from "../shared/chemical-library/chemistry.ts";
@@ -414,7 +417,7 @@ export function ringHydrogens(rd: MainModule, source: Mol) {
     }
   };
   let mol = add(source, need);
-  mol.set_new_coords(false);
+  computeDefaultCoords(mol, false);
   const probeGraph = graphOf(mol),
     fused = new Set(
       rings
@@ -473,8 +476,7 @@ export function scaffoldLayout(
       depths: number[] | undefined;
     try {
       if (drawing === "flat" && !data.views.flat.xy) {
-        mol.set_new_coords(data.views.flat.engine === "coordgen");
-        mol.straighten_depiction();
+        computeDefaultCoords(mol, data.views.flat.engine === "coordgen");
         points = graphOf(mol).conformers![0].coords;
       } else {
         let xyz: XYZ[] | undefined;

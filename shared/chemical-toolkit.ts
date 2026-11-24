@@ -49,3 +49,17 @@ export interface ChemicalToolkit {
   get_mcs_as_json(mols: ChemicalMolList, details?: string): string;
   version(): string;
 }
+
+/** Generate default 2D coordinates aligned horizontally on the 30-degree grid. */
+export function computeDefaultCoords(
+  mol: Pick<
+    ChemicalMolecule,
+    "set_new_coords" | "straighten_depiction" | "normalize_depiction"
+  >,
+  useCoordGen = false,
+): boolean {
+  const ok = mol.set_new_coords(useCoordGen);
+  mol.straighten_depiction();
+  mol.normalize_depiction(0, -1);
+  return ok;
+}

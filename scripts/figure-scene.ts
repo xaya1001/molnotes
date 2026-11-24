@@ -1,3 +1,4 @@
+import { computeDefaultCoords } from "../shared/chemical-toolkit.ts";
 import { chemicalFigureStyle } from "../shared/chemical-library/style.ts";
 import type { LibraryMarkush } from "../shared/chemical-library/types.ts";
 import { scaffoldLayout } from "./figure-scaffolds.ts";
@@ -457,7 +458,7 @@ export async function compileFigure(
       ).replace(/:\d+(?=\])/g, "");
       if (!compound) {
         const cid = "cmp_" + figureKey(signature);
-        if (spec.coordgen ?? input.coordgen) m.set_new_coords(true);
+        if (spec.coordgen ?? input.coordgen) computeDefaultCoords(m, true);
         compound = finishFigureEntry(
           prepareCompound(
             rd,

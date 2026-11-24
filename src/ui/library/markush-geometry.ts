@@ -1,3 +1,4 @@
+import { computeDefaultCoords } from "../../../shared/chemical-toolkit.ts";
 import { markushRepeatDrawing } from "../../../shared/patent-markush-chemistry.ts";
 import type {
   FigureGeometry,
@@ -153,7 +154,7 @@ export async function prepareMarkush(
       mol = openMolecule(rd, smiles.split(" |", 1)[0]),
       prefix = `m${serial++}`;
     try {
-      mol.set_new_coords();
+      computeDefaultCoords(mol);
       const graph = graphOf(mol),
         dummies = mappedDummies(mol);
       if (groups === entry.groups) {

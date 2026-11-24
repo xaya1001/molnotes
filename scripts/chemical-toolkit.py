@@ -51,10 +51,16 @@ def match_json(mol, query, atoms):
     return {"atoms": list(atoms), "bonds": [mol.GetBondBetweenAtoms(atoms[b.GetBeginAtomIdx()], atoms[b.GetEndAtomIdx()]).GetIdx() for b in query.GetBonds()]}
 
 
+def compute_default_coords(mol):
+    rdDepictor.Compute2DCoords(mol, canonOrient=True)
+    rdDepictor.StraightenDepiction(mol)
+    rdDepictor.NormalizeDepiction(mol, canonicalize=0)
+
+
 def svg(mol, options):
     copy = Chem.Mol(mol)
     if not copy.GetNumConformers():
-        rdDepictor.Compute2DCoords(copy, canonOrient=True)
+        compute_default_coords(copy)
     if options.get("useMolBlockWedging"):
         Chem.ReapplyMolBlockWedging(copy)
     copy = rdMolDraw2D.PrepareMolForDrawing(copy, addChiralHs=options.get("addChiralHs", True), wedgeBonds=options.get("wedgeBonds", True))
@@ -163,7 +169,7 @@ def invoke(op, args):
         if not atom_map:
             if not options.get("acceptFailure", False):
                 raise ValueError("Alignment core is absent")
-            rdDepictor.Compute2DCoords(mol, canonOrient=True)
+            compute_default_coords(mol)
             return "{}"
         params = rdDepictor.ConstrainedDepictionParams()
         params.alignOnly = options.get("alignOnly", False)

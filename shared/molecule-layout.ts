@@ -5,9 +5,10 @@
 // authored.
 
 import { moleculeSvg } from "../src/ui/chemistry/drawing.ts";
-import type {
-  ChemicalToolkit as MainModule,
-  ChemicalMolecule as Mol,
+import {
+  computeDefaultCoords,
+  type ChemicalToolkit as MainModule,
+  type ChemicalMolecule as Mol,
 } from "./chemical-toolkit.ts";
 
 const BOND = 1.5; // RDKit's depiction bond length
@@ -52,11 +53,35 @@ export function withCoordinates(smiles: string, points: Point[]) {
   return `${base} |(${block})${rest ? `,${rest}` : ""}|`;
 }
 
+/** Attach default 2D coordinates as a CXSMILES block when the input has none. */
+export function smilesWithDefaultCoords(
+  toolkit: Pick<MainModule, "get_mol">,
+  mol: Mol,
+  smiles: string,
+): string {
+  if (mol.has_coords() || mol.get_num_atoms() < 2) return smiles;
+  if (/\[(?:\d*)H(?:[+-]\d*)?(?::\d+)?\]/.test(smiles)) {
+    const full = toolkit.get_mol(smiles, JSON.stringify({ removeHs: false }));
+    if (full) {
+      try {
+        if (full.get_num_atoms() !== mol.get_num_atoms()) return smiles;
+      } finally {
+        full.delete();
+      }
+    }
+  }
+  computeDefaultCoords(mol);
+  const coords = molJson(mol).conformers?.[0]?.coords;
+  return coords?.length === mol.get_num_atoms()
+    ? withCoordinates(smiles, coords)
+    : smiles;
+}
+
 /** RDKit's JSON for a molecule, with 2D coordinates (computed when it has none). */
 function described(mol: Mol, coordgen = false) {
   let json = molJson(mol);
   if (!json.conformers) {
-    mol.set_new_coords(coordgen);
+    computeDefaultCoords(mol, coordgen);
     json = molJson(mol);
   }
   return json;
@@ -138,7 +163,7 @@ function drawnLayout(
     ].join("\n");
     const withH = toolkit.get_mol(block, JSON.stringify({ removeHs: false }))!;
     try {
-      withH.set_new_coords(false);
+      computeDefaultCoords(withH, false);
       const points = coordinatesOf(molJson(withH));
       const hydrogens = new Map(
         kept

@@ -1,4 +1,7 @@
-import type { ChemicalMolecule as Mol } from "../chemical-toolkit.ts";
+import {
+  computeDefaultCoords,
+  type ChemicalMolecule as Mol,
+} from "../chemical-toolkit.ts";
 import { ionPairCoordinates } from "./ion-layout.ts";
 import { abbreviatedGroups } from "../molecule-abbreviations.ts";
 import type { Compound, CompoundLayout, Point } from "./types.ts";
@@ -312,7 +315,7 @@ export function prepareCompound(
         imported.delete();
       }
     } else {
-      if (!mol.has_coords()) mol.set_new_coords();
+      if (!mol.has_coords()) computeDefaultCoords(mol);
       coords = graphOf(mol).conformers![0].coords;
     }
     const existingMaps = atomMaps(mol);
