@@ -12,6 +12,7 @@ import { resolve } from "node:path";
 import { loadFigureStyle } from "./figure-route.ts";
 import { diagnoseFigure } from "./figure-diagnostics.ts";
 import { figureChargeDiagnostics } from "./figure-chemistry-diagnostics.ts";
+import { figureLocantDiagnostics } from "./figure-text-diagnostics.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 
 const args = process.argv.slice(2);
@@ -27,6 +28,10 @@ if (args.length && args[0] !== "--library") {
       )) {
         console.log(diagnosticLine(source, compiled.reference, diagnostic));
         warnings++;
+      }
+      for (const diagnostic of figureLocantDiagnostics(compiled.entries)) {
+        console.log(diagnosticLine(source, compiled.reference, diagnostic));
+        count++;
       }
       for await (const rendered of drawFigure(
         compiled.entries,
@@ -56,6 +61,12 @@ if (args.length && args[0] !== "--library") {
       diagnosticLine(diagnostic.object, { ref: diagnostic.object }, diagnostic),
     );
     warnings++;
+  }
+  for (const diagnostic of figureLocantDiagnostics(entries)) {
+    console.log(
+      diagnosticLine(diagnostic.object, { ref: diagnostic.object }, diagnostic),
+    );
+    count++;
   }
   const css = await readFile(
     new URL("../src/ui/styles/tokens.css", import.meta.url),

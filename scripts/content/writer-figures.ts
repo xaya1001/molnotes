@@ -13,6 +13,7 @@ import type {
   LibraryFigureRender,
 } from "../../shared/chemical-library/types.ts";
 import { diagnosticLine } from "../figure-draw.ts";
+import { figureLocantDiagnostics } from "../figure-text-diagnostics.ts";
 import {
   libraryEntryFolders,
   libraryUsage,
@@ -70,7 +71,10 @@ async function baselineDiagnostics(
   page: Page,
   path: string,
   currentKeys: Set<string>,
-): Promise<Record<string, LibraryFigureRender>> {
+): Promise<{
+  renders: Record<string, LibraryFigureRender>;
+  locants: Diagnostic[];
+}> {
   const main = typeof page === "string" ? page : `${page.unit}/content.json`;
   const paths = [
     main,
@@ -88,14 +92,14 @@ async function baselineDiagnostics(
       { cwd: root },
     )
   ).stdout.trim();
-  if (!currentKeys.size) return {};
+  if (!currentKeys.size) return { renders: {}, locants: [] };
   const { stdout } = await exec(
     "git",
     ["ls-tree", "--name-only", "-z", base, "--", ...paths],
     { cwd: root },
   );
   const tracked = stdout.split("\0").filter(Boolean);
-  if (!tracked.includes(main)) return {};
+  if (!tracked.includes(main)) return { renders: {}, locants: [] };
   const temporary = await mkdtemp(join(tmpdir(), "figure-check-"));
   try {
     const archive = join(temporary, "base.tar");
@@ -115,13 +119,12 @@ async function baselineDiagnostics(
     const { entries } = await readChemicalLibraryEntries(temporary);
     const value = await baselinePage(temporary, page, entries);
     const { subset, views } = pageViews(entries, value, path);
-    return (
-      await prepareFigureViews(
-        subset,
-        views.filter((view) => currentKeys.has(figureViewKey(view))),
-        temporary,
-      )
-    ).renders;
+    const { renders } = await prepareFigureViews(
+      subset,
+      views.filter((view) => currentKeys.has(figureViewKey(view))),
+      temporary,
+    );
+    return { renders, locants: figureLocantDiagnostics(subset) };
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
@@ -150,7 +153,9 @@ export async function checkPageFigures(
   const issues: string[] = [];
   for (const view of views) {
     const key = figureViewKey(view);
-    const existing = (baseline[key]?.diagnostics ?? []).map(diagnosticKey);
+    const existing = (baseline.renders[key]?.diagnostics ?? []).map(
+      diagnosticKey,
+    );
     const local =
       view.numbers || view.focus
         ? ` [${JSON.stringify({ numbers: view.numbers, focus: view.focus })}]`
@@ -161,6 +166,19 @@ export async function checkPageFigures(
       if (index >= 0) existing.splice(index, 1);
       else issues.push(diagnosticLine(location, view, diagnostic));
     }
+  }
+  const existingLocants = baseline.locants.map(diagnosticKey);
+  for (const diagnostic of figureLocantDiagnostics(subset)) {
+    const index = existingLocants.indexOf(diagnosticKey(diagnostic));
+    if (index >= 0) existingLocants.splice(index, 1);
+    else
+      issues.push(
+        diagnosticLine(
+          `${path}: ${diagnostic.object}`,
+          { ref: diagnostic.object },
+          diagnostic,
+        ),
+      );
   }
   if (issues.length)
     throw new Error(
