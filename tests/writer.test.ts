@@ -73,6 +73,14 @@ test("page check rejects a new diagnostic in an unselected compound variant", ()
   commit();
   const unchanged = cli(dir, "check", file, "--figure-base", "HEAD");
   assert.equal(unchanged.status, 0, unchanged.stderr);
+  entry.footnote = "C2/C4";
+  writeFileSync(join(dir, compound), JSON.stringify(entry));
+  const locantCheck = cli(dir, "check", file, "--figure-base", "HEAD");
+  assert.equal(locantCheck.status, 1, locantCheck.stderr);
+  assert.match(locantCheck.stderr, /cmp_table_sample: UNESCAPED_LOCANT/);
+  commit();
+  const grandfathered = cli(dir, "check", file, "--figure-base", "HEAD");
+  assert.equal(grandfathered.status, 0, grandfathered.stderr);
 });
 
 test("series follows order and lists first terms without reading author plans", () => {
