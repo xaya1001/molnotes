@@ -10,12 +10,15 @@ import type {
 } from "../../shared/chemical-library/types.ts";
 import { figureViewKey } from "../../shared/chemical-library/views.ts";
 import type { UnitAsset } from "./content-files.ts";
-import { libraryDependencies } from "../../shared/chemical-library/contract.ts";
 import { sha256 } from "../../shared/assets.ts";
 import { parseFigureStyle } from "../../src/ui/library/scene-geometry.ts";
 import { figureFontFiles, nativeFigureFontFile } from "../figure-fonts.ts";
 import { figureWorkerPool } from "./figure-worker-pool.ts";
-import { verifyFigureProofs, type ProofRunner } from "./figure-proofs.ts";
+import {
+  figureLibrarySubset,
+  verifyFigureProofs,
+  type ProofRunner,
+} from "./figure-proofs.ts";
 import { stableFigureValue } from "./figure-proof-cache.ts";
 import {
   figureRendererFingerprint,
@@ -31,13 +34,7 @@ export function figureBuildRunner(
   const pool = figureWorkerPool(css);
   return {
     async prepare(reference, slot) {
-      const subset: Library = {};
-      const add = (id: string) => {
-        if (subset[id]) return;
-        subset[id] = library[id];
-        libraryDependencies(library[id]).forEach(add);
-      };
-      add(reference.ref);
+      const subset = figureLibrarySubset(library, [reference.ref]);
       const result = await pool.prepare(
         { kind: "prepare", library: subset, reference },
         slot,

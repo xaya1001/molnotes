@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { test } from "node:test";
@@ -31,6 +31,49 @@ const cli = (dir: string, ...args: string[]) =>
     encoding: "utf8",
     env: { ...process.env, MOLNOTES_CONTENT_DIR: dir },
   });
+
+test("page check rejects a new diagnostic in an unselected compound variant", () => {
+  const dir = fixture("figure-baseline");
+  const file = "notes/sample/first.md";
+  const compound = "library/compounds/cmp_table_sample.json";
+  mkdirSync(join(dir, "library/compounds"), { recursive: true });
+  writeFileSync(
+    join(dir, file),
+    note("```figure-ref\nref: cmp_table_sample\n```"),
+  );
+  const entry = JSON.parse(
+    readFileSync(join("tests/fixtures/content", compound), "utf8"),
+  );
+  writeFileSync(join(dir, compound), JSON.stringify(entry));
+  const git = (...args: string[]) =>
+    execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+  const commit = () => {
+    git("add", ".");
+    git(
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.org",
+      "commit",
+      "-qm",
+      "fixture",
+    );
+  };
+  git("init", "-q");
+  commit();
+  assert.equal(cli(dir, "check", file, "--figure-base", "HEAD").status, 0);
+  entry.variants.reverse.coords.a3 = { x: -0.433, y: -0.28 };
+  writeFileSync(join(dir, compound), JSON.stringify(entry));
+  const check = cli(dir, "check", file, "--figure-base", "HEAD");
+  assert.equal(check.status, 1, check.stderr);
+  assert.match(
+    check.stderr,
+    /cmp_table_sample \[variant reverse\]: LABEL_OVERLAP/,
+  );
+  commit();
+  const unchanged = cli(dir, "check", file, "--figure-base", "HEAD");
+  assert.equal(unchanged.status, 0, unchanged.stderr);
+});
 
 test("series follows order and lists first terms without reading author plans", () => {
   const dir = fixture("series");
