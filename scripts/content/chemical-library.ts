@@ -24,20 +24,21 @@ import type {
 import type { UnitAsset } from "./content-files.ts";
 import { assetResource, type AssetStage } from "./asset-stage.ts";
 
-export async function readChemicalLibrary(root: string, stage?: AssetStage) {
+export const libraryEntryFolders = {
+  compound: "compounds",
+  reaction: "reactions",
+  route: "routes",
+  mechanism: "mechanisms",
+  image: "images",
+  markush: "markush",
+  conformation: "conformations",
+};
+
+export async function readChemicalLibraryEntries(root: string) {
   const entries: Library = {},
-    entryFiles: Record<string, string> = {},
-    assets: UnitAsset[] = [];
+    entryFiles: Record<string, string> = {};
   const base = join(root, "library");
-  for (const dir of [
-    "compounds",
-    "reactions",
-    "routes",
-    "mechanisms",
-    "images",
-    "markush",
-    "conformations",
-  ]) {
+  for (const dir of Object.values(libraryEntryFolders)) {
     const files = await readdir(join(base, dir), { withFileTypes: true }).catch(
       (e: NodeJS.ErrnoException) => {
         if (e.code === "ENOENT") return [];
@@ -67,17 +68,7 @@ export async function readChemicalLibrary(root: string, stage?: AssetStage) {
         validateLibraryEntry(value, `library/${dir}/${f.name}`);
         if (f.name !== value.id + extension || entries[value.id])
           throw new Error(`library: duplicate or mismatched ID ${value.id}`);
-        if (
-          {
-            compound: "compounds",
-            reaction: "reactions",
-            route: "routes",
-            mechanism: "mechanisms",
-            image: "images",
-            markush: "markush",
-            conformation: "conformations",
-          }[value.kind] !== dir
-        )
+        if (libraryEntryFolders[value.kind] !== dir)
           throw new Error(`${value.id}: wrong library directory`);
         entries[value.id] = value;
         entryFiles[value.id] = path;
@@ -85,6 +76,13 @@ export async function readChemicalLibrary(root: string, stage?: AssetStage) {
     }
   }
   validateLibrary(entries);
+  return { entries, files: entryFiles };
+}
+
+export async function readChemicalLibrary(root: string, stage?: AssetStage) {
+  const { entries, files } = await readChemicalLibraryEntries(root);
+  const assets: UnitAsset[] = [];
+  const base = join(root, "library");
   const toolkit = Object.keys(entries).length ? await moleculeToolkit() : null;
   const seen = new Set<string>();
   const imagesToRegister: { id: string; asset: string; mime: string }[] = [];
@@ -132,7 +130,7 @@ export async function readChemicalLibrary(root: string, stage?: AssetStage) {
     );
     assets.push(...batch);
   }
-  return { entries, assets, files: entryFiles };
+  return { entries, assets, files };
 }
 export function libraryUsage(
   entries: Library,

@@ -231,6 +231,17 @@ export async function verifyFigureProofs(
   return { assets, renders, stats };
 }
 
+export function figureLibrarySubset(library: Library, ids: string[]): Library {
+  const subset: Library = {};
+  function add(id: string) {
+    if (subset[id]) return;
+    subset[id] = library[id];
+    libraryDependencies(library[id]).forEach(add);
+  }
+  ids.forEach(add);
+  return subset;
+}
+
 export function figureProofReferences(
   library: Library,
   references: FigureReference[],

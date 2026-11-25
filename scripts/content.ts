@@ -11,7 +11,7 @@ import {
 } from "./content/content-snapshot.ts";
 
 const usage =
-  "Usage: content build <output> | publish [--rollback <commit>] | todo [<unit>] | series <directory> | check <note.md> [--glossary-additions <json>]";
+  "Usage: content build <output> | publish [--rollback <commit>] | todo [<unit>] | series <directory> | check <page> [--glossary-additions <json>] [--figure-base <commit>]";
 const [command, ...args] = process.argv.slice(2);
 const valid = {
   build: args.length === 1,

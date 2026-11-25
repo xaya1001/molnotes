@@ -264,6 +264,32 @@ export function noteCitations(body: string, file: string, offset = 0) {
   return found;
 }
 
+function noteFigureYaml(source: string, file: string, line: number) {
+  const parsed = parseDocument(source);
+  if (parsed.errors.length) fail(file, line, parsed.errors[0].message);
+  return parsed.toJS() as unknown;
+}
+
+export function noteFigureBlocks(source: string, file: string): unknown[] {
+  const { body, offset } = parseNote(source, file);
+  return noteMarkdown()
+    .parse(body, { file })
+    .flatMap<unknown>((token) => {
+      if (token.type !== "fence") return [];
+      const kind = token.info.trim();
+      if (kind !== "figure-ref" && kind !== "panels") return [];
+      const value = noteFigureYaml(
+        token.content,
+        file,
+        offset + (token.map?.[0] ?? 0) + 1,
+      );
+      if (kind === "panels")
+        return [{ type: "panels", ...definePanels(value) }];
+      validateFigureReference(value, file);
+      return [{ type: "figure-ref", ...value }];
+    });
+}
+
 /**
  * Compile a complete catalog supplied by the database publication transaction;
  * `citations` holds each directory's resolved citations by href.
@@ -357,11 +383,9 @@ export async function compileNotes({
       return `<div id="${id}" class="note-diagram"></div>`;
     }
     if (kind === "panels") {
-      const parsed = parseDocument(token.content);
-      if (parsed.errors.length)
-        fail(env.file, env.line, parsed.errors[0].message);
+      const value = noteFigureYaml(token.content, env.file, env.line);
       try {
-        const panels = definePanels(parsed.toJS());
+        const panels = definePanels(value);
         const id = `note-diagram-${env.diagrams.length}`;
         env.diagrams.push({
           id,
@@ -380,10 +404,7 @@ export async function compileNotes({
       }
     }
     if (kind === "figure-ref") {
-      const parsed = parseDocument(token.content);
-      if (parsed.errors.length)
-        fail(env.file, env.line, parsed.errors[0].message);
-      const reference: unknown = parsed.toJS();
+      const reference = noteFigureYaml(token.content, env.file, env.line);
       validateFigureReference(reference, env.file);
       const id = `note-diagram-${env.diagrams.length}`;
       env.diagrams.push({

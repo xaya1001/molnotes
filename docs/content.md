@@ -381,6 +381,8 @@ explanation: 两个加一个是三个。
 
 `npm run content -- check notes/<目录>/<篇名>.md [--glossary-additions <json>]` 复用笔记编译、引用和资源请求校验，只检查该篇，格式错误时退出 1。
 `npm run content -- check sites/<slug>` 检查专题；使用 `sites/<slug>/chapters/<id>.md` 或 `sites/<slug>/content.json#<id>` 检查单章。
+落库时给 `check` 加 `--figure-base <内容仓库基准提交>`，用发布的视图枚举和诊断器检查当前页的图库引用、全部关联帧、化合物默认视图与变体，并沿图库依赖展开。
+检查将当前页与基准提交中的同一页比较，报告新增诊断的图 ID、视图与诊断码并退出 1；基准已有的诊断不影响退出码。
 `content:preview` 同样接受上述单章路径。
 待补全的请求可通过格式检查；正文的未知术语与附带 JSON 数组里的新增术语会与全站 glossary 比较，名称忽略大小写和空格后相同、或全称相同的条目会报错并建议链接已有术语。
 正文已有术语首次出现未用 `[[术语]]` 链接时给出提示，每篇每个术语只提示一处；前文已经链接的术语后续不提示。

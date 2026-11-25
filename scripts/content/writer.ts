@@ -1,10 +1,17 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { parseArgs } from "node:util";
 import { compileUnit } from "./compile-unit.ts";
-import { libraryUsage, readChemicalLibrary } from "./chemical-library.ts";
+import {
+  libraryUsage,
+  readChemicalLibrary,
+  readChemicalLibraryEntries,
+} from "./chemical-library.ts";
+import { noteFigureBlocks } from "../../shared/notes-index.ts";
 import { readGlossary } from "./content-files.ts";
 import { parseSiteManifest } from "../../shared/site-catalog.ts";
 import { checkNote } from "./writer-check.ts";
+import { checkPageFigures } from "./writer-figures.ts";
 import {
   readSeriesNotes,
   writerFiles,
@@ -23,19 +30,26 @@ export async function writerCommand(
   args: string[],
 ) {
   if (command === "check") {
-    if (!(
-      args.length === 1 ||
-      (args.length === 3 && args[1] === "--glossary-additions")
-    ))
+    const { positionals, values } = parseArgs({
+      args,
+      allowPositionals: true,
+      options: {
+        "glossary-additions": { type: "string" },
+        "figure-base": { type: "string" },
+      },
+    });
+    if (positionals.length !== 1)
       throw new Error(
-        "check <notes/directory/note.md> [--glossary-additions <json>]",
+        "check <page> [--glossary-additions <json>] [--figure-base <commit>]",
       );
+    const [file] = positionals;
+    const { "glossary-additions": additions, "figure-base": base } = values;
     const target =
       /^(sites\/[a-z0-9-]+)(?:\/(chapters\/[a-z0-9-]+\.md|content\.json#([a-z0-9-]+)))?$/.exec(
-        args[0].replace(/^content\//, ""),
+        file.replace(/^content\//, ""),
       );
     if (target) {
-      if (args.length !== 1)
+      if (additions !== undefined)
         throw new Error("site check does not accept glossary additions");
       const [, unit, path, id] = target;
       const content = JSON.parse(
@@ -53,11 +67,12 @@ export async function writerCommand(
         group: site.group,
         library,
       };
-      if (path) {
-        const { chapter, data, index } = await compileUnit({
+      const page = { unit, chapter: id ?? path };
+      if (page.chapter) {
+        const { chapter, data, index, references } = await compileUnit({
           ...common,
           kind: "chapter",
-          chapter: id ?? path,
+          chapter: page.chapter,
         });
         const where = `${unit}/content.json`;
         const glossary = await readGlossary(root);
@@ -81,15 +96,40 @@ export async function writerCommand(
         libraryUsage(library, [
           { value: chapter, path: topicBasePath(site), title: site.title },
         ]);
-      } else await compileUnit({ ...common, kind: "site" });
-      console.log(`${args[0]}: 0 errors`);
+        if (base !== undefined)
+          await checkPageFigures(root, base, page, file, library, [
+            chapter,
+            ...references,
+          ]);
+      } else {
+        const { content, references } = await compileUnit({
+          ...common,
+          kind: "site",
+        });
+        if (base !== undefined)
+          await checkPageFigures(root, base, page, file, library, [
+            content,
+            ...references,
+          ]);
+      }
+      console.log(`${file}: 0 errors`);
       return;
     }
-    const result = await checkNote(root, args[0], args[2]);
+    const result = await checkNote(root, file, additions);
     for (const error of result.errors) console.error(error);
     for (const hint of result.hints) console.log(`hint: ${hint}`);
+    if (!result.errors.length && base !== undefined) {
+      const blocks = noteFigureBlocks(
+        await readFile(join(root, file), "utf8"),
+        file,
+      );
+      const { entries } = blocks.length
+        ? await readChemicalLibraryEntries(root)
+        : { entries: {} };
+      await checkPageFigures(root, base, file, file, entries, blocks);
+    }
     console.log(
-      `${args[0]}: ${result.errors.length} errors, ${result.hints.length} hints`,
+      `${file}: ${result.errors.length} errors, ${result.hints.length} hints`,
     );
     if (result.errors.length) process.exitCode = 1;
     return;

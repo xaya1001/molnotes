@@ -49,6 +49,7 @@ export function compileUnit(input: ChapterInput): Promise<{
   };
   data: Record<string, unknown> | undefined;
   index: number;
+  references: ReturnType<typeof resolveCompoundSlots>["references"];
 }>;
 export async function compileUnit(
   input: SiteInput | NotesInput | ChapterInput,
@@ -121,7 +122,7 @@ export async function compileUnit(
     );
     if (found.pathPicker && resolved.value.paths === undefined)
       throw new Error(`${where}: a path-picker block needs top-level paths`);
-    return { chapter, data, index };
+    return { chapter, data, index, references: resolved.references };
   }
   const content = validateTopicContent(resolved.value, where);
   if ("glossary" in content && content.glossary !== undefined)
