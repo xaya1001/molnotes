@@ -37,6 +37,7 @@ test("resource requests retain source positions and completion skills in Markdow
       kind: "figure",
       caption: "Example route",
       figure: {
+        kind: "scheme",
         compounds: { a: "CCO", b: "CC=O" },
         steps: [{ from: "a", to: "b" }],
       },
@@ -70,7 +71,7 @@ test("resource requests retain source positions and completion skills in Markdow
         file: "example.md",
         line: 14,
       },
-      { kind: "chart", skill: "note-figures", file: "example.md", line: 26 },
+      { kind: "chart", skill: "note-figures", file: "example.md", line: 27 },
     ],
   );
   assert.deepEqual(

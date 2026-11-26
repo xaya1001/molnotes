@@ -209,10 +209,16 @@ const figureAbbreviations: Rule = (value, where) => {
 };
 const styles = new Set(["charges", "dots"]);
 const deferred = new Set(["mark", "notes", "bend"]);
-export function validateFigureInput(value: unknown): {
+export function validateFigureInput(source: unknown): {
   input: FigureInput;
   warnings: string[];
+  scheme: boolean;
 } {
+  if (!isObject(source)) fail("figure", "expected YAML mapping");
+  const scheme = source.kind === "scheme";
+  const value = scheme
+    ? { ...source, kind: "frames" in source ? "mechanism" : "route" }
+    : source;
   const warnings: string[] = [];
   const object =
     (fields: Record<string, Rule>, required: string[] = []): Rule =>
@@ -336,7 +342,6 @@ export function validateFigureInput(value: unknown): {
     },
     ["from", "to"],
   );
-  if (!isObject(value)) fail("figure", "expected YAML mapping");
   const kind = value.kind ?? "route";
   if (kind === "markush") {
     validateMarkushFigure(value, "figure");
@@ -363,13 +368,16 @@ export function validateFigureInput(value: unknown): {
       },
       ["core", "groups"],
     )(value, "figure");
-    return { input: value as unknown as FigureInput, warnings };
+    return { input: value as unknown as FigureInput, warnings, scheme };
   }
   if (kind === "table") fail("figure.kind", "尚未支持");
   if (
     !["route", "mechanism", "gallery", "scope", "cycle"].includes(String(kind))
   )
-    fail("figure.kind", "expected route | mechanism | gallery | scope | cycle");
+    fail(
+      "figure.kind",
+      "expected scheme | route | mechanism | gallery | scope | cycle",
+    );
   const shared = {
     bond: positiveNumber,
     width: positiveNumber,
@@ -590,6 +598,7 @@ export function validateFigureInput(value: unknown): {
     : warnings;
   return {
     input,
+    scheme,
     warnings: pending.length
       ? [`已保存、渲染待实现: ${pending.join(", ")}`]
       : [],

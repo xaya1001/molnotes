@@ -7,11 +7,117 @@ import { promisify } from "node:util";
 import { execFile } from "node:child_process";
 import { parse, stringify } from "yaml";
 import { readChemicalLibrary } from "../scripts/content/chemical-library.ts";
+import { prepareLibraryFigure } from "../scripts/figure-preparation.ts";
+import { loadFigureStyle } from "../scripts/figure-route.ts";
 import { saveFigureSource } from "../scripts/figure-save.ts";
+import { compileFigure } from "../scripts/figure-scene.ts";
+import { routeMetrics } from "../shared/chemical-library/routes.ts";
 
 const run = promisify(execFile);
 const command = new URL("../scripts/figure-recompile.ts", import.meta.url)
   .pathname;
+
+test("scheme sources preserve compiled entries, geometry and saved identities", async () => {
+  const convergent = parse(
+    await readFile(
+      new URL("./fixtures/figures/convergent.yaml", import.meta.url),
+      "utf8",
+    ),
+  );
+  const joinStep = convergent.steps[0];
+  joinStep.to = { id: joinStep.to, yield: "80%" };
+  const mechanism = {
+    kind: "mechanism",
+    frames: [
+      {
+        id: "before",
+        compounds: {
+          donor: "[OH-:1]",
+          acceptor: "[CH2:2]=[O:3]",
+        },
+        arrows: [
+          {
+            id: "attack",
+            from: "lp(donor:1)",
+            to: "between(donor:1,acceptor:2)",
+            forming: true,
+          },
+        ],
+      },
+      {
+        id: "after",
+        compounds: { product: "[OH:1][CH2:2][O-:3]" },
+        map: {
+          "donor:1": "product:1",
+          "acceptor:2": "product:2",
+          "acceptor:3": "product:3",
+        },
+      },
+    ],
+  };
+  const style = await loadFigureStyle();
+  for (const [prefix, source] of [
+    ["rte", convergent],
+    ["rxn", { ...convergent, steps: [joinStep] }],
+    ["mec", mechanism],
+  ] as const) {
+    const root = await mkdtemp(join(tmpdir(), "figure-scheme-"));
+    const oldPath = join(root, "figure.yaml");
+    const library = await readChemicalLibrary(root);
+    await writeFile(oldPath, stringify(source));
+    const { changes, ...baseline } = await saveFigureSource(
+      oldPath,
+      root,
+      library,
+    );
+    assert.ok(changes.length);
+    const { ref } = baseline.reference;
+    const entry = baseline.entries[ref];
+    assert.ok(ref.startsWith(prefix + "_"));
+
+    const scheme = { ...source, kind: "scheme" };
+    const compiled = await compileFigure(scheme, {}, entry.sourceKey);
+    assert.deepEqual(compiled, baseline);
+
+    const views = [baseline.reference];
+    if (entry.kind === "route") {
+      assert.deepEqual(entry.edges, [
+        { from: "left", to: "join", product: "product-2", reactant: "2" },
+        { from: "right", to: "join", product: "product-4", reactant: "4" },
+      ]);
+      assert.equal(routeMetrics(entry, compiled.entries).longestLinearSteps, 2);
+    } else if (entry.kind === "reaction") {
+      assert.equal(entry.products[0].yield, "80%");
+    } else if (entry.kind === "mechanism") {
+      assert.deepEqual(
+        entry.frames.map((frame) => frame.id),
+        ["before", "after"],
+      );
+      assert.equal(entry.maps?.length, 3);
+      const scene = entry.frames[0].scene;
+      assert.equal(scene.arrows?.[0].to.kind, "formingBond");
+      assert.equal(scene.partialBonds?.length, 1);
+      views.push(...entry.frames.map(({ id }) => ({ ref, frame: id })));
+    }
+    for (const view of views)
+      assert.deepEqual(
+        await prepareLibraryFigure(compiled.entries, view, style),
+        await prepareLibraryFigure(baseline.entries, view, style),
+      );
+
+    const saved = join(root, baseline.sourceFile);
+    const yaml = stringify(scheme);
+    await writeFile(saved, yaml);
+    const recompiled = await saveFigureSource(
+      saved,
+      root,
+      await readChemicalLibrary(root),
+    );
+    assert.deepEqual(recompiled.changes, []);
+    assert.deepEqual(recompiled.entries, baseline.entries);
+    assert.equal(await readFile(saved, "utf8"), yaml);
+  }
+});
 
 test("whole-library recompilation refreshes saved scenes, keeps identity and continues after a failed source", async () => {
   const root = await mkdtemp(join(tmpdir(), "figure-recompile-"));

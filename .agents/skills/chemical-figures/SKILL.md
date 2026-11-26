@@ -22,6 +22,7 @@ Use this as the authoring entrypoint. Read the current [content contract](../../
 5. Make the requested comparison HTML, publish it with `artifact publish --task <task> --name <name> <directory>`, run `artifact shot <published-index>`, and inspect that screenshot before returning `artifact url <published-index>`. Artifact review and product/content publication follow the task's separate permissions.
 
 ```yaml
+kind: scheme
 title: Sequential transformations
 compounds:
   1: CCO
@@ -117,6 +118,8 @@ Set figure-level `ring_h: false` to retain ring-bond wedges in SMILES structures
 Template data lives in `shared/chemical-templates/`: one JSON file per skeleton or ring conformation. Skeleton files retain SMILES/SMARTS, atom order, conformer provenance and both views. Conformation files retain normal/flipped coordinates, bonds, default labels and named slot directions. Newman, Fischer and sawhorse are generated in code. After adding or revising a data file, run `npm run figure:templates -- --out <temporary-directory>` to regenerate the complete overview and examples with substituents. Review the overview, render the affected entries with `figure:render`, and compare with the source geometry before accepting a new template.
 
 ## Route authoring
+
+Use `kind: scheme` with top-level `compounds` and `steps` for a reaction or route, or top-level `frames` for a standalone mechanism, resonance scheme or comparison.
 
 Dependencies come from shared compound keys. Write multiple `from`/`to` keys for convergence or multiple products; each product has one producer. Each step creates an owned reaction with a complete standalone view. Connected intermediates appear once; wrapped rows start at their arrow. Two branches of a fork align before joining. If the product will not fit at the right, a short branch can reverse into a downward join. More complex joins use the compound number.
 

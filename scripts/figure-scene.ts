@@ -288,7 +288,7 @@ export async function compileFigure(
       review: [],
     };
   }
-  const { input, warnings } = validateFigureInput(inputValue);
+  const { input, warnings, scheme } = validateFigureInput(inputValue);
   const review: string[] = [];
   const rd = await moleculeToolkit(),
     entries: Library = structuredClone(existing),
@@ -1187,15 +1187,19 @@ export async function compileFigure(
       ))
         generated.add(cid);
     }
-    let priorAtoms: Map<string, AtomRef> | undefined,
-      priorId = "";
+    let prior: { frame: FrameInput; atoms: Map<string, AtomRef> } | undefined;
     const appendFrameMaps = (
       frame: FrameInput,
       atoms: Map<string, AtomRef>,
     ) => {
-      if (frame.map && !priorAtoms)
-        throw new Error("First frame cannot have map");
-      if (priorAtoms) {
+      if (frame.map && !prior) throw new Error("First frame cannot have map");
+      if (prior) {
+        const { frame: previousFrame, atoms: priorAtoms } = prior;
+        const implicit =
+          !scheme ||
+          (previousFrame.arrow !== "none" &&
+            input.category !== "comparison" &&
+            input.category !== "examples");
         const qualify = (key: string | number) =>
           String(key).includes(":") ? String(key) : `structure:${key}`;
         const explicit = new Map(
@@ -1210,10 +1214,18 @@ export async function compileFigure(
             throw new Error(`frames.${frame.id}.map: unknown atom`);
         const pairs = [...priorAtoms].flatMap(([key, from]) => {
           const target =
-            explicit.get(key) ?? (targets.has(key) ? undefined : key);
+            explicit.get(key) ??
+            (implicit && !targets.has(key) ? key : undefined);
           const to = target === undefined ? undefined : atoms.get(target);
           return to
-            ? [{ from, to, fromFrame: priorId, toFrame: String(frame.id) }]
+            ? [
+                {
+                  from,
+                  to,
+                  fromFrame: String(previousFrame.id),
+                  toFrame: String(frame.id),
+                },
+              ]
             : [];
         });
         if (
@@ -1223,8 +1235,7 @@ export async function compileFigure(
           throw new Error(`frames.${frame.id}.map: duplicate target`);
         maps.push(...pairs);
       }
-      priorAtoms = atoms;
-      priorId = String(frame.id);
+      prior = { frame, atoms };
     };
     for (const frame of input.frames!) {
       const fid = String(frame.id);
