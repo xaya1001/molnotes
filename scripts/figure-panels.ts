@@ -48,6 +48,7 @@ export async function compilePanelScene(
     B = ctx.token("--chemical-bond");
   const scene = emptyScene(),
     boxes: FigureBox[] = [];
+  const grouped = input.scopeGroups !== undefined;
   const font = "var(--chemical-caption-font)";
   const measuredText = (text: string) => {
     const node = ctx.label({ x: 0, y: 0 }, text, font);
@@ -151,7 +152,7 @@ export async function compilePanelScene(
               ),
               ...(cell.spec.yield
                 ? [
-                    input.kind === "scope"
+                    grouped
                       ? `**${cell.spec.yield}**`
                       : placementCaptions
                         ? `(${cell.spec.yield})`
@@ -247,7 +248,7 @@ export async function compilePanelScene(
           (cell.body.height ? 0.4 : 0) +
           textBlock(cell.label).height / 2,
       );
-      if (input.kind === "scope" && cell.spec.yield)
+      if (grouped && cell.spec.yield)
         for (const caption of scene.captions!.slice(start))
           if (caption.text === `**${cell.spec.yield}**`) {
             caption.text = cell.spec.yield;
@@ -440,10 +441,7 @@ export async function compilePanelScene(
   } else {
     let y = 0;
     const width = ctx.token("--chemical-route-width") / B;
-    const groups: NonNullable<FigureInput["scopeGroups"]> =
-      input.kind === "scope"
-        ? input.scopeGroups!
-        : [{ items: measured.map((c) => c.key) }];
+    const groups = input.scopeGroups ?? [{ items: measured.map((c) => c.key) }];
     for (const group of groups) {
       if (group.title !== undefined) {
         const h = Math.max(1.5, textBlock(`**${group.title}**`).height + 0.4);
@@ -464,9 +462,9 @@ export async function compilePanelScene(
         const cell = measured.find((c) => c.key === String(key))!;
         if (
           row.length &&
-          (input.kind === "gallery"
-            ? row.length >= (input.cols ?? 4)
-            : used + 1.4 + cell.width > width)
+          (grouped
+            ? used + 1.4 + cell.width > width
+            : row.length >= (input.cols ?? 4))
         ) {
           rows.push(row);
           row = [];
@@ -493,9 +491,9 @@ export async function compilePanelScene(
             row.length,
           5,
         );
-        let x = input.kind === "scope" ? spacing / 2 : 0;
+        let x = grouped ? spacing / 2 : 0;
         row.forEach((cell, i) => {
-          const w = input.kind === "scope" ? cell.width : colWidths[i];
+          const w = grouped ? cell.width : colWidths[i];
           // Shared body height aligns structures and all number/yield rows.
           putCell(
             { ...cell, height: height },
@@ -503,7 +501,7 @@ export async function compilePanelScene(
             y + height / 2,
             bodyHeight,
           );
-          x += w + (input.kind === "scope" ? spacing : 2.2);
+          x += w + (grouped ? spacing : 2.2);
         });
         y += height + 1.6;
       }

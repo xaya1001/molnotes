@@ -61,7 +61,7 @@ test("forming arrows persist dashed bonds only when selected", async () => {
 
 test("collection cells retain their selected forming bonds", async () => {
   const compiled = await compileFigure({
-    kind: "gallery",
+    kind: "scheme",
     compounds: {
       event: {
         smiles: "[O-:1].[CH2:2]=[O:3]",
@@ -80,7 +80,7 @@ test("collection cells retain their selected forming bonds", async () => {
 
 test("collection electron events align their reacting fragments", async () => {
   const compiled = await compileFigure({
-    kind: "gallery",
+    kind: "scheme",
     compounds: {
       event: {
         smiles: "[CH2:1]=[C:2](OC)[CH:5]=[CH2:6].[CH2:7]=[CH:8]C#N",
@@ -222,7 +222,7 @@ test("structures and reactions without electron events share their free orientat
 
 test("polar fragment contacts retain the source donor and carbonyl direction", async () => {
   const compiled = await compileFigure({
-    kind: "gallery",
+    kind: "scheme",
     compounds: {
       event: {
         smiles: "N#[C-:1].C[C:2](=[O:3])C",
@@ -253,7 +253,7 @@ test("polar fragment contacts retain the source donor and carbonyl direction", a
 
 test("fragment depiction retains a linear charged electrophile", async () => {
   const compiled = await compileFigure({
-    kind: "gallery",
+    kind: "scheme",
     compounds: {
       event: {
         smiles: "[CH2:1]=[CH2:2].[O:5]=[N+:3]=[O:4]",
@@ -774,7 +774,7 @@ test("reaction sources preserve equivalents, mixture fractions, tags and reagent
   );
 });
 
-test("YAML boundary rejects unsupported kinds and style fields, validates deferred references", async () => {
+test("YAML boundary rejects unsupported style fields and validates deferred references", async () => {
   const input = {
     kind: "scheme",
     compounds: { a: "CCO", b: "CC=O" },
@@ -785,8 +785,6 @@ test("YAML boundary rejects unsupported kinds and style fields, validates deferr
       () => validateFigureInput({ ...input, [field]: 1 }),
       new RegExp(field),
     );
-  for (const kind of ["table"])
-    assert.throws(() => validateFigureInput({ ...input, kind }), /尚未支持/);
   const deferred = {
     kind: "scheme",
     forming: true,
@@ -1003,7 +1001,7 @@ test("figure substitutions preserve defaults and override one mapped instance", 
     [{ abbreviations: [{ name: "NO2", atom: 22, expand: true }] }, [11]],
   ] as const) {
     const result = await compileFigure({
-      kind: "gallery",
+      kind: "scheme",
       compounds: { a: { smiles, ...settings } },
     });
     const gallery = result.entries[result.reference.ref] as Mechanism;
@@ -1467,9 +1465,9 @@ test("new depictions place charge markers for their new bond directions", async 
   );
 });
 
-test("grouped scope and gallery YAML save reusable structures with ordered labels", async () => {
+test("schemes with compounds save grouped panels and grids with ordered labels", async () => {
   const input = {
-    kind: "scope",
+    kind: "scheme",
     compounds: {
       a: { smiles: "CCO", yield: "80%", note: "1 h" },
       b: { smiles: "CCCO", label: "**B**", yield: "72%" },
@@ -1496,13 +1494,26 @@ test("grouped scope and gallery YAML save reusable structures with ordered label
     result.entries,
   );
   const gallery = await compileFigure({
-    kind: "gallery",
+    kind: "scheme",
     cols: 2,
     compounds: input.compounds,
   });
   const grid = (gallery.entries[gallery.reference.ref] as Mechanism).frames[0]
     .scene;
+  assert.deepEqual(
+    grid.molecules.map((m) => m.id),
+    ["a", "b", "c"],
+  );
   assert.ok(grid.molecules[2].at.y > grid.molecules[0].at.y);
+  const defaults = await compileFigure({
+    kind: "scheme",
+    compounds: { a: "CCO", b: "CCCO", c: "CC(C)O", d: "CCF", e: "CCCl" },
+  });
+  const molecules = (defaults.entries[defaults.reference.ref] as Mechanism)
+    .frames[0].scene.molecules;
+  assert.ok(molecules[3].at.x > molecules[2].at.x);
+  assert.ok(molecules[4].at.x < molecules[3].at.x);
+  assert.ok(molecules[4].at.y > molecules[3].at.y);
   assert.throws(
     () => validateFigureInput({ ...input, groups: [{ items: ["missing"] }] }),
     /unknown compound/,
@@ -1554,7 +1565,7 @@ test("cycle YAML saves clockwise closed steps with incoming and outgoing branche
 
 test("gallery line spacing includes superscripts and subscripts in adjacent captions", async () => {
   const result = await compileFigure({
-    kind: "gallery",
+    kind: "scheme",
     compounds: {
       a: { smiles: "CCO", yield: "46% yield^b,e", note: "**Me3N**\n1 h" },
     },

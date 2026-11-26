@@ -93,7 +93,7 @@ test("draw works without a content library, emits every frame and retains diagno
       return true;
     },
   );
-  await writeFile(source, "kind: gallery\ncompounds: {a: '[invalid'}\n");
+  await writeFile(source, "kind: scheme\ncompounds: {a: '[invalid'}\n");
   await assert.rejects(
     run(
       process.execPath,

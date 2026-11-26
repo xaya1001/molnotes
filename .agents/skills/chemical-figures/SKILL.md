@@ -159,11 +159,11 @@ Use structure/frame `enclose: [{atoms: [mapNumbers], shape: auto}]` for a teachi
 
 ## Grouped galleries and catalytic cycles
 
-Use `kind: gallery` with `compounds` and optional `cols` (default 4) for a grid. Use `kind: scope` for grouped product panels: `groups: [{title?,subtitle?,items: [keys]}]` selects and orders keys from `compounds`. Structure cells accept the usual orientation, abbreviation, bracket, arrow and enclosure fields; `label`/`name`, `yield` and `note` appear beneath each structure. Preserve the existing `substrate-scope` block when the page teaches a generic scheme with R-value rows; its actual-product substitution check remains required, using the mapped attachment atoms shared with Markush cores.
+Use `kind: scheme` with `compounds` and optional `cols` (default 4) for a grid. For grouped product panels, `groups: [{title?,subtitle?,items: [keys]}]` replaces `cols` and selects and orders keys from `compounds`. Structure cells accept the usual orientation, abbreviation, bracket, arrow and enclosure fields; `label`/`name`, `yield` and `note` appear beneath each structure. Preserve the existing `substrate-scope` block when the page teaches a generic scheme with R-value rows; its actual-product substitution check remains required, using the mapped attachment atoms shared with Markush cores.
 
 Use `kind: cycle` with clockwise `nodes` starting at the top. Nodes accept rich text, `{text: ...}` or `{smiles: ..., label: ...}`. Optional `steps` has one entry per node, including the return to the first: `{in?,out?,label?}` saves entering reagents, leaving products and the elementary-step label. `radius` defaults to 150 prototype reference pixels at a 17px reference bond and scales with the site bond length; `branch` defaults to 0.3 of that radius. Increase the radius if a species leaves no connecting arc.
 
-These kinds compile to a `mec_` entry with one static `overview` scene; pages reference its ID normally. Recompile the saved YAML to retain identity, then render with the website renderer. Inspect group order, yields, clockwise step order, branch direction and phone scrolling. Draw and publish the current scene, and inspect its reported diagnostics.
+Compound-only schemes and cycles compile to a `mec_` entry with one static `overview` scene; pages reference its ID normally. Recompile the saved YAML to retain identity, then render with the website renderer. Inspect group order, yields, clockwise step order, branch direction and phone scrolling. Draw and publish the current scene, and inspect its reported diagnostics.
 
 ## Endpoint vocabulary
 

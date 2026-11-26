@@ -101,7 +101,7 @@ export async function compileMechanismFrameLayout(
       return compilePanelScene(
         library,
         entry,
-        { ...input, kind: "gallery" },
+        input,
         cells,
         style,
         placementCaptions,
@@ -111,7 +111,7 @@ export async function compileMechanismFrameLayout(
     const forward = await compilePanelScene(
       library,
       entry,
-      { ...input, kind: "gallery" },
+      input,
       cells,
       style,
       placementCaptions,
@@ -120,7 +120,7 @@ export async function compileMechanismFrameLayout(
     const reverse = await compilePanelScene(
       library,
       entry,
-      { ...input, kind: "gallery" },
+      input,
       [...cells].reverse(),
       style,
       placementCaptions,
@@ -250,7 +250,7 @@ export async function compileMechanismFrameLayout(
       const labeled = await compilePanelScene(
         library,
         entry,
-        { ...input, kind: "gallery" },
+        input,
         [cell],
         style,
         placementCaptions,

@@ -65,7 +65,7 @@ export async function compileFigureFile(source: string) {
         : undefined;
   return compileFigure(
     single
-      ? { kind: "gallery", compounds: { single: { label: "", ...single } } }
+      ? { kind: "scheme", compounds: { single: { label: "", ...single } } }
       : value,
     {},
     figureKey(resolve(source)),
