@@ -199,8 +199,6 @@ const pickMany = (value: number[]) => {
   const max = selectionRange(exercise.value)[1];
   selected.value = value.length > max ? value.slice(-max) : value;
 };
-const atomList = (atoms: readonly number[]) =>
-  atoms.length ? [...atoms].sort((a, b) => a - b).join("、") : "无";
 const picked = computed(() =>
   saved.value && "selected" in saved.value ? saved.value.selected : [],
 );
@@ -296,11 +294,7 @@ const hints: Record<string, string> = {
         :selected="chosen?.index"
       />
     </template>
-    <p v-if="hits !== undefined">
-      命中 {{ hits }} / {{ picked.length }}（你选了
-      {{ exercise.kind === "bonds" ? "键" : "原子" }}
-      {{ atomList(picked) }}）
-    </p>
+    <p v-if="hits !== undefined">命中 {{ hits }} / {{ picked.length }}</p>
     <template v-if="exercise.type === 'number' && typedValue !== undefined">
       <p>
         你的估计：{{ typedValue }}
@@ -326,15 +320,6 @@ const hints: Record<string, string> = {
         </template>
       </template>
     </template>
-    <p v-if="pickedArrow && exercise.kind === 'arrows'">
-      你画的箭头：原子 {{ pickedArrow.from }} → 原子
-      {{ pickedArrow.to }}；图中为正确的箭头，原子 {{ exercise.answer.from }} →
-      原子 {{ exercise.answer.to }}。
-    </p>
-    <p v-if="exercise.kind === 'atoms' || exercise.kind === 'bonds'">
-      正确答案：{{ exercise.kind === "atoms" ? "原子" : "键" }}
-      {{ atomList(exercise.answer) }}
-    </p>
     <MoleculeView
       v-if="exercise.kind === 'atoms' || exercise.kind === 'bonds'"
       :name="exercise.molecule.name"
@@ -347,24 +332,16 @@ const hints: Record<string, string> = {
       :labels="exercise.labels"
     />
     <template v-else-if="exercise.kind === 'atom-set'">
-      <template
+      <MoleculeView
         v-for="(molecule, i) in exercise.molecules"
         :key="molecule.name"
-      >
-        <MoleculeView
-          :name="molecule.name"
-          :smiles="molecule.smiles"
-          :abbreviations="molecule.abbreviations"
-          :selected="pickedSets[i] ?? []"
-          :highlight-atoms="molecule.answer"
-          :labels="exercise.labels"
-        />
-        <p>
-          {{ molecule.name }}：你选择了原子
-          {{ atomList(pickedSets[i] ?? []) }}；核对后的答案是原子
-          {{ atomList(molecule.answer) }}。
-        </p>
-      </template>
+        :name="molecule.name"
+        :smiles="molecule.smiles"
+        :abbreviations="molecule.abbreviations"
+        :selected="pickedSets[i] ?? []"
+        :highlight-atoms="molecule.answer"
+        :labels="exercise.labels"
+      />
     </template>
     <MoleculeView
       v-else-if="exercise.kind === 'arrows'"
@@ -405,8 +382,8 @@ const hints: Record<string, string> = {
         :labels="exercise.labels"
       />
       <p>
-        结构：{{ designAtomsOk ? "选对了位置" : "位置还要再看" }}（你选了原子
-        {{ atomList(pickedAtoms) }}）<template v-if="exercise.atomExplanation"
+        结构：{{ designAtomsOk ? "选对了位置" : "位置还要再看"
+        }}<template v-if="exercise.atomExplanation"
           >。{{ exercise.atomExplanation }}</template
         >
       </p>
