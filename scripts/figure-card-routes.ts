@@ -79,7 +79,10 @@ export async function prepareCardRoutes(
             : p.position && positions[p.position],
         })),
       to: products.map((p) => p.sourceKey),
-      above: (step.reagents ?? reaction.reagents).join("\n"),
+      above: (reaction.mechanism
+        ? reaction.reagents
+        : (step.reagents ?? reaction.reagents)
+      ).join("\n"),
       side: step.arrow?.side ?? reaction.arrow.side,
     });
   }

@@ -479,6 +479,10 @@ test("a route step renders its mechanism in place and can reference one frame", 
               ],
             },
             {
+              id: "intermediate",
+              compounds: { donor: { compound: "alcohol" }, solvent: "O" },
+            },
+            {
               id: "end",
               compounds: { donor: { compound: "anion" } },
             },
@@ -498,7 +502,7 @@ test("a route step renders its mechanism in place and can reference one frame", 
     mechanism.frames[0].scene.molecules[0].compound,
     step.reactants[0].compound,
   );
-  assert.equal(mechanism.maps?.length, 2);
+  assert.equal(mechanism.maps?.length, 4);
   assert.deepEqual(route.edges, [
     {
       from: "transfer",
@@ -525,12 +529,12 @@ test("a route step renders its mechanism in place and can reference one frame", 
     });
     return values;
   };
-  assert.deepEqual(attributes(visible, "data-frame"), ["start", "end"]);
+  assert.deepEqual(attributes(visible, "data-frame"), ["intermediate"]);
   assert.ok(
     attributes(visible, "data-arrow-head").includes("transfer/start/shift"),
   );
   assert.ok(
-    attributes(visible, "data-label").includes("transfer/start/donor:number:0"),
+    attributes(visible, "data-label").includes("transfer/alcohol:number:0"),
   );
   assert.ok(
     attributes(visible, "data-reaction-arrow").includes(
@@ -538,9 +542,14 @@ test("a route step renders its mechanism in place and can reference one frame", 
     ),
   );
   assert.ok(
-    !attributes(visible, "data-reaction-arrow").includes("transfer/" + step.id),
+    attributes(visible, "data-reaction-arrow").includes("transfer/" + step.id),
   );
 
+  assert.ok(
+    attributes(visible, "data-reaction-arrow").includes(
+      "transfer/next-intermediate",
+    ),
+  );
   const selected = {
     ...reference,
     frame: "transfer/end",

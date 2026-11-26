@@ -22,6 +22,7 @@ import {
   prepareFigure,
   prepareReactionFrames,
 } from "../src/ui/library/prepare.ts";
+import { reactionFrames } from "../src/ui/library/reaction-frames.ts";
 import { loadFigureFonts } from "./figure-fonts.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import { finishFigureEntry } from "./figure-output.ts";
@@ -294,8 +295,8 @@ export async function compileRouteLayout(
     });
     measured.set(step.id, byId);
     let mechanism: RouteLayoutStep["mechanism"];
+    const { start, middle } = reactionFrames(reaction);
     if (reaction.mechanism) {
-      const source = { ...reaction, mechanism: reaction.mechanism };
       const prefix =
         card && library[card.ref].kind === "route" ? step.id + "/" : "";
       const reference = {
@@ -308,7 +309,7 @@ export async function compileRouteLayout(
         reaction.title !== route.title ? reaction.title : undefined;
       const horizontal = await prepareReactionFrames(
         library,
-        source,
+        reaction,
         reference,
         options,
         "right",
@@ -317,7 +318,7 @@ export async function compileRouteLayout(
       );
       const vertical = await prepareReactionFrames(
         library,
-        source,
+        reaction,
         reference,
         options,
         "down",
@@ -325,8 +326,18 @@ export async function compileRouteLayout(
         heading,
       );
       mechanism = {
-        horizontal: { width: horizontal.width, height: horizontal.height },
-        vertical: { width: vertical.width, height: vertical.height },
+        horizontal: {
+          width: horizontal?.width ?? 0,
+          height: horizontal?.height ?? 0,
+        },
+        vertical: {
+          width: vertical?.width ?? 0,
+          height: vertical?.height ?? 0,
+        },
+        tail: [
+          ...(middle.at(-1)?.above ?? []),
+          ...(middle.at(-1)?.below ?? []),
+        ],
       };
     }
     layoutSteps.push({
@@ -334,17 +345,23 @@ export async function compileRouteLayout(
       id: step.id,
       from,
       to,
-      above: String(
-        reaction.reagentPosition === "below-arrow" ? "" : (raw.above ?? ""),
-      )
-        .split("\n")
-        .filter(Boolean),
-      below:
-        reaction.reagentPosition === "below-arrow"
-          ? [...reaction.reagents, ...reaction.conditions]
-          : reaction.conditions,
+      above: [
+        ...String(
+          reaction.reagentPosition === "below-arrow" ? "" : (raw.above ?? ""),
+        )
+          .split("\n")
+          .filter(Boolean),
+        ...(start?.frame.above ?? []),
+      ],
+      below: [
+        ...(reaction.reagentPosition === "below-arrow"
+          ? reaction.reagents
+          : []),
+        ...reaction.conditions,
+        ...(start?.frame.below ?? []),
+      ],
       others: raw.others,
-      turn: raw.turn,
+      turn: reaction.mechanism && raw.turn === "wrap" ? "down" : raw.turn,
       side: raw.side,
       reverse: raw.reverse,
     });

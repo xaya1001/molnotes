@@ -1,4 +1,5 @@
 import { figureFrames } from "../../../shared/chemical-library/contract.ts";
+import { mergeFrameAnnotations, reactionFrames } from "./reaction-frames.ts";
 import { fitFigureCanvas } from "./figure-canvas.ts";
 import { chemicalFigureStyle } from "../../../shared/chemical-library/style.ts";
 import { prepareMarkush } from "./markush-geometry.ts";
@@ -152,13 +153,15 @@ interface PrepareOptions {
 
 export function prepareReactionFrames(
   library: Library,
-  reaction: Reaction & { mechanism: NonNullable<Reaction["mechanism"]> },
+  reaction: Reaction,
   reference: FigureReference,
   options: PrepareOptions,
   flow: NonNullable<PrepareOptions["frameFlow"]>,
   prefix = "",
   heading?: string,
 ) {
+  const { middle } = reactionFrames(reaction);
+  if (!middle.length) return;
   const mechanism: Mechanism = {
     id: reaction.id,
     title: reaction.title,
@@ -166,7 +169,7 @@ export function prepareReactionFrames(
     style: reaction.style,
     kind: "mechanism",
     category: "reaction",
-    ...reaction.mechanism,
+    frames: middle,
   };
   return prepareFigure(
     { ...library, [mechanism.id]: mechanism },
@@ -1333,7 +1336,6 @@ export async function prepareFigure(
       bottom?: number;
       verticalTop?: number;
       ink?: string;
-      width?: number;
     } = {},
   ) {
     const font = options.font ?? "var(--chemical-caption-font)";
@@ -1341,7 +1343,7 @@ export async function prepareFigure(
     const vertical = Math.abs(a.y - b.y) > Math.abs(a.x - b.x);
     const left = options.side === "left";
     const center = options.x ?? (a.x + b.x) / 2;
-    const offset = verticalArrowLabelOffset(B) + (options.width ?? 0) / 2;
+    const offset = verticalArrowLabelOffset(B);
     let cursor = options.verticalTop ?? Math.min(a.y, b.y) + B * 0.3;
     for (const [lines, sign] of [
       [above, -1],
@@ -2216,19 +2218,32 @@ export async function prepareFigure(
           },
         }
       : source;
+    const sequence = reactionFrames(r);
+    const endpoints = [sequence.start, sequence.end].filter(
+      (frame) => frame !== undefined,
+    );
+    const merged = endpoints.length
+      ? mergeFrameAnnotations(r.scene, prefix, reference.focus, endpoints)
+      : undefined;
     const hidden = new Set(
       Object.entries(view?.display ?? {})
-        .filter(([, display]) => display === "hidden")
+        .filter(
+          ([id, display]) => display === "hidden" && !merged?.annotated.has(id),
+        )
         .map(([id]) => id),
     );
     await scene(
-      r.scene,
+      merged?.scene ?? r.scene,
       prefix,
       parent,
-      reference.focus,
+      merged?.focus ?? reference.focus,
       hidden,
       new Set(r.reactants.filter((p) => p.other).map((p) => p.id)),
     );
+    for (const [alias, placement] of merged?.aliases ?? [])
+      for (const [id, point] of Object.entries(atomPoints))
+        if (id.startsWith(placement + ":"))
+          atomPoints[alias + id.slice(placement.length)] = point;
     const routePoints = [r.arrow.from, ...(r.arrow.via ?? []), r.arrow.to];
     const a = mul(routePoints.at(-2)!, B),
       b = mul(r.arrow.to, B);
@@ -2273,7 +2288,7 @@ export async function prepareFigure(
       r.mechanism && options.canvas !== "scene"
         ? await prepareReactionFrames(
             library,
-            { ...r, mechanism: r.mechanism },
+            r,
             reference,
             options,
             vertical ? "down" : a.x > b.x ? "left" : "right",
@@ -2283,8 +2298,15 @@ export async function prepareFigure(
               : undefined,
           )
         : undefined;
+    let firstEnd = b;
+    let lastStart: Point | undefined;
     if (detail) {
       const center = mul(plus(a, b), 0.5);
+      const half = vertical
+        ? { x: 0, y: detail.height / 2 + B * 0.35 }
+        : { x: Math.sign(b.x - a.x) * (detail.width / 2 + B * 0.35), y: 0 };
+      firstEnd = plus(center, mul(half, -1));
+      lastStart = plus(center, half);
       const shift = {
         x: center.x - detail.width / 2,
         y: center.y - detail.height / 2,
@@ -2299,25 +2321,41 @@ export async function prepareFigure(
       for (const [id, point] of Object.entries(detail.atomPoints))
         atomPoints[id] = plus(point, shift);
     }
-    const arrowShape = solidArrow(a, b, B);
-    if (!detail)
-      await scene(
-        {
-          width: r.scene.width,
-          height: r.scene.height,
-          molecules: [],
-          reactionArrows: [
-            {
-              id,
-              from: { x: a.x / B, y: a.y / B },
-              to: { x: b.x / B, y: b.y / B },
-              kind: r.arrow.kind,
-            },
-          ],
-        },
-        prefix,
-        parent,
-      );
+    const firstKind = sequence.start
+      ? (sequence.start.frame.arrow ?? "forward")
+      : r.arrow.kind;
+    const lastFrame = sequence.middle.at(-1);
+    const arrowShape = solidArrow(a, firstEnd, B);
+    await scene(
+      {
+        width: r.scene.width,
+        height: r.scene.height,
+        molecules: [],
+        reactionArrows: [
+          {
+            id,
+            from: mul(a, 1 / B),
+            to: mul(firstEnd, 1 / B),
+            kind: r.mechanism && firstKind === "none" ? "forward" : firstKind,
+          },
+          ...(lastStart && lastFrame
+            ? [
+                {
+                  id: `next-${lastFrame.id}`,
+                  from: mul(lastStart, 1 / B),
+                  to: mul(b, 1 / B),
+                  kind:
+                    lastFrame.arrow && lastFrame.arrow !== "none"
+                      ? lastFrame.arrow
+                      : "forward",
+                },
+              ]
+            : []),
+        ],
+      },
+      prefix,
+      parent,
+    );
     if (routePoints.length > 2 && r.arrow.kind !== "none")
       ctx.append(
         parent,
@@ -2372,24 +2410,31 @@ export async function prepareFigure(
         ctx.textWidth(text, conditionFont),
       );
     const reagentsBelow = r.reagentPosition === "below-arrow";
-    const frameHeight = (detail?.height ?? 0) / 2;
+    const frameAbove = view?.placements
+      ? []
+      : (sequence.start?.frame.above ?? []);
+    const frameBelow = view?.placements
+      ? []
+      : (sequence.start?.frame.below ?? []);
     arrowText(
       parent,
       prefix + id + ":condition",
       a,
-      b,
-      reagentsBelow ? [] : wrap(r.reagents),
-      [...(reagentsBelow ? wrap(r.reagents) : []), ...wrap(r.conditions)],
+      firstEnd,
+      wrap([...(reagentsBelow ? [] : r.reagents), ...frameAbove]),
+      wrap([
+        ...(reagentsBelow ? r.reagents : []),
+        ...r.conditions,
+        ...frameBelow,
+      ]),
       {
         font: conditionFont,
         side: r.arrow.side,
-        width: detail?.width,
-        top:
-          Math.min(a.y, b.y, ...arrowShape.vertices.map((p) => p.y)) -
-          frameHeight,
+        top: Math.min(a.y, firstEnd.y, ...arrowShape.vertices.map((p) => p.y)),
         bottom: Math.max(
-          Math.max(a.y, b.y, ...arrowShape.vertices.map((p) => p.y)) +
-            frameHeight,
+          a.y,
+          firstEnd.y,
+          ...arrowShape.vertices.map((p) => p.y),
           ...overhead
             .filter(({ position }) => position === "below-arrow")
             .map(({ bounds }) => bounds.y + bounds.height),
@@ -2400,6 +2445,16 @@ export async function prepareFigure(
         ),
       },
     );
+    if (lastStart && lastFrame)
+      arrowText(
+        parent,
+        prefix + "next-" + lastFrame.id,
+        lastStart,
+        b,
+        wrap(lastFrame.above ?? []),
+        wrap(lastFrame.below ?? []),
+        { font: conditionFont, side: r.arrow.side },
+      );
     for (const p of [...r.reactants, ...r.products]) {
       if (p.position === "text" || p.position === "none") continue;
       const parts = [

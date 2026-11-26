@@ -29,6 +29,7 @@ export interface RouteLayoutStep {
   mechanism?: {
     horizontal: { width: number; height: number };
     vertical: { width: number; height: number };
+    tail: string[];
   };
 }
 export interface RouteLayoutItem {
@@ -221,6 +222,12 @@ export function layoutRoute(
       ...boxes.map((b) => b.measure.top + b.measure.bottom + bond * 1.1),
     ),
   });
+  const captionCenter = (p: Item) => {
+    const frameWidth = p.step.mechanism?.horizontal.width;
+    return p.kind !== "vertical" && frameWidth
+      ? p.x + p.direction * ((p.length - frameWidth) / 4 - bond * 0.175)
+      : p.textCenter;
+  };
   const rectangles = (p: Item): [number, number, number, number][] => {
     if (p.kind === "molecule" || p.kind === "reference" || p.kind === "plus")
       return [[p.x, p.x + p.width, -p.measure.top, p.measure.bottom]];
@@ -238,17 +245,17 @@ export function layoutRoute(
         topWidth = Math.max(p.above?.width ?? 0, box.width);
       if (topHeight)
         rects.push([
-          p.textCenter - topWidth / 2,
-          p.textCenter + topWidth / 2,
-          -topHeight - padding - frameHeight,
-          -frameHeight,
+          captionCenter(p) - topWidth / 2,
+          captionCenter(p) + topWidth / 2,
+          -topHeight - padding,
+          0,
         ]);
       if (p.below)
         rects.push([
-          p.textCenter - p.below.width / 2,
-          p.textCenter + p.below.width / 2,
-          frameHeight,
-          frameHeight + p.below.height + padding * 1.4,
+          captionCenter(p) - p.below.width / 2,
+          captionCenter(p) + p.below.width / 2,
+          0,
+          p.below.height + padding * 1.4,
         ]);
       return rects;
     }
@@ -425,16 +432,23 @@ export function layoutRoute(
       below = step.below.length ? options.text(step.below) : undefined,
       box = boxSize(boxes),
       textWidth = Math.max(above?.width ?? 0, below?.width ?? 0),
-      length = Math.max(
-        step.mechanism ? step.mechanism.horizontal.width + 2 * gap : 0,
-        card
-          ? Math.max(
-              96 / card.scale,
-              textWidth + 24 / card.scale,
-              box.width + gap,
-            )
-          : Math.max(bond * 4.5, textWidth + bond * 1.4, box.width + bond),
-      );
+      arrowLength = card
+        ? Math.max(
+            96 / card.scale,
+            textWidth + 24 / card.scale,
+            box.width + gap,
+          )
+        : Math.max(bond * 4.5, textWidth + bond * 1.4, box.width + bond);
+    const frameWidth = step.mechanism?.horizontal.width;
+    const tail = step.mechanism?.tail;
+    const length = frameWidth
+      ? frameWidth +
+        2 *
+          Math.max(
+            arrowLength + bond * 0.35,
+            tail?.length ? options.text(tail).width + bond * 1.4 : 0,
+          )
+      : arrowLength;
     const continuation = step.to.find((o) => uses.has(o.id)) ?? step.to.at(-1)!;
     const outputs = [
       ...step.to.filter((o) => o !== continuation),
@@ -781,8 +795,7 @@ export function layoutRoute(
       for (const p of mine) {
         if (p.kind === "vertical") {
           const detail = p.step.mechanism?.vertical;
-          const offset =
-            verticalArrowLabelOffset(bond) + (detail?.width ?? 0) / 2;
+          const offset = verticalArrowLabelOffset(bond);
           if (inlineMechanisms && card?.artworkWidth !== undefined)
             p.side =
               p.step.side ??
@@ -807,17 +820,23 @@ export function layoutRoute(
             contentHeight =
               textHeight + (box.height ? box.height + padding : 0),
             start = Math.max(...(p.sources ?? [p.source!]).map(bottom));
+          const tail = p.step.mechanism?.tail;
+          const connector = Math.max(
+            bond * 2.6,
+            contentHeight + bond,
+            tail?.length ? options.text(tail).height + bond : 0,
+          );
           y = Math.max(
             y,
             start +
               Math.max(
                 card ? (card.vertical ? 72 : 56) / card.scale : bond * 2.6,
                 contentHeight + bond,
-                detail ? detail.height + bond : 0,
+                detail?.height ? detail.height + 2 * connector : 0,
               ) +
               p.target!.measure.top,
           );
-          if (detail)
+          if (detail?.height)
             obstacles.push([
               p.x - detail.width / 2,
               p.x + detail.width / 2,
@@ -912,7 +931,7 @@ export function layoutRoute(
         ]);
       }
       const boxes: NonNullable<RouteLayoutItem["boxes"]> = [];
-      let x = p.textCenter - boxSize(p.boxes).width / 2 + bond * 0.55;
+      let x = captionCenter(p) - boxSize(p.boxes).width / 2 + bond * 0.55;
       for (const box of p.boxes) {
         boxes.push({
           key: box.key,
@@ -924,7 +943,6 @@ export function layoutRoute(
                 : p.y -
                   padding -
                   (p.above?.height ?? 0) -
-                  (p.step.mechanism?.horizontal.height ?? 0) / 2 -
                   padding -
                   box.measure.bottom -
                   bond * 0.55,
@@ -935,7 +953,7 @@ export function layoutRoute(
       result.push({
         kind: "arrow",
         step: p.step.id,
-        at: { x: p.textCenter, y: p.y },
+        at: { x: captionCenter(p), y: p.y },
         width:
           p.kind === "vertical"
             ? Math.max(p.above?.width ?? 0, p.below?.width ?? 0) + bond * 1.4
