@@ -36,10 +36,19 @@ function rate(rating: "know" | "unknown") {
       <strong v-if="block.label">{{ block.label }}</strong>
     </header>
     <ExerciseSource :source="block.source" />
-    <ProblemText v-if="block.prompt" :text="block.prompt" :chapter="chapter" />
+    <ProblemText
+      v-if="block.prompt"
+      :text="block.prompt"
+      :prose="block.prose?.prompt"
+      :chapter="chapter"
+    />
     <ol v-if="block.parts" type="a" class="problem-parts">
       <li v-for="(part, i) in block.parts" :key="i">
-        <ProblemText :text="part" :chapter="chapter" />
+        <ProblemText
+          :text="part"
+          :prose="block.prose?.parts?.[i]"
+          :chapter="chapter"
+        />
       </li>
     </ol>
     <label class="problem-response"
@@ -64,7 +73,11 @@ function rate(rating: "know" | "unknown") {
       <p class="caption">
         {{ block.answer.origin === "book" ? "书内答案" : "AI 答案" }}
       </p>
-      <ProblemText :text="block.answer.text" :chapter="chapter" />
+      <ProblemText
+        :text="block.answer.text"
+        :prose="block.prose?.answer"
+        :chapter="chapter"
+      />
       <p class="caption">{{ block.answer.basis }}</p>
       <SourceExcerpt
         v-for="id in block.evidence ?? []"

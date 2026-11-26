@@ -61,11 +61,50 @@ function proseParts(value: unknown, where: string) {
   assert(isList(value), `${where} must be a list of prose parts`);
   for (const part of value) {
     if (typeof part === "string") continue;
-    assert(
-      isObject(part) && (part.style === "chemical-name" || part.style === "em"),
-      `${where} has an invalid prose style`,
-    );
-    proseParts(part.parts, where);
+    assert(isObject(part), `${where} has an invalid prose part`);
+    if (part.style === "math") text(part.tex, where);
+    else {
+      assert(
+        part.style === "chemical-name" ||
+          part.style === "em" ||
+          part.style === "strong",
+        `${where} has an invalid prose style`,
+      );
+      proseParts(part.parts, where);
+    }
+  }
+}
+
+function proseBlocks(value: unknown, where: string) {
+  assert(isList(value), `${where} must be a list of prose blocks`);
+  for (const block of value) {
+    assert(isObject(block), `${where} has an invalid prose block`);
+    if (block.type === "paragraph") proseParts(block.parts, where);
+    else {
+      assert(
+        block.type === "list" &&
+          typeof block.ordered === "boolean" &&
+          (block.start === undefined || isInteger(block.start)) &&
+          isList(block.items),
+        `${where} has an invalid prose list`,
+      );
+      for (const item of block.items) proseBlocks(item, where);
+    }
+  }
+}
+
+export function validateExerciseProse(value: unknown, where: string) {
+  if (value === undefined) return;
+  assert(isObject(value), `${where} prose must be an object`);
+  for (const name of ["question", "explanation"])
+    if (value[name] !== undefined)
+      proseParts(value[name], `${where} prose.${name}`);
+  for (const name of ["options", "optionExplanations"]) {
+    const items = value[name];
+    if (items === undefined) continue;
+    assert(isList(items), `${where} prose.${name} must be an array`);
+    for (const item of items)
+      if (item !== null) proseParts(item, `${where} prose.${name}`);
   }
 }
 
@@ -232,6 +271,7 @@ export function validatePrediction(
   text(kind, `${where} kind`);
   text(prediction.question, `${where} question`);
   text(prediction.explanation, `${where} explanation`);
+  validateExerciseProse(prediction.prose, where);
   optionalText(prediction.source, `${where} source`);
   optionalText(prediction.context, `${where} context`);
   if (kind === "choice") {
@@ -613,9 +653,11 @@ const blockFields: Record<string, string[]> = {
   "path-picker": "title".split(" "),
   "diagnostic-summary": "title".split(" "),
   panels: ["mode", "caption", "items"],
-  problem: "lang label source task prompt parts answer evidence".split(" "),
+  problem: "lang label source task prompt parts answer evidence prose".split(
+    " ",
+  ),
   prediction:
-    "kind question source context explanation molecules excerpt reset options answer alsoCorrect optionExplanations molecule labels minSelections maxSelections match optionAnswer gradeAtoms groups atomExplanation image points input tolerance readout activity chapter data evidence inputExcerpt mode quizId refs result sourceContext title".split(
+    "kind question source context explanation molecules excerpt reset options answer alsoCorrect optionExplanations molecule labels minSelections maxSelections match optionAnswer gradeAtoms groups atomExplanation image points input tolerance readout activity chapter data evidence inputExcerpt mode quizId refs result sourceContext title prose".split(
       " ",
     ),
   matrix:
@@ -1024,6 +1066,19 @@ export function validateBlocks(
           `${here} answer.origin must be book or ai`,
         );
         text(block.answer.basis, `${here} answer.basis`);
+        if (block.prose !== undefined) {
+          const prose = block.prose;
+          assert(isObject(prose), `${here} prose must be an object`);
+          if (prose.prompt !== undefined)
+            proseBlocks(prose.prompt, `${here} prose.prompt`);
+          if (prose.answer !== undefined)
+            proseBlocks(prose.answer, `${here} prose.answer`);
+          if (prose.parts !== undefined) {
+            assert(isList(prose.parts), `${here} prose.parts must be an array`);
+            for (const part of prose.parts)
+              if (part !== null) proseBlocks(part, `${here} prose.parts`);
+          }
+        }
         if (block.evidence !== undefined) {
           assert(isList(block.evidence), `${here} evidence must be an array`);
           block.evidence.forEach((id) => {

@@ -11,6 +11,7 @@ import { contentCitations, parseCitation } from "./source-citations.ts";
 import {
   chapterPredictions,
   validateBlocks,
+  validateExerciseProse,
   validateStaticBlocks,
   type BlockReferences,
 } from "./topic-blocks.ts";
@@ -330,6 +331,7 @@ function checkTopicContent(
     assert(!quizIds.has(question.id), `${where} is a duplicate id`);
     quizIds.add(question.id);
     text(question.question, `${where} question`);
+    validateExerciseProse(question.prose, where);
     assert(
       isList(question.options) && question.options.length >= 2,
       `${where} needs at least two options`,

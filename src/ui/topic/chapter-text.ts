@@ -8,7 +8,14 @@ type PlainChapterPiece =
 
 export type ChapterPiece =
   | PlainChapterPiece
-  | { kind: "styled"; style: "chemical-name" | "em"; pieces: ChapterPiece[] };
+  | { kind: "math"; tex: string }
+  | { kind: "paragraph"; pieces: ChapterPiece[] }
+  | { kind: "list"; ordered: boolean; start?: number; items: ChapterPiece[][] }
+  | {
+      kind: "styled";
+      style: "chemical-name" | "em" | "strong";
+      pieces: ChapterPiece[];
+    };
 
 export function inlinePieces(
   parts: ProsePart[],
@@ -17,13 +24,15 @@ export function inlinePieces(
   return parts.flatMap((part): ChapterPiece[] =>
     typeof part === "string"
       ? plain(part)
-      : [
-          {
-            kind: "styled",
-            style: part.style,
-            pieces: inlinePieces(part.parts, plain),
-          },
-        ],
+      : part.style === "math"
+        ? [{ kind: "math", tex: part.tex }]
+        : [
+            {
+              kind: "styled",
+              style: part.style,
+              pieces: inlinePieces(part.parts, plain),
+            },
+          ],
   );
 }
 

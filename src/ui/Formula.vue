@@ -3,7 +3,7 @@ import { ref, watchEffect } from "vue";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 
-const props = defineProps<{ tex: string }>();
+const props = defineProps<{ tex: string; inline?: boolean }>();
 const element = ref<HTMLElement | null>(null);
 
 watchEffect(() => {
@@ -13,7 +13,8 @@ watchEffect(() => {
 </script>
 
 <template>
-  <div ref="element" class="formula" :aria-label="tex"></div>
+  <span v-if="inline" ref="element" :aria-label="tex"></span>
+  <div v-else ref="element" class="formula" :aria-label="tex"></div>
 </template>
 
 <style scoped>

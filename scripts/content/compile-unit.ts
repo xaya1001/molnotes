@@ -13,7 +13,11 @@ import type { BlockReferences } from "../../shared/topic-blocks.ts";
 import type { Library } from "../../shared/chemical-library/types.ts";
 import { compileTableStructures } from "./table-structures.ts";
 import { resolveCompoundSlots } from "./compound-slots.ts";
-import { readPracticeChapters } from "./practice-markdown.ts";
+import {
+  compileChoiceProse,
+  compilePracticeExercises,
+  readPracticeChapters,
+} from "./practice-markdown.ts";
 import { lintProse, proseTerms } from "./prose-lint.ts";
 
 type SiteInput = {
@@ -122,6 +126,7 @@ export async function compileUnit(
     );
     if (found.pathPicker && resolved.value.paths === undefined)
       throw new Error(`${where}: a path-picker block needs top-level paths`);
+    compilePracticeExercises(chapter, where);
     return { chapter, data, index, references: resolved.references };
   }
   const content = validateTopicContent(resolved.value, where);
@@ -134,5 +139,12 @@ export async function compileUnit(
       throw new Error(
         `${where}: source ${source.id} names a shelf file; register it in sources.json and cite it`,
       );
+  for (const chapter of content.chapters)
+    compilePracticeExercises(chapter, where);
+  for (const question of [
+    ...(content.quiz ?? []),
+    ...(content.placement ?? []),
+  ])
+    compileChoiceProse(question, `${where}: question ${question.id}`);
   return { content, references: resolved.references };
 }

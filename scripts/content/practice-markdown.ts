@@ -1,4 +1,5 @@
 import MarkdownIt from "markdown-it";
+import katex from "katex";
 import { LineCounter, parseDocument } from "yaml";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -13,7 +14,15 @@ import type { TopicBlock } from "../../src/ui/topic/blocks.ts";
 import { noteMarkdown, parseNote } from "../../shared/notes-index.ts";
 import { parseRequest } from "./requests.ts";
 import { proseMarkdown } from "../../shared/prose-markdown.ts";
-import type { ProsePart } from "../../shared/prose-format.ts";
+import type {
+  ExerciseProse,
+  ProseBlock,
+  ProsePart,
+} from "../../shared/prose-format.ts";
+import type {
+  TopicPrediction,
+  TopicQuizQuestion,
+} from "../../src/ui/topic/content.ts";
 
 type RequestHandler = (
   source: string,
@@ -22,25 +31,58 @@ type RequestHandler = (
 ) => void | Promise<void>;
 
 const markdown = new MarkdownIt("commonmark", { html: false });
+const exerciseMarkdown = new MarkdownIt("zero").enable("list");
 const inlineMarkdown = proseMarkdown();
 // Citations and terms in topic prose use the topic's existing runtime links.
 inlineMarkdown.inline.ruler.disable(["link", "image", "autolink", "entity"]);
+inlineMarkdown.core.ruler.disable("text_join");
+// Keep orbital, stereochemical, excited-state and footnote stars as text.
+inlineMarkdown.inline.ruler.before(
+  "emphasis",
+  "exercise_star",
+  (state, silent) => {
+    if (!state.env.exercise || state.src[state.pos] !== "*") return false;
+    const before = state.src.slice(0, state.pos);
+    const after = state.src.slice(state.pos + 1, state.posMax);
+    if (after.startsWith("*") || before.endsWith("*")) return false;
+    const surname = /^[A-Z][a-z]+, [A-Z]\./;
+    const suffix =
+      /(?:^|[^\p{Script=Latin}\p{Script=Greek}\d*])(?:[σπCR]|\d+[RS])$/u;
+    const excitedState =
+      /^(?:(?:PC|(?:Ir|Ru)[²³⁴]⁺|(?:Ir|Ni)\([IV]+\)|\d+[A-Z][a-z][A-Z]{2,})(?![A-Za-z\d*])|\[(?:Ir|Ru)\()/;
+    if (
+      !suffix.test(before) &&
+      !excitedState.test(after) &&
+      !(before.endsWith("(") && surname.test(after)) &&
+      !(before.endsWith(".") && /^\s+\(\*[A-Z][a-z]+, [A-Z]\./.test(after))
+    )
+      return false;
+    if (!silent) state.push("text_special", "", 0).content = "*";
+    state.pos++;
+    return true;
+  },
+);
 
-function practiceProse(source: string): { text: string; inline?: ProsePart[] } {
-  if (!/[{*\\]/.test(source)) return { text: source };
+function practiceProse(
+  source: string,
+  where?: string,
+): { text: string; inline?: ProsePart[] } {
+  if (!(where ? /[{}*$\\]/ : /[{*\\]/).test(source)) return { text: source };
   const inline: ProsePart[] = [];
   const stack = [inline];
   let text = "";
-  for (const token of inlineMarkdown.parseInline(source, {})[0].children ??
-    []) {
+  for (const token of inlineMarkdown.parseInline(source, {
+    exercise: Boolean(where),
+  })[0].children ?? []) {
     const style =
       token.type === "chemical_name_open" ||
       token.type === "chemical_name_close"
         ? "chemical-name"
-        : token.markup === "*" &&
-            (token.type === "em_open" || token.type === "em_close")
+        : token.markup === "*" && token.tag === "em"
           ? "em"
-          : undefined;
+          : where && token.markup === "**" && token.tag === "strong"
+            ? "strong"
+            : undefined;
     if (style) {
       if (token.nesting === 1) {
         const parts: ProsePart[] = [];
@@ -48,6 +90,21 @@ function practiceProse(source: string): { text: string; inline?: ProsePart[] } {
         stack.push(parts);
       } else stack.pop();
       continue;
+    }
+    if (where && token.type === "note_math") {
+      const tex = token.content.replaceAll("\\_", "_");
+      try {
+        katex.renderToString(tex, { throwOnError: true });
+      } catch (error) {
+        fail(where, String(error));
+      }
+      stack.at(-1)!.push({ style: "math", tex });
+      text += `$${token.content}$`;
+      continue;
+    }
+    if (where && token.type === "text") {
+      const marker = /[{}*$]/.exec(token.content)?.[0];
+      if (marker) fail(where, `Unparsed formatting marker ${marker}`);
     }
     const part =
       token.type === "softbreak" || token.type === "hardbreak"
@@ -58,12 +115,126 @@ function practiceProse(source: string): { text: string; inline?: ProsePart[] } {
             ? `${token.markup}${token.content}${token.markup}`
             : token.content || token.markup;
     if (!part) continue;
-    stack.at(-1)!.push(part);
+    const parts = stack.at(-1)!;
+    const previous = parts.at(-1);
+    if (typeof previous === "string") parts[parts.length - 1] = previous + part;
+    else parts.push(part);
     text += part;
   }
-  return inline.some((part) => typeof part !== "string")
+  return (where && text !== source) ||
+    inline.some((part) => typeof part !== "string")
     ? { text, inline }
     : { text };
+}
+
+export function compileChoiceProse(
+  question: TopicPrediction | TopicQuizQuestion,
+  where: string,
+) {
+  const prose: ExerciseProse = {};
+  for (const field of ["question", "explanation"] as const) {
+    const source = question[field];
+    if (source === undefined) continue;
+    const { inline } = practiceProse(source, `${where} ${field}`);
+    if (inline) prose[field] = inline;
+  }
+  const fields = {
+    options: "options" in question ? question.options : undefined,
+    optionExplanations:
+      "optionExplanations" in question
+        ? question.optionExplanations
+        : undefined,
+  };
+  for (const field of ["options", "optionExplanations"] as const) {
+    const items = fields[field]?.map(
+      (source, index) =>
+        practiceProse(source, `${where} ${field}[${index}]`).inline ?? null,
+    );
+    if (items?.some(Boolean)) prose[field] = items;
+  }
+  if (Object.keys(prose).length) question.prose = prose;
+}
+
+function problemProse(source: string | string[], where: string) {
+  const result: ProseBlock[] = [];
+  let formatted = false;
+  for (const paragraph of typeof source === "string" ? [source] : source) {
+    const tokens = exerciseMarkdown.parse(paragraph, {});
+    const addParagraph = (text: string, blocks: ProseBlock[]) => {
+      const { inline } = practiceProse(text, where);
+      if (inline) formatted = true;
+      blocks.push({ type: "paragraph", parts: inline ?? [text] });
+    };
+    if (!tokens.some((token) => token.type.endsWith("_list_open"))) {
+      addParagraph(paragraph, result);
+      continue;
+    }
+    formatted = true;
+    const stack: {
+      blocks: ProseBlock[];
+      list?: Extract<ProseBlock, { type: "list" }>;
+    }[] = [{ blocks: result }];
+    for (const token of tokens) {
+      const parent = stack.at(-1)!;
+      switch (token.type) {
+        case "bullet_list_open":
+        case "ordered_list_open": {
+          const start = token.attrGet("start");
+          const list = {
+            type: "list" as const,
+            ordered: token.type === "ordered_list_open",
+            ...(start === null ? {} : { start: Number(start) }),
+            items: [],
+          };
+          parent.blocks.push(list);
+          parent.list = list;
+          break;
+        }
+        case "list_item_open": {
+          const blocks: ProseBlock[] = [];
+          parent.list!.items.push(blocks);
+          stack.push({ blocks });
+          break;
+        }
+        case "list_item_close":
+          stack.pop();
+          break;
+        case "inline":
+          addParagraph(token.content, parent.blocks);
+          break;
+      }
+    }
+  }
+  return formatted ? result : undefined;
+}
+
+export function compilePracticeExercises(
+  chapter: { id: string; blocks: TopicBlock[] },
+  where: string,
+) {
+  const visit = (blocks: TopicBlock[]) => {
+    for (const block of blocks) {
+      const at = `${where}: chapter ${chapter.id} question ${block.id ?? chapter.id}`;
+      if (block.type === "prediction") compileChoiceProse(block, at);
+      if (block.type === "problem") {
+        const prompt =
+          block.prompt && problemProse(block.prompt, `${at} prompt`);
+        const parts = block.parts?.map(
+          (part, index) => problemProse(part, `${at} parts[${index}]`) ?? null,
+        );
+        const answer = problemProse(block.answer.text, `${at} answer.text`);
+        if (prompt || parts?.some(Boolean) || answer)
+          block.prose = {
+            ...(prompt ? { prompt } : {}),
+            ...(parts?.some(Boolean) ? { parts } : {}),
+            ...(answer ? { answer } : {}),
+          };
+      }
+      if (block.type === "tabs")
+        block.items.forEach((item) => visit(item.blocks));
+    }
+  };
+  visit(chapter.blocks);
 }
 
 const slug = "[a-z0-9]+(?:-[a-z0-9]+)*";

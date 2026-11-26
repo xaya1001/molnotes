@@ -11,7 +11,7 @@ import type { TimelineInput } from "../diagrams/model.ts";
 import type { MatrixInput } from "../matrix/model.ts";
 import type { StructureSetInput } from "../structure/model.ts";
 import type { TopicPrediction } from "./content.ts";
-import type { ProsePart } from "../../../shared/prose-format.ts";
+import type { ProblemProse, ProsePart } from "../../../shared/prose-format.ts";
 
 interface BlockBase {
   /** Names the block; a prediction's records are kept under it (the chapter id when absent). */
@@ -192,6 +192,7 @@ export interface ProblemBlock extends BlockBase {
   parts?: string[];
   answer: { text: string | string[]; origin: "book" | "ai"; basis: string };
   evidence?: string[];
+  prose?: ProblemProse;
 }
 export type PredictionBlock = BlockBase &
   TopicPrediction & { type: "prediction" };

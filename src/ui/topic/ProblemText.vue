@@ -1,27 +1,50 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { paragraphPieces, sourceIdsOf } from "./chapter-text.ts";
+import type { ProseBlock } from "../../../shared/prose-format.ts";
+import {
+  inlinePieces,
+  paragraphPieces,
+  sourceIdsOf,
+  type ChapterPiece,
+} from "./chapter-text.ts";
 import { useTopic } from "./context.ts";
-import SourceText from "./SourceText.vue";
-import TopicRefs from "./TopicRefs.vue";
-import TopicTerm from "./TopicTerm.vue";
-const props = defineProps<{ text: string | string[]; chapter: string }>();
+import ChapterText from "./ChapterText.vue";
+const props = defineProps<{
+  text: string | string[];
+  prose?: ProseBlock[] | null;
+  chapter: string;
+}>();
 const { content } = useTopic();
-const paragraphs = computed(() => {
+const pieces = computed(() => {
   const seen = new Set<string>();
   const terms =
     content.chapters.find((c) => c.id === props.chapter)?.terms ?? [];
-  return (Array.isArray(props.text) ? props.text : [props.text]).map((text) =>
-    paragraphPieces(text, terms, seen, sourceIdsOf(content.sources)),
-  );
+  const sources = sourceIdsOf(content.sources);
+  const blocks: ProseBlock[] =
+    props.prose ??
+    (Array.isArray(props.text) ? props.text : [props.text]).map((text) => ({
+      type: "paragraph",
+      parts: [text],
+    }));
+  const render = (blocks: ProseBlock[]): ChapterPiece[] =>
+    blocks.map((block) =>
+      block.type === "list"
+        ? {
+            kind: "list",
+            ordered: block.ordered,
+            start: block.start,
+            items: block.items.map(render),
+          }
+        : {
+            kind: "paragraph",
+            pieces: inlinePieces(block.parts, (text) =>
+              paragraphPieces(text, terms, seen, sources),
+            ),
+          },
+    );
+  return render(blocks);
 });
 </script>
 <template>
-  <p v-for="(paragraph, i) in paragraphs" :key="i">
-    <template v-for="(piece, j) in paragraph" :key="j">
-      <TopicTerm v-if="piece.kind === 'term'" :name="piece.name" />
-      <TopicRefs v-else-if="piece.kind === 'refs'" :ids="piece.ids" />
-      <SourceText v-else :text="piece.text" />
-    </template>
-  </p>
+  <ChapterText :pieces="pieces" link-patent-text />
 </template>

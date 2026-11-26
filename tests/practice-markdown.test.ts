@@ -306,6 +306,169 @@ test("Markdown and JSON chapters keep their authored order in one topic", async 
   );
 });
 
+test("publication compiles the same exercise prose in JSON and Markdown", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "practice-format-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const unit = "sites/sample";
+  cpSync(resolve("tests/fixtures/content", unit), join(root, unit), {
+    recursive: true,
+  });
+  cpSync(resolve("tests/fixtures/content/notes"), join(root, "notes"), {
+    recursive: true,
+  });
+  const path = join(root, unit, "content.json");
+  const content = JSON.parse(readFileSync(path, "utf8"));
+  const fields = {
+    question: "Compare {Sample} with $x_1$ and σ*.",
+    options: ["*First*", "Second"],
+    explanation: "**Check** the difference.",
+    optionExplanations: ["$x_1$ is larger.", "The \\* is literal."],
+  };
+  const problem = {
+    id: "formatted-open",
+    lang: "en",
+    prompt: "Measure {Sample}.\n\n- Write **units**.",
+    parts: ["Use $x_1$.\n\n* Explain your setup."],
+    answer: {
+      text: ["*Compare* the two.", "3. Record $x_1$.\n   - Add {Sample}."],
+      origin: "ai",
+      basis: "Sample counts",
+    },
+  };
+  content.chapters[0].blocks.push({ ...problem, type: "problem" });
+  Object.assign(content.chapters[0].blocks[1], fields, {
+    id: "formatted-choice",
+  });
+  Object.assign(content.quiz[0], fields);
+  Object.assign(content.placement[0], fields);
+  writeFileSync(path, JSON.stringify(content));
+  const writtenPath = join(root, unit, "chapters/written.md");
+  const written = readFileSync(writtenPath, "utf8");
+  writeFileSync(
+    writtenPath,
+    chapter(
+      [
+        fence(
+          JSON.stringify({
+            ...fields,
+            id: "markdown-choice",
+            type: "choice",
+            answer: 0,
+          }),
+        ),
+        fence(
+          JSON.stringify({ ...problem, id: "markdown-open", type: "problem" }),
+        ),
+      ].join("\n\n"),
+    ),
+  );
+  const topic = await readUnit(root, unit);
+  assert.equal(topic.kind, "sites");
+  const [json, , markdown] = topic.content.chapters;
+  const expected = {
+    question: [
+      "Compare ",
+      { style: "chemical-name", parts: ["Sample"] },
+      " with ",
+      { style: "math", tex: "x_1" },
+      " and σ*.",
+    ],
+    options: [[{ style: "em", parts: ["First"] }], null],
+    explanation: [{ style: "strong", parts: ["Check"] }, " the difference."],
+    optionExplanations: [
+      [{ style: "math", tex: "x_1" }, " is larger."],
+      ["The * is literal."],
+    ],
+  };
+  for (const exercise of [
+    json.blocks.find((block) => block.type === "prediction"),
+    markdown.blocks.find((block) => block.type === "prediction"),
+    topic.content.quiz?.[0],
+    topic.content.placement?.[0],
+  ])
+    assert.deepEqual(exercise?.prose, expected);
+
+  const para = (...parts: import("../shared/prose-format.ts").ProsePart[]) => ({
+    type: "paragraph",
+    parts,
+  });
+  const expectedProblem = {
+    prompt: [
+      para("Measure ", { style: "chemical-name", parts: ["Sample"] }, "."),
+      {
+        type: "list",
+        ordered: false,
+        items: [[para("Write ", { style: "strong", parts: ["units"] }, ".")]],
+      },
+    ],
+    parts: [
+      [
+        para("Use ", { style: "math", tex: "x_1" }, "."),
+        {
+          type: "list",
+          ordered: false,
+          items: [[para("Explain your setup.")]],
+        },
+      ],
+    ],
+    answer: [
+      para({ style: "em", parts: ["Compare"] }, " the two."),
+      {
+        type: "list",
+        ordered: true,
+        start: 3,
+        items: [
+          [
+            para("Record ", { style: "math", tex: "x_1" }, "."),
+            {
+              type: "list",
+              ordered: false,
+              items: [
+                [
+                  para(
+                    "Add ",
+                    { style: "chemical-name", parts: ["Sample"] },
+                    ".",
+                  ),
+                ],
+              ],
+            },
+          ],
+        ],
+      },
+    ],
+  };
+  for (const chapter of [json, markdown]) {
+    const exercise = chapter.blocks.find((block) => block.type === "problem");
+    assert.deepEqual(exercise?.prose, expectedProblem);
+  }
+
+  content.quiz[0].options = ["*First", "Second"];
+  writeFileSync(path, JSON.stringify(content));
+  await assert.rejects(
+    buildSnapshot(root),
+    /sites\/sample\/content\.json: question .* options\[0\]: Unparsed formatting marker \*/,
+  );
+  content.quiz[0].options = fields.options;
+  writeFileSync(path, JSON.stringify(content));
+  writeFileSync(
+    writtenPath,
+    written.replace("A 比 B 多一个。", "A 比 {Sample 多一个。"),
+  );
+  await assert.rejects(
+    buildSnapshot(root),
+    /sites\/sample\/content\.json: chapter written question written-open answer\.text: Unparsed formatting marker \{/,
+  );
+  writeFileSync(
+    writtenPath,
+    written.replace("A 比 B 多一个。", "A 比 $x_1 多一个。"),
+  );
+  await assert.rejects(
+    buildSnapshot(root),
+    /question written-open answer\.text: Unparsed formatting marker \$/,
+  );
+});
+
 test("practice chapter checks referenced note headings and explanations", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "practice-lint-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
