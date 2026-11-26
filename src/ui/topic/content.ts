@@ -1,4 +1,5 @@
 import type { PatentData } from "../../../shared/patent-contract.ts";
+import type { ExerciseProse } from "../../../shared/prose-format.ts";
 import {
   chapterRoutePath,
   resolveData,
@@ -13,6 +14,7 @@ import type { DataRef, TopicBlock } from "./blocks.ts";
 
 interface PredictionBase {
   question: string;
+  prose?: ExerciseProse;
   /** The setting the reader needs before predicting, shown under the question. */
   context?: string;
   source?: string;
@@ -203,6 +205,7 @@ export interface TopicQuizQuestion {
   optionExplanations?: string[];
   chapter: string;
   refs?: (number | string)[];
+  prose?: ExerciseProse;
 }
 
 export interface TopicSource extends EvidenceSource {

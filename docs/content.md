@@ -260,6 +260,7 @@ optionExplanations: [A 有两个。, B 有一个。]
 `type` 选择题型，其余字段沿用现有块契约；选择题、结构题、排序题和数值题都使用 `question` 与 `explanation`。
 `source` 写题目来源，`evidence` 引用专题的原文区 id，`context` 写题设，`reset: true` 开启重新作答。
 选择题的 `options`、`optionExplanations` 逐项对应，`answer` 从 0 起计数。
+JSON 与 Markdown 练习的 `question`、`options`、`explanation`、`optionExplanations` 和开放题的 `prompt`、`parts`、`answer.text` 支持化学名、斜体、加粗与行内公式，开放题的这三个字段也支持 Markdown 列表。
 
 开放题使用 `type: problem`，字段与 `problem` 块相同。
 `lang` 是 `zh` 或 `en`，`prompt` 是一段文字或段落数组，`parts` 是可选小问列表。

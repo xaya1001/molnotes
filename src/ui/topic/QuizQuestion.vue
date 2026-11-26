@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import ChapterText from "./ChapterText.vue";
 import { useTopic } from "./context.ts";
 import TopicRefs from "./TopicRefs.vue";
 
@@ -24,7 +25,9 @@ function answer(option: number) {
     class="callout"
     :aria-label="`${diagnostic ? '起点自测' : '判断练习'} ${question.id}`"
   >
-    <h3>{{ question.question }}</h3>
+    <h3>
+      <ChapterText :parts="question.prose?.question ?? [question.question]" />
+    </h3>
     <slot />
     <div class="choices">
       <button
@@ -35,7 +38,7 @@ function answer(option: number) {
         :disabled="answers[id] !== undefined"
         @click="answer(index)"
       >
-        {{ option }}
+        <ChapterText :parts="question.prose?.options?.[index] ?? [option]" />
       </button>
     </div>
     <div v-if="answers[id] !== undefined" role="status">
@@ -44,15 +47,27 @@ function answer(option: number) {
           >{{
             answers[id] === question.answer ? "判断正确" : "再核对一次"
           }}。</strong
-        >{{ question.explanation
-        }}<TopicRefs v-if="question.refs?.length" :ids="question.refs" />
+        ><ChapterText
+          v-if="question.explanation"
+          :parts="question.prose?.explanation ?? [question.explanation]"
+        /><TopicRefs v-if="question.refs?.length" :ids="question.refs" />
       </p>
       <dl v-if="question.optionExplanations">
         <template v-for="(option, index) in question.options" :key="index">
           <dt>
-            {{ option }}{{ index === question.answer ? "（符合证据）" : "" }}
+            <ChapterText
+              :parts="question.prose?.options?.[index] ?? [option]"
+            />{{ index === question.answer ? "（符合证据）" : "" }}
           </dt>
-          <dd>{{ question.optionExplanations[index] }}</dd>
+          <dd>
+            <ChapterText
+              :parts="
+                question.prose?.optionExplanations?.[index] ?? [
+                  question.optionExplanations[index],
+                ]
+              "
+            />
+          </dd>
         </template>
       </dl>
       <RouterLink :to="content.chapterPath(question.chapter)"

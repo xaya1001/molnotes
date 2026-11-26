@@ -10,7 +10,9 @@ function submit() {
 </script>
 <template>
   <section aria-label="先预测再揭晓">
-    <h3>{{ prompt }}</h3>
+    <h3>
+      <slot name="prompt">{{ prompt }}</slot>
+    </h3>
     <slot :submitted="submitted" />
     <button
       class="button button--primary"

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ExerciseSource from "./ExerciseSource.vue";
+import ChapterText from "./ChapterText.vue";
 import { computed, ref } from "vue";
 import MoleculeView from "../MoleculeView.vue";
 import ImagePoints from "./ImagePoints.vue";
@@ -145,7 +146,7 @@ const chosen = computed(() => {
   const s = saved.value;
   if (!s) return undefined;
   if ((isChoice(p) || p.kind === "design") && "option" in s)
-    return p.options[s.option];
+    return { text: p.options[s.option], index: s.option };
   if (
     (p.kind === "arrows" ||
       p.kind === "atom-set" ||
@@ -154,7 +155,7 @@ const chosen = computed(() => {
     "choice" in s &&
     s.choice !== undefined
   )
-    return p.options[s.choice];
+    return { text: p.options[s.choice], index: s.choice };
   return undefined;
 });
 const pickedAtoms = computed(() =>
@@ -256,10 +257,26 @@ const hints: Record<string, string> = {
   >
     <ExerciseSource :source="prediction.source" />
     <h3>{{ verdict }}</h3>
-    <p>{{ prediction.question }}</p>
-    <p v-if="chosen !== undefined">你的预测：{{ chosen }}</p>
+    <p>
+      <ChapterText
+        :parts="prediction.prose?.question ?? [prediction.question]"
+      />
+    </p>
+    <p v-if="chosen?.text !== undefined">
+      你的预测：<ChapterText
+        :parts="prediction.prose?.options?.[chosen.index] ?? [chosen.text]"
+      />
+    </p>
     <template v-if="isChoice(prediction)">
-      <p>正确答案：{{ prediction.options[prediction.answer] }}</p>
+      <p>
+        正确答案：<ChapterText
+          :parts="
+            prediction.prose?.options?.[prediction.answer] ?? [
+              prediction.options[prediction.answer],
+            ]
+          "
+        />
+      </p>
       <ol v-if="prediction.optionExplanations" class="option-explanations">
         <li
           v-for="(explanation, index) in prediction.optionExplanations"
@@ -271,7 +288,13 @@ const hints: Record<string, string> = {
           :data-chosen="'option' in saved && saved.option === index"
         >
           <p>
-            {{ prediction.options[index] }}
+            <ChapterText
+              :parts="
+                prediction.prose?.options?.[index] ?? [
+                  prediction.options[index],
+                ]
+              "
+            />
             <span
               v-if="
                 index === prediction.answer ||
@@ -286,7 +309,13 @@ const hints: Record<string, string> = {
               >（你的选择）</span
             >
           </p>
-          <p>{{ explanation }}</p>
+          <p>
+            <ChapterText
+              :parts="
+                prediction.prose?.optionExplanations?.[index] ?? [explanation]
+              "
+            />
+          </p>
         </li>
       </ol>
     </template>
@@ -407,11 +436,17 @@ const hints: Record<string, string> = {
     </template>
     <ol v-else-if="prediction.kind === 'ranking'" class="ranking">
       <li v-for="i in savedRanking" :key="i">
-        {{ prediction.options[i] }}
+        <ChapterText
+          :parts="prediction.prose?.options?.[i] ?? [prediction.options[i]]"
+        />
         <template v-if="i === prediction.answer">（参考答案的第一名）</template>
       </li>
     </ol>
-    <p>{{ prediction.explanation }}</p>
+    <p>
+      <ChapterText
+        :parts="prediction.prose?.explanation ?? [prediction.explanation]"
+      />
+    </p>
     <SourceExcerpt
       v-for="excerpt in excerpts"
       :key="excerpt.id"
@@ -436,6 +471,11 @@ const hints: Record<string, string> = {
       :can-submit="canSubmit"
       @submit="submit"
     >
+      <template #prompt>
+        <ChapterText
+          :parts="prediction.prose?.question ?? [prediction.question]"
+        />
+      </template>
       <template #default="{ submitted }">
         <p v-if="prediction.context">{{ prediction.context }}</p>
         <slot />
@@ -500,8 +540,8 @@ const hints: Record<string, string> = {
         <fieldset v-if="prediction.kind === 'ranking'" :disabled="submitted">
           <legend>你的排序</legend>
           <label v-for="(item, i) in prediction.options" :key="item"
-            >{{ item
-            }}<input
+            ><ChapterText
+              :parts="prediction.prose?.options?.[i] ?? [item]" /><input
               v-model.number="places[i]"
               type="number"
               min="1"
@@ -549,7 +589,9 @@ const hints: Record<string, string> = {
               :name="`prediction-${id}`"
               :value="index"
             />
-            {{ answer }}
+            <ChapterText
+              :parts="prediction.prose?.options?.[index] ?? [answer]"
+            />
           </label>
         </fieldset>
       </template>
