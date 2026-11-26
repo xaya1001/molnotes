@@ -22,9 +22,9 @@ test("reading and record validation load without browser state or publication co
         return next(specifier, context);
       },
     });
-    const { createRecordCodec } = await import(${JSON.stringify(new URL("../src/contracts/records.ts", import.meta.url).href)});
+    const { createRecordCodec, RECORD_VERSION } = await import(${JSON.stringify(new URL("../src/contracts/records.ts", import.meta.url).href)});
     const codec = createRecordCodec({ chapterIds: [], quiz: [], extras: {} });
-    codec.parseRecords({ version: 1, ...codec.empty() });
+    codec.parseRecords({ version: RECORD_VERSION, ...codec.empty() });
     await import(${JSON.stringify(new URL("../server/web/web.ts", import.meta.url).href)});
   `,
     ],

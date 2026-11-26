@@ -3,7 +3,7 @@ import type { ExerciseProse } from "../../../shared/prose-format.ts";
 import {
   chapterRoutePath,
   resolveData,
-  topicPredictions,
+  topicExercises,
   validateTopicContent,
 } from "../../../shared/topic-content.ts";
 import type { MoleculeData } from "../chemistry/types.ts";
@@ -12,10 +12,11 @@ import { validateEvidence } from "../evidence.ts";
 import type { MatrixModel } from "../matrix/model.ts";
 import type { DataRef, TopicBlock } from "./blocks.ts";
 
-interface PredictionBase {
+interface ExerciseBase {
   question: string;
   prose?: ExerciseProse;
-  /** The setting the reader needs before predicting, shown under the question. */
+  id: string;
+  /** The setting the reader needs before answering, shown under the question. */
   context?: string;
   source?: string;
   explanation: string;
@@ -29,8 +30,9 @@ interface PredictionBase {
 }
 
 /** The reader picks one option. */
-export interface ChoicePrediction extends PredictionBase {
-  kind?: "choice";
+export interface TextChoiceExercise extends ExerciseBase {
+  type: "choice";
+  kind?: never;
   options: string[];
   optionExplanations?: string[];
   answer: number;
@@ -38,8 +40,9 @@ export interface ChoicePrediction extends PredictionBase {
   alsoCorrect?: number[];
 }
 
-/** The reader picks one atom or bond on `molecule`; any index in `answer` is right. */
-export interface StructurePrediction extends PredictionBase {
+/** The reader picks atoms or bonds on `molecule`. */
+export interface SingleStructureExercise extends ExerciseBase {
+  type: "structure";
   kind: "atoms" | "bonds";
   molecule: MoleculeData;
   answer: number[];
@@ -52,7 +55,8 @@ export interface StructurePrediction extends PredictionBase {
 }
 
 /** The reader picks a set of atoms on each molecule; each set must match that molecule's `answer`. */
-export interface AtomSetPrediction extends PredictionBase {
+export interface AtomSetExercise extends ExerciseBase {
+  type: "structure";
   kind: "atom-set";
   molecules: (MoleculeData & { answer: number[] })[];
   labels?: Record<number, string>;
@@ -61,10 +65,12 @@ export interface AtomSetPrediction extends PredictionBase {
   optionAnswer?: number;
   /** False: the atoms are recorded and shown beside the right ones but not graded. */
   gradeAtoms?: boolean;
+  optionExplanations?: string[];
 }
 
 /** The reader picks one curved arrow on `molecule`: its source atom, then its target atom. */
-export interface ArrowPrediction extends PredictionBase {
+export interface ArrowExercise extends ExerciseBase {
+  type: "structure";
   kind: "arrows";
   molecule: MoleculeData;
   answer: { from: number; to: number };
@@ -72,11 +78,12 @@ export interface ArrowPrediction extends PredictionBase {
   /** A choice submitted together with the arrow; both must be right. */
   options?: string[];
   optionAnswer?: number;
+  optionExplanations?: string[];
 }
 
-/** A prediction, run by ChapterPrediction and stored in `records.predictions` under its id. */
 /** The reader picks atoms and a design choice together; every `groups` entry must be hit and no other atom picked. */
-export interface DesignPrediction extends PredictionBase {
+export interface DesignExercise extends ExerciseBase {
+  type: "structure";
   kind: "design";
   molecule: MoleculeData;
   groups: number[][];
@@ -85,17 +92,21 @@ export interface DesignPrediction extends PredictionBase {
   /** Why those atoms, shown beside the structure verdict. */
   atomExplanation?: string;
   labels?: Record<number, string>;
+  optionExplanations?: string[];
 }
 
 /** The reader ranks every option; only the first place is graded against `answer`. */
-export interface RankingPrediction extends PredictionBase {
-  kind: "ranking";
+export interface RankingExercise extends ExerciseBase {
+  type: "ranking";
+  kind?: never;
   options: string[];
   answer: number;
+  optionExplanations?: string[];
 }
 
 /** The reader picks one marked point on a picture, optionally with a choice; both must be right. */
-export interface ImagePointsPrediction extends PredictionBase {
+export interface ImageChoiceExercise extends ExerciseBase {
+  type: "choice";
   kind: "image-points";
   image:
     | { src: string; alt: string }
@@ -105,11 +116,13 @@ export interface ImagePointsPrediction extends PredictionBase {
   answer: string[];
   options?: string[];
   optionAnswer?: number;
+  optionExplanations?: string[];
 }
 
 /** The reader types an estimate; `answer` ± `tolerance` grades it, `readout` runs a lab model on it. */
-export interface NumberPrediction extends PredictionBase {
-  kind: "number";
+export interface NumberExercise extends ExerciseBase {
+  type: "number";
+  kind?: never;
   input: {
     label: string;
     unit?: string;
@@ -122,32 +135,33 @@ export interface NumberPrediction extends PredictionBase {
   readout?: { model: string; input: string };
 }
 
-/** A prediction, run by ChapterPrediction and stored in `records.predictions` under its id. */
-export type TopicPrediction =
-  | ChoicePrediction
-  | StructurePrediction
-  | AtomSetPrediction
-  | ArrowPrediction
-  | NumberPrediction
-  | DesignPrediction
-  | RankingPrediction
-  | ImagePointsPrediction;
+export type TopicExercise =
+  | TextChoiceExercise
+  | SingleStructureExercise
+  | AtomSetExercise
+  | ArrowExercise
+  | NumberExercise
+  | DesignExercise
+  | RankingExercise
+  | ImageChoiceExercise;
 
-/** A `matrix` block as a prediction: answered once every required cell is. */
-export interface MatrixPrediction {
-  kind: "matrix";
+/** A `matrix` block: answered once every required cell is. */
+export interface MatrixGate {
+  type: "matrix";
+  kind?: never;
   model: MatrixModel;
 }
 
 /** A `quiz` block with an id: answered once every question has an answer; it keeps no record of its own. */
 export interface QuizGate {
-  kind: "quiz";
+  type: "quiz";
+  kind?: never;
   questions: string[];
   diagnostic: boolean;
 }
 
-/** What a reader answered to a prediction. */
-export type PredictionAnswer =
+/** What a reader answered to an exercise. */
+export type ExerciseAnswer =
   | { option: number }
   | { selected: number[] }
   | { sets: number[][]; choice?: number }
@@ -155,14 +169,17 @@ export type PredictionAnswer =
   | { value: number }
   | { atoms: number[]; option: number }
   | { ranking: number[] }
-  | { point: string; choice?: number }
-  | { cells: Record<string, number> };
+  | { point: string; choice?: number };
 
-/** A prediction with the id its records are kept under and its chapter. */
-export interface PredictionEntry {
+export interface MatrixAnswer {
+  cells: Record<string, number>;
+}
+
+/** A chapter exercise or a gate that checks its recorded answers. */
+export interface ExerciseEntry {
   id: string;
   chapter: string;
-  prediction: TopicPrediction | MatrixPrediction | QuizGate;
+  exercise: TopicExercise | MatrixGate | QuizGate;
 }
 
 export interface LearningPath {
@@ -260,8 +277,8 @@ export interface TopicLookups<Chapter, Quiz> {
   quizById(id: string): Quiz;
   /** Route of a chapter inside the topic, from `chapterRoute` or the default. */
   chapterPath(id: string): string;
-  /** Every prediction of the topic, in chapter order. */
-  predictions: PredictionEntry[];
+  /** Every exercise or answer gate, in chapter order. */
+  exercises: ExerciseEntry[];
   /** A block field's value, or the `data` entry it names. */
   dataOf<T>(value: DataRef<T>): T;
 }
@@ -323,7 +340,7 @@ export function defineTopicContent<Content extends TopicContent>(
     excerptById,
     quizById,
     chapterPath,
-    predictions: topicPredictions(content),
+    exercises: topicExercises(content),
     dataOf,
   });
 }

@@ -27,7 +27,9 @@
 
 ## 先预测再揭晓
 
-`PredictionExercise` 接收 `prompt` 与 `canSubmit`，默认插槽提供 `{ submitted }`，提交后才创建 `#result` 插槽；`@submit` 回调读取专题自己的作答状态，写入专题记录。原子/键练习使用 `MoleculeView`，选项或 SAR 预测表可在默认插槽用原生表单。题目切换时用题目 id 作为 `key`。提交前只传空高亮和空标签，任何会透露答案的结构、说明与摘录都放在 `#result` 中；记录、评分和恢复由专题负责。
+结构题用 `type: structure`，按作答位置选择 `kind: atoms` 或 `kind: bonds`。
+题目填写显式 `id`、`molecule`、参考下标数组 `answer` 及 `explanation`。
+共享练习在作答后显示高亮、解析与原文摘录，并按题号保存结果。
 
 ## 原文与阅读
 

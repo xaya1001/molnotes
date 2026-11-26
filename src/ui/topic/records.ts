@@ -50,11 +50,16 @@ export function createTopicRecords<E extends object>({
   let applying = false;
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
   const endpoint = `/api/records/topics/${encodeURIComponent(slug)}`;
-  const sync = recordSync<Record<string, unknown>>(endpoint, parseRecords, {
-    getItem: (key) => sessionStorage.getItem(key),
-    setItem: (key, value) => sessionStorage.setItem(key, value),
-    removeItem: (key) => sessionStorage.removeItem(key),
-  });
+  const sync = recordSync<Record<string, unknown>>(
+    endpoint,
+    parseRecords,
+    {
+      getItem: (key) => sessionStorage.getItem(key),
+      setItem: (key, value) => sessionStorage.setItem(key, value),
+      removeItem: (key) => sessionStorage.removeItem(key),
+    },
+    `molnotes/pending:${endpoint}:v${RECORD_VERSION}`,
+  );
   const snapshot = () => ({
     version: RECORD_VERSION,
     ...JSON.parse(JSON.stringify(records)),

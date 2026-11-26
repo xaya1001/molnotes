@@ -1,3 +1,4 @@
+import { RECORD_VERSION } from "../src/contracts/records.ts";
 import { validateTopicContent } from "../shared/topic-content.ts";
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
@@ -10,7 +11,7 @@ assert.ok(unit.kind === "sites");
 const content = unit.content;
 test("server record codec validates problem answers and omits empty entries", () => {
   const codec = topicRecordsCodec(validateTopicContent(content));
-  const records = { version: 1, ...codec.empty() };
+  const records = { version: RECORD_VERSION, ...codec.empty() };
   for (const problems of [
     null,
     [],
@@ -51,7 +52,7 @@ test("server record codec validates problem answers and omits empty entries", ()
 test("server topic index carries review data while excluding exercise text from search", () => {
   const index = buildTopicIndex([{ slug: "sample", title: "Sample", content }]);
   assert.equal(
-    (index.chapters[0].predictions[0].prediction as { answer: number }).answer,
+    (index.chapters[0].exercises[0].exercise as { answer: number }).answer,
     0,
   );
   assert.equal(index.chapters[0].problems.length, 3);

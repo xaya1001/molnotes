@@ -33,7 +33,7 @@ export { default as MolecularProperties } from "./MolecularProperties.vue";
 export { default as SubstituentExplorer } from "./SubstituentExplorer.vue";
 export { default as ReactionStep } from "./ReactionStep.vue";
 export { default as SubstrateScope } from "./SubstrateScope.vue";
-export { default as PredictionExercise } from "./PredictionExercise.vue";
+export { default as ExerciseForm } from "./ExerciseForm.vue";
 export { default as DataScatterExplorer } from "./data/DataScatterExplorer.vue";
 export {
   defineDataTable,
@@ -85,14 +85,14 @@ export {
   type Topic,
   type TopicQuizQuestion,
   type TopicSource,
-  type ChoicePrediction,
-  type StructurePrediction,
-  type TopicPrediction,
-  type PredictionAnswer,
-  type PredictionEntry,
+  type TextChoiceExercise,
+  type SingleStructureExercise,
+  type TopicExercise,
+  type ExerciseAnswer,
+  type ExerciseEntry,
 } from "./topic/content.ts";
 export { isObject, type RecordField } from "../contracts/records.ts";
-export { useTopic, type TopicPredictionRecords } from "./topic/context.ts";
+export { useTopic, type TopicExerciseRecords } from "./topic/context.ts";
 export { openTerm, openSource, closeOverlay } from "./topic/overlay.ts";
 export { default as TopicTerm } from "./topic/TopicTerm.vue";
 export { default as TopicRefs } from "./topic/TopicRefs.vue";
@@ -101,6 +101,6 @@ export { default as ChapterBody } from "./topic/ChapterBody.vue";
 export { default as ChapterBlocks } from "./topic/ChapterBlocks.vue";
 export type { TopicBlock } from "./topic/blocks.ts";
 export { labModels } from "./models/catalog.ts";
-export { default as ChapterPrediction } from "./topic/ChapterPrediction.vue";
+export { default as ChapterExercise } from "./topic/ChapterExercise.vue";
 export { default as ChapterRecords } from "./topic/ChapterRecords.vue";
 export { default as QuizQuestion } from "./topic/QuizQuestion.vue";

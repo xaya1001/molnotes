@@ -10,6 +10,7 @@ import {
   validateBlocks,
   type BlockReferences,
 } from "../../shared/topic-blocks.ts";
+import { isExerciseBlock } from "../../src/ui/topic/blocks.ts";
 import type { TopicBlock } from "../../src/ui/topic/blocks.ts";
 import { noteMarkdown, parseNote } from "../../shared/notes-index.ts";
 import { parseRequest } from "./requests.ts";
@@ -20,7 +21,7 @@ import type {
   ProsePart,
 } from "../../shared/prose-format.ts";
 import type {
-  TopicPrediction,
+  TopicExercise,
   TopicQuizQuestion,
 } from "../../src/ui/topic/content.ts";
 
@@ -128,7 +129,7 @@ function practiceProse(
 }
 
 export function compileChoiceProse(
-  question: TopicPrediction | TopicQuizQuestion,
+  question: TopicExercise | TopicQuizQuestion,
   where: string,
 ) {
   const prose: ExerciseProse = {};
@@ -215,7 +216,7 @@ export function compilePracticeExercises(
   const visit = (blocks: TopicBlock[]) => {
     for (const block of blocks) {
       const at = `${where}: chapter ${chapter.id} question ${block.id ?? chapter.id}`;
-      if (block.type === "prediction") compileChoiceProse(block, at);
+      if (isExerciseBlock(block)) compileChoiceProse(block, at);
       if (block.type === "problem") {
         const prompt =
           block.prompt && problemProse(block.prompt, `${at} prompt`);
@@ -319,8 +320,12 @@ async function question(value: Record<string, unknown>, where: string) {
     fail(where, `Unknown question type ${String(type)}`);
   const block: Record<string, unknown> = {
     ...fields,
-    type: "prediction",
-    kind: type,
+    type: ["atoms", "bonds", "atom-set"].includes(String(type))
+      ? "structure"
+      : type,
+    ...(["atoms", "bonds", "atom-set"].includes(String(type))
+      ? { kind: type }
+      : {}),
   };
   if (type === "choice" && !Array.isArray(block.optionExplanations))
     fail(where, "choice needs optionExplanations");
@@ -415,7 +420,7 @@ export async function compilePracticeChapter(
     validateBlocks(chapter, undefined, where, {
       excerpts: [],
       quiz: [],
-      predictionIds: new Set(),
+      exerciseIds: new Set(),
       pathPicker: false,
     });
     blocks.push(...chapter.blocks);
@@ -529,14 +534,13 @@ export async function readPracticeChapters(
           ids.set(question.id, `${unit}/content.json:1`);
   for (const chapter of hasMarkdown ? authored.chapters : []) {
     if (!isObject(chapter)) continue;
-    // Existing JSON chapters keep their implicit prediction ids.
     if (typeof chapter.id !== "string" || !Array.isArray(chapter.blocks))
       continue;
     const blocks = { id: chapter.id, blocks: chapter.blocks };
     const found: BlockReferences = {
       excerpts: [],
       quiz: [],
-      predictionIds: new Set(),
+      exerciseIds: new Set(),
       pathPicker: false,
     };
     validateBlocks(
@@ -545,7 +549,7 @@ export async function readPracticeChapters(
       `${unit}/content.json: chapter ${chapter.id}`,
       found,
     );
-    for (const id of found.predictionIds)
+    for (const id of found.exerciseIds)
       if (typeof id === "string") ids.set(id, `${unit}/content.json:1`);
   }
   const chapters: unknown[] = [];

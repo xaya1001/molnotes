@@ -1,3 +1,4 @@
+import { RECORD_VERSION } from "../src/contracts/records.ts";
 import { expect, test, type Page } from "./helpers/test.ts";
 
 const toc = (page: Page) => page.getByRole("navigation", { name: "专题目录" });
@@ -122,13 +123,13 @@ for (const viewport of [
   }) => {
     await page.setViewportSize(viewport);
     const record = {
-      version: 1,
+      version: RECORD_VERSION,
       complete: ["start", "start", "retired"],
       bookmarks: [],
       notes: {},
       answers: {},
       diagnostic: {},
-      predictions: {},
+      exercises: {},
       problems: {},
       path: "all",
     };

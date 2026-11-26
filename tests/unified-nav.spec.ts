@@ -1,14 +1,15 @@
+import { RECORD_VERSION } from "../src/contracts/records.ts";
 import { test, expect } from "./helpers/test.ts";
 import { mkdir } from "node:fs/promises";
 
 const empty = {
-  version: 1,
+  version: RECORD_VERSION,
   complete: [],
   bookmarks: [],
   notes: {},
   answers: {},
   diagnostic: {},
-  predictions: {},
+  exercises: {},
   problems: {},
 };
 test("section links resume saved chapters and opening a chapter saves its timestamp", async ({

@@ -7,7 +7,7 @@ import { useTopic } from "./context.ts";
 /**
  * A peak list beside its molecule. The reader picks a peak to read its shift,
  * integration and multiplicity; once `assigned` (the block's `assignAfter`
- * predictions are answered) the pick also highlights the peak's atoms and
+ * exercises are answered) the pick also highlights the peak's atoms and
  * shows the assignment.
  */
 const props = defineProps<{ block: SpectrumBlock; assigned: boolean }>();

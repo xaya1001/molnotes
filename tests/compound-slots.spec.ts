@@ -1,3 +1,4 @@
+import { RECORD_VERSION } from "../src/contracts/records.ts";
 import { expect, test } from "./helpers/test.ts";
 import { putRecords } from "./helpers/records.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
@@ -27,13 +28,13 @@ test("migrating an indexed structure input keeps its saved prediction and atom o
   c.variants = { input: prepareInputVariant(rd, c, "CCO") };
   const endpoint = "/api/records/topics/instruments";
   const seed = {
-    version: 1,
+    version: RECORD_VERSION,
     complete: [],
     bookmarks: [],
     notes: {},
     answers: {},
     diagnostic: {},
-    predictions: { instruments: { selected: [2] } },
+    exercises: { instruments: { selected: [2] } },
     problems: {},
   };
   await putRecords(request, endpoint, { data: seed });
@@ -47,7 +48,7 @@ test("migrating an indexed structure input keeps its saved prediction and atom o
       topic = await response.json();
     const prediction = topic.content.chapters
       .find((chapter: { id: string }) => chapter.id === "instruments")
-      .blocks.find((block: { type: string }) => block.type === "prediction");
+      .blocks.find((block: { type: string }) => block.type === "structure");
     const { smiles, ...local } = prediction.molecule;
     expect(smiles).toBe("CCO");
     prediction.molecule = { ...local, ref: c.id, variant: "input" };
@@ -62,15 +63,15 @@ test("migrating an indexed structure input keeps its saved prediction and atom o
     for (const width of [1366, 390]) {
       await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
       await page.goto("/sites/instruments/instruments");
-      const prediction = page.getByTestId("prediction-instruments");
-      await expect(prediction).toHaveAttribute("aria-label", "预测结果");
+      const prediction = page.getByTestId("exercise-instruments");
+      await expect(prediction).toHaveAttribute("aria-label", "练习结果");
       await expect(prediction.locator(".comparison-choice")).toHaveCount(1);
       const record = await (await request.get(endpoint)).json();
-      expect(record.predictions).toEqual(seed.predictions);
+      expect(record.exercises).toEqual(seed.exercises);
     }
     for (const write of writes)
-      expect(JSON.parse(write).predictions).toEqual(seed.predictions);
+      expect(JSON.parse(write).exercises).toEqual(seed.exercises);
   } finally {
-    await putRecords(request, endpoint, { data: { ...seed, predictions: {} } });
+    await putRecords(request, endpoint, { data: { ...seed, exercises: {} } });
   }
 });

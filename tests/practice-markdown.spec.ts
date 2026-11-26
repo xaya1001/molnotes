@@ -1,3 +1,4 @@
+import { RECORD_VERSION } from "../src/contracts/records.ts";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { test, expect } from "./helpers/test.ts";
@@ -9,13 +10,13 @@ for (const width of [1366, 390]) {
   }) => {
     await putRecords(page.request, "/api/records/topics/sample", {
       data: {
-        version: 1,
+        version: RECORD_VERSION,
         complete: [],
         bookmarks: [],
         notes: {},
         answers: {},
         diagnostic: {},
-        predictions: {},
+        exercises: {},
         problems: {},
       },
     });
@@ -65,9 +66,9 @@ for (const width of [1366, 390]) {
     await expect(page).toHaveURL(/\/notes\/reader-test\/second$/);
     await page.locator(".practice-next").click();
     await expect(page).toHaveURL(/\/practice\/sample\/written$/);
-    const choice = page.getByTestId("prediction-written-choice");
+    const choice = page.getByTestId("exercise-written-choice");
     const open = page.getByTestId("problem-written-open");
-    const atom = page.getByTestId("prediction-written-atom");
+    const atom = page.getByTestId("exercise-written-atom");
     const oxygen = atom.getByRole("button", { name: "原子 8", exact: true });
     await expect(oxygen).toBeVisible();
     await expect(atom.locator("text.atom-9, text.atom-10")).toHaveText([
@@ -80,25 +81,25 @@ for (const width of [1366, 390]) {
     );
     await screenshot("markdown");
     await choice.getByRole("radio", { name: "B", exact: true }).check();
-    await choice.getByRole("button", { name: "提交预测" }).click();
+    await choice.getByRole("button", { name: "提交" }).click();
     await open.getByRole("textbox").fill("A 比 B 多一个。");
     await open.getByRole("button").first().click();
     await open.getByRole("group").getByRole("button").nth(1).click();
     await oxygen.click();
-    await atom.getByRole("button", { name: "提交预测" }).click();
+    await atom.getByRole("button", { name: "提交" }).click();
     await expect
       .poll(async () => {
         const records = await (
           await page.request.get("/api/records/topics/sample")
         ).json();
         return {
-          choice: records.predictions["written-choice"],
-          atom: records.predictions["written-atom"],
+          choice: records.answers["written-choice"],
+          atom: records.exercises["written-atom"],
           open: records.problems["written-open"],
         };
       })
       .toEqual({
-        choice: { option: 1 },
+        choice: 1,
         atom: { selected: [8] },
         open: { response: "A 比 B 多一个。", rating: "unknown" },
       });
@@ -109,7 +110,7 @@ for (const width of [1366, 390]) {
     await expect(open.getByRole("textbox")).toHaveValue("A 比 B 多一个。");
     await page.goto("/review/");
     await expect(
-      page.getByTestId("mistake-prediction-written-choice"),
+      page.getByTestId("mistake-exercise-written-choice"),
     ).toBeVisible();
     await expect(
       page.getByTestId("mistake-problem-written-open"),
@@ -117,7 +118,7 @@ for (const width of [1366, 390]) {
     await page.goto("/practice/sample/written");
     await choice.getByRole("button", { name: "重新判断" }).click();
     await choice.getByRole("radio", { name: "A", exact: true }).check();
-    await choice.getByRole("button", { name: "提交预测" }).click();
+    await choice.getByRole("button", { name: "提交" }).click();
     await open.getByRole("button").first().click();
     await open.getByRole("group").getByRole("button").first().click();
     await expect
@@ -126,14 +127,14 @@ for (const width of [1366, 390]) {
           await page.request.get("/api/records/topics/sample")
         ).json();
         return [
-          records.predictions["written-choice"]?.option,
+          records.answers["written-choice"],
           records.problems["written-open"]?.rating,
         ];
       })
       .toEqual([0, "know"]);
     await page.goto("/review/");
     await expect(
-      page.getByTestId("mistake-prediction-written-choice"),
+      page.getByTestId("mistake-exercise-written-choice"),
     ).toHaveCount(0);
     await expect(page.getByTestId("mistake-problem-written-open")).toHaveCount(
       0,

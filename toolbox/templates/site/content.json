@@ -24,7 +24,8 @@
           "text": "正文第一段：从合成人员已知的概念类比切入，再给出生物或药化的准确说法。"
         },
         {
-          "type": "prediction",
+          "type": "choice",
+          "id": "start-choice",
           "question": "先预测：在这个条件下会发生什么？",
           "options": ["结果 A", "结果 B"],
           "answer": 0,

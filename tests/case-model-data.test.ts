@@ -151,9 +151,8 @@ test("publication rejects incomplete or invalid case datasets and data-derived d
 test("number prediction readouts keep static models and reject dataset-dependent models without data", () => {
   const doc = fixture();
   const block = {
-    type: "prediction",
+    type: "number",
     id: "number-model",
-    kind: "number",
     question: "估计",
     input: { label: "估计值", min: 0, max: 100, step: 1 },
     readout: { model: "enantioselectivity-estimate", input: "guess" },

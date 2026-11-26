@@ -16,7 +16,8 @@
       "refs": [1],
       "blocks": [
         {
-          "type": "prediction",
+          "type": "structure",
+          "id": "instruments",
           "kind": "atoms",
           "question": "点选氧原子。",
           "molecule": {

@@ -1,16 +1,17 @@
+import { RECORD_VERSION } from "../src/contracts/records.ts";
 import { putRecords } from "./helpers/records.ts";
 import { test, expect } from "./helpers/test.ts";
 import { readFile } from "node:fs/promises";
 const base = "/sites/fable-patent";
 const endpoint = "/api/records/topics/fable-patent";
 const empty = {
-  version: 1,
+  version: RECORD_VERSION,
   complete: [],
   bookmarks: [],
   notes: {},
   answers: {},
   diagnostic: {},
-  predictions: {},
+  exercises: {},
   pins: {},
   recordNotes: {},
 };

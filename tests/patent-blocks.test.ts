@@ -1,3 +1,4 @@
+import { RECORD_VERSION } from "../src/contracts/records.ts";
 import type { TopicContent } from "../src/ui/topic/content.ts";
 import type FixtureFixture from "./fixtures/content/sites/fable-patent/content.json";
 import test from "node:test";
@@ -152,7 +153,7 @@ test("content rejects bad cross references and page locations", () => {
 test("browser/server record codec rejects unknown ids, duplicates, overflow and long notes", () => {
   const codec = topicRecordsCodec(fixture());
   const record = {
-    version: 1,
+    version: RECORD_VERSION,
     ...codec.empty(),
     pins: { examples: [1, 2] },
     recordNotes: { "examples/1": "核对" },

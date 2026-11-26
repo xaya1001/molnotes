@@ -93,7 +93,7 @@ export async function validateTopicValues(
             data.abbreviations,
             `${where}:${path}`,
           );
-          const prediction =
+          const exercise =
             parent &&
             (parent.molecule === value ||
               (Array.isArray(parent.molecules) &&
@@ -103,7 +103,7 @@ export async function validateTopicValues(
           validateAbbreviatedReferences(
             mol,
             groups,
-            { ...prediction, ...data },
+            { ...exercise, ...data },
             `${where}:${path}`,
           );
         } finally {

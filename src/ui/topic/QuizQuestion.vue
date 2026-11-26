@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import ChapterText from "./ChapterText.vue";
+import ChoiceOptions from "./ChoiceOptions.vue";
+import ChoiceExplanations from "./ChoiceExplanations.vue";
 import { useTopic } from "./context.ts";
 import TopicRefs from "./TopicRefs.vue";
 
@@ -29,18 +31,15 @@ function answer(option: number) {
       <ChapterText :parts="question.prose?.question ?? [question.question]" />
     </h3>
     <slot />
-    <div class="choices">
-      <button
-        v-for="(option, index) in question.options"
-        :key="index"
-        class="button"
-        :aria-pressed="answers[id] === index"
-        :disabled="answers[id] !== undefined"
-        @click="answer(index)"
-      >
-        <ChapterText :parts="question.prose?.options?.[index] ?? [option]" />
-      </button>
-    </div>
+    <ChoiceOptions
+      :id="id"
+      :options="question.options"
+      :prose="question.prose?.options"
+      :selected="answers[id]"
+      :disabled="answers[id] !== undefined"
+      immediate
+      @pick="answer"
+    />
     <div v-if="answers[id] !== undefined" role="status">
       <p>
         <strong
@@ -52,24 +51,14 @@ function answer(option: number) {
           :parts="question.prose?.explanation ?? [question.explanation]"
         /><TopicRefs v-if="question.refs?.length" :ids="question.refs" />
       </p>
-      <dl v-if="question.optionExplanations">
-        <template v-for="(option, index) in question.options" :key="index">
-          <dt>
-            <ChapterText
-              :parts="question.prose?.options?.[index] ?? [option]"
-            />{{ index === question.answer ? "（符合证据）" : "" }}
-          </dt>
-          <dd>
-            <ChapterText
-              :parts="
-                question.prose?.optionExplanations?.[index] ?? [
-                  question.optionExplanations[index],
-                ]
-              "
-            />
-          </dd>
-        </template>
-      </dl>
+      <ChoiceExplanations
+        v-if="question.optionExplanations"
+        :options="question.options"
+        :explanations="question.optionExplanations"
+        :prose="question.prose"
+        :answer="question.answer"
+        :selected="answers[id]"
+      />
       <RouterLink :to="content.chapterPath(question.chapter)"
         >{{
           diagnostic && answers[id] === question.answer
@@ -80,18 +69,3 @@ function answer(option: number) {
     </div>
   </section>
 </template>
-
-<style scoped>
-dt {
-  font-weight: 600;
-  margin-top: var(--space-3);
-}
-dd {
-  margin: var(--space-2) 0 0;
-}
-.choices {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-</style>

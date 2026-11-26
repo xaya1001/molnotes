@@ -786,7 +786,7 @@ test("publication rejects invalid abbreviations and references to collapsed atom
   ])
     await rejects(
       update({
-        type: "prediction",
+        type: "structure",
         question: "Pick",
         explanation: "Sample",
         molecule,
@@ -796,7 +796,7 @@ test("publication rejects invalid abbreviations and references to collapsed atom
     );
   await rejects(
     update({
-      type: "prediction",
+      type: "structure",
       kind: "atom-set",
       question: "Pick",
       explanation: "Sample",
@@ -806,7 +806,7 @@ test("publication rejects invalid abbreviations and references to collapsed atom
   );
   const restore = await edit(
     update({
-      type: "prediction",
+      type: "structure",
       kind: "atoms",
       question: "Pick",
       explanation: "Sample",

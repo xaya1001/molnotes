@@ -4,8 +4,13 @@ import { patentRecordFields } from "./patent-records.ts";
 import { defineComponent, h } from "vue";
 import { mountApp } from "../app.ts";
 import { defineTopicContent, type CheckedContent } from "./content.ts";
-import { provideTopic, type TopicPredictionRecords } from "./context.ts";
-import { pathField, predictionField } from "./prediction.ts";
+import { provideTopic, type TopicExerciseRecords } from "./context.ts";
+import {
+  pathField,
+  exerciseField,
+  matrixField,
+  choiceQuestions,
+} from "./exercise.ts";
 import { createTopicRecords } from "./records.ts";
 import type { RecordFields } from "../../contracts/records.ts";
 import { defineTopicRoutes } from "./routes.ts";
@@ -38,13 +43,14 @@ export async function mountTopic(options: TopicOptions) {
   const extras = {
     ...patentRecordFields(content),
     problems: problemField(topicProblems(content)),
-    predictions: predictionField(content.predictions),
+    exercises: exerciseField(content.exercises),
+    matrices: matrixField(content.exercises),
     ...(content.paths ? { path: pathField(content.paths) } : {}),
-  } as RecordFields<TopicPredictionRecords>;
-  const records = createTopicRecords<TopicPredictionRecords>({
+  } as RecordFields<TopicExerciseRecords>;
+  const records = createTopicRecords<TopicExerciseRecords>({
     slug,
     chapterIds: content.chapters.map((chapter) => chapter.id),
-    quiz: content.quiz,
+    quiz: choiceQuestions(content.quiz, content.exercises),
     diagnostic: content.placement ?? content.quiz,
     extras,
   });

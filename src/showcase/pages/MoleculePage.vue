@@ -8,7 +8,7 @@ import {
   MolecularProperties,
   SubstituentExplorer,
   SubstrateScope,
-  PredictionExercise,
+  ExerciseForm,
   SourceExcerpt,
   ReadingGuide,
 } from "@ui";
@@ -33,7 +33,7 @@ const excerpt = {
       summary="点选结构、比较性质，再把判断与证据放在一起。"
     />
     <div class="prose">
-      <PredictionExercise
+      <ExerciseForm
         prompt="乙醇中，哪个原子是氧？"
         :can-submit="selected.length > 0"
       >
@@ -55,7 +55,7 @@ const excerpt = {
           </p>
           <SourceExcerpt :excerpt="excerpt" :sources="sources"
         /></template>
-      </PredictionExercise>
+      </ExerciseForm>
       <MolecularProperties smiles="CCO" />
       <h2>立体标记</h2>
       <MoleculeView name="L-乳酸" smiles="C[C@H](O)C(=O)O" />
@@ -73,10 +73,7 @@ const excerpt = {
         smiles="CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
       />
       <h2>选择断键</h2>
-      <PredictionExercise
-        prompt="选择乙醇的 C–O 键"
-        :can-submit="cut.length > 0"
-      >
+      <ExerciseForm prompt="选择乙醇的 C–O 键" :can-submit="cut.length > 0">
         <template #default="{ submitted }"
           ><MoleculeView
             name="断键示例"
@@ -93,9 +90,9 @@ const excerpt = {
             }}。本题演示键选择，不代表合成路线建议。
           </p></template
         >
-      </PredictionExercise>
+      </ExerciseForm>
       <h2>表格中的预测</h2>
-      <PredictionExercise
+      <ExerciseForm
         prompt="乙醇换成乙酸，TPSA 会怎样变化？"
         :can-submit="sar !== ''"
       >
@@ -131,7 +128,7 @@ const excerpt = {
         <template #result
           ><p>TPSA 从 20.23 Å² 升高到 37.30 Å²（RDKit / Ertl）。</p></template
         >
-      </PredictionExercise>
+      </ExerciseForm>
       <h2>改一个基团</h2>
       <SubstituentExplorer
         site="苯环上的预设取代基"

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { catalogSite, topicBase } from "../ui/catalog.ts";
-import { isChoice } from "../ui/topic/prediction.ts";
+import { isTextChoice } from "../ui/topic/exercise.ts";
 import { ref } from "vue";
 import { quiz } from "../ui/content-data.ts";
 import { topics } from "../ui/content-data.ts";
@@ -47,8 +47,12 @@ const mistakes = readable
   .map((item) => ({
     topic: item.topic,
     questions: [
-      ...Object.keys(item.answers)
-        .filter((id) => item.answers[id] !== item.topic.answerKey[id])
+      ...Object.keys(item.topic.answerKey)
+        .filter(
+          (id) =>
+            item.answers[id] !== undefined &&
+            item.answers[id] !== item.topic.answerKey[id],
+        )
         .map((id) => {
           const question = questions.get(`${item.slug}/${id}`)!;
           return {
@@ -64,26 +68,26 @@ const mistakes = readable
             chapter: chapter(item.slug, question.chapter),
           };
         }),
-      ...item.topic.predictions
-        .filter(({ id }) => item.predictionMistakes.includes(id))
-        .map(({ id, prediction, chapter: chapterId }) => {
-          const answer = item.predictions[id];
+      ...item.topic.exercises
+        .filter(({ id }) => item.exerciseMistakes.includes(id))
+        .map(({ id, exercise, chapter: chapterId }) => {
+          const choice = item.answers[id];
           return {
-            id: `prediction-${id}`,
+            id: `exercise-${id}`,
             question: [
-              ...(prediction.context ? [prediction.context] : []),
-              prediction.question,
+              ...(exercise.context ? [exercise.context] : []),
+              exercise.question,
             ],
             parts: [],
             lang: "zh",
             chosen:
-              isChoice(prediction) && "option" in answer
-                ? prediction.options[answer.option]
+              isTextChoice(exercise) && choice !== undefined
+                ? exercise.options[choice]
                 : undefined,
-            correct: isChoice(prediction)
-              ? prediction.options[prediction.answer]
+            correct: isTextChoice(exercise)
+              ? exercise.options[exercise.answer]
               : undefined,
-            explanation: [prediction.explanation],
+            explanation: [exercise.explanation],
             basis: "",
             origin: "",
             chapter: chapter(item.slug, chapterId),

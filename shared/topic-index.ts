@@ -1,5 +1,5 @@
 import type { TopicChapter, TopicContent } from "../src/ui/topic/content.ts";
-import type { TopicPrediction } from "../src/ui/topic/content.ts";
+import type { TopicExercise } from "../src/ui/topic/content.ts";
 import type { ProblemBlock } from "../src/ui/topic/blocks.ts";
 import { topicProblems } from "../src/ui/topic/problem.ts";
 import {
@@ -7,7 +7,7 @@ import {
   chapterRoutePath,
   topicBasePath,
   validateTopicContent,
-  topicPredictions,
+  topicExercises,
 } from "./topic-content.ts";
 
 export interface IndexedTopic {
@@ -16,7 +16,7 @@ export interface IndexedTopic {
   chapters: { id: string; number: number; title: string; path: string }[];
   /** Correct option per review question id. */
   answerKey: Record<string, number>;
-  predictions: { id: string; chapter: string; prediction: TopicPrediction }[];
+  exercises: { id: string; chapter: string; exercise: TopicExercise }[];
   problems: (ProblemBlock & { chapter: string })[];
 }
 
@@ -84,10 +84,9 @@ function reviewIndex(
         title: chapter.title,
         path: `${topicBasePath(site)}${chapterRoutePath(content, chapter)}`,
       })),
-      predictions: topicPredictions(content).filter(
-        (entry): entry is IndexedTopic["predictions"][number] =>
-          entry.prediction.kind !== "matrix" &&
-          entry.prediction.kind !== "quiz",
+      exercises: topicExercises(content).filter(
+        (entry): entry is IndexedTopic["exercises"][number] =>
+          entry.exercise.type !== "matrix" && entry.exercise.type !== "quiz",
       ),
       problems: topicProblems(content),
       answerKey: Object.fromEntries(

@@ -177,17 +177,17 @@ test("each question type compiles to the existing block and answer contract", as
   assert.deepEqual(
     blocks.map((b) => b.type),
     [
-      "prediction",
+      "choice",
       "problem",
-      "prediction",
-      "prediction",
-      "prediction",
-      "prediction",
-      "prediction",
+      "structure",
+      "structure",
+      "structure",
+      "ranking",
+      "number",
     ],
   );
   assert.deepEqual(blocks[2], {
-    type: "prediction",
+    type: "structure",
     kind: "atoms",
     id: "atoms",
     question: "Compare the observations.",
@@ -198,29 +198,19 @@ test("each question type compiles to the existing block and answer contract", as
   });
   assert.equal(blocks[1].type === "problem" && blocks[1].answer.origin, "ai");
   assert.deepEqual(
-    blocks[3].type === "prediction" &&
+    blocks[3].type === "structure" &&
       blocks[3].kind === "bonds" &&
       blocks[3].answer,
     [1],
   );
   assert.deepEqual(
-    blocks[4].type === "prediction" &&
+    blocks[4].type === "structure" &&
       blocks[4].kind === "atom-set" &&
       blocks[4].molecules.map((m) => m.answer),
     [[0, 2], [0]],
   );
-  assert.equal(
-    blocks[5].type === "prediction" &&
-      blocks[5].kind === "ranking" &&
-      blocks[5].answer,
-    1,
-  );
-  assert.equal(
-    blocks[6].type === "prediction" &&
-      blocks[6].kind === "number" &&
-      blocks[6].tolerance,
-    0.1,
-  );
+  assert.equal(blocks[5].type === "ranking" && blocks[5].answer, 1);
+  assert.equal(blocks[6].type === "number" && blocks[6].tolerance, 0.1);
 });
 
 test("stable ids and mapped answers report their source locations", async () => {
@@ -381,8 +371,8 @@ test("publication compiles the same exercise prose in JSON and Markdown", async 
     ],
   };
   for (const exercise of [
-    json.blocks.find((block) => block.type === "prediction"),
-    markdown.blocks.find((block) => block.type === "prediction"),
+    json.blocks.find((block) => block.type === "choice"),
+    markdown.blocks.find((block) => block.type === "choice"),
     topic.content.quiz?.[0],
     topic.content.placement?.[0],
   ])

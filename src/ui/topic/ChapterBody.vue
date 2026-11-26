@@ -13,8 +13,8 @@ const props = defineProps<{ id: string }>();
 const { content } = useTopic();
 const chapter = computed(() => content.chapterById(props.id));
 const blocks = computed(() => chapter.value.blocks);
-const predictions = computed(() =>
-  content.predictions.filter((entry) => entry.chapter === props.id),
+const exercises = computed(() =>
+  content.exercises.filter((entry) => entry.chapter === props.id),
 );
 const placedQuestions = computed(
   () =>
@@ -33,12 +33,12 @@ const questions = computed(() =>
 const shownExcerpts = computed(
   () =>
     new Set([
-      ...predictions.value.flatMap((entry) => [
-        ...("excerpt" in entry.prediction && entry.prediction.excerpt
-          ? [entry.prediction.excerpt]
+      ...exercises.value.flatMap((entry) => [
+        ...("excerpt" in entry.exercise && entry.exercise.excerpt
+          ? [entry.exercise.excerpt]
           : []),
-        ...("evidence" in entry.prediction
-          ? (entry.prediction.evidence ?? [])
+        ...("evidence" in entry.exercise
+          ? (entry.exercise.evidence ?? [])
           : []),
       ]),
       ...blocks.value.flatMap((block) =>
