@@ -84,40 +84,64 @@ export function ionPairCoordinates(
   for (const { atoms, pivot, centres } of counterions) {
     const moving = new Set(atoms);
     const fixed = [...graph.atoms.keys()].filter((i) => !moving.has(i));
-    let best: Point | undefined,
+    const fixedBonds = graph.bonds.filter(({ atoms: [i] }) => !moving.has(i));
+    const movingBonds = graph.bonds.filter(({ atoms: [i] }) => moving.has(i));
+    const origin = points[pivot];
+    let best: Map<number, Point> | undefined,
       clearance = -Infinity;
-    for (const centre of centres) {
-      const angle = Math.atan2(
-        points[pivot].y - result[centre].y,
-        points[pivot].x - result[centre].x,
-      );
-      for (let k = 0; k < 24; k++) {
-        const a = angle + (k * Math.PI) / 12;
-        const shift = {
-          x: result[centre].x + ionPairDistance * Math.cos(a) - points[pivot].x,
-          y: result[centre].y + ionPairDistance * Math.sin(a) - points[pivot].y,
-        };
-        let score = Infinity;
-        for (const i of atoms) {
-          const p = { x: points[i].x + shift.x, y: points[i].y + shift.y };
-          for (const j of fixed)
-            score = Math.min(score, distance(p, result[j]));
+    // Try the saved orientation first, then turn multi-atom ions about their charge.
+    const orientations = atoms.length === 1 ? 1 : 12;
+    for (let turn = 0; turn < orientations; turn++) {
+      const rotation = (turn * 2 * Math.PI) / orientations;
+      const cos = Math.cos(rotation),
+        sin = Math.sin(rotation);
+      const offsets = atoms.map((i) => {
+        const x = points[i].x - origin.x,
+          y = points[i].y - origin.y;
+        return { x: x * cos - y * sin, y: x * sin + y * cos };
+      });
+      for (const centre of centres) {
+        const anchor = result[centre];
+        const angle = Math.atan2(origin.y - anchor.y, origin.x - anchor.x);
+        for (let k = 0; k < 24; k++) {
+          const a = angle + (k * Math.PI) / 12;
+          const x = anchor.x + ionPairDistance * Math.cos(a),
+            y = anchor.y + ionPairDistance * Math.sin(a);
+          const candidate = new Map(
+            atoms.map((i, j) => [
+              i,
+              { x: x + offsets[j].x, y: y + offsets[j].y },
+            ]),
+          );
+          let score = Infinity;
+          for (const p of candidate.values()) {
+            for (const j of fixed)
+              score = Math.min(score, distance(p, result[j]));
+            for (const {
+              atoms: [u, v],
+            } of fixedBonds)
+              score = Math.min(score, segmentDistance(p, result[u], result[v]));
+          }
           for (const {
             atoms: [u, v],
-          } of graph.bonds) {
-            if (moving.has(u)) continue;
-            score = Math.min(score, segmentDistance(p, result[u], result[v]));
+          } of movingBonds)
+            for (const j of fixed)
+              score = Math.min(
+                score,
+                segmentDistance(
+                  result[j],
+                  candidate.get(u)!,
+                  candidate.get(v)!,
+                ),
+              );
+          if (score > clearance + 1e-8) {
+            clearance = score;
+            best = candidate;
           }
-        }
-        if (score > clearance + 1e-8) {
-          clearance = score;
-          best = shift;
         }
       }
     }
-    if (best)
-      for (const i of atoms)
-        result[i] = { x: points[i].x + best.x, y: points[i].y + best.y };
+    if (best) for (const [i, point] of best) result[i] = point;
   }
   return result;
 }
