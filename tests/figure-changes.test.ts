@@ -10,6 +10,7 @@ async function reaction(
   extra: Partial<FigureInput> = {},
 ) {
   const result = await compileFigure({
+    kind: "scheme",
     title: "Transformation",
     compounds: {
       a: { smiles: a, abbreviate: false },

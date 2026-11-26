@@ -125,7 +125,7 @@ test("resource request validation rejects invalid fields and figure inputs at th
       kind: "figure",
       caption: "Example",
       figure: {
-        kind: "mechanism",
+        kind: "scheme",
         frames: [{ id: "a", smiles: "invalid-smiles" }],
       },
     },
@@ -162,7 +162,7 @@ test("resource request validation rejects invalid fields and figure inputs at th
     /example\.md:\d+: request:/,
   );
   const source =
-    "kind: figure\ncaption: Example\nfigure:\n  kind: mechanism\n  frames:\n    - id: first\n      title: First\n      smiles: invalid-smiles\n    - id: second\n      title: Second\n      smiles: invalid-smiles\n";
+    "kind: figure\ncaption: Example\nfigure:\n  kind: scheme\n  frames:\n    - id: first\n      title: First\n      smiles: invalid-smiles\n    - id: second\n      title: Second\n      smiles: invalid-smiles\n";
   const invalid = await inspectRequest(source, "example.md", 10);
   assert.deepEqual(
     invalid.errors.map(({ line, path }) => ({ line, path })),

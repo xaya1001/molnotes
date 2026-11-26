@@ -85,17 +85,14 @@ export function pathBox(d: string) {
         const b = 2 * (p[0][axis] - 2 * p[1][axis] + p[2][axis]);
         const c = p[1][axis] - p[0][axis];
         const discriminant = b * b - 4 * a * c;
-        const roots =
-          a === 0
-            ? b === 0
-              ? []
-              : [-c / b]
-            : discriminant < 0
-              ? []
-              : [
-                  (-b + Math.sqrt(discriminant)) / (2 * a),
-                  (-b - Math.sqrt(discriminant)) / (2 * a),
-                ];
+        let roots: number[];
+        if (a === 0) roots = b === 0 ? [] : [-c / b];
+        else if (discriminant < 0) roots = [];
+        else {
+          // Avoid subtracting nearly equal numbers for a nearly quadratic curve.
+          const root = -(b + (b < 0 ? -1 : 1) * Math.sqrt(discriminant)) / 2;
+          roots = root === 0 ? [] : [root / a, c / root];
+        }
         for (const t of roots)
           if (t > 0 && t < 1) {
             const u = 1 - t;

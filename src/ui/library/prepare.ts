@@ -31,6 +31,7 @@ import {
   ionPairDistance,
 } from "../../../shared/chemical-library/ion-layout.ts";
 import { transformPoint, rectangle } from "./geometry-math.ts";
+import { boxOverlapsPolygon } from "./geometry-collision.ts";
 import { pathContours, inkIntersectsBox } from "./path-geometry.ts";
 import { refreshGeometry } from "./geometry-tree.ts";
 import { wrapFigureText, figureLabelLines } from "./text-runs.ts";
@@ -1336,6 +1337,7 @@ export async function prepareFigure(
       bottom?: number;
       verticalTop?: number;
       ink?: string;
+      heads?: Point[][];
     } = {},
   ) {
     const font = options.font ?? "var(--chemical-caption-font)";
@@ -1370,6 +1372,18 @@ export async function prepareFigure(
             String(center + (left ? -1 : 1) * (offset + box.width / 2)),
           );
         ctx.set(node, "y", String(cursor - box.y - (upward ? box.height : 0)));
+        if (
+          !vertical &&
+          options.heads?.some((head) => boxOverlapsPolygon(ctx.box(node), head))
+        ) {
+          const ys = options.heads.flatMap((head) => head.map(({ y }) => y));
+          cursor = upward ? Math.min(...ys) - gap : Math.max(...ys) + gap;
+          ctx.set(
+            node,
+            "y",
+            String(cursor - box.y - (upward ? box.height : 0)),
+          );
+        }
         ctx.setData(node, "label", `${id}:${sign}:${i}`);
         if (options.ink) ctx.setStyle(node, "fill", options.ink);
         ctx.append(parent, node);
@@ -2035,6 +2049,7 @@ export async function prepareFigure(
         s.comparison && a.tone === "comparison"
           ? "var(--chemical-comparison)"
           : "var(--chemical-ink)";
+      const heads: Point[][] = [];
       const draw = (
         start: Point,
         end: Point,
@@ -2042,6 +2057,7 @@ export async function prepareFigure(
         half = false,
       ) => {
         const shape = solidArrow(start, end, B, controls, half);
+        heads.push(shape.vertices);
         ctx.append(
           parent,
           stroke(
@@ -2105,6 +2121,7 @@ export async function prepareFigure(
         if (a.kind === "resonance") draw(q, p);
       }
       arrowText(parent, prefix + a.id, p, q, a.above ?? [], a.below ?? [], {
+        heads,
         ink,
       });
     }

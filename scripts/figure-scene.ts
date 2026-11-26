@@ -289,7 +289,7 @@ export async function compileFigure(
       review: [],
     };
   }
-  const { input, warnings, scheme } = validateFigureInput(inputValue);
+  const { input, warnings } = validateFigureInput(inputValue);
   const review: string[] = [];
   const rd = await moleculeToolkit(),
     entries: Library = structuredClone(existing),
@@ -298,7 +298,7 @@ export async function compileFigure(
   const previous = Object.values(entries).find(
     (e) => e.sourceKey === sourceKey && !e.owner,
   );
-  const kind = input.kind ?? "route",
+  const kind = input.kind,
     count = input.steps?.length ?? 0;
   const routeGraph =
     kind === "route" && (count > 1 || previous?.kind === "route");
@@ -1126,10 +1126,9 @@ export async function compileFigure(
       if (prior) {
         const { frame: previousFrame, atoms: priorAtoms } = prior;
         const implicit =
-          !scheme ||
-          (previousFrame.arrow !== "none" &&
-            category !== "comparison" &&
-            category !== "examples");
+          previousFrame.arrow !== "none" &&
+          category !== "comparison" &&
+          category !== "examples";
         const qualify = (key: string | number) =>
           String(key).includes(":") ? String(key) : `structure:${key}`;
         const explicit = new Map(
@@ -1176,6 +1175,7 @@ export async function compileFigure(
           structure: { ...frame, arrows: undefined, focus: undefined },
         };
         const resolved = new Map<string, Resolved>(),
+          variants = new Map<string, string>(),
           cells: PanelCell[] = [];
         const eventRefs = (text: string) =>
           [...text.matchAll(/(?:([^\s,():]+):)?(\d+)/g)].map((m) => ({
@@ -1230,6 +1230,12 @@ export async function compileFigure(
               ? { ...shared, spec }
               : await resolveStructure(spec, where, frameMaps, piSources);
           resolved.set(local, r);
+          if (
+            typeof raw === "object" &&
+            "variant" in raw &&
+            raw.variant !== undefined
+          )
+            variants.set(local, raw.variant);
         }
         if (
           frame.steps?.length ||
@@ -1250,7 +1256,18 @@ export async function compileFigure(
           ))
             generated.add(cid);
         for (const [local, r] of resolved) {
-          positionArrowFragments(r);
+          const variant = variants.get(local);
+          if (variant !== undefined) {
+            const saved = existing[r.compound.id];
+            const layout =
+              saved?.kind === "compound" && saved.variants?.[variant];
+            if (!isChemical(r) || !layout)
+              throw new Error(
+                `${path}.${fid}.compounds.${local}: unknown variant ${variant}`,
+              );
+            (r.compound.variants ??= {})[variant] = structuredClone(layout);
+            r.variant = variant;
+          } else positionArrowFragments(r);
           const scene = blank();
           scene.molecules.push(placement(r, local, { x: 0, y: 0 }));
           pushArrows(scene, r, local, true);
@@ -1345,6 +1362,12 @@ export async function compileFigure(
           category: category ?? "reaction",
           frames: [],
         };
+        const bonds: NonNullable<Scene["partialBonds"]> = (
+          frame.partialBonds ?? []
+        ).map(({ from, to, order }) => ({
+          atoms: [atom(from), atom(to)],
+          order: order ?? 1,
+        }));
         const scene = await compileMechanismFrameLayout(
           entries,
           entry,
@@ -1364,6 +1387,7 @@ export async function compileFigure(
               : from.flatMap((a) => to.map((b): [AtomRef, AtomRef] => [a, b]));
             return pairs.filter(([a, b]) => a.molecule !== b.molecule);
           }),
+          bonds.map(({ atoms }) => atoms),
           outer !== undefined,
         );
         const first = resolved.values().next().value!;
@@ -1374,11 +1398,7 @@ export async function compileFigure(
           false,
           atom,
         );
-        for (const bond of frame.partialBonds ?? [])
-          (scene.partialBonds ??= []).push({
-            atoms: [atom(bond.from), atom(bond.to)],
-            order: bond.order ?? 1,
-          });
+        if (bonds.length) (scene.partialBonds ??= []).push(...bonds);
         scene.comparison =
           frame.arrow === "none" ||
           category === "comparison" ||

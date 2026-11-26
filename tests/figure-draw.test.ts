@@ -53,7 +53,7 @@ test("draw works without a content library, emits every frame and retains diagno
     out = join(root, "drawing.svg");
   await writeFile(
     source,
-    "kind: mechanism\nbond: 1\nframes:\n  - {id: first, smiles: CCO}\n  - {id: second, smiles: 'CC=O'}\n",
+    "kind: scheme\nbond: 1\nframes:\n  - {id: first, smiles: CCO}\n  - {id: second, smiles: 'CC=O'}\n",
   );
   const options = {
     cwd: root,
@@ -141,7 +141,7 @@ test("figure:lint flags unescaped locants and ignores chemical formulas and esca
   await writeFile(
     source,
     [
-      "kind: route",
+      "kind: scheme",
       "title: Sample",
       "compounds:",
       "  1: CCO",
@@ -167,7 +167,7 @@ test("figure:lint flags unescaped locants and ignores chemical formulas and esca
   await writeFile(
     source,
     [
-      "kind: route",
+      "kind: scheme",
       "title: Sample",
       "compounds:",
       "  1: CCO",

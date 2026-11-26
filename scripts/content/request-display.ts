@@ -25,9 +25,7 @@ export function figureMeta(value: unknown) {
       ? "frames" in value
         ? "mechanism"
         : "route"
-      : typeof value.kind === "string"
-        ? value.kind
-        : "route";
+      : String(value.kind);
   return figureNames[kind]
     ? `${figureNames[kind]}${Array.isArray(value.frames) ? ` · ${value.frames.length} 帧` : ""}`
     : "";
@@ -56,7 +54,7 @@ export function figureDisplay(
         : {}),
   }));
   return {
-    meta: figureMeta(input),
+    meta: figureMeta(value),
     ...(frames ? { frames } : {}),
   };
 }

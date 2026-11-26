@@ -76,7 +76,7 @@ export interface StepInput {
   changes?: boolean | "on" | "off" | { add?: number[]; remove?: number[] };
   arrow?: ArrowKind;
   tags?: string[];
-  mechanism?: { frames: FrameInput<StructureInput | { compound: Key }>[] };
+  mechanism?: { frames: FrameInput<FrameStructureInput | { compound: Key }>[] };
   reagentPosition?: "above-arrow" | "below-arrow";
 }
 export type Show = "box" | "text" | "plus" | "none";
@@ -86,7 +86,10 @@ export type ProductInput = {
   yield?: string;
   fraction?: number;
 };
-export interface FrameInput<Spec = StructureInput> extends StructureInput {
+interface FrameStructureInput extends StructureInput {
+  variant?: string;
+}
+export interface FrameInput<Spec = FrameStructureInput> extends StructureInput {
   id: Key;
   title?: Key;
   compounds?: Record<string, string | Spec>;
@@ -114,7 +117,7 @@ export interface FigureInput {
   width?: number;
   scale?: number;
   abbreviate?: AbbreviationName[];
-  kind?: "route" | "mechanism" | "markush" | "gallery" | "scope" | "cycle";
+  kind: "route" | "mechanism" | "markush" | "gallery" | "scope" | "cycle";
   core?: MarkushFigureData["core"];
   groups?: MarkushFigureData["groups"];
   view?: MarkushFigureData["view"];
@@ -213,13 +216,24 @@ const deferred = new Set(["mark", "notes", "bend"]);
 export function validateFigureInput(source: unknown): {
   input: FigureInput;
   warnings: string[];
-  scheme: boolean;
 } {
   if (!isObject(source)) fail("figure", "expected YAML mapping");
-  const scheme = source.kind === "scheme";
-  const value = scheme
-    ? { ...source, kind: "frames" in source ? "mechanism" : "route" }
-    : source;
+  const authoredKind = source.kind;
+  if (authoredKind === "table") fail("figure.kind", "尚未支持");
+  choice(
+    "scheme",
+    "markush",
+    "gallery",
+    "scope",
+    "cycle",
+  )(authoredKind, "figure.kind");
+  const kind =
+    authoredKind === "scheme"
+      ? "frames" in source
+        ? "mechanism"
+        : "route"
+      : authoredKind;
+  const value: Record<string, unknown> = { ...source, kind };
   const warnings: string[] = [];
   const object =
     (fields: Record<string, Rule>, required: string[] = []): Rule =>
@@ -320,7 +334,6 @@ export function validateFigureInput(source: unknown): {
     object({ source: text, locator: text, note: text }, ["source"]),
   );
 
-  const kind = value.kind ?? "route";
   if (kind === "markush") {
     validateMarkushFigure(value, "figure");
     object(
@@ -346,16 +359,8 @@ export function validateFigureInput(source: unknown): {
       },
       ["core", "groups"],
     )(value, "figure");
-    return { input: value as unknown as FigureInput, warnings, scheme };
+    return { input: value as unknown as FigureInput, warnings };
   }
-  if (kind === "table") fail("figure.kind", "尚未支持");
-  if (
-    !["route", "mechanism", "gallery", "scope", "cycle"].includes(String(kind))
-  )
-    fail(
-      "figure.kind",
-      "expected scheme | route | mechanism | gallery | scope | cycle",
-    );
   const shared = {
     bond: positiveNumber,
     width: positiveNumber,
@@ -380,6 +385,12 @@ export function validateFigureInput(source: unknown): {
   const compounds = map((v, p) =>
     typeof v === "string" ? string(v, p) : structureRule(v, p),
   );
+  const frameStructure: Rule = (v, p) => {
+    if (typeof v === "string") string(v, p);
+    else if (isObject(v) && "variant" in v)
+      object({ ...structure, variant: string }, ["smiles", "variant"])(v, p);
+    else structureRule(v, p);
+  };
   const positive: Rule = (v, p) => {
     number(v, p);
     if (Number(v) <= 0) fail(p, "expected positive number");
@@ -423,15 +434,11 @@ export function validateFigureInput(source: unknown): {
         object(
           {
             ...frame,
-            compounds: nested
-              ? map((v, p) =>
-                  isObject(v) && "compound" in v
-                    ? object({ compound: text }, ["compound"])(v, p)
-                    : typeof v === "string"
-                      ? string(v, p)
-                      : structureRule(v, p),
-                )
-              : compounds,
+            compounds: map((v, p) =>
+              nested && isObject(v) && "compound" in v
+                ? object({ compound: text }, ["compound"])(v, p)
+                : frameStructure(v, p),
+            ),
             arrows,
             focus,
             steps: list(
@@ -493,9 +500,7 @@ export function validateFigureInput(source: unknown): {
       enclose: map(enclose),
       arrow: arrowKind,
       tags: list(string),
-      ...(scheme && {
-        mechanism: object({ frames: frames(true) }, ["frames"]),
-      }),
+      mechanism: object({ frames: frames(true) }, ["frames"]),
       reagentPosition: choice("above-arrow", "below-arrow"),
     },
     ["from", "to"],
@@ -614,7 +619,6 @@ export function validateFigureInput(source: unknown): {
     : warnings;
   return {
     input,
-    scheme,
     warnings: pending.length
       ? [`已保存、渲染待实现: ${pending.join(", ")}`]
       : [],

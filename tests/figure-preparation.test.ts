@@ -22,6 +22,27 @@ import type { FigureBox } from "../shared/chemical-library/geometry.ts";
 const toolkit = await moleculeToolkit(),
   fonts = await loadFigureFonts();
 
+test("a single frame keeps the next arrowhead clear of a reagent label", async () => {
+  const compiled = await compileFigure({
+    kind: "scheme",
+    frames: [
+      { id: "before", smiles: "CCO", above: "Oxidative addition" },
+      { id: "after", smiles: "CC=O" },
+    ],
+  });
+  const geometry = await prepareFigure(
+    compiled.entries,
+    { ...compiled.reference, frame: "before" },
+    { toolkit, fonts, style },
+  );
+  assert.deepEqual(
+    figureGeometryDiagnostics(geometry, style).filter(
+      (diagnostic) => diagnostic.code === "ARROW_HEAD_OVERLAP",
+    ),
+    [],
+  );
+});
+
 test("electron events use the shared red accent and draw selected forming bonds", async () => {
   const compiled = await compileFigure({
     kind: "gallery",
@@ -59,7 +80,7 @@ test("electron events use the shared red accent and draw selected forming bonds"
 
 test("rendering keeps the compiled contact placement of oppositely charged fragments", async () => {
   const compiled = await compileFigure({
-    kind: "mechanism",
+    kind: "scheme",
     frames: [
       {
         id: "event",
@@ -103,7 +124,7 @@ test("rendering keeps the compiled contact placement of oppositely charged fragm
 
 test("mechanism overviews retain saved frame geometry and use declared step arrows", async () => {
   const compiled = await compileFigure({
-    kind: "mechanism",
+    kind: "scheme",
     width: 420,
     frames: (
       ["forward", "equilibrium", "resonance", "none", "forward"] as const
@@ -178,7 +199,7 @@ test("mechanism overviews retain saved frame geometry and use declared step arro
 test("structure scale enlarges rendered bonds while preserving label size", async () => {
   const render = async (scale: number) => {
     const compiled = await compileFigure({
-      kind: "mechanism",
+      kind: "scheme",
       frames: [{ id: "one", smiles: "CCO", scale }],
     });
     const geometry = await prepareFigure(compiled.entries, compiled.reference, {
@@ -210,7 +231,7 @@ test("structure scale enlarges rendered bonds while preserving label size", asyn
 
 test("fragment placement keeps vertical lone-pair clearances finite", async () => {
   const compiled = await compileFigure({
-    kind: "mechanism",
+    kind: "scheme",
     frames: [
       {
         id: "addition",
@@ -237,7 +258,7 @@ test("fragment placement keeps vertical lone-pair clearances finite", async () =
 
 test("electron head selection clears the complete halogen label", async () => {
   const compiled = await compileFigure({
-    kind: "mechanism",
+    kind: "scheme",
     frames: [
       {
         id: "leaving",
@@ -260,6 +281,7 @@ test("electron head selection clears the complete halogen label", async () => {
 
 test("reaction changes preserve normal ink on unmarked atoms and bonds", async () => {
   const compiled = await compileFigure({
+    kind: "scheme",
     compounds: { a: "CCCO", b: "CCC=O" },
     steps: [{ from: "a", to: "b" }],
   });
@@ -294,6 +316,7 @@ test("a changed implicit carbon stereocentre visibly marks its solid or hashed w
       product.includes("@@") ? "@" : "@@",
     );
     const compiled = await compileFigure({
+      kind: "scheme",
       compounds: { a: reactant, b: product },
       steps: [{ from: "a", to: "b" }],
     });
@@ -841,7 +864,7 @@ test("ring stereocentres use drawing-only hydrogen wedges without duplicating ex
 
 test("scene enclosures surround visible labels without changing molecular ink or coordinates", async () => {
   const compiled = await compileFigure({
-    kind: "mechanism",
+    kind: "scheme",
     frames: [{ id: "one", smiles: "[CH3:1][CH2:2][OH:3]" }],
   });
   const entry = compiled.entries[compiled.reference.ref];
@@ -1155,6 +1178,7 @@ test("every saved compiler variant has its final label placement", async () => {
   }
   const compiled = await compileFigure(
     {
+      kind: "scheme",
       title: "Group transformation",
       compounds: { a: smiles, b: "N1CCCCC1" },
       steps: [{ from: "a", to: "b" }],
@@ -1293,7 +1317,7 @@ test("the linear-centre rule distinguishes bent double-bond centres", async () =
 
 test("radical ions keep the electron beside the charge and use it as the arrow source", async () => {
   const compiled = await compileFigure({
-    kind: "mechanism",
+    kind: "scheme",
     frames: [
       {
         id: "event",
@@ -1336,7 +1360,7 @@ test("radical ions keep the electron beside the charge and use it as the arrow s
 
 test("a small charged reagent uses a condensed label at its oxygen anchor", async () => {
   const compiled = await compileFigure({
-    kind: "mechanism",
+    kind: "scheme",
     frames: [
       {
         id: "event",
@@ -1378,7 +1402,7 @@ test("a referenced interior atom or disabled abbreviation keeps a reagent expand
     ["lp(2)", false],
   ] as const) {
     const compiled = await compileFigure({
-      kind: "mechanism",
+      kind: "scheme",
       frames: [
         {
           id: "event",
@@ -1408,7 +1432,7 @@ test("a referenced interior atom or disabled abbreviation keeps a reagent expand
 
 test("a protected substrate group does not disable a separate reagent label", async () => {
   const compiled = await compileFigure({
-    kind: "mechanism",
+    kind: "scheme",
     frames: [
       {
         id: "event",
@@ -1436,7 +1460,7 @@ test("declared donor pairs remain separate from the atom and charge", async () =
     ["[O-:1][C:2]([CH3:4])=[CH2:3]", true],
   ] as const) {
     const compiled = await compileFigure({
-      kind: "mechanism",
+      kind: "scheme",
       frames: [
         {
           id: "first",
@@ -1900,6 +1924,7 @@ test("condition text inside a filled structure is rejected even without crossing
 
 test("atom numbers clear folded group labels after an authored turn", async () => {
   const result = await compileFigure({
+    kind: "scheme",
     compounds: {
       a: { smiles: "C[C@H]([C:21](=O)OC)O", numbers: true, rot: 90 },
       b: "C[C@H]([C:21](=O)OC)O",
@@ -1917,7 +1942,7 @@ test("atom numbers clear folded group labels after an authored turn", async () =
 test("scene arrow condition lines reserve their measured ink height", async () => {
   const compiled = await compileFigure({
     title: "Comparison",
-    kind: "mechanism",
+    kind: "scheme",
     frames: [{ id: "first", smiles: "CCO", arrow: "none" }],
   });
   const entry = compiled.entries[compiled.reference.ref];
@@ -1950,6 +1975,7 @@ test("scene arrow condition lines reserve their measured ink height", async () =
 
 test("compiled ester labels clear bonds and adjacent labels after saving aligned coordinates", async () => {
   const compiled = await compileFigure({
+    kind: "scheme",
     title: "Aligned ester",
     anchor: "b",
     compounds: {
@@ -1994,6 +2020,7 @@ test("compiled ester labels clear bonds and adjacent labels after saving aligned
 
 test("compiled layouts reserve a three-digit number line for page references", async () => {
   const input = {
+    kind: "scheme",
     title: "Numbered reaction",
     compounds: {
       a: { smiles: "CC", label: "" },
@@ -2023,7 +2050,7 @@ test("compiled layouts reserve a three-digit number line for page references", a
 
 test("automatic circles use an outline when a neighbouring label crosses their boundary", async () => {
   const compiled = await compileFigure({
-    kind: "mechanism",
+    kind: "scheme",
     frames: [{ id: "one", smiles: "CC(C)(C)O" }],
   });
   const entry = compiled.entries[compiled.reference.ref];
@@ -2058,7 +2085,7 @@ test("automatic circles use an outline when a neighbouring label crosses their b
 
 test("figure canvas follows visible ink instead of saved scene whitespace", async () => {
   const compiled = await compileFigure({
-    kind: "mechanism",
+    kind: "scheme",
     frames: [{ id: "one", smiles: "CCC" }],
   });
   const entry = compiled.entries[compiled.reference.ref];

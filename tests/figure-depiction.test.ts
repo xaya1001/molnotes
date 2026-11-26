@@ -7,7 +7,7 @@ test("aligned route depictions preserve a linear triple-bond centre", async () =
   const { compileFigure } = await import("../scripts/figure-scene.ts");
   const { graphOf } = await import("../shared/chemical-library/chemistry.ts");
   const compiled = await compileFigure({
-    kind: "route",
+    kind: "scheme",
     compounds: { a: "CCc1ccccc1", b: "C#Cc1ccccc1" },
     steps: [{ from: "a", to: "b" }],
   });
@@ -165,6 +165,7 @@ test("terminal alkoxy rotation frees neighboring labels while preserving branch 
 test("cyclic enone aligned to a same-ring tertiary alcohol places its carbonyl oxygen on the external bisector", async () => {
   const { compileFigure } = await import("../scripts/figure-scene.ts");
   const compiled = await compileFigure({
+    kind: "scheme",
     title: "Ring carbonyl alignment",
     anchor: "alcohol",
     compounds: {

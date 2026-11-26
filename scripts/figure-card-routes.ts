@@ -27,7 +27,7 @@ export async function prepareCardRoutes(
           width: entry.scene.width,
           height: entry.scene.height,
         };
-  const input: FigureInput = { compounds: {} };
+  const input: FigureInput = { kind: "route", compounds: {} };
   const reactions: Library = {};
   const steps = new Map<string, StepInput>();
   const positions: Record<NonNullable<Participant["position"]>, Show> = {

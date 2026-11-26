@@ -14,6 +14,13 @@ import { compileRouteLayout } from "./figure-route.ts";
 import { prepareFigure } from "../src/ui/library/prepare.ts";
 import { loadFigureFonts } from "./figure-fonts.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
+import {
+  compoundView,
+  graphOf,
+  openMolecule,
+  placedCoordinates,
+} from "../shared/chemical-library/chemistry.ts";
+import { placeBondContacts } from "./figure-fragments.ts";
 
 const words = (value: string | number | undefined) =>
   value === undefined ? "" : String(value);
@@ -35,9 +42,72 @@ export async function compileMechanismFrameLayout(
   input: FigureInput,
   style: FigureStyle,
   contacts: [AtomRef, AtomRef][],
+  partialBonds: [AtomRef, AtomRef][],
   placementCaptions: boolean,
 ): Promise<Scene> {
   if (!frame.steps?.length) {
+    const bonds = partialBonds.filter(([a, b]) => a.molecule !== b.molecule);
+    if (cells.length === 2 && bonds.length) {
+      const toolkit = await moleculeToolkit();
+      const drawings = cells.map(({ scene }) => {
+        const placement = scene.molecules[0];
+        const entry = library[placement.compound];
+        if (entry.kind !== "compound")
+          throw new Error("Partial bonds require chemical atoms");
+        const layout = placement.variant
+          ? entry.variants![placement.variant]
+          : entry.layout;
+        const compound = compoundView(toolkit, entry, layout);
+        const points = placedCoordinates(
+          toolkit,
+          compound,
+          layout,
+          placement.rotate,
+          placement.mirror,
+        );
+        const molecule = openMolecule(toolkit, compound.smiles);
+        try {
+          return {
+            placement,
+            points,
+            bonds: graphOf(molecule).bonds,
+            point: ({ atom }: AtomRef) =>
+              points[compound.atomIds.indexOf(atom)],
+          };
+        } finally {
+          molecule.delete();
+        }
+      });
+      const [fixed, moving] = drawings.sort(
+        (a, b) => b.points.length - a.points.length,
+      );
+      const anchor = fixed.placement,
+        shifted = moving.placement;
+      const positioned = placeBondContacts(
+        fixed,
+        moving,
+        bonds.map(([a, b]) =>
+          a.molecule === anchor.id
+            ? [fixed.point(a), moving.point(b)]
+            : [fixed.point(b), moving.point(a)],
+        ),
+      );
+      if (!positioned)
+        throw new Error(
+          `Frame ${frame.id}: no clear placement for partial bonds`,
+        );
+      if (Math.abs(positioned.rotate) > 1e-9)
+        shifted.rotate = (shifted.rotate ?? 0) + positioned.rotate;
+      return compilePanelScene(
+        library,
+        entry,
+        { ...input, kind: "gallery" },
+        cells,
+        style,
+        placementCaptions,
+        { [anchor.id]: { x: 0, y: 0 }, [shifted.id]: positioned.at },
+      );
+    }
     const forward = await compilePanelScene(
       library,
       entry,

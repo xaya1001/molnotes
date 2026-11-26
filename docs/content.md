@@ -734,7 +734,6 @@ The placement uses that compound's saved identity while keeping its own placemen
 Use `frame: stepId/frameId` on a route reference or `frame: frameId` on a reaction reference to show a single attached frame.
 In the complete figure, number and focus keys for attached placements start with `stepId/frameId/` on a route and `frameId/` on a reaction.
 An individual frame uses its local placement keys.
-The compiler also reads route sources with `kind: route` or an omitted kind, and frame sources with `kind: mechanism`.
 Galleries, grouped substrate scopes, catalytic cycles, Markush formulas and standalone conformation drawings have their own kinds.
 
 The compiler stores the exact input in `library/sources/<figure-id>.yaml`.
@@ -756,8 +755,7 @@ Structures and mechanism frames accept `enclose: [{id?,atoms?: [mapNumbers],bond
 
 A mechanism has `frames: [{id,title?,smiles,map?,above?,below?,arrow?,rot?,flip?,coordgen?,numbers?,notes?,arrows?,focus?,enclose?,scale?,bracket?}]`.
 Adjacent frames connected by an arrow match equal SMILES map numbers by default, with `map: {previousNumber: currentNumber}` taking precedence.
-In a scheme, comparison and example frames, and pairs whose outgoing arrow is `none`, use only explicitly authored `map` entries.
-Sources using `kind: mechanism` also match equal numbers across those boundaries.
+Comparison and example frames, and pairs whose outgoing arrow is `none`, use only explicitly authored `map` entries.
 Frame arrows use SMILES map numbers in the sources `lp(n)`, `charge(n)`, `radical(n)`, `bond(n,m)` and `pi(n,m)` and the destinations `atom(n)`, `bond(n,m)` and `between(n,m)`.
 Fragment placement follows cross-fragment electron arrows and keeps spectator counterions near the opposite charge centre.
 Figure lint reports unexpected color from the native drawing backend and automatic counterion spacing more than 0.1 base bond lengths above its target.
@@ -766,6 +764,9 @@ Lint reports changes in total formal charge between adjacent frames as warnings.
 Electron arrows accept `id?`, `from`, `to`, `electrons: 1|2`, `side?`, `bend?`, `forming?`; a radical source defaults to one electron. `between(n,m)` targets the forming-bond midpoint; `forming: true` also draws that bond dashed. Compilation positions disconnected fragments from their arrow contacts and saves an explicit Kekulé variant for aromatic π sources. Frame `scale` enlarges bond geometry while keeping label size. `focus: {primary:[arrowIds],supporting:[arrowIds]}` selects one primary event and up to two supporting arrows. `arrow: none` expresses a comparison; step/frame arrows otherwise accept `forward` (default), `equilibrium`, `resonance` and `retro`.
 
 A mechanism can declare `category: reaction|resonance|comparison|examples`. For independent participants, replace a frame's `smiles` with `compounds: {placementId: structure}` using the same structure fields as routes and galleries. Placement keys remain in the saved scene. Frame `steps: [{id?,from,to,above?,below?,arrow?}]` uses the route vocabulary to arrange an in-frame transformation; frames without steps use a gallery grid. Compound `label`, `name`, `yield` and `note` own their attached captions. Electron endpoints qualify atom maps with placement keys, such as `lp(donor:1)` and `between(donor:1,acceptor:2)`. Qualified `map: {"before:1": "after:2"}` entries describe correspondence across frames. Standalone annotations use `labels: [{id,at: "placement:mapNumber",kind,text?}]`, where `kind` is `lonePair`, `radical`, `charge`, `partialCharge` or `text`; their positions come from the molecular geometry. `partialBonds: [{from: "placement:mapNumber",to: "placement:mapNumber",order?}]` saves a dashed bond, with order 1 by default.
+A frame with two compounds connected by `partialBonds` places the molecules together using the specified atom contacts.
+Compilation requires a placement that keeps the bonds clear of crossings and unrelated atoms.
+Within frame `compounds`, set `variant` beside `smiles` to select a saved layout by name for that compound.
 
 SMILES identity includes stereochemistry, isotopes, charges and disconnected salt fragments. Bracket abbreviations expand before matching the saved canonical graph; maps do not enter identity. New compounds use permanent sequential atom IDs; input maps are translated through a full graph match when a compound already exists. Compound keys, names and labels stay in figure participants or captions. Saved compound variants and their atom IDs remain available to existing figures.
 

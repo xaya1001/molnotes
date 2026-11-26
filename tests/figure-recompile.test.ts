@@ -27,7 +27,7 @@ test("scheme sources preserve compiled entries, geometry and saved identities", 
   const joinStep = convergent.steps[0];
   joinStep.to = { id: joinStep.to, yield: "80%" };
   const mechanism = {
-    kind: "mechanism",
+    kind: "scheme",
     frames: [
       {
         id: "before",
@@ -62,11 +62,11 @@ test("scheme sources preserve compiled entries, geometry and saved identities", 
     ["mec", mechanism],
   ] as const) {
     const root = await mkdtemp(join(tmpdir(), "figure-scheme-"));
-    const oldPath = join(root, "figure.yaml");
+    const sourcePath = join(root, "figure.yaml");
     const library = await readChemicalLibrary(root);
-    await writeFile(oldPath, stringify(source));
+    await writeFile(sourcePath, stringify(source));
     const { changes, ...baseline } = await saveFigureSource(
-      oldPath,
+      sourcePath,
       root,
       library,
     );
@@ -75,9 +75,13 @@ test("scheme sources preserve compiled entries, geometry and saved identities", 
     const entry = baseline.entries[ref];
     assert.ok(ref.startsWith(prefix + "_"));
 
-    const scheme = { ...source, kind: "scheme" };
-    const compiled = await compileFigure(scheme, {}, entry.sourceKey);
-    assert.deepEqual(compiled, baseline);
+    const compiled = await compileFigure(
+      source,
+      baseline.entries,
+      entry.sourceKey,
+    );
+    assert.deepEqual(compiled.reference, baseline.reference);
+    assert.deepEqual(compiled.entries, baseline.entries);
 
     const views = [baseline.reference];
     if (entry.kind === "route") {
@@ -106,7 +110,7 @@ test("scheme sources preserve compiled entries, geometry and saved identities", 
       );
 
     const saved = join(root, baseline.sourceFile);
-    const yaml = stringify(scheme);
+    const yaml = stringify(source);
     await writeFile(saved, yaml);
     const recompiled = await saveFigureSource(
       saved,
@@ -123,8 +127,8 @@ test("whole-library recompilation refreshes saved scenes, keeps identity and con
   const root = await mkdtemp(join(tmpdir(), "figure-recompile-"));
   const library = await readChemicalLibrary(root);
   const inputs = [
-    "title: Route\ncompounds: {a: CCO, b: 'CC=O', c: 'CC(=O)O'}\nsteps:\n  - {id: first, from: a, to: b}\n  - {id: second, from: b, to: c}\n",
-    "kind: mechanism\nframes: [{id: event, smiles: CCO}]\n",
+    "kind: scheme\ntitle: Route\ncompounds: {a: CCO, b: 'CC=O', c: 'CC(=O)O'}\nsteps:\n  - {id: first, from: a, to: b}\n  - {id: second, from: b, to: c}\n",
+    "kind: scheme\nframes: [{id: event, smiles: CCO}]\n",
     "kind: gallery\ncompounds: {a: CCO}\n",
   ];
   const compiled = [];
@@ -162,7 +166,7 @@ test("whole-library recompilation refreshes saved scenes, keeps identity and con
     );
   }
   const broken = join(root, compiled[1].sourceFile);
-  await writeFile(broken, "kind: mechanism\nframes: [{smiles: '[invalid'}]\n");
+  await writeFile(broken, "kind: scheme\nframes: [{smiles: '[invalid'}]\n");
   await assert.rejects(
     run(process.execPath, [command], {
       env: { ...process.env, MOLNOTES_CONTENT_DIR: root },
@@ -207,6 +211,7 @@ test("selected sources report new entries and remove only obsolete owned reactio
   const root = await mkdtemp(join(tmpdir(), "figure-recompile-selected-"));
   const source = join(root, "route.yaml");
   const input = {
+    kind: "scheme",
     compounds: { a: "CCO", b: "CC=O", c: "CC(=O)O" },
     steps: [
       { id: "first", from: "a", to: "b" },

@@ -59,6 +59,7 @@ test("registered skeletal views retain chemical identity through native wedging 
 test("drawing selects a matched scaffold in route and mechanism compilation", async () => {
   const smiles = "C1CC2CCC1C2";
   const ordinary = await compileFigure({
+    kind: "scheme",
     compounds: { a: smiles, b: smiles },
     steps: [{ from: "a", to: "b" }],
   });
@@ -70,6 +71,7 @@ test("drawing selects a matched scaffold in route and mechanism compilation", as
     const input =
       kind === "route"
         ? {
+            kind: "scheme",
             compounds: {
               a: { smiles, drawing: "perspective" },
               b: { smiles, drawing: "flat" },
@@ -77,7 +79,7 @@ test("drawing selects a matched scaffold in route and mechanism compilation", as
             steps: [{ from: "a", to: "b" }],
           }
         : {
-            kind: "mechanism",
+            kind: "scheme",
             frames: [
               { id: "one", smiles, drawing: "perspective" },
               { id: "two", smiles, drawing: "flat" },
@@ -96,6 +98,7 @@ test("drawing selects a matched scaffold in route and mechanism compilation", as
   }
   await assert.rejects(
     compileFigure({
+      kind: "scheme",
       compounds: { a: { smiles: "CCO", drawing: "perspective" }, b: "CC=O" },
       steps: [{ from: "a", to: "b" }],
     }),
@@ -262,6 +265,7 @@ test("template structures participate in routes, panels and mechanism frames", a
   };
   for (const input of [
     {
+      kind: "scheme",
       compounds: { a: "CCO", b: chair, c: "CC=O" },
       steps: [
         { from: "a", to: "b" },
@@ -276,7 +280,7 @@ test("template structures participate in routes, panels and mechanism frames", a
       },
     },
     {
-      kind: "mechanism",
+      kind: "scheme",
       frames: [
         { id: "a", ...chair, above: "Heat" },
         { id: "b", ...chair, flip: true },

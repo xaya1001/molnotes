@@ -8,11 +8,12 @@ import { compileFigure } from "../scripts/figure-scene.ts";
 import type { Mechanism } from "../shared/chemical-library/types.ts";
 import { figureChargeDiagnostics } from "../scripts/figure-chemistry-diagnostics.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
+import { prepareCompound } from "../shared/chemical-library/chemistry.ts";
 
 test("compilation rejects an electron arrow from a positive charge", async () => {
   await assert.rejects(
     compileFigure({
-      kind: "mechanism",
+      kind: "scheme",
       frames: [
         {
           id: "event",
@@ -27,7 +28,7 @@ test("compilation rejects an electron arrow from a positive charge", async () =>
 
 test("lint reports a change in total formal charge between mechanism frames", async () => {
   const compiled = await compileFigure({
-    kind: "mechanism",
+    kind: "scheme",
     frames: [
       { id: "before", smiles: "[OH-:1]" },
       { id: "after", smiles: "[OH2:1]" },
@@ -48,7 +49,7 @@ test("lint reports a change in total formal charge between mechanism frames", as
 
 test("mechanism frames retain participant identity and electron events", async () => {
   const result = await compileFigure({
-    kind: "mechanism",
+    kind: "scheme",
     category: "resonance",
     frames: [
       {
@@ -101,7 +102,7 @@ test("mechanism frames retain participant identity and electron events", async (
 
 test("mechanism steps and qualified maps retain their roles across frames", async () => {
   const result = await compileFigure({
-    kind: "mechanism",
+    kind: "scheme",
     category: "examples",
     frames: [
       {
@@ -155,16 +156,11 @@ test("scheme frames require explicit maps across comparison and unconnected boun
       { id: "before", smiles: "[CH3:1][OH:2]", ...(arrow && { arrow }) },
       { id: "after", smiles: "[CH3:1][OH:2]", map: { 2: 2 } },
     ];
-    const old = await compileFigure({ kind: "mechanism", category, frames });
     const scheme = await compileFigure({ kind: "scheme", category, frames });
-    const oldEntry = old.entries[old.reference.ref] as Mechanism;
-    const schemeEntry = scheme.entries[scheme.reference.ref] as Mechanism;
-    assert.equal(oldEntry.maps?.length, 2);
+    const entry = scheme.entries[scheme.reference.ref] as Mechanism;
     assert.deepEqual(
-      schemeEntry.maps,
-      arrow === "forward"
-        ? oldEntry.maps
-        : oldEntry.maps?.filter((map) => map.from.atom === "a2"),
+      entry.maps?.map((map) => map.from.atom),
+      arrow === "forward" ? ["a1", "a2"] : ["a2"],
     );
   }
 });
@@ -173,7 +169,7 @@ async function frameDiagnostics(
   frame: import("../scripts/figure-input.ts").FrameInput,
 ) {
   const { drawFigure } = await import("../scripts/figure-draw.ts");
-  const compiled = await compileFigure({ kind: "mechanism", frames: [frame] });
+  const compiled = await compileFigure({ kind: "scheme", frames: [frame] });
   const diagnostics = [];
   for await (const rendered of drawFigure(compiled.entries, compiled.reference))
     diagnostics.push(...rendered.diagnostics);
@@ -299,7 +295,7 @@ test("lone-pair donation clears adjacent substituent bonds", async () => {
 
 test("aromatic triple-bond pi sources retain their molecular graph", async () => {
   const compiled = await compileFigure({
-    kind: "mechanism",
+    kind: "scheme",
     frames: [
       {
         id: "event",
@@ -349,7 +345,7 @@ test("independent mechanism panels retain the library's saved depiction", async 
     point.y = x;
   }
   const compiled = await compileFigure(
-    { kind: "mechanism", frames: [{ id: "panel", compounds: { a: "CCO" } }] },
+    { kind: "scheme", frames: [{ id: "panel", compounds: { a: "CCO" } }] },
     gallery.entries,
     "panel",
   );
@@ -365,8 +361,6 @@ test("independent mechanism panels retain the library's saved depiction", async 
 
 test("fragment placement preserves the compound's shared default layout", async () => {
   const { moleculeToolkit } = await import("../shared/molecule-toolkit.ts");
-  const { prepareCompound } =
-    await import("../shared/chemical-library/chemistry.ts");
   const compound = prepareCompound(await moleculeToolkit(), {
     id: "cmp_mixture",
     title: "Mixture",
@@ -375,7 +369,7 @@ test("fragment placement preserves the compound's shared default layout", async 
   });
   const compiled = await compileFigure(
     {
-      kind: "mechanism",
+      kind: "scheme",
       frames: [{ id: "mixture", compounds: { a: "CCO.N" } }],
     },
     { [compound.id]: compound },
@@ -391,7 +385,7 @@ test("fragment placement preserves the compound's shared default layout", async 
 
 test("reacting ends face each other across independent panels", async () => {
   const compiled = await compileFigure({
-    kind: "mechanism",
+    kind: "scheme",
     frames: [
       {
         id: "event",
@@ -435,6 +429,97 @@ test("reacting ends face each other across independent panels", async () => {
     .map(([, point]) => point.x);
   const midpoint = (donor.x + acceptor.x) / 2;
   assert.ok(midpoint < Math.min(...xs) || midpoint > Math.max(...xs));
+});
+
+test("partial bonds bring two compounds together while using the named layout", async () => {
+  const toolkit = await moleculeToolkit();
+  const saved = prepareCompound(toolkit, {
+    id: "cmp_contact",
+    title: "Contact partner",
+    sources: [{ source: "example", locator: "fixture" }],
+    smiles: "C=C",
+  });
+  saved.variants = { contact: structuredClone(saved.layout) };
+  const compiled = await compileFigure(
+    {
+      kind: "scheme",
+      frames: [
+        {
+          id: "contact",
+          compounds: {
+            a: { smiles: "[CH2:1]=[CH:2][CH:3]=[CH2:4]", label: "" },
+            b: { smiles: "[CH2:1]=[CH2:2]", label: "", variant: "contact" },
+          },
+          partialBonds: [
+            { from: "a:1", to: "b:1" },
+            { from: "b:2", to: "a:4" },
+          ],
+        },
+      ],
+    },
+    { [saved.id]: saved },
+  );
+  const entry = compiled.entries[compiled.reference.ref] as Mechanism;
+  const scene = entry.frames[0].scene;
+  assert.equal(scene.molecules[1].compound, saved.id);
+  assert.equal(scene.molecules[1].variant, "contact");
+  const retained = compiled.entries[saved.id];
+  assert.ok(retained.kind === "compound");
+  assert.deepEqual(retained.variants?.contact, saved.variants.contact);
+  const style = await loadFigureStyle();
+  const geometry = await prepareLibraryFigure(
+    compiled.entries,
+    compiled.reference,
+    style,
+  );
+  const bond = parseFloat(style.values["--chemical-bond"]);
+  for (const { atoms } of scene.partialBonds!) {
+    const [a, b] = atoms.map(
+      ({ molecule, atom }) => geometry.atomPoints[`${molecule}:${atom}`],
+    );
+    const length = Math.hypot(a.x - b.x, a.y - b.y) / bond;
+    assert.ok(length >= 1 && length < 2, `Contact is ${length} bond lengths`);
+  }
+});
+
+test("compilation rejects a partial bond whose placements all run through another atom", async () => {
+  const smiles = "[C:1]([CH3:2])([CH3:3])([CH3:4])[CH3:5]";
+  const saved = prepareCompound(await moleculeToolkit(), {
+    id: "cmp_surrounded",
+    title: "Surrounded atom",
+    sources: [{ source: "example", locator: "fixture" }],
+    smiles,
+  });
+  saved.variants = {
+    surrounded: {
+      coords: {
+        a1: { x: 0, y: 0 },
+        a2: { x: 1, y: 0 },
+        a3: { x: -1, y: 0 },
+        a4: { x: 0, y: 1 },
+        a5: { x: 0, y: -1 },
+      },
+    },
+  };
+  await assert.rejects(
+    compileFigure(
+      {
+        kind: "scheme",
+        frames: [
+          {
+            id: "blocked",
+            compounds: {
+              fixed: { smiles, variant: "surrounded" },
+              moving: "[Li+:6]",
+            },
+            partialBonds: [{ from: "fixed:1", to: "moving:6" }],
+          },
+        ],
+      },
+      { [saved.id]: saved },
+    ),
+    /Frame blocked: no clear placement for partial bonds/,
+  );
 });
 
 test("terminal charged atom hydrogens face away from their bond", async () => {
