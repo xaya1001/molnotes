@@ -622,6 +622,7 @@ export async function prepareFigure(
           f.atoms.add(ids[0]);
       }
       const glyphCounts = new Map<number, number>();
+      const strippedChargeAtoms = new Set<string>();
       for (const node of [...doc.children]) {
         if (node.kind === "rect" || node.kind === "ellipse") continue;
         const cls = ctx.get(node, "class") ?? "";
@@ -675,7 +676,10 @@ export async function prepareFigure(
             index = glyphCounts.get(i) ?? 0;
           glyphCounts.set(i, index + 1);
           const glyph = nativeGlyphs.get(i)![index];
-          if (/^[+−-]$/.test(glyph)) continue;
+          if (/^[+−-]$/.test(glyph)) {
+            strippedChargeAtoms.add(key({ molecule: id, atom: c.atomIds[i] }));
+            continue;
+          }
           if (glyph === elementSymbols[graph.atoms[i].z ?? 6][0])
             ctx.set(e, "data-element-anchor", "true");
         }
@@ -841,7 +845,13 @@ export async function prepareFigure(
         });
         localPoints[atom] = p;
       });
-      spaceBondEndpoints(g, ctx, localPoints);
+      spaceBondEndpoints(
+        g,
+        ctx,
+        localPoints,
+        strippedChargeAtoms,
+        token("--chemical-atom-label-padding") * B,
+      );
       const rings = atomRings(graph);
       spaceChiralHydrogens(
         g,
@@ -974,10 +984,19 @@ export async function prepareFigure(
           const boxes = (useAnchor ? anchorNodes : labelNodes).map((node) =>
             inkBox(node, g, ctx),
           );
-          if (useAnchor)
+          if (useAnchor) {
+            const allBoxes = labelNodes.map((node) => inkBox(node, g, ctx));
             for (const [index, node] of labelNodes.entries())
               if (!anchorNodes.includes(node))
-                chargeBoxes[`glyph:${i}:${index}`] = inkBox(node, g, ctx);
+                chargeBoxes[`glyph:${i}:${index}`] = allBoxes[index];
+            if (labelNodes.length > anchorNodes.length)
+              chargeBoxes[`union:${i}`] = {
+                left: Math.min(...allBoxes.map((b) => b.left)),
+                right: Math.max(...allBoxes.map((b) => b.right)),
+                top: Math.min(...allBoxes.map((b) => b.top)),
+                bottom: Math.max(...allBoxes.map((b) => b.bottom)),
+              };
+          }
           if (boxes.length)
             chargeBoxes[String(i)] = {
               left: Math.min(...boxes.map((b) => b.left)),

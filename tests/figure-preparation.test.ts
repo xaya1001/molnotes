@@ -2287,3 +2287,30 @@ test("authored bond density reaches the website renderer", async () => {
   );
   assert.ok(geometry.width < 400);
 });
+
+test("charged hydrogen-bearing atoms keep bond endpoints attached and charges clear of labels", async () => {
+  const { prepareCompound } =
+    await import("../shared/chemical-library/chemistry.ts");
+  for (const [smiles, staleAngle] of [
+    ["CC([O-])[NH2+]C", { a4: 90 }],
+    ["CC=[NH+]C", { a3: 90 }],
+    ["CO[CH2+]", undefined],
+  ] as const) {
+    const compound = prepareCompound(toolkit, {
+      id: "cmp_charged_label",
+      title: "Charged label",
+      smiles,
+      sources: [{ source: "example", locator: "Structures" }],
+    });
+    if (staleAngle) compound.layout.chargeAngles = { ...staleAngle };
+    const geometry = await prepareFigure(
+      { [compound.id]: compound },
+      { ref: compound.id },
+      { toolkit, fonts, style },
+    );
+    const issues = figureGeometryDiagnostics(geometry, style).filter(
+      (d) => d.code === "BOND_ENDPOINT_DETACHED" || d.code === "LABEL_OVERLAP",
+    );
+    assert.deepEqual(issues, [], smiles);
+  }
+});
