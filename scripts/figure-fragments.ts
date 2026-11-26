@@ -1,6 +1,9 @@
 import type { ChemicalGraph } from "../shared/chemical-library/chemistry.ts";
 import type { Point } from "../shared/chemical-library/types.ts";
-import { segmentDistance } from "../src/ui/library/geometry-collision.ts";
+import {
+  crosses,
+  segmentDistance,
+} from "../src/ui/library/geometry-collision.ts";
 const add = (a: Point, b: Point): Point => ({ x: a.x + b.x, y: a.y + b.y });
 const sub = (a: Point, b: Point): Point => ({ x: a.x - b.x, y: a.y - b.y });
 const mul = (a: Point, k: number): Point => ({ x: a.x * k, y: a.y * k });
@@ -18,8 +21,8 @@ const turn = (p: Point, a: number) => ({
 
 /** Move a placement as a rigid drawing so its dashed contacts close the ring. */
 export function placeBondContacts(
-  fixed: Point[],
-  moving: Point[],
+  { points: fixed, bonds: fixedBonds }: BondDrawing,
+  { points: moving, bonds: movingBonds }: BondDrawing,
   contacts: [Point, Point][],
 ) {
   const [p, q] = contacts[0];
@@ -48,6 +51,7 @@ export function placeBondContacts(
     );
   }
   const target = 1.35;
+  const fixedSegments = bondSegments(fixedBonds, fixed);
   const rotated = moving.map((point) => turn(point, angle));
   const rotatedCenter = turn(movingCenter, angle);
   const candidates = directions.flatMap((direction) =>
@@ -56,14 +60,33 @@ export function placeBondContacts(
         const targetCenter = add(add(fixedCenter, offset), mul(direction, gap));
         const at = sub(targetCenter, rotatedCenter);
         const points = rotated.map((point) => add(at, point));
+        const movingSegments = bondSegments(movingBonds, points);
+        const dashed = contacts.map(([a, b]): [Point, Point] => [
+          a,
+          points[moving.indexOf(b)],
+        ]);
+        const blocked =
+          fixedSegments.some(([a, b]) =>
+            movingSegments.some(([c, d]) => crosses(a, b, c, d)),
+          ) ||
+          dashed.some(([a, b], index) =>
+            [
+              ...fixedSegments,
+              ...movingSegments,
+              ...dashed.slice(index + 1),
+            ].some(([c, d]) => crosses(a, b, c, d)),
+          ) ||
+          crossesAtom(fixedSegments, points) ||
+          crossesAtom(movingSegments, fixed) ||
+          crossesAtom(dashed, [...fixed, ...points]);
+        if (blocked) return { at, score: Infinity };
         const clearance = Math.min(
           ...points.flatMap((point) =>
             fixed.map((anchor) => dist(point, anchor)),
           ),
         );
         const contactError =
-          contacts.reduce((sum, [a, b]) => {
-            const end = points[moving.indexOf(b)];
+          dashed.reduce((sum, [a, end]) => {
             const nearby = [
               ...fixed.filter((point) => point !== a),
               ...points.filter((point) => point !== end),
@@ -85,7 +108,26 @@ export function placeBondContacts(
     ),
   );
   const best = candidates.reduce((a, b) => (a.score <= b.score ? a : b));
-  return { at: best.at, rotate: (angle * 180) / Math.PI };
+  if (Number.isFinite(best.score))
+    return { at: best.at, rotate: (angle * 180) / Math.PI };
+}
+
+interface BondDrawing {
+  points: Point[];
+  bonds: ChemicalGraph["bonds"];
+}
+
+function bondSegments(
+  bonds: BondDrawing["bonds"],
+  points: Point[],
+): [Point, Point][] {
+  return bonds.map(({ atoms: [a, b] }) => [points[a], points[b]]);
+}
+
+function crossesAtom(bonds: [Point, Point][], points: Point[]) {
+  return bonds.some(([a, b]) =>
+    points.some((p) => p !== a && p !== b && segmentDistance(p, a, b) < 0.2),
+  );
 }
 
 /** Port of arrows.place_fragments; coordinates use one bond as their unit, y upward. */

@@ -16,6 +16,8 @@ import { loadFigureFonts } from "./figure-fonts.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import {
   compoundView,
+  graphOf,
+  openMolecule,
   placedCoordinates,
 } from "../shared/chemical-library/chemistry.ts";
 import { placeBondContacts } from "./figure-fragments.ts";
@@ -63,11 +65,18 @@ export async function compileMechanismFrameLayout(
           placement.rotate,
           placement.mirror,
         );
-        return {
-          placement,
-          points,
-          point: ({ atom }: AtomRef) => points[compound.atomIds.indexOf(atom)],
-        };
+        const molecule = openMolecule(toolkit, compound.smiles);
+        try {
+          return {
+            placement,
+            points,
+            bonds: graphOf(molecule).bonds,
+            point: ({ atom }: AtomRef) =>
+              points[compound.atomIds.indexOf(atom)],
+          };
+        } finally {
+          molecule.delete();
+        }
       });
       const [fixed, moving] = drawings.sort(
         (a, b) => b.points.length - a.points.length,
@@ -75,14 +84,18 @@ export async function compileMechanismFrameLayout(
       const anchor = fixed.placement,
         shifted = moving.placement;
       const positioned = placeBondContacts(
-        fixed.points,
-        moving.points,
+        fixed,
+        moving,
         bonds.map(([a, b]) =>
           a.molecule === anchor.id
             ? [fixed.point(a), moving.point(b)]
             : [fixed.point(b), moving.point(a)],
         ),
       );
+      if (!positioned)
+        throw new Error(
+          `Frame ${frame.id}: no clear placement for partial bonds`,
+        );
       if (Math.abs(positioned.rotate) > 1e-9)
         shifted.rotate = (shifted.rotate ?? 0) + positioned.rotate;
       return compilePanelScene(

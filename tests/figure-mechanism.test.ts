@@ -482,6 +482,46 @@ test("partial bonds bring two compounds together while using the named layout", 
   }
 });
 
+test("compilation rejects a partial bond whose placements all run through another atom", async () => {
+  const smiles = "[C:1]([CH3:2])([CH3:3])([CH3:4])[CH3:5]";
+  const saved = prepareCompound(await moleculeToolkit(), {
+    id: "cmp_surrounded",
+    title: "Surrounded atom",
+    sources: [{ source: "example", locator: "fixture" }],
+    smiles,
+  });
+  saved.variants = {
+    surrounded: {
+      coords: {
+        a1: { x: 0, y: 0 },
+        a2: { x: 1, y: 0 },
+        a3: { x: -1, y: 0 },
+        a4: { x: 0, y: 1 },
+        a5: { x: 0, y: -1 },
+      },
+    },
+  };
+  await assert.rejects(
+    compileFigure(
+      {
+        kind: "scheme",
+        frames: [
+          {
+            id: "blocked",
+            compounds: {
+              fixed: { smiles, variant: "surrounded" },
+              moving: "[Li+:6]",
+            },
+            partialBonds: [{ from: "fixed:1", to: "moving:6" }],
+          },
+        ],
+      },
+      { [saved.id]: saved },
+    ),
+    /Frame blocked: no clear placement for partial bonds/,
+  );
+});
+
 test("terminal charged atom hydrogens face away from their bond", async () => {
   const diagnostics = await frameDiagnostics({
     id: "event",
