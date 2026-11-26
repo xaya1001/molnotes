@@ -1,41 +1,54 @@
-import type { Library, Route, Reaction } from "./types.ts";
-export function routeMetrics(route: Route, library: Library) {
-  const steps = new Map(route.steps.map((s) => [s.id, s]));
-  const reaction = (id: string): Reaction => {
-    const entry = library[steps.get(id)?.reaction ?? ""];
-    if (!entry || entry.kind !== "reaction")
-      throw new Error(`${route.id}: missing reaction ${id}`);
-    return entry;
-  };
-  const inputs = new Set<string>();
-  for (const e of route.edges) {
-    const input = `${e.to}/${e.reactant}`;
-    if (inputs.has(input))
-      throw new Error(`${route.id}: multiple sources for one reactant`);
-    inputs.add(input);
-    const a = reaction(e.from).products.find((p) => p.id === e.product),
-      b = reaction(e.to).reactants.find((p) => p.id === e.reactant);
-    if (!a || !b || a.compound !== b.compound)
-      throw new Error(
-        `${route.id}: edge participants disagree: ${e.from} -> ${e.to}`,
-      );
-  }
-  const active = new Set<string>(),
-    lengths = new Map<string, number>();
-  function length(id: string): number {
-    if (active.has(id)) throw new Error(`${route.id}: route cycle`);
-    if (lengths.has(id)) return lengths.get(id)!;
-    active.add(id);
+import type { Figure } from "./types.ts";
+
+function longestPath(
+  id: string,
+  arrows: string[],
+  dependencies: { from: string; to: string }[],
+) {
+  const active = new Set<string>();
+  const lengths = new Map<string, number>();
+  function length(arrow: string): number {
+    if (active.has(arrow)) throw new Error(`${id}: route cycle`);
+    const known = lengths.get(arrow);
+    if (known !== undefined) return known;
+    active.add(arrow);
     const n =
       1 +
       Math.max(
         0,
-        ...route.edges.filter((e) => e.to === id).map((e) => length(e.from)),
+        ...dependencies
+          .filter(({ to }) => to === arrow)
+          .map(({ from }) => length(from)),
       );
-    active.delete(id);
-    lengths.set(id, n);
+    active.delete(arrow);
+    lengths.set(arrow, n);
     return n;
   }
-  const longest = Math.max(0, ...route.steps.map((s) => length(s.id)));
-  return { longestLinearSteps: longest };
+  return { longestLinearSteps: Math.max(0, ...arrows.map(length)) };
+}
+
+export function figureRouteMetrics(figure: Figure) {
+  const arrows = Object.entries(figure.graph.arrows).filter(
+    ([, arrow]) => arrow.role === "reaction",
+  );
+  const productKey = (state: string, placement?: string) =>
+    `${state}/${placement ?? ""}`;
+  const producers = new Map(
+    arrows.flatMap(([id, arrow]) =>
+      arrow.to.map(
+        ({ state, placement }) => [productKey(state, placement), id] as const,
+      ),
+    ),
+  );
+  const dependencies = arrows.flatMap(([to, arrow]) =>
+    arrow.from.flatMap(({ state, placement }) => {
+      const from = producers.get(productKey(state, placement));
+      return from === undefined ? [] : [{ from, to }];
+    }),
+  );
+  return longestPath(
+    figure.id,
+    arrows.map(([id]) => id),
+    dependencies,
+  );
 }

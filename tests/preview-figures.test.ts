@@ -1,8 +1,9 @@
+import { panelGraph } from "./helpers/figure-graph.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { topicFigures } from "../shared/content-preview.ts";
 import type { TopicContent } from "../src/ui/topic/content.ts";
-import type { Library, Mechanism } from "../shared/chemical-library/types.ts";
+import type { Library, Figure } from "../shared/chemical-library/types.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import { prepareCompound } from "../shared/chemical-library/chemistry.ts";
 async function compoundFixture() {
@@ -22,21 +23,24 @@ async function compoundFixture() {
 
 test("library mechanism previews collect the overview or the explicitly selected frame", async () => {
   const compound = await compoundFixture();
-  const mechanism: Mechanism = {
+  const mechanism: Figure = {
     id: "mec_example",
-    kind: "mechanism",
+    kind: "figure",
     title: "Mechanism",
-    category: "comparison",
     sources: compound.sources,
-    frames: ["first", "second"].map((id) => ({
-      id,
-      title: id,
-      scene: {
-        width: 4,
-        height: 4,
-        molecules: [{ id: "input", compound: compound.id, at: { x: 2, y: 2 } }],
-      },
-    })),
+    ...panelGraph(
+      ["first", "second"].map((id) => ({
+        id,
+        title: id,
+        scene: {
+          width: 4,
+          height: 4,
+          molecules: [
+            { id: "input", compound: compound.id, at: { x: 2, y: 2 } },
+          ],
+        },
+      })),
+    ),
   };
   const library: Library = {
     [compound.id]: compound,
@@ -56,7 +60,11 @@ test("library mechanism previews collect the overview or the explicitly selected
         lead: "Example",
         refs: [],
         blocks: [
-          { type: "figure-ref", ref: mechanism.id, numbers: { input: "7" } },
+          {
+            type: "figure-ref",
+            ref: mechanism.id,
+            numbers: { "first/input": "7", "second/input": "7" },
+          },
           { type: "figure-ref", ref: mechanism.id, frame: "second" },
         ],
       },
@@ -67,13 +75,16 @@ test("library mechanism previews collect the overview or the explicitly selected
   assert.deepEqual(
     figures.map((f) => f.value),
     [
-      { ref: mechanism.id, numbers: { input: "7" } },
+      {
+        ref: mechanism.id,
+        numbers: { "first/input": "7", "second/input": "7" },
+      },
       { ref: mechanism.id, frame: "second" },
     ],
   );
   assert.deepEqual(
     figures.map((f) => f.title),
-    [undefined, "second"],
+    [undefined, undefined],
   );
   assert.ok(figures[1].where.includes("[second]"));
   topic.chapters[0].blocks = [
@@ -81,7 +92,7 @@ test("library mechanism previews collect the overview or the explicitly selected
   ];
   const invalid: string[] = [];
   assert.deepEqual(topicFigures(topic, "example", invalid, library), []);
-  assert.match(invalid[0], /frame/);
+  assert.match(invalid[0], /unknown graph view/);
 });
 
 test("authoring preview prepares only requested views and returns SVG assets without thumbnails", async () => {

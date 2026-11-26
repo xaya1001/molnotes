@@ -117,7 +117,7 @@ test("compound slots resolve all nested structures and reject ambiguous or chang
   const data = {
     prediction: { molecule: slot, molecules: [{ ...slot, answer: [0] }] },
     wallMatrix: { rows: [{ id: "row", label: "Row", ...slot }] },
-    frames: [{ ...slot, arrows: [] }],
+    examples: [{ ...slot, arrows: [] }],
     products: [{ ...slot, yield: 0.8 }],
     figure: { ref: c.id },
     blocks: [{ type: "figure-ref", ref: c.id }],

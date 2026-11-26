@@ -1,3 +1,4 @@
+import { arrowAt } from "./helpers/figure-graph.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
@@ -43,12 +44,23 @@ test("native close-contact flags do not draw colored atom marks", async () => {
 test("compiled reaction places a spectator ion beside its charge centre", async () => {
   const { entries, reference } = await compileFigure({
     kind: "scheme",
-    compounds: { salt: "CC(=O)[O-].[Li+]", product: "CC(=O)O" },
-    steps: [{ from: "salt", to: "product" }],
+    states: {
+      salt: { compounds: { structure: "CC(=O)[O-].[Li+]" } },
+      product: { compounds: { structure: "CC(=O)O" } },
+    },
+    arrows: {
+      protonation: {
+        from: "salt",
+        to: "product",
+        kind: "forward",
+        role: "reaction",
+      },
+    },
   });
-  const reaction = entries[reference.ref];
-  assert.ok(reaction.kind === "reaction");
-  const placement = reaction.scene.molecules.find(({ id }) => id === "salt")!;
+  const reaction = arrowAt(entries[reference.ref]);
+  const placement = reaction.drawing.scene.molecules.find(
+    ({ id }) => id === "salt",
+  )!;
   const compound = entries[placement.compound];
   assert.ok(compound.kind === "compound");
   const toolkit = await moleculeToolkit();

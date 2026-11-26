@@ -30,7 +30,7 @@ import {
   type MoleculeAbbreviation,
 } from "../shared/molecule-abbreviations.ts";
 import type { Compound } from "../shared/chemical-library/types.ts";
-import type { FigureInput, StructureInput } from "./figure-input.ts";
+import type { StructureInput } from "./figure-input.ts";
 import type { FigureStyle } from "../src/ui/library/scene-geometry.ts";
 import {
   pathBox,
@@ -59,7 +59,7 @@ export function figureAbbreviations(
   rd: Toolkit,
   mol: Mol,
   spec: StructureInput,
-  extra: FigureInput["abbreviate"],
+  extra: import("./figure-input.ts").SchemeInput["abbreviate"],
   frameMaps: { electronic: number[]; protected: number[] },
   where: string,
   mechanism: boolean,
@@ -1043,7 +1043,12 @@ function contractedFor(rd: Toolkit, r: Structure, full: Mol) {
 export function depictRoute(
   rd: Toolkit,
   compounds: Map<string, Structure | StructureInput>,
-  input: FigureInput,
+  input: {
+    arrows: { from: string[]; to: string[] }[];
+    anchor?: string;
+    ring_h?: boolean;
+    coordgen?: boolean;
+  },
   variantName: (key: string) => string,
   style: FigureStyle,
   placeFragments?: (key: string) => void,
@@ -1058,12 +1063,7 @@ export function depictRoute(
       if (!links.has(a)) links.set(a, []);
       if (b !== undefined) links.get(a)!.push(b);
     };
-  const list = <T>(x: T | T[]) => (Array.isArray(x) ? x : [x]);
-  const key = (x: string | number | { id: string | number }) =>
-    String(typeof x === "object" ? x.id : x);
-  for (const step of input.steps!) {
-    const ins = list(step.from).map(key),
-      outs = list(step.to).map(key);
+  for (const { from: ins, to: outs } of input.arrows) {
     for (const o of outs) {
       add(ins[0], o);
       add(o, ins[0]);

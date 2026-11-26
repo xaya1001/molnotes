@@ -32,7 +32,7 @@ export interface RequestDisplay {
   filename?: boolean;
   prompt?: string;
   yaml?: boolean;
-  frames?: { title: string; smiles: string; note?: string }[];
+  states?: { id: string; title: string; smiles: string; note?: string }[];
   chart?: {
     columns: string[];
     rows: (string | number)[][];
@@ -112,13 +112,12 @@ export function topicFigures(
           validateFigureReference(reference, at);
           validateFigureInstance(library, reference);
           const entry = library[reference.ref];
-          const frame =
-            entry?.kind === "mechanism"
-              ? entry.frames.find((frame) => frame.id === reference.frame)
+          const view =
+            reference.frame && entry?.kind === "figure"
+              ? reference.frame
               : undefined;
           figures.push({
-            where: frame ? `${at} [${frame.id}]` : at,
-            ...(frame ? { title: frame.title } : {}),
+            where: view ? `${at} [${view}]` : at,
             kind: "library",
             value: reference,
             caption: reference.caption ?? "",

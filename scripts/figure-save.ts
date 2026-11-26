@@ -2,6 +2,7 @@ import { readFile, writeFile, mkdir, unlink } from "node:fs/promises";
 import { resolve, join, dirname } from "node:path";
 import { parse, stringify } from "yaml";
 import { compileFigure, figureKey } from "./figure-scene.ts";
+import { libraryEntryFolders } from "./content/chemical-library.ts";
 import type { Library } from "../shared/chemical-library/types.ts";
 
 export interface EntryChange {
@@ -26,15 +27,6 @@ export async function saveFigureSource(
   );
   const key = saved?.sourceKey ?? figureKey(resolve(source));
   const result = await compileFigure(parse(text), existing, key);
-  const folders = {
-    compound: "compounds",
-    reaction: "reactions",
-    route: "routes",
-    mechanism: "mechanisms",
-    image: "images",
-    markush: "markush",
-    conformation: "conformations",
-  };
   async function save(path: string, after: string) {
     const before = await readFile(path, "utf8").catch(
       (e: NodeJS.ErrnoException) => {
@@ -52,10 +44,11 @@ export async function saveFigureSource(
   for (const id of result.generated) {
     const entry = result.entries[id];
     const path =
-      files[id] ?? join(root, "library", folders[entry.kind], id + ".yaml");
+      files[id] ??
+      join(root, "library", libraryEntryFolders[entry.kind], id + ".yaml");
     const after = path.endsWith(".json")
       ? JSON.stringify(entry, null, 2) + "\n"
-      : stringify(entry, { lineWidth: 0 });
+      : stringify(entry, { lineWidth: 0 }).replace(/^[ \t]+$/gm, "");
     const before = await save(path, after);
     if (before !== after) changes.push({ id, before, after });
     files[id] = path;

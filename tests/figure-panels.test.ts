@@ -24,18 +24,19 @@ async function drawing(input: unknown) {
 const scope = {
   kind: "scheme",
   mark: "[#6]-F",
-  compounds: { a: { smiles: "CCF", yield: "80%" } },
-  groups: [{ title: "Products", items: ["a"] }],
+  states: { a: { compounds: { a: { smiles: "CCF", yield: "80%" } } } },
+  arrows: {},
+  groups: { group1: { title: "Products", items: ["a"] } },
 };
 
 test("scope marks color the matching atoms and bond", async () => {
   const { nodes, style } = await drawing({
     ...scope,
-    compounds: {
-      ...scope.compounds,
-      b: { template: "chair", subs: { "1a": "Me" } },
+    states: {
+      ...scope.states,
+      b: { compounds: { b: { template: "chair", subs: { "1a": "Me" } } } },
     },
-    groups: [{ title: "Products", items: ["a", "b"] }],
+    groups: { products: { title: "Products", items: ["a", "b"] } },
   });
   const colored = nodes.filter(
     (n) =>
@@ -64,9 +65,19 @@ test("scope titles sit on a full width gray bar", async () => {
 
 test("cycle step names have a gray box enclosing every line", async () => {
   const { geometry, nodes, style } = await drawing({
-    kind: "cycle",
-    nodes: ["A", "B", "C"],
-    steps: [{ label: "First\nstep" }, {}, {}],
+    kind: "scheme",
+    states: { "1": { text: "A" }, "2": { text: "B" }, "3": { text: "C" } },
+    arrows: {
+      "step-1": {
+        from: "1",
+        to: "2",
+        role: "elementary",
+        kind: "forward",
+        title: "First\nstep",
+      },
+      "step-2": { from: "2", to: "3", role: "elementary", kind: "forward" },
+      "step-3": { from: "3", to: "1", role: "elementary", kind: "forward" },
+    },
   });
   const bar = nodes.find((n) => n.attributes["data-caption-box"] !== undefined);
   assert.ok(bar?.bounds);

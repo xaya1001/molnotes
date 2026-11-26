@@ -1,7 +1,11 @@
-import type { FigureInput, StructureInput } from "./figure-input.ts";
+import type { SchemeGraph, StructureInput } from "./figure-input.ts";
 import type {
+  Anchor,
+  AtomRef,
   Library,
-  Mechanism,
+  Figure,
+  FocusGroup,
+  GraphArrow,
   Point,
   Scene,
 } from "../shared/chemical-library/types.ts";
@@ -32,11 +36,77 @@ const emptyScene = (): Scene => ({
   reactionArrows: [],
 });
 
+function scopeCell(cell: PanelCell): PanelCell {
+  const qualify = (id: string) => cell.key + "/" + id;
+  const atom = (ref: AtomRef): AtomRef => ({
+    ...ref,
+    molecule: qualify(ref.molecule),
+  });
+  const bond = ([a, b]: [AtomRef, AtomRef]): [AtomRef, AtomRef] => [
+    atom(a),
+    atom(b),
+  ];
+  const anchor = (value: Anchor): Anchor =>
+    value.kind === "lonePair"
+      ? { ...value, label: qualify(value.label) }
+      : "at" in value
+        ? { ...value, at: atom(value.at) }
+        : { ...value, atoms: bond(value.atoms) };
+  const focus = (value: FocusGroup): FocusGroup => ({
+    atoms: value.atoms?.map(atom),
+    bonds: value.bonds?.map(bond),
+    arrows: value.arrows?.map(qualify),
+  });
+  const scene = cell.scene;
+  return {
+    ...cell,
+    scene: {
+      ...scene,
+      molecules: scene.molecules.map((molecule) => ({
+        ...molecule,
+        id: qualify(molecule.id),
+      })),
+      labels: scene.labels?.map((label) => ({
+        ...label,
+        id: qualify(label.id),
+        at: atom(label.at),
+      })),
+      arrows: scene.arrows?.map((arrow) => ({
+        ...arrow,
+        id: qualify(arrow.id),
+        from: anchor(arrow.from),
+        to: anchor(arrow.to),
+      })),
+      enclose: scene.enclose?.map((group) => ({
+        ...group,
+        ...focus(group),
+        id: qualify(group.id),
+      })),
+      focus: scene.focus && {
+        primary: scene.focus.primary && focus(scene.focus.primary),
+        supporting: scene.focus.supporting?.map(focus),
+      },
+      changes: scene.changes && focus(scene.changes),
+      partialBonds: scene.partialBonds?.map((partial) => ({
+        ...partial,
+        atoms: bond(partial.atoms),
+      })),
+    },
+  };
+}
+
 /** Port the prototype's grid and circular geometry into saved website scenes. */
 export async function compilePanelScene(
   library: Library,
-  entry: Mechanism,
-  input: FigureInput,
+  entry: Figure,
+  layout: NonNullable<SchemeGraph["layout"]> & {
+    groups?: {
+      title?: string | number;
+      subtitle?: string | number;
+      items: (string | number)[];
+    }[];
+    cycle?: [string, Pick<GraphArrow, "kind" | "title" | "in" | "out">][];
+  },
   cells: PanelCell[],
   style: FigureStyle,
   placementCaptions = false,
@@ -48,7 +118,7 @@ export async function compilePanelScene(
     B = ctx.token("--chemical-bond");
   const scene = emptyScene(),
     boxes: FigureBox[] = [];
-  const grouped = input.scopeGroups !== undefined;
+  const grouped = layout.groups !== undefined;
   const font = "var(--chemical-caption-font)";
   const measuredText = (text: string) => {
     const node = ctx.label({ x: 0, y: 0 }, text, font);
@@ -108,23 +178,17 @@ export async function compilePanelScene(
     });
     boxes.push(box);
   };
+  const placements = cells.flatMap(({ scene }) =>
+    scene.molecules.map(({ id }) => id),
+  );
+  const scoped =
+    new Set(placements).size < placements.length ? cells.map(scopeCell) : cells;
   const measured = await Promise.all(
-    cells.map(async (cell) => {
-      const probe: Mechanism = {
-        ...entry,
-        footnote: undefined,
-        frames: [
-          {
-            id: "measure",
-            title: "Measure",
-            scene: cell.scene,
-          },
-        ],
-      };
+    scoped.map(async (cell) => {
       const geometry = await prepareFigure(
-        { ...library, [entry.id]: probe },
+        { ...library, [entry.id]: entry },
         { ref: entry.id },
-        { toolkit, fonts, style, canvas: "scene" },
+        { toolkit, fonts, style, canvas: "scene", scene: cell.scene },
       );
       const parts: FigureBox[] = [];
       walkGeometry(geometry.root, (node, matrix) => {
@@ -271,10 +335,10 @@ export async function compilePanelScene(
         y + cell.body.y + cell.height / 2,
       );
     }
-  } else if (input.kind === "cycle") {
+  } else if (layout.cycle) {
     // Prototype radius is in reference pixels at a 17px bond length.
-    const radius = (input.radius ?? 150) / 17,
-      branch = radius * (input.branch ?? 0.3);
+    const radius = (layout.radius ?? 150) / 17,
+      branch = radius * (layout.branch ?? 0.3);
     const angles = measured.map(
       (_, i) => -Math.PI / 2 + (2 * Math.PI * i) / measured.length,
     );
@@ -296,6 +360,7 @@ export async function compilePanelScene(
       r: number,
       a: number,
       b: number,
+      kind?: GraphArrow["kind"],
     ) => {
       const k = (4 / 3) * Math.tan((b - a) / 4),
         from = point(cx, cy, r, a),
@@ -304,6 +369,7 @@ export async function compilePanelScene(
         id,
         from,
         to,
+        kind,
         controls: [
           { x: from.x - k * r * Math.sin(a), y: from.y + k * r * Math.cos(a) },
           { x: to.x + k * r * Math.sin(b), y: to.y - k * r * Math.cos(b) },
@@ -333,15 +399,15 @@ export async function compilePanelScene(
     );
     const labels: { text: string; angle: number; distance: number }[] = [];
     measured.forEach((_, i) => {
-      const step = input.cycleSteps?.[i] ?? {},
+      const [id, edge] = layout.cycle![i],
         j = (i + 1) % measured.length;
       const a = angles[i] + gaps[i],
         b = angles[i] + (2 * Math.PI) / measured.length - gaps[j];
       if (a >= b)
         throw new Error(
-          `figure.nodes[${i}]: species exceed cycle spacing; increase radius`,
+          `state ${measured[i].key}: species exceed cycle spacing; increase radius`,
         );
-      arc(`step-${i + 1}`, 0, 0, radius, a, b);
+      arc(id, 0, 0, radius, a, b, edge.kind);
       const mid = (a + b) / 2,
         ux = Math.cos(mid),
         uy = Math.sin(mid),
@@ -352,7 +418,7 @@ export async function compilePanelScene(
         ["in", 1],
         ["out", -1],
       ] as const) {
-        const text = words(step[key]);
+        const text = words(edge[key]);
         if (!text) continue;
         const cx = (radius + branch) * ux,
           cy = (radius + branch) * uy,
@@ -377,9 +443,9 @@ export async function compilePanelScene(
         putText(text, center.x, center.y);
         distance = radius + branch * (1 - Math.cos(phi)) + 2.4;
       }
-      if (step.label !== undefined)
+      if (edge.title !== undefined)
         labels.push({
-          text: words(step.label)
+          text: words(edge.title)
             .split("\n")
             .map((line) => `*${line}*`)
             .join("\n"),
@@ -441,7 +507,7 @@ export async function compilePanelScene(
   } else {
     let y = 0;
     const width = ctx.token("--chemical-route-width") / B;
-    const groups = input.scopeGroups ?? [{ items: measured.map((c) => c.key) }];
+    const groups = layout.groups ?? [{ items: measured.map((c) => c.key) }];
     for (const group of groups) {
       if (group.title !== undefined) {
         const h = Math.max(1.5, textBlock(`**${group.title}**`).height + 0.4);
@@ -464,7 +530,7 @@ export async function compilePanelScene(
           row.length &&
           (grouped
             ? used + 1.4 + cell.width > width
-            : row.length >= (input.cols ?? 4))
+            : row.length >= (layout.cols ?? 4))
         ) {
           rows.push(row);
           row = [];
@@ -474,7 +540,7 @@ export async function compilePanelScene(
         row.push(cell);
       }
       if (row.length) rows.push(row);
-      const cols = input.cols ?? 4;
+      const cols = layout.cols ?? 4;
       const colWidths = Array.from(
         { length: Math.min(cols, measured.length) },
         (_, i) =>

@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import { parse } from "yaml";
+import { compileFigure } from "../scripts/figure-scene.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { computeDefaultCoords } from "../shared/chemical-toolkit.ts";
@@ -16,13 +19,8 @@ import {
   validateLibrary,
   validateFigureReference,
 } from "../shared/chemical-library/contract.ts";
-import { routeMetrics } from "../shared/chemical-library/routes.ts";
-import type {
-  Library,
-  Reaction,
-  Route,
-  Scene,
-} from "../shared/chemical-library/types.ts";
+import { figureRouteMetrics } from "../shared/chemical-library/routes.ts";
+import type { Library, Scene } from "../shared/chemical-library/types.ts";
 const sources = [{ source: "handbook", locator: "Example 1" }];
 test("Kekulé variants preserve identity and bind pi anchors to their explicit bond orders", async () => {
   const rd = await moleculeToolkit();
@@ -212,81 +210,23 @@ test("page references cannot own molecular facts or layout and limit semantic fo
     focus: { primary: { atoms: [{ molecule: "compound", atom: "a1" }] } },
   });
 });
-test("a convergent route validates graph edges and counts the longest path", async () => {
-  const rd = await moleculeToolkit();
-  const c = prepareCompound(rd, {
-    id: "cmp_example",
-    title: "Example",
-    smiles: "CCO",
-    sources,
-  });
-  const rx = (id: string, yieldValue: string): Reaction => ({
-    kind: "reaction",
-    id,
-    title: id,
-    sources,
-    reactants: [{ id: "input", compound: c.id }],
-    products: [{ id: "output", compound: c.id, yield: yieldValue }],
-    reagents: [],
-    conditions: [],
-    scene: {
-      width: 12,
-      height: 6,
-      molecules: [
-        { id: "input", compound: c.id, at: { x: 2, y: 3 } },
-        { id: "output", compound: c.id, at: { x: 10, y: 3 } },
-      ],
-    },
-    arrow: { from: { x: 4, y: 3 }, to: { x: 8, y: 3 }, textWidth: 4 },
-  });
-  const library: Library = {
-    [c.id]: c,
-    rxn_a: rx("rxn_a", "80%"),
-    rxn_b: rx("rxn_b", "40%"),
-    rxn_c: rx("rxn_c", "50%"),
-  };
-  const convergent = library.rxn_c as Reaction;
-  convergent.reactants.push({ id: "second", compound: c.id });
-  convergent.scene.molecules.push({
-    id: "second",
-    compound: c.id,
-    at: { x: 2, y: 5 },
-  });
-  const route: Route = {
-    kind: "route",
-    id: "rte_example",
-    title: "Convergent",
-    sources,
-    width: 30,
-    height: 20,
-    steps: [
-      { id: "a", reaction: "rxn_a", at: { x: 0, y: 0 } },
-      { id: "b", reaction: "rxn_b", at: { x: 15, y: 0 } },
-      { id: "c", reaction: "rxn_c", at: { x: 7, y: 10 } },
-    ],
-    edges: [
-      { from: "a", to: "c", product: "output", reactant: "input" },
-      { from: "b", to: "c", product: "output", reactant: "second" },
-    ],
-  };
-  library[route.id] = route;
-  validateLibrary(library);
-  assert.equal(routeMetrics(route, library).longestLinearSteps, 2);
-  assert.throws(
-    () =>
-      routeMetrics(
-        {
-          ...route,
-          edges: [
-            ...route.edges,
-            { from: "c", to: "a", product: "output", reactant: "input" },
-          ],
-        },
-        library,
-      ),
-    /cycle/,
+test("a convergent graph counts the longest route and rejects a reaction cycle", async () => {
+  const source = parse(
+    await readFile(
+      new URL("./fixtures/figures/convergent.yaml", import.meta.url),
+      "utf8",
+    ),
   );
+  const { entries, reference } = await compileFigure(source);
+  const figure = entries[reference.ref];
+  assert.equal(figure.kind, "figure");
+  validateLibrary(entries);
+  assert.equal(figureRouteMetrics(figure).longestLinearSteps, 2);
+  const first = Object.values(figure.graph.arrows)[0];
+  figure.graph.arrows.loop = { ...first, from: first.to, to: first.from };
+  assert.throws(() => figureRouteMetrics(figure), /cycle/);
 });
+
 test("alignment preserves distances while placing explicitly corresponding atoms", () => {
   const coords = { a: { x: 0, y: 0 }, b: { x: 1, y: 0 }, c: { x: 1, y: 1 } };
   const result = alignCoordinates(
@@ -501,13 +441,25 @@ test("content reads compiled YAML figures with shared compound identity", async 
   );
   const compiled = await compileFigure({
     kind: "scheme",
-    frames: [
-      { id: "first", smiles: "CCO" },
-      { id: "second", smiles: "CCO", rot: 90, arrow: "none" },
-    ],
+    states: {
+      first: { compounds: { structure: { smiles: "CCO" } } },
+      second: { compounds: { structure: { smiles: "CCO", rot: 90 } } },
+    },
+    arrows: {
+      ["next-" + "first"]: {
+        from: "first",
+        to: "second",
+        kind: "forward",
+        role: "elementary",
+      },
+    },
+    views: {
+      first: { items: ["first"], arrows: ["next-" + "first"] },
+      second: { items: ["second"] },
+    },
   });
   for (const e of Object.values(compiled.entries)) {
-    const folder = e.kind === "compound" ? "compounds" : "mechanisms";
+    const folder = e.kind === "compound" ? "compounds" : "figures";
     await mkdir(join(root, "library", folder), { recursive: true });
     await writeFile(
       join(root, "library", folder, e.id + ".yaml"),
@@ -517,12 +469,12 @@ test("content reads compiled YAML figures with shared compound identity", async 
   const { entries } = await readChemicalLibrary(root);
   assert.deepEqual(entries, compiled.entries);
   const mechanism = entries[compiled.reference.ref];
-  if (mechanism.kind !== "mechanism") throw new Error("Expected mechanism");
+  assert.equal(mechanism.kind, "figure");
   assert.equal(
-    mechanism.frames[0].scene.molecules[0].compound,
-    mechanism.frames[1].scene.molecules[0].compound,
+    mechanism.graph.states.first.scene!.molecules[0].compound,
+    mechanism.graph.states.second.scene!.molecules[0].compound,
   );
-  assert.equal(mechanism.frames[1].scene.molecules[0].rotate, -90);
+  assert.equal(mechanism.graph.states.second.scene!.molecules[0].rotate, -90);
 });
 
 test("compound identity preserves relative stereo groups as well as isotopes", async () => {

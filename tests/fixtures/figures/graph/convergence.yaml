@@ -1,0 +1,61 @@
+kind: scheme
+title: 两支汇聚的酰胺制备
+states:
+  acid: { compounds: { acid: { smiles: CC(=O)O } } }
+  nitrile: { compounds: { nitrile: { smiles: CC#N } } }
+  acyl: { compounds: { acyl: { smiles: CC(=O)Cl } } }
+  amine: { compounds: { amine: { smiles: CCN } } }
+  amide: { compounds: { amide: { smiles: CCNC(C)=O } } }
+arrows:
+  activate:
+    { from: [acid], to: [acyl], kind: forward, role: reaction, above: SOCl2 }
+  reduce:
+    { from: [nitrile], to: [amine], kind: forward, role: reaction, above: H2 }
+  couple:
+    from: [acyl, amine]
+    to: [amide]
+    kind: forward
+    role: reaction
+    title: 酰基取代
+    via:
+      states:
+        start:
+          compounds:
+            acyl: { use: acyl/acyl }
+            amine: { use: amine/amine }
+        tetrahedral:
+          title: 四面体中间体
+          compounds:
+            intermediate:
+              { smiles: "CC([O-])(Cl)[NH2+]CC", abbreviate: false, label: "" }
+        ionpair:
+          compounds:
+            protonated:
+              { smiles: "CC[NH2+]C(C)=O", abbreviate: false, label: "" }
+            chloride: { smiles: "[Cl-]", label: "" }
+        finish:
+          compounds:
+            amide: { use: amide/amide }
+      arrows:
+        add:
+          { from: [start], to: [tetrahedral], kind: forward, role: elementary }
+        eliminate:
+          {
+            from: [tetrahedral],
+            to: [ionpair],
+            kind: forward,
+            role: elementary,
+          }
+        deprotonate:
+          {
+            from: [ionpair],
+            to: [finish],
+            kind: forward,
+            role: elementary,
+            above: Base,
+          }
+      bind:
+        from: { acyl/acyl: start/acyl, amine/amine: start/amine }
+        to: { amide/amide: finish/amide }
+views:
+  couple/tetrahedral: { items: [couple/via/tetrahedral] }

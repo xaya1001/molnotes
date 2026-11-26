@@ -53,7 +53,7 @@ test("draw works without a content library, emits every frame and retains diagno
     out = join(root, "drawing.svg");
   await writeFile(
     source,
-    "kind: scheme\nbond: 1\nframes:\n  - {id: first, smiles: CCO}\n  - {id: second, smiles: 'CC=O'}\n",
+    "kind: scheme\nbond: 1\nstates:\n  first: {compounds: {structure: CCO}}\n  second: {compounds: {structure: 'CC=O'}}\narrows: {next: {from: first, to: second, kind: forward, role: elementary}}\n",
   );
   const options = {
     cwd: root,
@@ -143,11 +143,11 @@ test("figure:lint flags unescaped locants and ignores chemical formulas and esca
     [
       "kind: scheme",
       "title: Sample",
-      "compounds:",
-      "  1: CCO",
-      "  2: CC=O",
-      "steps:",
-      '  - { id: s1, from: 1, to: 2, above: "C2/C4 activation" }',
+      "states:",
+      "  a: {compounds: {structure: CCO}}",
+      "  b: {compounds: {structure: CC=O}}",
+      "arrows:",
+      '  s1: { from: a, to: b, kind: forward, role: reaction, above: "C2/C4 activation" }',
       "",
     ].join("\n"),
   );
@@ -169,11 +169,11 @@ test("figure:lint flags unescaped locants and ignores chemical formulas and esca
     [
       "kind: scheme",
       "title: Sample",
-      "compounds:",
-      "  1: CCO",
-      "  2: CC=O",
-      "steps:",
-      '  - { id: s1, from: 1, to: 2, above: "C\\\\2/C\\\\4, CH3, C6H5, O2 (air)" }',
+      "states:",
+      "  a: {compounds: {structure: CCO}}",
+      "  b: {compounds: {structure: CC=O}}",
+      "arrows:",
+      '  s1: { from: a, to: b, kind: forward, role: reaction, above: "C\\\\2/C\\\\4, CH3, C6H5, O2 (air)" }',
       "",
     ].join("\n"),
   );

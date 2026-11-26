@@ -13,7 +13,8 @@ import {
   validateCompound,
   validateSceneChemistry,
 } from "../../shared/chemical-library/chemistry.ts";
-import { routeMetrics } from "../../shared/chemical-library/routes.ts";
+import { figureRouteMetrics } from "../../shared/chemical-library/routes.ts";
+import { graphScenes } from "../../shared/chemical-library/figure-layout.ts";
 import { moleculeToolkit } from "../../shared/molecule-toolkit.ts";
 import { sha256, contentType } from "../../shared/assets.ts";
 import type {
@@ -26,9 +27,7 @@ import { assetResource, type AssetStage } from "./asset-stage.ts";
 
 export const libraryEntryFolders = {
   compound: "compounds",
-  reaction: "reactions",
-  route: "routes",
-  mechanism: "mechanisms",
+  figure: "figures",
   image: "images",
   markush: "markush",
   conformation: "conformations",
@@ -88,23 +87,11 @@ export async function readChemicalLibrary(root: string, stage?: AssetStage) {
   const imagesToRegister: { id: string; asset: string; mime: string }[] = [];
   for (const e of Object.values(entries)) {
     if (e.kind === "compound") validateCompound(toolkit!, e);
-    if (e.kind === "route") routeMetrics(e, entries);
-    if (e.kind === "reaction")
-      validateSceneChemistry(toolkit!, entries, e.scene, e.id);
-    const mechanism =
-      e.kind === "mechanism"
-        ? e
-        : e.kind === "reaction"
-          ? e.mechanism
-          : undefined;
-    if (mechanism)
-      for (const frame of mechanism.frames)
-        validateSceneChemistry(
-          toolkit!,
-          entries,
-          frame.scene,
-          `${e.id}/${frame.id}`,
-        );
+    if (e.kind === "figure") {
+      figureRouteMetrics(e);
+      for (const scene of graphScenes(e.graph))
+        validateSceneChemistry(toolkit!, entries, scene, e.id);
+    }
     if (e.kind === "image" && !seen.has(e.asset)) {
       seen.add(e.asset);
       imagesToRegister.push({ id: e.id, asset: e.asset, mime: e.mime });

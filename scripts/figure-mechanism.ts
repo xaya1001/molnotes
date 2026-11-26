@@ -1,16 +1,16 @@
-import type { FigureInput, FrameInput } from "./figure-input.ts";
 import type { FigureStyle } from "../src/ui/library/scene-geometry.ts";
 import type {
   Library,
-  Mechanism,
+  Figure,
+  FigureGraph,
+  GraphArrow,
+  GraphParticipant,
   Participant,
-  Reaction,
-  Route,
   Scene,
   AtomRef,
 } from "../shared/chemical-library/types.ts";
 import { compilePanelScene, type PanelCell } from "./figure-panels.ts";
-import { compileRouteLayout } from "./figure-route.ts";
+import { compileGraphLayout } from "./figure-route.ts";
 import { prepareFigure } from "../src/ui/library/prepare.ts";
 import { loadFigureFonts } from "./figure-fonts.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
@@ -24,213 +24,179 @@ import { placeBondContacts } from "./figure-fragments.ts";
 
 const words = (value: string | number | undefined) =>
   value === undefined ? "" : String(value);
-const keys = (
-  value:
-    | NonNullable<FrameInput["steps"]>[number]["from"]
-    | NonNullable<FrameInput["steps"]>[number]["to"],
-) =>
-  (Array.isArray(value) ? value : [value]).map((v) =>
-    String(typeof v === "object" ? v.id : v),
-  );
 
 /** Frame grids and transformations use the same measured layouts as figure panels and routes. */
-export async function compileMechanismFrameLayout(
+export async function compileStateLayout(
   library: Library,
-  entry: Mechanism,
-  frame: Pick<FrameInput, "id" | "steps">,
+  entry: Figure,
   cells: PanelCell[],
-  input: FigureInput,
   style: FigureStyle,
   contacts: [AtomRef, AtomRef][],
   partialBonds: [AtomRef, AtomRef][],
   placementCaptions: boolean,
 ): Promise<Scene> {
-  if (!frame.steps?.length) {
-    const bonds = partialBonds.filter(([a, b]) => a.molecule !== b.molecule);
-    if (cells.length === 2 && bonds.length) {
-      const toolkit = await moleculeToolkit();
-      const drawings = cells.map(({ scene }) => {
-        const placement = scene.molecules[0];
-        const entry = library[placement.compound];
-        if (entry.kind !== "compound")
-          throw new Error("Partial bonds require chemical atoms");
-        const layout = placement.variant
-          ? entry.variants![placement.variant]
-          : entry.layout;
-        const compound = compoundView(toolkit, entry, layout);
-        const points = placedCoordinates(
-          toolkit,
-          compound,
-          layout,
-          placement.rotate,
-          placement.mirror,
-        );
-        const molecule = openMolecule(toolkit, compound.smiles);
-        try {
-          return {
-            placement,
-            points,
-            bonds: graphOf(molecule).bonds,
-            point: ({ atom }: AtomRef) =>
-              points[compound.atomIds.indexOf(atom)],
-          };
-        } finally {
-          molecule.delete();
-        }
-      });
-      const [fixed, moving] = drawings.sort(
-        (a, b) => b.points.length - a.points.length,
+  const bonds = partialBonds.filter(([a, b]) => a.molecule !== b.molecule);
+  if (cells.length === 2 && bonds.length) {
+    const toolkit = await moleculeToolkit();
+    const drawings = cells.map(({ scene }) => {
+      const placement = scene.molecules[0];
+      const entry = library[placement.compound];
+      if (entry.kind !== "compound")
+        throw new Error("Partial bonds require chemical atoms");
+      const layout = placement.variant
+        ? entry.variants![placement.variant]
+        : entry.layout;
+      const compound = compoundView(toolkit, entry, layout);
+      const points = placedCoordinates(
+        toolkit,
+        compound,
+        layout,
+        placement.rotate,
+        placement.mirror,
       );
-      const anchor = fixed.placement,
-        shifted = moving.placement;
-      const positioned = placeBondContacts(
-        fixed,
-        moving,
-        bonds.map(([a, b]) =>
-          a.molecule === anchor.id
-            ? [fixed.point(a), moving.point(b)]
-            : [fixed.point(b), moving.point(a)],
-        ),
-      );
-      if (!positioned)
-        throw new Error(
-          `Frame ${frame.id}: no clear placement for partial bonds`,
-        );
-      if (Math.abs(positioned.rotate) > 1e-9)
-        shifted.rotate = (shifted.rotate ?? 0) + positioned.rotate;
-      return compilePanelScene(
-        library,
-        entry,
-        input,
-        cells,
-        style,
-        placementCaptions,
-        { [anchor.id]: { x: 0, y: 0 }, [shifted.id]: positioned.at },
-      );
-    }
-    const forward = await compilePanelScene(
+      const molecule = openMolecule(toolkit, compound.smiles);
+      try {
+        return {
+          placement,
+          points,
+          bonds: graphOf(molecule).bonds,
+          point: ({ atom }: AtomRef) => points[compound.atomIds.indexOf(atom)],
+        };
+      } finally {
+        molecule.delete();
+      }
+    });
+    const [fixed, moving] = drawings.sort(
+      (a, b) => b.points.length - a.points.length,
+    );
+    const anchor = fixed.placement,
+      shifted = moving.placement;
+    const positioned = placeBondContacts(
+      fixed,
+      moving,
+      bonds.map(([a, b]) =>
+        a.molecule === anchor.id
+          ? [fixed.point(a), moving.point(b)]
+          : [fixed.point(b), moving.point(a)],
+      ),
+    );
+    if (!positioned) throw new Error("No clear placement for partial bonds");
+    if (Math.abs(positioned.rotate) > 1e-9)
+      shifted.rotate = (shifted.rotate ?? 0) + positioned.rotate;
+    return compilePanelScene(
       library,
       entry,
-      input,
+      {},
       cells,
       style,
       placementCaptions,
+      { [anchor.id]: { x: 0, y: 0 }, [shifted.id]: positioned.at },
     );
-    if (cells.length !== 2 || !contacts.length) return forward;
-    const reverse = await compilePanelScene(
-      library,
-      entry,
-      input,
-      [...cells].reverse(),
-      style,
-      placementCaptions,
-    );
-    const options = {
-      style,
-      fonts: await loadFigureFonts(),
-      toolkit: await moleculeToolkit(),
-      canvas: "scene" as const,
-    };
-    const distance = async (scene: Scene) => {
-      const probe: Mechanism = {
-        ...entry,
-        frames: [{ id: "measure", title: "Measure", scene }],
-      };
-      const geometry = await prepareFigure(
-        { ...library, [entry.id]: probe },
-        { ref: entry.id },
-        options,
-      );
-      const at = (ref: AtomRef) =>
-        geometry.atomPoints[`${ref.molecule}:${ref.atom}`];
-      return contacts.reduce(
-        (sum, [a, b]) => sum + Math.hypot(at(a).x - at(b).x, at(a).y - at(b).y),
-        0,
-      );
-    };
-    // Keep the reaction sites close by putting their exposed ends toward one another.
-    return (await distance(reverse)) < (await distance(forward)) - 0.1
-      ? reverse
-      : forward;
   }
-
-  const byKey = new Map(cells.map((cell) => [cell.key, cell])),
-    working = { ...library },
-    raw = new Map<string, NonNullable<FrameInput["steps"]>[number]>();
-  const route: Route = {
-    kind: "route",
-    id: entry.id,
-    title: entry.title,
-    sources: entry.sources,
-    steps: [],
-    edges: [],
-    width: 1,
-    height: 1,
+  const forward = await compilePanelScene(
+    library,
+    entry,
+    {},
+    cells,
+    style,
+    placementCaptions,
+  );
+  if (cells.length !== 2 || !contacts.length) return forward;
+  const reverse = await compilePanelScene(
+    library,
+    entry,
+    {},
+    [...cells].reverse(),
+    style,
+    placementCaptions,
+  );
+  const options = {
+    style,
+    fonts: await loadFigureFonts(),
+    toolkit: await moleculeToolkit(),
+    canvas: "scene" as const,
   };
-  const participant = (key: string): Participant => {
-    const cell = byKey.get(key);
-    if (!cell)
-      throw new Error(`frames.${frame.id}.steps: unknown compound ${key}`);
-    const molecule = cell.scene.molecules[0];
-    if (!molecule)
-      throw new Error(`frames.${frame.id}.steps: ${key} requires a structure`);
-    return {
-      id: key,
-      sourceKey: key,
+  const distance = async (scene: Scene) => {
+    const geometry = await prepareFigure(
+      { ...library, [entry.id]: entry },
+      { ref: entry.id },
+      { ...options, scene },
+    );
+    const at = (ref: AtomRef) =>
+      geometry.atomPoints[`${ref.molecule}:${ref.atom}`];
+    return contacts.reduce(
+      (sum, [a, b]) => sum + Math.hypot(at(a).x - at(b).x, at(a).y - at(b).y),
+      0,
+    );
+  };
+  // Keep the reaction sites close by putting their exposed ends toward one another.
+  return (await distance(reverse)) < (await distance(forward)) - 0.1
+    ? reverse
+    : forward;
+}
+
+export async function compileGroupLayout(
+  library: Library,
+  entry: Figure,
+  cells: PanelCell[],
+  states: FigureGraph["states"],
+  arrows: FigureGraph["arrows"],
+  style: FigureStyle,
+) {
+  const byState = new Map(cells.map((cell) => [cell.key, cell]));
+  const participant = (endpoint: GraphParticipant): GraphParticipant => {
+    const cell = byState.get(endpoint.state);
+    const molecule = cell?.scene.molecules[0];
+    if (!cell || !molecule)
+      throw new Error(`${endpoint.state}: expected group structure`);
+    const appearance: Participant = {
+      id: molecule.id,
+      sourceKey: endpoint.state + "/" + molecule.id,
       compound: molecule.compound,
-      number: words(cell.spec.label ?? key),
+      number: words(cell.spec.label ?? molecule.id),
       name: [words(cell.spec.name), words(cell.spec.note)]
         .filter(Boolean)
         .join("\n"),
       ...(cell.spec.yield ? { yield: cell.spec.yield } : {}),
     };
+    return { ...endpoint, placement: molecule.id, appearance };
   };
-  for (const [i, step] of frame.steps.entries()) {
-    const sid = String(step.id ?? i + 1),
-      rid = `rxn_${entry.id.slice(4)}_${frame.id}_${sid}`;
-    if (raw.has(sid))
-      throw new Error(`frames.${frame.id}.steps: duplicate step ${sid}`);
-    raw.set(sid, step);
-    const reactants = keys(step.from).map(participant),
-      products = keys(step.to).map(participant);
-    const scene: Scene = {
-      width: 1,
-      height: 1,
-      molecules: [...reactants, ...products].flatMap(
-        (p) => byKey.get(p.id)!.scene.molecules,
-      ),
-    };
-    const reaction: Reaction = {
-      kind: "reaction",
-      id: rid,
-      title: entry.title,
-      sources: entry.sources,
-      reactants,
-      products,
-      reagents: words(step.above).split("\n").filter(Boolean),
-      conditions: words(step.below).split("\n").filter(Boolean),
-      scene,
-      arrow: {
-        from: { x: 0, y: 0 },
-        to: { x: 1, y: 0 },
-        textWidth: 5,
-        kind: step.arrow ?? "forward",
-      },
-    };
-    working[rid] = reaction;
-    route.steps.push({ id: sid, reaction: rid, at: { x: 0, y: 0 } });
-  }
-  await compileRouteLayout(
-    working,
-    route,
-    {
-      ...input,
-      kind: "route",
-      compounds: Object.fromEntries(cells.map(({ key, spec }) => [key, spec])),
-      steps: frame.steps,
-    },
-    raw,
+  const graph: FigureGraph = {
+    states,
+    arrows: Object.fromEntries(
+      Object.entries(arrows).map(([id, edge]) => {
+        const from = edge.from.map(participant);
+        const to = edge.to.map(participant);
+        const scene: Scene = {
+          width: 1,
+          height: 1,
+          molecules: [...from, ...to].flatMap(
+            ({ state }) => byState.get(state)!.scene.molecules,
+          ),
+        };
+        const drawing: NonNullable<GraphArrow["drawing"]> = {
+          scene,
+          reagents: edge.above ?? [],
+          conditions: edge.below ?? [],
+          arrow: {
+            from: { x: 0, y: 0 },
+            to: { x: 1, y: 0 },
+            textWidth: 5,
+            kind: edge.kind,
+          },
+        };
+        return [id, { ...edge, from, to, drawing }];
+      }),
+    ),
+  };
+  const geometry = await compileGraphLayout(
+    library,
+    { ...entry, graph },
     style,
+  );
+  const { route, placements } = geometry;
+  const byKey = new Map(
+    cells.map((cell) => [cell.scene.molecules[0].id, cell]),
   );
   const scene: Scene = {
     width: route.width,
@@ -239,7 +205,7 @@ export async function compileMechanismFrameLayout(
     captions: (route.plusAt ?? []).map((at) => ({ at, text: "+" })),
     reactionArrows: [],
   };
-  for (const step of route.steps) {
+  for (const [id, step] of Object.entries(placements)) {
     for (const [key, at] of Object.entries(step.placements!)) {
       if (
         step.display?.[key] === "hidden" ||
@@ -250,10 +216,10 @@ export async function compileMechanismFrameLayout(
       const labeled = await compilePanelScene(
         library,
         entry,
-        input,
+        {},
         [cell],
         style,
-        placementCaptions,
+        false,
       );
       const origin = labeled.molecules[0].at,
         dx = at.x + step.at.x - origin.x,
@@ -303,17 +269,15 @@ export async function compileMechanismFrameLayout(
       y: p.y + step.at.y,
     });
     scene.reactionArrows!.push({
-      id: step.id,
+      id,
       from: absolute(arrow.from),
       to: absolute(arrow.to),
       kind: arrow.kind,
-      above: words(raw.get(step.id)!.above).split("\n").filter(Boolean),
-      below: words(raw.get(step.id)!.below).split("\n").filter(Boolean),
+      above: arrows[id].above,
+      below: arrows[id].below,
     });
   }
   if (scene.molecules.length !== cells.length)
-    throw new Error(
-      `frames.${frame.id}.steps: every compound must participate`,
-    );
+    throw new Error("Every group placement must participate in its arrows");
   return scene;
 }

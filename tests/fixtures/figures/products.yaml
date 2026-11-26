@@ -1,13 +1,41 @@
 kind: scheme
 title: Product mixture
-compounds:
-  1: CCC=O
-  2: { smiles: "CC/C=N/O", name: A }
-  3: { smiles: "CC/C=N\\O", name: B }
-  4: { text: NH2OH }
-steps:
-  - from: [1, { id: 4, show: text }]
+states:
+  "1":
+    compounds:
+      structure:
+        label: "1"
+        smiles: CCC=O
+  "2":
+    compounds:
+      structure:
+        label: "2"
+        smiles: CC/C=N/O
+        name: A
+  "3":
+    compounds:
+      structure:
+        label: "3"
+        smiles: CC/C=N\O
+        name: B
+  "4":
+    text: NH2OH
+arrows:
+  "1":
+    from:
+      - state: "1"
+        id: "1"
+      - state: "4"
+        id: "4"
+        show: text
     to:
-      [{ id: 2, ratio: "45%" }, { id: 3, ratio: "55%", yield: "82% combined" }]
-    below: "25 °C"
-    arrow: equilibrium
+      - state: "2"
+        id: product-2
+        ratio: 45%
+      - state: "3"
+        id: product-3
+        ratio: 55%
+        yield: 82% combined
+    kind: equilibrium
+    role: reaction
+    below: 25 °C

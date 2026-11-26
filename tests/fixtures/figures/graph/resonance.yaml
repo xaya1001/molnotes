@@ -1,0 +1,26 @@
+kind: scheme
+title: 乙酸根的两种贡献式
+states:
+  a:
+    title: 贡献式 A
+    compounds:
+      structure: { smiles: "C[C:1](=[O:2])[O-:3]", abbreviate: false }
+    arrows:
+      - { id: donate, from: "lp(3)", to: "bond(1,3)" }
+      - { id: shift, from: "pi(1,2)", to: "atom(2)" }
+  b:
+    title: 贡献式 B
+    compounds:
+      structure: { smiles: "C[C:1]([O-:2])=[O:3]", abbreviate: false }
+arrows:
+  delocalization:
+    from: [a]
+    to: [b]
+    kind: resonance
+    role: elementary
+    map:
+      {
+        "structure:1": "structure:1",
+        "structure:2": "structure:2",
+        "structure:3": "structure:3",
+      }

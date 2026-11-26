@@ -1,0 +1,39 @@
+kind: scheme
+title: 光氧化还原催化循环
+states:
+  ground: { text: PC }
+  excited: { text: "\\*PC" }
+  reduced: { text: "PC^{−}" }
+arrows:
+  step-1:
+    {
+      from: [ground],
+      to: [excited],
+      kind: forward,
+      role: elementary,
+      in: hν,
+      title: 光激发,
+    }
+  step-2:
+    {
+      from: [excited],
+      to: [reduced],
+      kind: forward,
+      role: elementary,
+      in: D,
+      out: "D^{+}",
+      title: 还原猝灭,
+    }
+  step-3:
+    {
+      from: [reduced],
+      to: [ground],
+      kind: forward,
+      role: elementary,
+      in: A,
+      out: "A^{−}",
+      title: 催化剂再生,
+    }
+layout: { anchor: ground, radius: 185 }
+views:
+  overview: { items: [ground, excited, reduced] }

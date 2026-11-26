@@ -1,3 +1,6 @@
+import { arrowAt } from "./helpers/figure-graph.ts";
+import { compileFigure } from "../scripts/figure-scene.ts";
+import { panelGraph } from "./helpers/figure-graph.ts";
 import { serveFigureViews } from "./helpers/figure-views.ts";
 import { expect, test } from "./helpers/test.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
@@ -5,7 +8,7 @@ import { prepareCompound } from "../shared/chemical-library/chemistry.ts";
 import type {
   Library,
   LibrarySnapshot,
-  Reaction,
+  Figure,
 } from "../shared/chemical-library/types.ts";
 
 test.setTimeout(90_000);
@@ -18,24 +21,60 @@ async function fixture(): Promise<LibrarySnapshot> {
     smiles: "CC(N)C(=O)O",
     sources,
   });
-  const reaction: Reaction = {
-    kind: "reaction",
+  const reaction: Figure = {
+    kind: "figure",
     id: "rxn_example",
     title: "Example transformation",
     sources,
-    reactants: [{ id: "input", compound: compound.id }],
-    products: [{ id: "output", compound: compound.id, yield: "80%" }],
-    reagents: ["Reagent"],
-    conditions: ["Ambient temperature"],
-    scene: {
-      width: 24,
-      height: 9,
-      molecules: [
-        { id: "input", compound: compound.id, at: { x: 4, y: 4 } },
-        { id: "output", compound: compound.id, at: { x: 20, y: 4 } },
-      ],
+    views: {},
+    graph: {
+      states: {
+        input: { compounds: { structure: { ref: compound.id } } },
+        output: { compounds: { structure: { ref: compound.id } } },
+      },
+      arrows: {
+        transform: {
+          kind: "forward",
+          role: "reaction",
+          from: [
+            {
+              state: "input",
+              placement: "structure",
+              appearance: {
+                id: "input",
+                sourceKey: "input/structure",
+                compound: compound.id,
+              },
+            },
+          ],
+          to: [
+            {
+              state: "output",
+              placement: "structure",
+              appearance: {
+                id: "output",
+                sourceKey: "output/structure",
+                yield: "80%",
+                compound: compound.id,
+              },
+            },
+          ],
+          drawing: {
+            reagents: ["Reagent"],
+            conditions: ["Ambient temperature"],
+            scene: {
+              width: 24,
+              height: 9,
+              molecules: [
+                { id: "input", compound: compound.id, at: { x: 4, y: 4 } },
+                { id: "output", compound: compound.id, at: { x: 20, y: 4 } },
+              ],
+            },
+            arrow: { from: { x: 8, y: 4 }, to: { x: 16, y: 4 }, textWidth: 8 },
+          },
+        },
+      },
     },
-    arrow: { from: { x: 8, y: 4 }, to: { x: 16, y: 4 }, textWidth: 8 },
   };
   const entries: Library = { [compound.id]: compound, [reaction.id]: reaction };
   return {
@@ -156,8 +195,7 @@ test("wrapped reaction conditions leave visible space between CJK and Latin line
   page,
 }) => {
   const library = await fixture();
-  const reaction = library.entries.rxn_example;
-  if (reaction.kind !== "reaction") throw new Error("Invalid fixture");
+  const reaction = arrowAt(library.entries.rxn_example).drawing;
   reaction.reagents = [
     "试剂甲与试剂乙混合后缓慢加入反应体系",
     "Reagent A / Me2S / H₂O",
@@ -184,7 +222,7 @@ test("wrapped reaction conditions leave visible space between CJK and Latin line
     [],
   );
   const lines = await entry
-    .locator('[data-label*="rxn_example:condition:"]')
+    .locator('[data-label*=":condition:"]')
     .evaluateAll((nodes) =>
       nodes.map((node) => node.getAttribute("data-text") ?? ""),
     );
@@ -195,9 +233,7 @@ test("wrapped reaction conditions leave visible space between CJK and Latin line
     const gaps = await entry.locator("svg").evaluate((svg) => {
       return [-1, 1].flatMap((sign) => {
         const lines = [
-          ...svg.querySelectorAll(
-            `[data-label^="rxn_example:condition:${sign}:"]`,
-          ),
+          ...svg.querySelectorAll(`[data-label*=":condition:${sign}:"]`),
         ]
           .map((el) => el.getBoundingClientRect())
           .sort((a, b) => a.top - b.top);
@@ -477,39 +513,37 @@ test("wrapped route connections clear quantities and reaction heads at every row
   page,
 }) => {
   const library = await fixture();
-  const base = library.entries.rxn_example;
-  if (base.kind !== "reaction") throw new Error("Invalid fixture");
-  for (const [id, count, shift] of [
-    ["rte_two", 2, 0],
-    ["rte_seven", 7, 0],
-    ["rte_quantity", 3, 16],
+  for (const [id, count] of [
+    ["rte_two", 2],
+    ["rte_seven", 7],
+    ["rte_quantity", 3],
   ] as const) {
-    const steps = Array.from({ length: count }, (_, i) => {
-      const reaction = structuredClone(base);
-      reaction.id = `rxn_${id}_${i}`;
-      reaction.products[0].yield = i % 2 ? "100%" : "67.7%";
-      library.entries[reaction.id] = reaction;
-      return {
-        id: `step${i}`,
-        reaction: reaction.id,
-        at: { x: shift * i, y: 11 * i },
-      };
-    });
-    library.entries[id] = {
-      kind: "route",
-      id,
-      title: "Example route",
-      sources: base.sources,
-      steps,
-      edges: steps.slice(1).map((s, i) => ({
-        from: steps[i].id,
-        to: s.id,
-        product: "output",
-        reactant: "input",
-      })),
-      width: 24 + shift * (count - 1),
-      height: 11 * count,
-    };
+    const states = Object.fromEntries(
+      Array.from({ length: count + 1 }, (_, i) => [
+        "s" + i,
+        { compounds: { structure: { ref: "cmp_example" } } },
+      ]),
+    );
+    const arrows = Object.fromEntries(
+      Array.from({ length: count }, (_, i) => [
+        "step" + i,
+        {
+          kind: "forward",
+          role: "reaction",
+          from: { state: "s" + i, id: "input" },
+          to: {
+            state: "s" + (i + 1),
+            id: "output",
+            yield: i % 2 ? "100%" : "67.7%",
+          },
+        },
+      ]),
+    );
+    const compiled = await compileFigure(
+      { kind: "scheme", id, states, arrows, changes: "off" },
+      library.entries,
+    );
+    Object.assign(library.entries, compiled.entries);
   }
   for (const id of Object.keys(library.entries)) library.uses[id] ??= [];
   await serveFigureViews(page, library);
@@ -566,36 +600,47 @@ test("mechanism references show the complete overview or one pinned frame", asyn
   const library = await fixture();
   const compound = library.entries.cmp_example;
   library.entries.mec_example = {
-    kind: "mechanism",
+    kind: "figure",
     id: "mec_example",
     title: "Example steps",
     sources: compound.sources,
-    category: "reaction",
-    frames: ["first", "second"].map((id) => ({
-      id,
-      title: id,
-      scene: {
-        width: 12,
-        height: 8,
-        molecules: [
-          {
-            id: "structure",
-            compound: compound.id,
-            at: { x: id === "first" ? 5 : 7, y: 4 },
-          },
-        ],
-      },
-    })),
+    ...panelGraph(
+      ["first", "second"].map((id) => ({
+        id,
+        title: id,
+        scene: {
+          width: 12,
+          height: 8,
+          molecules: [
+            {
+              id: "structure",
+              compound: compound.id,
+              at: { x: id === "first" ? 5 : 7, y: 4 },
+            },
+          ],
+        },
+      })),
+    ),
   };
-  const reference = {
+  const frameReference = {
     ref: "mec_example",
+    frame: "second",
     numbers: { structure: "7" },
     focus: { primary: { atoms: [{ molecule: "structure", atom: "a3" }] } },
   };
-  await serveFigureViews(page, library, [
-    reference,
-    { ...reference, frame: "second" },
-  ]);
+  const overviewReference = {
+    ref: "mec_example",
+    numbers: { "first/structure": "7", "second/structure": "7" },
+    focus: {
+      primary: {
+        atoms: ["first/structure", "second/structure"].map((molecule) => ({
+          molecule,
+          atom: "a3",
+        })),
+      },
+    },
+  };
+  await serveFigureViews(page, library, [overviewReference, frameReference]);
   await page.route("**/api/library", (route) =>
     route.fulfill({ json: library }),
   );
@@ -603,8 +648,8 @@ test("mechanism references show the complete overview or one pinned frame", asyn
     const response = await route.fetch();
     const topic = await response.json();
     topic.content.chapters[0].blocks = [
-      { type: "figure-ref", ...reference },
-      { type: "figure-ref", ...reference, frame: "second" },
+      { type: "figure-ref", ...overviewReference },
+      { type: "figure-ref", ...frameReference },
     ];
     await route.fulfill({ json: topic });
   });
@@ -670,15 +715,18 @@ test("adjacent bond transfers use a readable arc when space is available", async
 }) => {
   const { compileFigure } = await import("../scripts/figure-scene.ts");
   const { entries, reference } = await compileFigure({
-    title: "Bond transfer",
     kind: "scheme",
-    frames: [
-      {
-        id: "transfer",
-        smiles: "[2H:1][CH2:2][C:3](=[O:4])[CH3:5]",
+    title: "Bond transfer",
+    states: {
+      transfer: {
         arrows: [{ id: "electron-1", from: "bond(1,2)", to: "bond(2,3)" }],
+        compounds: {
+          structure: { smiles: "[2H:1][CH2:2][C:3](=[O:4])[CH3:5]" },
+        },
       },
-    ],
+    },
+    arrows: {},
+    views: { transfer: { items: ["transfer"] } },
   });
   const library: LibrarySnapshot = { entries, uses: {} };
   await serveFigureViews(page, library);
@@ -720,24 +768,34 @@ test("adjacent bond transfers use a readable arc when space is available", async
 
 test("saved product separators are rendered once", async () => {
   const library = await fixture();
-  const reaction = library.entries.rxn_example as Reaction;
-  reaction.products.push({
-    id: "second",
-    compound: "cmp_example",
-    yield: "20%",
+  const figure = library.entries.rxn_example;
+  if (figure.kind !== "figure") throw new Error("Invalid fixture");
+  const arrow = arrowAt(figure);
+  figure.graph.states.second = {
+    compounds: { structure: { ref: "cmp_example" } },
+  };
+  arrow.to.push({
+    state: "second",
+    placement: "structure",
+    appearance: {
+      id: "second",
+      sourceKey: "second/structure",
+      compound: "cmp_example",
+      yield: "20%",
+    },
   });
-  reaction.scene.width = 40;
-  reaction.scene.molecules.push({
+  arrow.drawing.scene.width = 40;
+  arrow.drawing.scene.molecules.push({
     id: "second",
     compound: "cmp_example",
     at: { x: 31, y: 4 },
   });
-  reaction.scene.captions = [{ at: { x: 25.5, y: 4 }, text: "+" }];
+  arrow.drawing.scene.captions = [{ at: { x: 25.5, y: 4 }, text: "+" }];
   const { prepareFigureViews } =
     await import("../scripts/content/figure-build.ts");
   const result = await prepareFigureViews(
     library.entries,
-    [{ ref: reaction.id }],
+    [{ ref: figure.id }],
     ".",
   );
   const svg = result.assets[0].bytes.toString();

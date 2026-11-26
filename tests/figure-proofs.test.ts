@@ -1,3 +1,4 @@
+import { panelGraph } from "./helpers/figure-graph.ts";
 import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
@@ -17,7 +18,7 @@ import type { FigureGeometry } from "../shared/chemical-library/geometry.ts";
 import type {
   Library,
   Compound,
-  Reaction,
+  Figure,
 } from "../shared/chemical-library/types.ts";
 
 async function fixture(t: TestContext) {
@@ -33,24 +34,59 @@ async function fixture(t: TestContext) {
     atomIds: ["a1", "a2"],
     layout: { coords: { a1: { x: 0, y: 0 }, a2: { x: 1, y: 0 } } },
   });
-  const reaction: Reaction = {
-    kind: "reaction",
+  const reaction: Figure = {
+    kind: "figure",
     id: "rxn_example",
     title: "Example transformation",
     sources: [{ source: "example", locator: "Reactions" }],
-    reactants: [{ id: "input", compound: "cmp_a" }],
-    products: [{ id: "output", compound: "cmp_b" }],
-    reagents: [],
-    conditions: [],
-    scene: {
-      width: 12,
-      height: 8,
-      molecules: [
-        { id: "input", compound: "cmp_a", at: { x: 2, y: 3 } },
-        { id: "output", compound: "cmp_b", at: { x: 10, y: 3 } },
-      ],
+    views: {},
+    graph: {
+      states: {
+        input: { compounds: { structure: { ref: "cmp_a" } } },
+        output: { compounds: { structure: { ref: "cmp_b" } } },
+      },
+      arrows: {
+        transform: {
+          kind: "forward",
+          role: "reaction",
+          from: [
+            {
+              state: "input",
+              placement: "structure",
+              appearance: {
+                id: "input",
+                sourceKey: "input/structure",
+                compound: "cmp_a",
+              },
+            },
+          ],
+          to: [
+            {
+              state: "output",
+              placement: "structure",
+              appearance: {
+                id: "output",
+                sourceKey: "output/structure",
+                compound: "cmp_b",
+              },
+            },
+          ],
+          drawing: {
+            reagents: [],
+            conditions: [],
+            scene: {
+              width: 12,
+              height: 8,
+              molecules: [
+                { id: "input", compound: "cmp_a", at: { x: 2, y: 3 } },
+                { id: "output", compound: "cmp_b", at: { x: 10, y: 3 } },
+              ],
+            },
+            arrow: { from: { x: 4, y: 3 }, to: { x: 8, y: 3 }, textWidth: 4 },
+          },
+        },
+      },
     },
-    arrow: { from: { x: 4, y: 3 }, to: { x: 8, y: 3 }, textWidth: 4 },
   };
   const library: Library = {
     cmp_a: compound("cmp_a"),
@@ -292,37 +328,42 @@ test("diagnostic code changes reuse geometry and recompute proofs", async (t) =>
 test("mechanism overview and pinned views retain local numbering and focus", async (t) => {
   const f = await fixture(t);
   f.library.mec_example = {
-    kind: "mechanism",
+    kind: "figure",
     id: "mec_example",
     title: "Example mechanism",
-    category: "comparison",
     sources: f.library.cmp_a.sources,
-    frames: ["first", "second"].map((id) => ({
-      id,
-      title: id,
-      scene: {
-        width: 8,
-        height: 6,
-        molecules: [{ id: "input", compound: "cmp_a", at: { x: 4, y: 3 } }],
-      },
-    })),
+    ...panelGraph(
+      ["first", "second"].map((id) => ({
+        id,
+        title: id,
+        scene: {
+          width: 8,
+          height: 6,
+          molecules: [{ id: "input", compound: "cmp_a", at: { x: 4, y: 3 } }],
+        },
+      })),
+    ),
   };
   const local = {
     ref: "mec_example",
-    numbers: { input: "7" },
-    focus: { primary: { atoms: [{ molecule: "input", atom: "a1" }] } },
+    numbers: { "first/input": "7" },
+    focus: { primary: { atoms: [{ molecule: "first/input", atom: "a1" }] } },
   };
   const views = figureProofReferences(f.library, [local]);
   assert.deepEqual(
     views.filter((view) => view.ref === local.ref && view.numbers),
     [local],
   );
-  const pinned = figureProofReferences(f.library, [
-    { ...local, frame: "second" },
-  ]);
+  const selection = {
+    ref: local.ref,
+    frame: "second",
+    numbers: { input: "7" },
+    focus: { primary: { atoms: [{ molecule: "input", atom: "a1" }] } },
+  };
+  const pinned = figureProofReferences(f.library, [selection]);
   assert.deepEqual(
     pinned.filter((view) => view.ref === local.ref && view.numbers),
-    [{ ...local, frame: "second" }],
+    [selection],
   );
 });
 

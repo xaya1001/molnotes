@@ -9,8 +9,8 @@ import { reactionChanges } from "./figure-changes.ts";
 import { placeArrowFragments } from "./figure-fragments.ts";
 import { counterionGroups } from "../shared/chemical-library/ion-layout.ts";
 import {
-  compileRouteLayout,
-  compileReactionLayout,
+  compileGraphLayout,
+  compileArrowLayout,
   loadFigureStyle,
 } from "./figure-route.ts";
 import {
@@ -45,17 +45,20 @@ import {
   validateLibrary,
 } from "../shared/chemical-library/contract.ts";
 import { finishFigureEntry } from "./figure-output.ts";
-import { routeMetrics } from "../shared/chemical-library/routes.ts";
+import { figureRouteMetrics } from "../shared/chemical-library/routes.ts";
 import { compilePanelScene, type PanelCell } from "./figure-panels.ts";
-import { compileMechanismFrameLayout } from "./figure-mechanism.ts";
+import { compileGroupLayout, compileStateLayout } from "./figure-mechanism.ts";
 import {
   validateFigureInput,
   type StructureInput,
-  type ProductInput,
-  type StepInput,
-  type FrameInput,
-  type FigureInput,
+  type SchemeArrow,
+  type SchemeCompound,
+  type SchemeEndpoint,
+  type SchemeGraph,
+  type SchemeParticipant,
+  type SchemeState,
 } from "./figure-input.ts";
+import { graphScenes } from "../shared/chemical-library/figure-layout.ts";
 import type {
   Anchor,
   AtomRef,
@@ -63,13 +66,12 @@ import type {
   Conformation,
   Evidence,
   Library,
-  LibraryEntry,
-  Mechanism,
+  Figure,
+  FigureGraph,
+  GraphArrow,
   Participant,
   Placement,
   Point,
-  Reaction,
-  Route,
   Scene,
 } from "../shared/chemical-library/types.ts";
 
@@ -181,8 +183,6 @@ function depictStructures(
 function endpoints<T>(value: T | T[]): T[] {
   return Array.isArray(value) ? value : [value];
 }
-const keyOf = (v: string | number | { id: string | number }) =>
-  typeof v === "object" ? String(v.id) : String(v);
 const layoutOf = (r: ChemicalStructure) =>
   r.variant ? r.compound.variants![r.variant] : r.compound.layout;
 function chemicalBounds(rd: Toolkit, r: ChemicalStructure) {
@@ -296,23 +296,23 @@ export async function compileFigure(
     generated = new Set<string>();
   for (const entry of Object.values(entries)) finishFigureEntry(entry);
   const previous = Object.values(entries).find(
-    (e) => e.sourceKey === sourceKey && !e.owner,
+    (e) =>
+      (("id" in input && e.id === input.id) || e.sourceKey === sourceKey) &&
+      !e.owner,
   );
-  const kind = input.kind,
-    count = input.steps?.length ?? 0;
-  const routeGraph =
-    kind === "route" && (count > 1 || previous?.kind === "route");
+  const authored = input.kind === "scheme" ? input : undefined;
+  const reactionCount = Object.values(authored?.arrows ?? {}).filter(
+    (arrow) => arrow.role === "reaction",
+  ).length;
   const prefix =
-    kind === "markush"
+    input.kind === "markush"
       ? "mku_"
-      : kind !== "route"
-        ? "mec_"
-        : routeGraph
-          ? "rte_"
-          : "rxn_";
-  const id = previous?.id ?? prefix + sourceKey;
-  if (!id.startsWith(prefix))
-    throw new Error("Changing figure kind requires a new source file");
+      : reactionCount > 1
+        ? "rte_"
+        : reactionCount
+          ? "rxn_"
+          : "mec_";
+  const id = authored?.id ?? previous?.id ?? prefix + sourceKey;
   const sourceFile = `library/sources/${id}.yaml`,
     title = words(input.title) || "Figure";
   const sources: Evidence[] = input.sources?.map((s) => ({
@@ -320,16 +320,16 @@ export async function compileFigure(
     locator: words(s.locator) || title,
     ...(s.note === undefined ? {} : { note: words(s.note) }),
   })) ?? [{ source: "unknown", locator: title, note: "Authored figure" }];
+  const overrides =
+    input.bond !== undefined || input.width !== undefined
+      ? { bond: input.bond, width: input.width }
+      : undefined;
   const style = chemicalFigureStyle(
     options.style ?? (await loadFigureStyle()),
-    input,
+    overrides,
   );
   const base = {
-    ...(input.bond === undefined && input.width === undefined
-      ? {}
-      : {
-          style: { bond: input.bond, width: input.width },
-        }),
+    ...(overrides && { style: overrides }),
     title,
     sources,
     sourceFile,
@@ -338,7 +338,7 @@ export async function compileFigure(
       ? {}
       : { footnote: words(input.footnote) }),
   };
-  if (kind === "markush") {
+  if (input.kind === "markush") {
     const entry: LibraryMarkush = finishFigureEntry({
       ...base,
       kind: "markush",
@@ -368,47 +368,47 @@ export async function compileFigure(
     };
   }
   const templateFonts = await loadFigureFonts();
-  const previousReactions =
-    previous?.kind === "reaction"
-      ? [previous]
-      : previous?.kind === "route"
-        ? previous.steps
-            .map((step) => existing[step.reaction])
-            .filter((entry): entry is Reaction => entry?.kind === "reaction")
-        : [];
-  const compoundBindings = new Map<string, string>(
-    previousReactions.flatMap((reaction) =>
-      [...reaction.reactants, ...reaction.products].flatMap((p) =>
-        p.sourceKey ? [[`compounds.${p.sourceKey}`, p.compound] as const] : [],
-      ),
-    ),
-  );
-  const bindFrames = (frames: Mechanism["frames"], path: string) => {
-    for (const frame of frames)
-      for (const molecule of frame.scene.molecules) {
-        compoundBindings.set(
-          `${path}.${frame.id}.compounds.${molecule.id}`,
-          molecule.compound,
-        );
-        if (frame.scene.molecules.length === 1)
-          compoundBindings.set(`${path}.${frame.id}`, molecule.compound);
-      }
+  if (!authored) throw new Error("Expected a scheme graph");
+  const graphSource = authored;
+  const existingGraph =
+    previous?.kind === "figure" ? previous.graph : undefined;
+  const bindings = new Map<string, { ref: string; variant?: string }>();
+  const bindSaved = (graph: FigureGraph, prefix = "") => {
+    for (const [id, state] of Object.entries(graph.states))
+      for (const [placement, binding] of Object.entries(state.compounds ?? {}))
+        bindings.set(prefix + id + "/" + placement, binding);
+    for (const [id, group] of Object.entries(graph.groups ?? {}))
+      for (const { id: placement, compound, variant } of group.scene
+        ?.molecules ?? [])
+        bindings.set(prefix + id + "/" + placement, { ref: compound, variant });
+    for (const [id, arrow] of Object.entries(graph.arrows))
+      if (arrow.via) bindSaved(arrow.via, prefix + id + "/via/");
   };
-  if (previous?.kind === "mechanism") bindFrames(previous.frames, "frames");
-  // Remove only entries owned by this route when a step is removed.
-  for (const e of Object.values(entries))
-    if (e.owner === id) delete entries[e.id];
+  if (existingGraph) bindSaved(existingGraph);
+  const variantName = (where: string) =>
+    bindings.get(where)?.variant ?? `${id}_${figureKey(where)}`;
+
   async function resolveStructure(
-    spec: StructureInput,
+    spec: SchemeCompound,
     where: string,
     frameMaps: { electronic: number[]; protected: number[] } = {
       electronic: [],
       protected: [],
     },
     piSources: number[][] = [],
+    electronicState = false,
   ): Promise<Resolved> {
+    const binding = bindings.get(where);
+    if (spec.ref) {
+      const target = entries[spec.ref];
+      if (target?.kind === "conformation")
+        return { compound: target, spec, atoms: new Map() };
+      if (target?.kind !== "compound")
+        throw new Error(`${where}: unknown compound ${spec.ref}`);
+      spec = { ...spec, smiles: target.smiles };
+    }
     if (spec.template) {
-      const cid = `cnf_${sourceKey}_${figureKey(where)}`;
+      const cid = binding?.ref ?? `cnf_${sourceKey}_${figureKey(where)}`;
       const compound: Conformation = {
         template: spec.template,
         subs: spec.subs,
@@ -448,7 +448,7 @@ export async function compileFigure(
       const labels = maps.filter((n) => n > 0);
       if (new Set(labels).size !== labels.length)
         throw new Error(`${where}: duplicate atom map`);
-      const bound = entries[compoundBindings.get(where) ?? ""];
+      const bound = entries[spec.ref ?? binding?.ref ?? ""];
       let compound =
         bound?.kind === "compound" && bound.graph === signature
           ? bound
@@ -462,12 +462,15 @@ export async function compileFigure(
       ).replace(/:\d+(?=\])/g, "");
       if (!compound) {
         const cid = "cmp_" + figureKey(signature);
-        if (spec.coordgen ?? input.coordgen) computeDefaultCoords(m, true);
+        if (spec.coordgen ?? graphSource.coordgen)
+          computeDefaultCoords(m, true);
         compound = finishFigureEntry(
           prepareCompound(
             rd,
             { id: cid, title: "Compound", smiles: unmapped, sources },
-            (spec.coordgen ?? input.coordgen) ? m.get_molblock() : undefined,
+            (spec.coordgen ?? graphSource.coordgen)
+              ? m.get_molblock()
+              : undefined,
           ),
         );
         compound.layout.abbreviations =
@@ -491,20 +494,14 @@ export async function compileFigure(
         m,
         {
           ...spec,
-          enclose: [
-            ...(spec.enclose ?? []),
-            ...(input.steps ?? []).flatMap(
-              (step) => step.enclose?.[where.replace(/^compounds\./, "")] ?? [],
-            ),
-          ],
+          enclose: spec.enclose ?? [],
         },
-        input.abbreviate,
+        graphSource.abbreviate,
         frameMaps,
         where,
-        (kind === "mechanism" || where.startsWith("steps.")) &&
-          (frameMaps.electronic.length > 0 ||
-            !!spec.arrows?.length ||
-            (input.category !== "examples" && input.category !== "comparison")),
+        electronicState ||
+          frameMaps.electronic.length > 0 ||
+          !!spec.arrows?.length,
       );
       const baseTarget = openMolecule(rd, compound.smiles);
       try {
@@ -594,7 +591,7 @@ export async function compileFigure(
           JSON.stringify(abbreviationAtoms) !==
             JSON.stringify(compound.layout.abbreviationAtoms)
         ) {
-          variant = `${id}_${figureKey(where)}`;
+          variant = variantName(where);
           compound.variants ??= {};
           const layout = {
             ...structuredClone(compound.layout),
@@ -685,7 +682,7 @@ export async function compileFigure(
             const layout = variant
               ? compound.variants![variant]
               : compound.layout;
-            variant ??= `${id}_${figureKey(where)}`;
+            variant ??= variantName(where);
             compound.variants ??= {};
             compound.variants[variant] = {
               ...structuredClone(layout),
@@ -707,7 +704,7 @@ export async function compileFigure(
           const layout = variant
             ? compound.variants![variant]
             : compound.layout;
-          variant ??= `${id}_${figureKey(where)}`;
+          variant ??= variantName(where);
           compound.variants ??= {};
           compound.variants[variant] = {
             ...structuredClone(layout),
@@ -731,7 +728,7 @@ export async function compileFigure(
           const layout = variant
             ? compound.variants![variant]
             : compound.layout;
-          variant ??= `${id}_${figureKey(where)}`;
+          variant ??= variantName(where);
           compound.variants ??= {};
           compound.variants[variant] = {
             ...structuredClone(layout),
@@ -739,15 +736,15 @@ export async function compileFigure(
           };
           generated.add(compound.id);
         }
-        if (spec.ring_h !== undefined || input.ring_h !== undefined) {
+        if (spec.ring_h !== undefined || graphSource.ring_h !== undefined) {
           const layout = variant
             ? compound.variants![variant]
             : compound.layout;
-          variant ??= `${id}_${figureKey(where)}`;
+          variant ??= variantName(where);
           compound.variants ??= {};
           compound.variants[variant] = {
             ...structuredClone(layout),
-            ringHydrogens: spec.ring_h ?? input.ring_h,
+            ringHydrogens: spec.ring_h ?? graphSource.ring_h,
           };
           generated.add(compound.id);
         }
@@ -755,13 +752,13 @@ export async function compileFigure(
           const layout = variant
             ? compound.variants![variant]
             : compound.layout;
-          variant ??= `${id}_${figureKey(where)}`;
+          variant ??= variantName(where);
           compound.variants ??= {};
           compound.variants[variant] = scaffoldLayout(
             rd,
             { ...compound, layout },
             spec.drawing,
-            spec.ring_h ?? input.ring_h ?? true,
+            spec.ring_h ?? graphSource.ring_h ?? true,
           );
           generated.add(compound.id);
         }
@@ -769,7 +766,7 @@ export async function compileFigure(
           const layout = variant
             ? compound.variants![variant]
             : compound.layout;
-          variant ??= `${id}_${figureKey(where)}`;
+          variant ??= variantName(where);
           compound.variants ??= {};
           compound.variants[variant] = {
             ...structuredClone(layout),
@@ -1012,7 +1009,7 @@ export async function compileFigure(
           ? {}
           : { bend: a.side === "left" || a.side === 1 ? "left" : "right" }),
       });
-      if (to.kind === "formingBond" && (a.forming ?? input.forming)) {
+      if (to.kind === "formingBond" && (a.forming ?? graphSource.forming)) {
         const bonds = (scene.partialBonds ??= []);
         if (
           !bonds.some((b) =>
@@ -1072,596 +1069,786 @@ export async function compileFigure(
       });
     }
   }
-  async function compileFrames(
-    frameInputs: NonNullable<StepInput["mechanism"]>["frames"],
-    path: string,
-    category: FigureInput["category"],
-    outer?: Map<string, Resolved>,
+  const figure: Figure = {
+    ...base,
+    kind: "figure",
+    id,
+    graph: { states: {}, arrows: {} },
+    views: graphSource.views ?? {},
+  };
+  entries[id] = figure;
+  generated.add(id);
+
+  const authoredParticipant = (end: SchemeEndpoint): SchemeParticipant =>
+    typeof end === "string" ? { state: end } : end;
+  const asStructure = (raw: string | SchemeCompound): SchemeCompound =>
+    typeof raw === "string" ? { smiles: raw } : raw;
+  const atomsByState = new Map<string, Map<string, AtomRef>>();
+
+  function selectSavedVariant(
+    resolved: Resolved,
+    variant: string,
+    location: string,
   ) {
-    const frames: Mechanism["frames"] = [],
-      maps: NonNullable<Mechanism["maps"]> = [];
-    const linkedFrames =
-      frameInputs.length > 1 &&
-      frameInputs.every(
-        (frame) => !frame.compounds && !frame.labels && !frame.partialBonds,
-      ) &&
-      frameInputs.every((frame) => frame.arrow !== "none") &&
-      frameInputs.some((frame) => frame.arrows?.length);
-    const resolvedFrames = linkedFrames
-      ? new Map<string, Resolved>()
-      : undefined;
-    if (resolvedFrames) {
-      for (const frame of frameInputs) {
-        const fid = String(frame.id);
-        if (resolvedFrames.has(fid)) throw new Error(`Duplicate frame ${fid}`);
-        resolvedFrames.set(
-          fid,
-          await resolveStructure(frame, `${path}.${fid}`),
-        );
-      }
-      // chemfig.mechanism_route / render propagate orientation through adjacent frames.
+    const saved = existing[resolved.compound.id];
+    const layout = saved?.kind === "compound" && saved.variants?.[variant];
+    if (!isChemical(resolved) || !layout)
+      throw new Error(`${location}: unknown variant ${variant}`);
+    (resolved.compound.variants ??= {})[variant] = structuredClone(layout);
+    resolved.variant = variant;
+  }
+
+  async function compileState(
+    state: SchemeState,
+    where: string,
+    outer: Map<string, Resolved> | undefined,
+    orientation?: Map<string, Resolved>,
+    outgoing?: { id: string; arrow: GraphArrow },
+    groupLayout?: (cells: PanelCell[]) => Promise<Scene>,
+  ) {
+    const resolved = new Map<string, Resolved>();
+    const cells: PanelCell[] = [];
+    const compounds = Object.entries(state.compounds ?? {});
+    const eventRefs = (text: string) =>
+      [...text.matchAll(/(?:([^\s,():]+):)?(\d+)/g)].map((m) => ({
+        local: m[1] ?? "structure",
+        number: Number(m[2]),
+      }));
+    for (const [local, raw] of compounds) {
+      const location = where + "/" + local;
+      const spec = asStructure(raw);
+      const shared = spec.use === undefined ? undefined : outer?.get(spec.use);
+      if (spec.use !== undefined && !shared)
+        throw new Error(`${location}: unknown structure binding ${spec.use}`);
+      const mapsFor = (refs: string[]) =>
+        refs
+          .flatMap(eventRefs)
+          .filter((event) => event.local === local)
+          .map((event) => event.number);
+      const frameMaps = {
+        electronic: mapsFor([
+          ...(state.arrows ?? []).flatMap(({ from, to }) => [from, to]),
+          ...(state.labels ?? [])
+            .filter(({ kind }) => kind !== "text")
+            .map(({ at }) => at),
+        ]),
+        protected: mapsFor([
+          ...(state.labels ?? [])
+            .filter(({ kind }) => kind === "text")
+            .map(({ at }) => at),
+          ...(state.partialBonds ?? []).flatMap(({ from, to }) => [from, to]),
+        ]),
+      };
+      const piSources = (state.arrows ?? [])
+        .filter((a) => a.from.startsWith("pi("))
+        .map(({ from }) => eventRefs(from))
+        .filter(
+          (pair) =>
+            pair.length === 2 && pair.every((ref) => ref.local === local),
+        )
+        .map((pair) => pair.map(({ number }) => number));
+      const bound = orientation?.get(location);
+      const placementArrows =
+        compounds.length === 1 && state.arrows?.length
+          ? [
+              ...(spec.arrows ?? []),
+              ...state.arrows.map((arrow) => ({
+                ...arrow,
+                from: arrow.from.replaceAll(local + ":", ""),
+                to: arrow.to.replaceAll(local + ":", ""),
+              })),
+            ]
+          : spec.arrows;
+      const layoutSpec = {
+        ...shared?.spec,
+        ...spec,
+        ...(placementArrows && { arrows: placementArrows }),
+        enclose: [...(spec.enclose ?? []), ...(state.enclose ?? [])],
+      };
+      const r =
+        bound ??
+        (shared && !isChemical(shared)
+          ? shared
+          : await resolveStructure(
+              layoutSpec,
+              location,
+              frameMaps,
+              piSources,
+              !!outer,
+            ));
+      resolved.set(local, r);
+    }
+    const singleMixture =
+      resolved.size === 1 &&
+      [...resolved.values()].some(
+        (r) => isChemical(r) && r.compound.smiles.includes("."),
+      );
+    if (
+      !orientation &&
+      (singleMixture ||
+        state.arrows?.length ||
+        [...resolved.values()].some((r) => r.spec.arrows?.length))
+    ) {
       for (const cid of depictStructures(
         rd,
-        resolvedFrames,
-        {
-          ...input,
-          steps: frameInputs.slice(1).map((frame, i) => ({
-            from: frameInputs[i].id,
-            to: frame.id,
-          })),
-        },
-        (fid) => `${id}_${figureKey(`${path}.${fid}`)}`,
+        resolved,
+        { ...graphSource, arrows: [], anchor: resolved.keys().next().value },
+        (local) => variantName(where + "/" + local),
         style,
       ))
         generated.add(cid);
     }
-    let prior:
-      | { frame: Pick<FrameInput, "id" | "arrow">; atoms: Map<string, AtomRef> }
-      | undefined;
-    const appendFrameMaps = (
-      frame: Pick<FrameInput, "id" | "arrow" | "map">,
-      atoms: Map<string, AtomRef>,
-    ) => {
-      if (frame.map && !prior) throw new Error("First frame cannot have map");
-      if (prior) {
-        const { frame: previousFrame, atoms: priorAtoms } = prior;
-        const implicit =
-          previousFrame.arrow !== "none" &&
-          category !== "comparison" &&
-          category !== "examples";
-        const qualify = (key: string | number) =>
-          String(key).includes(":") ? String(key) : `structure:${key}`;
-        const explicit = new Map(
-          Object.entries(frame.map ?? {}).map(([a, b]) => [
-            qualify(a),
-            qualify(b),
-          ]),
-        );
-        const targets = new Set(explicit.values());
-        for (const [from, to] of explicit)
-          if (!priorAtoms.has(from) || !atoms.has(to))
-            throw new Error(`${path}.${frame.id}.map: unknown atom`);
-        const pairs = [...priorAtoms].flatMap(([key, from]) => {
-          const target =
-            explicit.get(key) ??
-            (implicit && !targets.has(key) ? key : undefined);
-          const to = target === undefined ? undefined : atoms.get(target);
-          return to
-            ? [
-                {
-                  from,
-                  to,
-                  fromFrame: String(previousFrame.id),
-                  toFrame: String(frame.id),
-                },
-              ]
-            : [];
-        });
-        if (
-          new Set(pairs.map((p) => `${p.to.molecule}:${p.to.atom}`)).size !==
-          pairs.length
-        )
-          throw new Error(`${path}.${frame.id}.map: duplicate target`);
-        maps.push(...pairs);
+    for (const [local, r] of resolved) {
+      const authoredSpec = asStructure(state.compounds![local]);
+      const variant = authoredSpec.variant;
+      if (variant !== undefined) {
+        selectSavedVariant(r, variant, where + "/" + local);
+      } else {
+        const binding = bindings.get(where + "/" + local);
+        if (isChemical(r) && binding?.ref === r.compound.id)
+          r.variant ??= binding.variant;
+        positionArrowFragments(r);
       }
-      prior = { frame, atoms };
-    };
-    for (const frame of frameInputs) {
-      const fid = String(frame.id);
-      if (frames.some((f) => f.id === fid))
-        throw new Error(`Duplicate frame ${fid}`);
-      if (frame.compounds || frame.labels || frame.partialBonds) {
-        const specs = frame.compounds ?? {
-          structure: { ...frame, arrows: undefined, focus: undefined },
-        };
-        const resolved = new Map<string, Resolved>(),
-          variants = new Map<string, string>(),
-          cells: PanelCell[] = [];
-        const eventRefs = (text: string) =>
-          [...text.matchAll(/(?:([^\s,():]+):)?(\d+)/g)].map((m) => ({
-            local: m[1] ?? "structure",
-            number: Number(m[2]),
-          }));
-        for (const [local, raw] of Object.entries(specs)) {
-          const where = `${path}.${fid}.compounds.${local}`;
-          let spec: StructureInput;
-          let shared: Resolved | undefined;
-          if (typeof raw === "object" && "compound" in raw) {
-            const key = String(raw.compound);
-            shared = outer?.get(key);
-            if (!shared)
-              throw new Error(`${where}: unknown route structure ${key}`);
-            spec = { ...shared.spec, label: shared.spec.label ?? key };
-            if (shared.compound.kind === "compound")
-              compoundBindings.set(where, shared.compound.id);
-          } else spec = typeof raw === "string" ? { smiles: raw } : raw;
-          const mapsFor = (refs: string[]) =>
-            refs
-              .flatMap(eventRefs)
-              .filter((event) => event.local === local)
-              .map((event) => event.number);
-          const frameMaps = {
-            electronic: mapsFor([
-              ...(frame.arrows ?? []).flatMap(({ from, to }) => [from, to]),
-              ...(frame.labels ?? [])
-                .filter((label) => label.kind !== "text")
-                .map((label) => label.at),
-            ]),
-            protected: mapsFor([
-              ...(frame.labels ?? [])
-                .filter((label) => label.kind === "text")
-                .map((label) => label.at),
-              ...(frame.partialBonds ?? []).flatMap(({ from, to }) => [
-                from,
-                to,
-              ]),
-            ]),
-          };
-          const piSources = (frame.arrows ?? [])
-            .filter((a) => a.from.startsWith("pi("))
-            .map((a) => eventRefs(a.from))
-            .filter(
-              (pair) =>
-                pair.length === 2 && pair.every((a) => a.local === local),
-            )
-            .map((pair) => pair.map((a) => a.number));
-          const r =
-            shared && !isChemical(shared)
-              ? { ...shared, spec }
-              : await resolveStructure(spec, where, frameMaps, piSources);
-          resolved.set(local, r);
-          if (
-            typeof raw === "object" &&
-            "variant" in raw &&
-            raw.variant !== undefined
-          )
-            variants.set(local, raw.variant);
-        }
-        if (
-          frame.steps?.length ||
-          frame.arrows?.length ||
-          [...resolved.values()].some((r) => r.spec.arrows?.length)
-        )
-          for (const cid of depictStructures(
-            rd,
-            resolved,
-            {
-              ...input,
-              steps: frame.steps ?? [],
-              anchor: [...resolved.keys()][0],
-            },
-            (local) =>
-              `${id}_${figureKey(`${path}.${fid}.compounds.${local}`)}`,
-            style,
-          ))
-            generated.add(cid);
-        for (const [local, r] of resolved) {
-          const variant = variants.get(local);
-          if (variant !== undefined) {
-            const saved = existing[r.compound.id];
-            const layout =
-              saved?.kind === "compound" && saved.variants?.[variant];
-            if (!isChemical(r) || !layout)
-              throw new Error(
-                `${path}.${fid}.compounds.${local}: unknown variant ${variant}`,
-              );
-            (r.compound.variants ??= {})[variant] = structuredClone(layout);
-            r.variant = variant;
-          } else positionArrowFragments(r);
-          const scene = blank();
-          scene.molecules.push(placement(r, local, { x: 0, y: 0 }));
-          pushArrows(scene, r, local, true);
-          pushEnclosures(scene, r, local);
-          cells.push({ key: local, spec: r.spec, scene });
-        }
-        const atoms = new Map<string, AtomRef>(
-          [...resolved].flatMap(([local, r]) =>
-            [...r.atoms].map(
-              ([number, atom]) =>
-                [`${local}:${number}`, { molecule: local, atom }] as const,
+      const scene = blank();
+      scene.molecules.push(placement(r, local, { x: 0, y: 0 }));
+      const mark = authoredSpec.mark ?? graphSource.mark;
+      if (mark && isChemical(r)) {
+        const query = rd.get_qmol(mark);
+        if (!query) throw new Error(`${where}: invalid mark SMARTS`);
+        const mol = openMolecule(rd, r.compound.smiles);
+        try {
+          const matches: { atoms: number[]; bonds: number[] }[] = JSON.parse(
+            mol.get_substruct_matches(query),
+          );
+          const atom = (idx: number) => ({
+            molecule: local,
+            atom: r.compound.atomIds[idx],
+          });
+          const graph = graphOf(mol);
+          scene.changes = {
+            atoms: [...new Set(matches.flatMap((match) => match.atoms))].map(
+              atom,
             ),
-          ),
-        );
-        const atom = (key: string): AtomRef => {
-          const value = atoms.get(key.includes(":") ? key : `structure:${key}`);
-          if (!value) throw new Error(`${path}.${fid}: unknown atom ${key}`);
-          return value;
-        };
-        const labelContext = createFigureScene(style, await loadFigureFonts());
-        for (const label of frame.labels ?? []) {
-          const at = atom(label.at),
-            r = resolved.get(at.molecule)!;
-          if (!isChemical(r))
-            throw new Error(`${path}.${fid}.labels: requires a chemical atom`);
-          let offset = { x: 0, y: 0 };
-          if (label.kind === "text" || label.kind === "partialCharge") {
-            const molecule = openMolecule(rd, r.compound.smiles);
-            try {
-              const index = r.compound.atomIds.indexOf(at.atom),
-                points = placedCoordinates(
-                  rd,
-                  r.compound,
-                  layoutOf(r),
-                  -(r.spec.rot ?? 0) + (r.spec.flip === "v" ? 180 : 0),
-                  !!r.spec.flip,
-                );
-              const angles = graphOf(molecule)
-                .bonds.flatMap((b) =>
-                  b.atoms.includes(index)
-                    ? [b.atoms.find((i) => i !== index)!]
-                    : [],
-                )
-                .map(
-                  (i) =>
-                    (Math.atan2(
-                      -(points[i].y - points[index].y),
-                      points[i].x - points[index].x,
-                    ) +
-                      2 * Math.PI) %
-                    (2 * Math.PI),
-                )
-                .sort((a, b) => a - b);
-              const gaps = angles.map((angle, i) => ({
-                angle,
-                gap:
-                  angles[(i + 1) % angles.length] +
-                  (i === angles.length - 1 ? 2 * Math.PI : 0) -
-                  angle,
-              }));
-              const largest = gaps.sort((a, b) => b.gap - a.gap)[0],
-                angle = largest
-                  ? largest.angle + largest.gap / 2
-                  : -Math.PI / 2;
-              const width =
-                labelContext.textWidth(
-                  words(label.text),
-                  "var(--chemical-font)",
-                ) / labelContext.token("--chemical-bond");
-              offset = {
-                x: Math.cos(angle) * (0.8 + width / 2),
-                y: Math.sin(angle) * 1.1,
-              };
-            } finally {
-              molecule.delete();
-            }
-          }
-          cells
-            .find((cell) => cell.key === at.molecule)!
-            .scene.labels!.push({
-              id: String(label.id),
-              at,
-              kind: label.kind,
-              offset,
-              ...(label.text === undefined ? {} : { text: String(label.text) }),
-            });
+            bonds: [...new Set(matches.flatMap((match) => match.bonds))].map(
+              (idx) => {
+                const [from, to] = graph.bonds[idx].atoms;
+                return [atom(from), atom(to)];
+              },
+            ),
+          };
+        } finally {
+          mol.delete();
+          query.delete();
         }
-        const entry: Mechanism = {
-          ...base,
-          kind: "mechanism",
-          id,
-          category: category ?? "reaction",
-          frames: [],
-        };
-        const bonds: NonNullable<Scene["partialBonds"]> = (
-          frame.partialBonds ?? []
-        ).map(({ from, to, order }) => ({
-          atoms: [atom(from), atom(to)],
-          order: order ?? 1,
-        }));
-        const scene = await compileMechanismFrameLayout(
-          entries,
-          entry,
-          { id: frame.id, steps: frame.steps },
-          cells,
-          input,
-          style,
-          (frame.arrows ?? []).flatMap((arrow) => {
-            const from = eventRefs(arrow.from).map((ref) =>
-                atom(`${ref.local}:${ref.number}`),
-              ),
-              to = eventRefs(arrow.to).map((ref) =>
-                atom(`${ref.local}:${ref.number}`),
-              );
-            const pairs: [AtomRef, AtomRef][] = arrow.to.startsWith("between(")
-              ? [[to[0], to[1]]]
-              : from.flatMap((a) => to.map((b): [AtomRef, AtomRef] => [a, b]));
-            return pairs.filter(([a, b]) => a.molecule !== b.molecule);
-          }),
-          bonds.map(({ atoms }) => atoms),
-          outer !== undefined,
-        );
-        const first = resolved.values().next().value!;
-        pushArrows(
-          scene,
-          { ...first, spec: { arrows: frame.arrows, focus: frame.focus } },
-          "structure",
-          false,
-          atom,
-        );
-        if (bonds.length) (scene.partialBonds ??= []).push(...bonds);
-        scene.comparison =
-          frame.arrow === "none" ||
-          category === "comparison" ||
-          category === "examples";
-        appendFrameMaps(frame, atoms);
-        frames.push({
-          id: fid,
-          title: words(frame.title) || fid,
-          scene,
-          ...(frame.arrow === undefined ? {} : { arrow: frame.arrow }),
-          ...(frame.above === undefined ? {} : { above: lines(frame.above) }),
-          ...(frame.below === undefined ? {} : { below: lines(frame.below) }),
-        });
-        continue;
       }
-      const resolved = resolvedFrames
-        ? resolvedFrames.get(fid)!
-        : await resolveStructure(frame, `${path}.${fid}`);
-      if (!resolvedFrames)
-        for (const cid of depictStructures(
-          rd,
-          new Map([[fid, resolved]]),
-          { ...input, steps: [], anchor: fid },
-          () => `${id}_${figureKey(`${path}.${fid}`)}`,
-          style,
-        ))
-          generated.add(cid);
-      if (isChemical(resolved) && frame.arrows?.length)
-        layoutOf(resolved).methylLabels = [];
-      positionArrowFragments(resolved);
-      const scene = blank(),
-        box = bounds(rd, resolved);
-      scene.molecules.push(placement(resolved, "structure", { x: 0, y: 0 }));
-      pushArrows(scene, resolved, "structure");
-      pushEnclosures(scene, resolved, "structure");
-      const arrow = frame.arrow ?? "forward";
-      const arrowY = linkedFrames ? (box.top + box.bottom) / 2 : 0;
-      if (arrow !== "none" && frameInputs.at(-1) !== frame)
-        scene.reactionArrows!.push({
-          id: `next-${fid}`,
-          from: { x: box.right + 1, y: arrowY },
-          to: { x: box.right + 5, y: arrowY },
-          kind: arrow,
-          above: lines(frame.above),
-          below: lines(frame.below),
+      if (
+        isChemical(r) &&
+        variant === undefined &&
+        state.arrows?.length &&
+        cells.length === 0 &&
+        Object.keys(state.compounds!).length === 1
+      )
+        layoutOf(r).methylLabels = [];
+      pushArrows(
+        scene,
+        {
+          ...r,
+          spec: {
+            ...r.spec,
+            arrows: authoredSpec.arrows,
+            focus: authoredSpec.focus,
+          },
+        },
+        local,
+        true,
+      );
+      pushEnclosures(scene, r, local);
+      cells.push({ key: local, spec: r.spec, scene });
+    }
+    if (!cells.length) {
+      const scene = blank();
+      cells.push({ key: where, spec: { text: state.text }, scene });
+      return {
+        scene: await compilePanelScene(entries, figure, {}, cells, style),
+        cells,
+        bindings: {},
+        resolved,
+      };
+    }
+    const atoms = new Map<string, AtomRef>(
+      [...resolved].flatMap(([local, r]) =>
+        [...r.atoms].map(
+          ([number, atom]) =>
+            [`${local}:${number}`, { molecule: local, atom }] as const,
+        ),
+      ),
+    );
+    const atom = (key: string): AtomRef => {
+      const value = atoms.get(key.includes(":") ? key : `structure:${key}`);
+      if (!value) throw new Error(`${where}: unknown atom ${key}`);
+      return value;
+    };
+    const labelContext = createFigureScene(style, await loadFigureFonts());
+    for (const label of state.labels ?? []) {
+      const at = atom(label.at),
+        r = resolved.get(at.molecule)!;
+      if (!isChemical(r))
+        throw new Error(`${where}.labels: requires a chemical atom`);
+      let offset = label.offset ?? { x: 0, y: 0 };
+      if (
+        !label.offset &&
+        (label.kind === "text" || label.kind === "partialCharge")
+      ) {
+        const molecule = openMolecule(rd, r.compound.smiles);
+        try {
+          const index = r.compound.atomIds.indexOf(at.atom),
+            points = placedCoordinates(
+              rd,
+              r.compound,
+              layoutOf(r),
+              -(r.spec.rot ?? 0) + (r.spec.flip === "v" ? 180 : 0),
+              !!r.spec.flip,
+            );
+          const angles = graphOf(molecule)
+            .bonds.flatMap((b) =>
+              b.atoms.includes(index)
+                ? [b.atoms.find((i) => i !== index)!]
+                : [],
+            )
+            .map(
+              (i) =>
+                (Math.atan2(
+                  -(points[i].y - points[index].y),
+                  points[i].x - points[index].x,
+                ) +
+                  2 * Math.PI) %
+                (2 * Math.PI),
+            )
+            .sort((a, b) => a - b);
+          const gaps = angles.map((angle, i) => ({
+            angle,
+            gap:
+              angles[(i + 1) % angles.length] +
+              (i === angles.length - 1 ? 2 * Math.PI : 0) -
+              angle,
+          }));
+          const largest = gaps.sort((a, b) => b.gap - a.gap)[0],
+            angle = largest ? largest.angle + largest.gap / 2 : -Math.PI / 2;
+          const width =
+            labelContext.textWidth(words(label.text), "var(--chemical-font)") /
+            labelContext.token("--chemical-bond");
+          offset = {
+            x: Math.cos(angle) * (0.8 + width / 2),
+            y: Math.sin(angle) * 1.1,
+          };
+        } finally {
+          molecule.delete();
+        }
+      }
+      cells
+        .find((cell) => cell.key === at.molecule)!
+        .scene.labels!.push({
+          id: String(label.id),
+          at,
+          kind: label.kind,
+          offset,
+          ...(label.text === undefined ? {} : { text: String(label.text) }),
         });
-      scene.comparison = arrow === "none";
+    }
+
+    const bonds = (state.partialBonds ?? []).map(({ from, to, order }) => ({
+      atoms: [atom(from), atom(to)] as [AtomRef, AtomRef],
+      order: order ?? 1,
+    }));
+    let scene: Scene;
+    if (groupLayout) {
+      scene = await groupLayout(cells);
+    } else if (
+      cells.length === 1 &&
+      cells[0].key === "structure" &&
+      !state.labels &&
+      !bonds.length
+    ) {
+      scene = cells[0].scene;
+      const r = resolved.get("structure")!;
+      const box = bounds(rd, r);
+      if (outgoing && outgoing.arrow.kind !== "none") {
+        const y = orientation ? (box.top + box.bottom) / 2 : 0;
+        scene.reactionArrows!.push({
+          id: outgoing.id,
+          from: { x: box.right + 1, y },
+          to: { x: box.right + 5, y },
+          kind: outgoing.arrow.kind,
+          above: outgoing.arrow.above,
+          below: outgoing.arrow.below,
+        });
+      }
       fit(scene, [
         { x: box.left, y: box.top },
         { x: box.right, y: box.bottom },
       ]);
-      appendFrameMaps(
-        frame,
-        new Map(
-          [...resolved.atoms].map(([number, atom]) => [
-            `structure:${number}`,
-            { molecule: "structure", atom },
-          ]),
-        ),
+    } else {
+      if (
+        cells.length === 1 &&
+        cells[0].key === "structure" &&
+        cells[0].spec.label === undefined
+      )
+        cells[0].spec = { ...cells[0].spec, label: "" };
+      scene = await compileStateLayout(
+        entries,
+        figure,
+        cells,
+        style,
+        (state.arrows ?? []).flatMap((arrow) => {
+          const from = eventRefs(arrow.from).map((ref) =>
+            atom(`${ref.local}:${ref.number}`),
+          );
+          const to = eventRefs(arrow.to).map((ref) =>
+            atom(`${ref.local}:${ref.number}`),
+          );
+          const pairs: [AtomRef, AtomRef][] = arrow.to.startsWith("between(")
+            ? [[to[0], to[1]]]
+            : from.flatMap((a) => to.map((b): [AtomRef, AtomRef] => [a, b]));
+          return pairs.filter(([a, b]) => a.molecule !== b.molecule);
+        }),
+        bonds.map(({ atoms }) => atoms),
+        !!outer,
       );
-      frames.push({
-        id: fid,
-        title: words(frame.title) || fid,
-        scene,
-        arrow,
-        above: lines(frame.above),
-        below: lines(frame.below),
-      });
     }
-    return { frames, maps };
+    const first = resolved.values().next().value!;
+    pushArrows(
+      scene,
+      { ...first, spec: { arrows: state.arrows, focus: state.focus } },
+      "structure",
+      false,
+      atom,
+    );
+    if (bonds.length) (scene.partialBonds ??= []).push(...bonds);
+    if (state.tone === "comparison") scene.comparison = true;
+    if (state.transitionState) scene.transitionState = true;
+    atomsByState.set(where, atoms);
+    const stateBindings = Object.fromEntries(
+      scene.molecules.map(({ id, compound, variant }) => [
+        id,
+        { ref: compound, variant },
+      ]),
+    );
+    return { scene, cells, bindings: stateBindings, resolved };
   }
 
-  let top: LibraryEntry;
-  if (kind === "scheme" || kind === "cycle") {
-    const cells: PanelCell[] = [];
-    const items: (readonly [string, StructureInput])[] =
-      kind === "cycle"
-        ? input.nodes!.map(
-            (raw, i) =>
-              [
-                String(i + 1),
-                typeof raw === "object" ? raw : { text: raw },
-              ] as const,
-          )
-        : Object.entries(input.compounds!).map(
-            ([key, raw]) =>
-              [key, typeof raw === "string" ? { smiles: raw } : raw] as const,
-          );
-    for (const [key, spec] of items) {
-      const scene = blank();
-      if (spec.smiles || spec.template) {
-        const resolved = await resolveStructure(
-          spec,
-          kind === "cycle" ? `nodes.${key}` : `compounds.${key}`,
-        );
-        if (spec.arrows?.length)
-          for (const cid of depictStructures(
-            rd,
-            new Map([[key, resolved]]),
-            { ...input, steps: [], anchor: key },
-            () => `${id}_${figureKey(`compounds.${key}`)}`,
-            options.style ?? (await loadFigureStyle()),
-          ))
-            generated.add(cid);
-        // Prototype chemfig.depict applies arrows.place_fragments to every electron event.
-        positionArrowFragments(resolved);
-        scene.molecules.push(placement(resolved, key, { x: 0, y: 0 }));
-        const mark = spec.mark ?? input.mark;
-        const compound = resolved.compound;
-        if (mark && compound.kind === "compound") {
-          const query = rd.get_qmol(mark);
-          if (!query) throw new Error(`${key}: invalid mark SMARTS`);
-          const mol = openMolecule(rd, compound.smiles);
-          try {
-            const matches: { atoms: number[]; bonds: number[] }[] = JSON.parse(
-              mol.get_substruct_matches(query),
-            );
-            const atom = (i: number): AtomRef => ({
-              molecule: key,
-              atom: compound.atomIds[i],
-            });
-            const graph = graphOf(mol);
-            scene.changes = {
-              atoms: [...new Set(matches.flatMap((m) => m.atoms))].map(atom),
-              bonds: [...new Set(matches.flatMap((m) => m.bonds))].map((i) => {
-                const [a, b] = graph.bonds[i].atoms;
-                return [atom(a), atom(b)];
-              }),
-            };
-          } finally {
-            mol.delete();
-            query.delete();
-          }
-        }
-        pushArrows(scene, resolved, key, true);
-        pushEnclosures(scene, resolved, key);
-      } else if (spec.text === undefined)
-        throw new Error(`${key}: requires smiles or text`);
-      cells.push({ key, spec, scene });
-    }
-    const panel: Mechanism = {
-      ...base,
-      kind: "mechanism",
-      id,
-      category: "examples",
-      frames: [],
-    };
-    const scene = await compilePanelScene(entries, panel, input, cells, style);
-    panel.frames.push({
-      id: "overview",
-      title,
-      scene,
-      arrow: "none",
-    });
-    top = panel;
-  } else if (kind === "mechanism") {
-    top = {
-      ...base,
-      kind: "mechanism",
-      id,
-      category:
-        input.category ??
-        (input.frames!.every((f) => f.arrow === "none")
-          ? "comparison"
-          : "reaction"),
-      ...(await compileFrames(input.frames!, "frames", input.category)),
-    };
-  } else {
-    const compounds = new Map<string, Resolved | StructureInput>();
-    for (const [key, raw] of Object.entries(input.compounds!)) {
-      const spec = typeof raw === "string" ? { smiles: raw } : raw;
-      compounds.set(
-        key,
-        spec.smiles || spec.template
-          ? await resolveStructure(spec, `compounds.${key}`)
-          : spec,
+  const newArrow = (edge: SchemeArrow): GraphArrow => ({
+    from: endpoints(edge.from).map(authoredParticipant),
+    to: endpoints(edge.to).map(authoredParticipant),
+    kind: edge.kind,
+    role: edge.role,
+    title: edge.title === undefined ? undefined : words(edge.title),
+    above: lines(edge.above),
+    below: lines(edge.below),
+    tags: edge.tags,
+    sources: edge.sources?.map(({ source, locator, note }) => ({
+      source: words(source),
+      locator: words(locator) || words(edge.title) || title,
+      note: note === undefined ? undefined : words(note),
+    })),
+    in: edge.in === undefined ? undefined : words(edge.in),
+    out: edge.out === undefined ? undefined : words(edge.out),
+    settings: {
+      others: edge.others,
+      turn: edge.turn,
+      side: edge.side,
+      reverse: edge.reverse,
+    },
+  });
+
+  function resetArrowMap(
+    graph: FigureGraph,
+    source: SchemeGraph,
+    prefix: string,
+  ) {
+    for (const [id, edge] of Object.entries(graph.arrows)) {
+      const [from] = edge.from;
+      const [to] = edge.to;
+      if (edge.from.length !== 1 || edge.to.length !== 1) continue;
+      const a = atomsByState.get(prefix + from.state);
+      const b = atomsByState.get(prefix + to.state);
+      if (!a || !b) continue;
+      const qualify = (key: string | number) =>
+        String(key).includes(":") ? String(key) : "structure:" + key;
+      const explicit = new Map(
+        Object.entries(source.arrows[id].map ?? {}).map(([atom, target]) => [
+          qualify(atom),
+          qualify(target),
+        ]),
       );
+      const taken = new Set(explicit.values());
+      for (const [key, target] of explicit)
+        if (!a.has(key) || !b.has(target))
+          throw new Error(`${prefix}${id}: unknown mapped atom`);
+      const matchImplicit =
+        edge.kind !== "none" &&
+        source.states[from.state]?.tone !== "comparison";
+      const map = [...a].flatMap(([key, ref]) => {
+        const other =
+          explicit.get(key) ?? (matchImplicit && !taken.has(key) ? key : "");
+        const target = b.get(other);
+        if (!target) return [];
+        return [
+          {
+            from: { ...ref, molecule: from.state + "/" + ref.molecule },
+            to: { ...target, molecule: to.state + "/" + target.molecule },
+          },
+        ];
+      });
+      if (map.length) edge.map = map;
     }
+  }
+
+  function simpleCycle(graph: FigureGraph) {
+    const keys = Object.keys(graph.states);
+    const edges = Object.entries(graph.arrows).filter(
+      ([, edge]) => edge.kind !== "none",
+    );
+    if (
+      keys.length < 2 ||
+      edges.length !== keys.length ||
+      edges.some(
+        ([, edge]) =>
+          edge.from.length !== 1 ||
+          edge.to.length !== 1 ||
+          edge.role !== "elementary",
+      )
+    )
+      return;
+    const next = new Map(edges.map((pair) => [pair[1].from[0].state, pair]));
+    const start = graph.layout?.anchor ?? keys[0];
+    const cycle: [string, GraphArrow][] = [];
+    const states: string[] = [];
+    let state = start;
+    while (!states.includes(state)) {
+      const edge = next.get(state);
+      if (!edge) return;
+      states.push(state);
+      cycle.push(edge);
+      state = edge[1].to[0].state;
+    }
+    if (state === start && states.length === keys.length)
+      return { states, cycle };
+  }
+
+  async function compileGraph(
+    source: SchemeGraph,
+    graph: FigureGraph,
+    prefix: string,
+    outer?: Map<string, Resolved>,
+  ) {
+    graph.layout = source.layout ? { ...source.layout } : undefined;
+    graph.yields = source.yields?.map((span) => ({
+      arrows: span.arrows,
+      product: span.product,
+      yield: span.yield,
+      note: span.note === undefined ? undefined : words(span.note),
+      sources: span.sources?.map(({ source, locator, note }) => ({
+        source: words(source),
+        locator: words(locator) || span.product,
+        note: note === undefined ? undefined : words(note),
+      })),
+    }));
+    for (const [key, state] of Object.entries(source.states))
+      graph.states[key] = {
+        title: state.title === undefined ? undefined : words(state.title),
+        text: state.text === undefined ? undefined : words(state.text),
+      };
+    for (const [key, edge] of Object.entries(source.arrows))
+      graph.arrows[key] = newArrow(edge);
+    if (Object.values(graph.arrows).some(({ role }) => role === "reaction")) {
+      await compileTransformations(source, graph, prefix);
+      return;
+    }
+    const cycle = simpleCycle(graph);
+    const childMembers = new Set(
+      Object.values(source.groups ?? {})
+        .filter(({ edges }) => edges?.length)
+        .flatMap(({ items }) => items),
+    );
+    const authoredStates = Object.entries(source.states);
+    const layoutAsGrid =
+      Object.keys(graph.arrows).length === 0 &&
+      (authoredStates.length > 1 || source.groups !== undefined);
+    const orderedCells = new Map<string, PanelCell>();
+    const oriented = new Map<string, Resolved>();
+    const isLinear =
+      !layoutAsGrid &&
+      !cycle &&
+      authoredStates.length > 1 &&
+      !childMembers.size &&
+      authoredStates.every(
+        ([, state]) =>
+          !state.labels &&
+          !state.partialBonds &&
+          Object.keys(state.compounds ?? {}).join() === "structure" &&
+          !asStructure(state.compounds!.structure).use &&
+          asStructure(state.compounds!.structure).align !== false,
+      ) &&
+      Object.values(source.arrows).every(({ kind }) => kind !== "none") &&
+      authoredStates.some(([, state]) => state.arrows?.length);
+    if (isLinear) {
+      for (const [state, spec] of authoredStates) {
+        const shape = asStructure(spec.compounds!.structure);
+        oriented.set(
+          prefix + state + "/structure",
+          await resolveStructure(
+            {
+              ...shape,
+              arrows: spec.arrows,
+              focus: spec.focus,
+              enclose: spec.enclose ?? shape.enclose,
+            },
+            prefix + state + "/structure",
+            undefined,
+            [],
+            spec.tone !== "comparison",
+          ),
+        );
+      }
+      for (const cid of depictStructures(
+        rd,
+        oriented,
+        {
+          ...graphSource,
+          arrows: Object.values(graph.arrows).map(({ from, to }) => ({
+            from: from.map(({ state }) => prefix + state + "/structure"),
+            to: to.map(({ state }) => prefix + state + "/structure"),
+          })),
+        },
+        variantName,
+        style,
+      ))
+        generated.add(cid);
+    }
+    for (const [key, state] of authoredStates) {
+      const out = Object.entries(graph.arrows).find(
+        ([id, arrow]) =>
+          source.views?.[key]?.arrows?.includes(id) &&
+          arrow.from.some(({ state }) => state === key),
+      );
+      const { scene, cells, bindings } = await compileState(
+        state,
+        prefix + key,
+        outer,
+        oriented.size ? oriented : undefined,
+        out && { id: out[0], arrow: out[1] },
+      );
+      graph.states[key].compounds = bindings;
+      graph.states[key].scene = scene;
+      const label = cells.length === 1 ? cells[0].spec : {};
+      orderedCells.set(key, {
+        key,
+        spec: {
+          ...label,
+          ...(state.text === undefined &&
+            state.title !== undefined && { label: state.title }),
+        },
+        scene,
+      });
+    }
+    if (source.groups) {
+      graph.groups = {};
+      for (const [id, group] of Object.entries(source.groups)) {
+        for (const item of group.items)
+          if (!orderedCells.has(item))
+            throw new Error(`${prefix}${id}: unknown state ${item}`);
+        const layoutGroup = async (cells: PanelCell[]) =>
+          compileGroupLayout(
+            entries,
+            figure,
+            cells,
+            Object.fromEntries(
+              group.items.map((item) => [item, graph.states[item]]),
+            ),
+            Object.fromEntries(
+              group.edges!.map((edge) => [edge, graph.arrows[edge]]),
+            ),
+            style,
+          );
+        const scene = group.edges?.length
+          ? (
+              await compileState(
+                {
+                  ...group,
+                  compounds: Object.assign(
+                    {},
+                    ...group.items.map((item) => source.states[item].compounds),
+                  ),
+                },
+                prefix + id,
+                outer,
+                undefined,
+                undefined,
+                (cells) =>
+                  layoutGroup(
+                    cells.map((cell) => ({
+                      ...cell,
+                      key: group.items.find((item) =>
+                        Object.hasOwn(
+                          source.states[item].compounds ?? {},
+                          cell.key,
+                        ),
+                      )!,
+                    })),
+                  ),
+              )
+            ).scene
+          : undefined;
+        graph.groups[id] = {
+          items: group.items,
+          edges: group.edges,
+          title: group.title === undefined ? undefined : words(group.title),
+          subtitle:
+            group.subtitle === undefined ? undefined : words(group.subtitle),
+          scene,
+        };
+      }
+    }
+    if (cycle || layoutAsGrid) {
+      const cells = cycle
+        ? cycle.states.map((id) => orderedCells.get(id)!)
+        : [...orderedCells.values()];
+      const groups = source.groups && Object.values(source.groups);
+      const panel = await compilePanelScene(
+        entries,
+        figure,
+        {
+          ...source.layout,
+          groups: cycle ? undefined : groups,
+          cycle: cycle?.cycle,
+        },
+        cells,
+        style,
+      );
+      graph.layout = { ...graph.layout, panel };
+      if (!prefix)
+        figure.views.overview ??= { items: cells.map(({ key }) => key) };
+    } else {
+      for (const key of Object.keys(graph.states))
+        if (!childMembers.has(key))
+          figure.views[prefix ? prefix.replace(/\/via\/$/, "/") + key : key] ??=
+            { items: [prefix + key] };
+    }
+    resetArrowMap(graph, source, prefix);
+  }
+
+  async function compileTransformations(
+    source: SchemeGraph,
+    graph: FigureGraph,
+    prefix: string,
+  ) {
+    const structures = new Map<string, Resolved>();
+    const textStates = new Map<string, StructureInput>();
+    for (const [state, item] of Object.entries(source.states)) {
+      if (item.text !== undefined) textStates.set(state, { text: item.text });
+      for (const [local, value] of Object.entries(item.compounds ?? {})) {
+        const location = state + "/" + local;
+        const spec = asStructure(value);
+        const align =
+          typeof spec.align === "string" || typeof spec.align === "number"
+            ? String(spec.align)
+            : undefined;
+        if (align && !align.includes("/") && source.states[align]?.compounds)
+          spec.align =
+            align + "/" + Object.keys(source.states[align].compounds!)[0];
+        const authoredEnclosures = Object.values(source.arrows).flatMap(
+          (arrow) => arrow.enclose?.[state] ?? [],
+        );
+        structures.set(
+          location,
+          await resolveStructure(
+            {
+              label: "",
+              ...spec,
+              enclose: [...(spec.enclose ?? []), ...authoredEnclosures],
+            },
+            prefix + location,
+          ),
+        );
+      }
+    }
+    const group = (ends: SchemeArrow["from"]) =>
+      endpoints(ends).flatMap((raw) => {
+        const item = authoredParticipant(raw);
+        const state = source.states[item.state];
+        if (!state) throw new Error(`Unknown state ${item.state}`);
+        const keys = item.placement
+          ? [item.placement]
+          : Object.keys(state.compounds ?? {});
+        if (!keys.length) return [{ ...item, key: item.state }];
+        return keys.map((placement) => ({
+          ...item,
+          placement,
+          key: item.state + "/" + placement,
+        }));
+      });
+    const arrows = Object.entries(source.arrows).map(([id, arrow]) => ({
+      id,
+      from: group(arrow.from),
+      to: group(arrow.to),
+    }));
+    const anchor = source.layout?.anchor;
     for (const cid of depictStructures(
       rd,
-      compounds,
-      input,
-      (key) => `${id}_${figureKey(key)}`,
+      structures,
+      {
+        ...graphSource,
+        anchor:
+          anchor &&
+          (structures.has(anchor)
+            ? anchor
+            : anchor +
+              "/" +
+              Object.keys(source.states[anchor]?.compounds ?? {})[0]),
+        arrows: arrows.map(({ from, to }) => ({
+          from: from.map(({ key }) => key),
+          to: to.map(({ key }) => key),
+        })),
+      },
+      (key) => variantName(prefix + key),
       style,
       (key) => {
-        const resolved = compounds.get(key)!;
-        if ("compound" in resolved) positionArrowFragments(resolved);
+        const r = structures.get(key);
+        if (r) positionArrowFragments(r);
       },
     ))
       generated.add(cid);
+    for (const [key, state] of Object.entries(source.states)) {
+      graph.states[key].compounds = Object.fromEntries(
+        Object.entries(state.compounds ?? {}).map(([local, input]) => {
+          const location = key + "/" + local;
+          const r = structures.get(location)!;
+          const { variant } = asStructure(input);
+          if (variant !== undefined)
+            selectSavedVariant(r, variant, prefix + location);
+          return [
+            local,
+            {
+              ref: r.compound.id,
+              variant: isChemical(r) ? r.variant : undefined,
+            },
+          ];
+        }),
+      );
+    }
     const resolve = (key: string) => {
-      const r = compounds.get(key);
-      if (!r) throw new Error(`Unknown compound ${key}`);
+      const r = structures.get(key) ?? textStates.get(key);
+      if (!r) throw new Error(`Unknown placement ${key}`);
       return r;
     };
-    const producer = new Map<string, string>(),
-      rawSteps = new Map<string, StepInput>();
-    for (const [i, step] of input.steps!.entries()) {
-      const sid = words(step.id) || String(i + 1);
-      if (rawSteps.has(sid)) throw new Error(`Duplicate step ${sid}`);
-      rawSteps.set(sid, step);
-      for (const p of endpoints(step.to)) {
-        const key = keyOf(p);
-        resolve(key);
-        if (producer.has(key)) throw new Error(`Two steps produce ${key}`);
-        producer.set(key, sid);
-      }
-      for (const r of endpoints(step.from)) resolve(keyOf(r));
-      for (const key of Object.keys(step.enclose ?? {})) {
-        if (
-          ![...endpoints(step.from), ...endpoints(step.to)].some(
-            (p) => keyOf(p) === key,
-          )
-        )
-          throw new Error(
-            `enclose: ${key} is not a participant of step ${sid}`,
-          );
-      }
-    }
-    const ordered: string[] = [],
-      active = new Set<string>();
-    function visit(sid: string) {
-      if (ordered.includes(sid)) return;
-      if (active.has(sid)) throw new Error("Route cycle");
-      active.add(sid);
-      for (const r of endpoints(rawSteps.get(sid)!.from)) {
-        const p = producer.get(keyOf(r));
-        if (p) visit(p);
-      }
-      active.delete(sid);
-      ordered.push(sid);
-    }
-    for (const sid of rawSteps.keys()) visit(sid);
-    const reactions: Reaction[] = [],
-      steps: Route["steps"] = [],
-      edges: Route["edges"] = [];
-    for (const sid of ordered) {
-      const oldStep =
-        previous?.kind === "route"
-          ? previous.steps.find((s) => s.id === sid)
-          : undefined;
-      const step = rawSteps.get(sid)!,
-        rid = !routeGraph
-          ? id
-          : oldStep && existing[oldStep.reaction]?.owner === id
-            ? oldStep.reaction
-            : `rxn_${sourceKey}_${figureKey(sid)}`,
-        scene = blank();
-      const previousReaction = existing[oldStep?.reaction ?? rid];
-      const framePath = `steps.${sid}.mechanism.frames`;
-      if (previousReaction?.kind === "reaction" && previousReaction.mechanism)
-        bindFrames(previousReaction.mechanism.frames, framePath);
-      const participantId = (role: "reactants" | "products", key: string) =>
-        previousReaction?.kind === "reaction"
-          ? (previousReaction[role].find((p) => p.sourceKey === key)?.id ??
-            (role === "products" ? `product-${key}` : key))
-          : role === "products"
-            ? `product-${key}`
-            : key;
-      const reactants: Participant[] = [],
-        products: Participant[] = [],
-        reagents: string[] = [],
-        extra: Point[] = [];
+    for (const { id: sid, from: fromEndpoints, to: toEndpoints } of arrows) {
+      const authored = source.arrows[sid];
+      const edge = graph.arrows[sid];
+      const scene = blank();
+      const reactants: Participant[] = [];
+      const products: Participant[] = [];
+      const reagents: string[] = [];
+      const extra: Point[] = [];
       let cursor = 0,
         first = true;
       const display = (pid: string, resolved: Resolved) => {
@@ -1683,37 +1870,39 @@ export async function compileFigure(
       };
       const localNumber = (key: string, spec: StructureInput) =>
         spec.label === undefined ? key : words(spec.label);
-      for (const raw of endpoints(step.from)) {
+      for (const raw of fromEndpoints) {
         const other = !first;
         const quantity =
           typeof raw === "object" && "equivalents" in raw
             ? { equivalents: raw.equivalents }
             : {};
-        const key = keyOf(raw),
+        const key = raw.key,
           r = resolve(key),
           spec = "compound" in r ? r.spec : r;
         const show = first
           ? "plus"
           : typeof raw === "object"
-            ? (raw.show ?? step.others ?? ("compound" in r ? "plus" : "text"))
-            : (step.others ?? ("compound" in r ? "plus" : "text"));
+            ? (raw.show ??
+              edge.settings?.others ??
+              ("compound" in r ? "plus" : "text"))
+            : (edge.settings?.others ?? ("compound" in r ? "plus" : "text"));
         first = false;
         if (show === "text" || show === "none") {
           if (show === "text")
             reagents.push(
               words(spec.text) ||
-                [localNumber(key, spec), words(spec.name)]
+                [localNumber(raw.state, spec), words(spec.name)]
                   .filter(Boolean)
                   .join(" · "),
             );
           if ("compound" in r)
             reactants.push({
-              id: participantId("reactants", key),
+              id: raw.id ?? raw.state,
               sourceKey: key,
               ...(other ? { other: true } : {}),
               ...quantity,
               compound: r.compound.id,
-              number: localNumber(key, spec),
+              number: localNumber(raw.state, spec),
               name: words(spec.name),
               position: show,
             });
@@ -1722,31 +1911,31 @@ export async function compileFigure(
         if (!("compound" in r))
           throw new Error(`${key}: structure required for ${show}`);
         const participant: Participant = {
-          id: participantId("reactants", key),
+          id: raw.id ?? raw.state,
           sourceKey: key,
           ...(other ? { other: true } : {}),
           ...quantity,
           compound: r.compound.id,
-          number: localNumber(key, spec),
+          number: localNumber(raw.state, spec),
           name: words(spec.name),
           ...(show === "box" ? { position: "above-arrow" } : {}),
         };
         reactants.push(participant);
         if (show !== "box") display(participant.id, r);
       }
-      reagents.push(...lines(step.above));
+      reagents.push(...(edge.above ?? []));
       const from = { x: cursor - 0.7, y: 0 },
         to = { x: cursor + 4.3, y: 0 };
       cursor += 5.8;
       let previousProduct: ReturnType<typeof display> | undefined;
-      for (const raw of endpoints(step.to)) {
-        const key = keyOf(raw),
+      for (const raw of toEndpoints) {
+        const key = raw.key,
           r = resolve(key);
         if (!("compound" in r))
           throw new Error(`${key}: product requires smiles`);
-        const p: ProductInput = typeof raw === "object" ? raw : { id: key };
+        const p = raw;
         products.push({
-          id: participantId("products", key),
+          id: raw.id ?? "product-" + raw.state,
           sourceKey: key,
           compound: r.compound.id,
           number: localNumber(key, r.spec),
@@ -1757,7 +1946,7 @@ export async function compileFigure(
           ...(p.ratio === undefined ? {} : { ratio: p.ratio }),
           ...(p.fraction === undefined ? {} : { fraction: p.fraction }),
         });
-        const productBox = display(participantId("products", key), r);
+        const productBox = display(raw.id ?? "product-" + raw.state, r);
         if (previousProduct)
           scene.captions!.push({
             at: {
@@ -1797,7 +1986,8 @@ export async function compileFigure(
           scene,
           resolved,
           p.id,
-          step.enclose?.[participant.sourceKey!] ?? resolved.spec.enclose,
+          authored.enclose?.[participant.sourceKey!.split("/")[0]] ??
+            resolved.spec.enclose,
         );
       }
       const { dx, dy } = fit(scene, extra);
@@ -1805,46 +1995,40 @@ export async function compileFigure(
       from.y += dy;
       to.x += dx;
       to.y += dy;
-      const reaction: Reaction = {
-        ...base,
-        ...(step.title === undefined ? {} : { title: words(step.title) }),
-        ...(step.sources === undefined
-          ? {}
-          : {
-              sources: step.sources.map((s) => ({
-                source: words(s.source),
-                locator: words(s.locator) || title,
-                ...(s.note === undefined ? {} : { note: words(s.note) }),
-              })),
-            }),
-        ...(routeGraph ? { footnote: undefined } : {}),
-        kind: "reaction",
-        id: rid,
-        ...(routeGraph ? { owner: id } : {}),
-        reactants,
-        products,
+      edge.from = fromEndpoints.map(({ key, state, placement, show }) => ({
+        state,
+        placement,
+        show,
+        appearance: reactants.find((p) => p.sourceKey === key),
+      }));
+      edge.to = toEndpoints.map(({ key, state, placement }) => ({
+        state,
+        placement,
+        appearance: products.find((p) => p.sourceKey === key),
+      }));
+      const drawing: NonNullable<GraphArrow["drawing"]> = {
         reagents,
-        conditions: lines(step.below),
-        ...(step.tags === undefined ? {} : { tags: step.tags }),
-        ...(step.reagentPosition === undefined
-          ? {}
-          : { reagentPosition: step.reagentPosition }),
+        conditions: edge.below ?? [],
+        reagentPosition: authored.reagentPosition,
         scene,
-        ...(step.mechanism && {
-          mechanism: await compileFrames(
-            step.mechanism.frames,
-            framePath,
-            "reaction",
-            new Map(
-              [...compounds].flatMap(([key, value]) =>
-                "compound" in value ? [[key, value] as const] : [],
-              ),
-            ),
-          ),
-        }),
-        arrow: { from, to, textWidth: 5, kind: step.arrow ?? "forward" },
+        arrow: { from, to, textWidth: 5, kind: edge.kind },
       };
-      entries[rid] = reaction;
+      edge.drawing = drawing;
+      edge.title ??= title;
+      if (authored.via) {
+        const via: NonNullable<GraphArrow["via"]> = {
+          states: {},
+          arrows: {},
+          bind: authored.via.bind,
+        };
+        edge.via = via;
+        await compileGraph(
+          authored.via,
+          via,
+          prefix + sid + "/via/",
+          structures,
+        );
+      }
       const manual = (numbers: number[] = []) =>
         numbers.map((n) => {
           const found = products.flatMap((p) => {
@@ -1859,88 +2043,53 @@ export async function compileFigure(
           return found[0];
         });
       review.push(
-        ...reactionChanges(rd, entries, reaction, {
-          enabled:
-            input.changes !== false &&
-            input.changes !== "off" &&
-            step.changes !== false &&
-            step.changes !== "off",
-          ...(typeof step.changes === "object"
-            ? {
-                add: manual(step.changes.add),
-                remove: manual(step.changes.remove),
-              }
-            : {}),
-          numbers: Object.fromEntries(
-            products.map((p) => {
-              const r = resolve(p.sourceKey!);
-              return [
-                p.id,
-                "compound" in r
-                  ? Object.fromEntries([...r.atoms].map(([n, a]) => [a, n]))
-                  : {},
-              ];
-            }),
-          ),
-        }),
+        ...reactionChanges(
+          rd,
+          entries,
+          { ...edge, title: edge.title, drawing },
+          {
+            enabled:
+              graphSource.changes !== false &&
+              graphSource.changes !== "off" &&
+              authored.changes !== false &&
+              authored.changes !== "off",
+            ...(typeof authored.changes === "object"
+              ? {
+                  add: manual(authored.changes.add),
+                  remove: manual(authored.changes.remove),
+                }
+              : {}),
+            numbers: Object.fromEntries(
+              products.map((p) => {
+                const r = resolve(p.sourceKey!);
+                return [
+                  p.id,
+                  "compound" in r
+                    ? Object.fromEntries([...r.atoms].map(([n, a]) => [a, n]))
+                    : {},
+                ];
+              }),
+            ),
+          },
+        ),
       );
-      await compileReactionLayout(entries, reaction, sid, input, step, style);
-      generated.add(rid);
-      reactions.push(reaction);
-      steps.push({ id: sid, reaction: rid, at: { x: 0, y: 0 } });
-      for (const raw of endpoints(step.from)) {
-        const key = keyOf(raw),
-          p = producer.get(key);
-        if (p && reactants.some((r) => r.sourceKey === key))
-          edges.push({
-            from: p,
-            to: sid,
-            product: (
-              entries[steps.find((s) => s.id === p)!.reaction] as Reaction
-            ).products.find((item) => item.sourceKey === key)!.id,
-            reactant: reactants.find((item) => item.sourceKey === key)!.id,
-          });
-      }
+
+      await compileArrowLayout(entries, { ...figure, graph }, sid, style);
     }
-    if (!routeGraph) top = reactions[0];
-    else {
-      top = { ...base, kind: "route", id, steps, edges, width: 1, height: 1 };
-      await compileRouteLayout(entries, top, input, rawSteps, style);
-    }
+    if (arrows.length > 1 || existingGraph?.layout?.route)
+      await compileGraphLayout(entries, { ...figure, graph }, style);
   }
-  entries[id] = top;
-  generated.add(id);
+
+  await compileGraph(graphSource, figure.graph, "");
+  figureRouteMetrics(figure);
   for (const gid of generated) finishFigureEntry(entries[gid]);
   validateLibrary(entries);
   for (const gid of generated) {
-    const e = entries[gid];
-    validateLibraryEntry(e);
-    if (e.kind === "compound") validateCompound(rd, e);
-    if (e.kind === "route") routeMetrics(e, entries);
-    if (e.kind === "reaction")
-      validateSceneChemistry(
-        rd,
-        entries,
-        e.scene,
-        `${sourceFile ?? e.id}`,
-        true,
-      );
-    const mechanism =
-      e.kind === "mechanism"
-        ? e
-        : e.kind === "reaction"
-          ? e.mechanism
-          : undefined;
-    if (mechanism)
-      for (const f of mechanism.frames)
-        validateSceneChemistry(
-          rd,
-          entries,
-          f.scene,
-          `${sourceFile ?? id}/${f.id}`,
-          true,
-        );
+    const entry = entries[gid];
+    if (entry.kind === "compound") validateCompound(rd, entry);
   }
+  for (const scene of graphScenes(figure.graph))
+    validateSceneChemistry(rd, entries, scene, sourceFile, true);
   return {
     entries,
     generated: [...generated],

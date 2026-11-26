@@ -1,3 +1,6 @@
+import { arrowAt } from "./helpers/figure-graph.ts";
+import { drawingPanels } from "./helpers/figure-graph.ts";
+import { appearances } from "../shared/chemical-library/figure-layout.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -25,10 +28,23 @@ const toolkit = await moleculeToolkit(),
 test("a single frame keeps the next arrowhead clear of a reagent label", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    frames: [
-      { id: "before", smiles: "CCO", above: "Oxidative addition" },
-      { id: "after", smiles: "CC=O" },
-    ],
+    states: {
+      before: { compounds: { structure: { smiles: "CCO" } } },
+      after: { compounds: { structure: { smiles: "CC=O" } } },
+    },
+    arrows: {
+      ["next-" + "before"]: {
+        from: "before",
+        to: "after",
+        kind: "forward",
+        role: "elementary",
+        above: "Oxidative addition",
+      },
+    },
+    views: {
+      before: { items: ["before"], arrows: ["next-" + "before"] },
+      after: { items: ["after"] },
+    },
   });
   const geometry = await prepareFigure(
     compiled.entries,
@@ -46,12 +62,17 @@ test("a single frame keeps the next arrowhead clear of a reagent label", async (
 test("electron events use the shared red accent and draw selected forming bonds", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    compounds: {
+    states: {
       event: {
-        smiles: "[O-:1].[CH2:2]=[O:3]",
-        arrows: [{ from: "lp(1)", to: "between(1,2)", forming: true }],
+        compounds: {
+          event: {
+            smiles: "[O-:1].[CH2:2]=[O:3]",
+            arrows: [{ from: "lp(1)", to: "between(1,2)", forming: true }],
+          },
+        },
       },
     },
+    arrows: {},
   });
   const geometry = await prepareFigure(compiled.entries, compiled.reference, {
     toolkit,
@@ -81,20 +102,21 @@ test("electron events use the shared red accent and draw selected forming bonds"
 test("rendering keeps the compiled contact placement of oppositely charged fragments", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    frames: [
-      {
-        id: "event",
-        smiles: "[O-:1].[H:2][O+:3]([H])[H]",
+    states: {
+      event: {
         arrows: [
           { from: "lp(1)", to: "atom(2)" },
           { from: "bond(2,3)", to: "atom(3)" },
         ],
+        compounds: { structure: { smiles: "[O-:1].[H:2][O+:3]([H])[H]" } },
       },
-    ],
+    },
+    arrows: {},
+    views: { event: { items: ["event"] } },
   });
   const entry = compiled.entries[compiled.reference.ref];
-  assert.equal(entry.kind, "mechanism");
-  const scene = entry.frames[0].scene,
+  assert.equal(entry.kind, "figure");
+  const scene = drawingPanels(entry)[0].scene,
     placement = scene.molecules[0],
     compound = compiled.entries[placement.compound];
   assert.equal(compound.kind, "compound");
@@ -123,19 +145,49 @@ test("rendering keeps the compiled contact placement of oppositely charged fragm
 });
 
 test("mechanism overviews retain saved frame geometry and use declared step arrows", async () => {
+  const kinds = ["forward", "equilibrium", "resonance", "none"];
+  const keys = Array.from({ length: 5 }, (_, i) => `frame-${i}`);
+  const states = Object.fromEntries(
+    keys.map((id, index) => [
+      id,
+      {
+        title: `State ${index + 1}`,
+        compounds: {
+          structure: {
+            smiles: "[O-:1][CH2:2][CH3:3]",
+            bracket: index === 1 ? "ts" : false,
+          },
+        },
+        arrows: [{ from: "lp(1)", to: "bond(1,2)" }],
+      },
+    ]),
+  );
+  const authoredArrows = Object.fromEntries(
+    kinds.map((kind, i) => [
+      "next-" + keys[i],
+      {
+        kind,
+        role: "elementary",
+        from: keys[i],
+        to: keys[i + 1],
+      },
+    ]),
+  );
+  const views = Object.fromEntries(
+    keys.map((id, index) => [
+      id,
+      {
+        items: [id],
+        arrows: index < kinds.length ? ["next-" + id] : [],
+      },
+    ]),
+  );
   const compiled = await compileFigure({
     kind: "scheme",
     width: 420,
-    frames: (
-      ["forward", "equilibrium", "resonance", "none", "forward"] as const
-    ).map((arrow, index) => ({
-      id: `frame-${index}`,
-      title: `Step ${index + 1}`,
-      smiles: "[O-:1][CH2:2][CH3:3]",
-      bracket: index === 1 ? ("ts" as const) : false,
-      arrow,
-      arrows: [{ from: "lp(1)", to: "bond(1,2)" }],
-    })),
+    states,
+    arrows: authoredArrows,
+    views,
   });
   const saved = structuredClone(compiled.entries);
   const overview = await prepareFigure(compiled.entries, compiled.reference, {
@@ -200,7 +252,9 @@ test("structure scale enlarges rendered bonds while preserving label size", asyn
   const render = async (scale: number) => {
     const compiled = await compileFigure({
       kind: "scheme",
-      frames: [{ id: "one", smiles: "CCO", scale }],
+      states: { one: { compounds: { structure: { smiles: "CCO", scale } } } },
+      arrows: {},
+      views: { one: { items: ["one"] } },
     });
     const geometry = await prepareFigure(compiled.entries, compiled.reference, {
       toolkit,
@@ -232,16 +286,17 @@ test("structure scale enlarges rendered bonds while preserving label size", asyn
 test("fragment placement keeps vertical lone-pair clearances finite", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    frames: [
-      {
-        id: "addition",
-        smiles: "[O:1]=[C:2](OC)C.[CH3:3][NH2:4]",
+    states: {
+      addition: {
         arrows: [
           { from: "lp(4)", to: "between(4,2)" },
           { from: "pi(1,2)", to: "atom(1)" },
         ],
+        compounds: { structure: { smiles: "[O:1]=[C:2](OC)C.[CH3:3][NH2:4]" } },
       },
-    ],
+    },
+    arrows: {},
+    views: { addition: { items: ["addition"] } },
   });
   const geometry = await prepareFigure(compiled.entries, compiled.reference, {
     toolkit,
@@ -259,13 +314,14 @@ test("fragment placement keeps vertical lone-pair clearances finite", async () =
 test("electron head selection clears the complete halogen label", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    frames: [
-      {
-        id: "leaving",
-        smiles: "[CH3:1][Br:2]",
+    states: {
+      leaving: {
         arrows: [{ from: "bond(1,2)", to: "atom(2)" }],
+        compounds: { structure: { smiles: "[CH3:1][Br:2]" } },
       },
-    ],
+    },
+    arrows: {},
+    views: { leaving: { items: ["leaving"] } },
   });
   const geometry = await prepareFigure(compiled.entries, compiled.reference, {
     toolkit,
@@ -282,8 +338,18 @@ test("electron head selection clears the complete halogen label", async () => {
 test("reaction changes preserve normal ink on unmarked atoms and bonds", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    compounds: { a: "CCCO", b: "CCC=O" },
-    steps: [{ from: "a", to: "b" }],
+    states: {
+      a: { compounds: { structure: { label: "a", smiles: "CCCO" } } },
+      b: { compounds: { structure: { label: "b", smiles: "CCC=O" } } },
+    },
+    arrows: {
+      "1": {
+        from: [{ state: "a", id: "a" }],
+        to: [{ state: "b", id: "product-b" }],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
   });
   const geometry = await prepareFigure(compiled.entries, compiled.reference, {
     toolkit,
@@ -317,8 +383,18 @@ test("a changed implicit carbon stereocentre visibly marks its solid or hashed w
     );
     const compiled = await compileFigure({
       kind: "scheme",
-      compounds: { a: reactant, b: product },
-      steps: [{ from: "a", to: "b" }],
+      states: {
+        a: { compounds: { structure: { label: "a", smiles: reactant } } },
+        b: { compounds: { structure: { label: "b", smiles: product } } },
+      },
+      arrows: {
+        "1": {
+          from: [{ state: "a", id: "a" }],
+          to: [{ state: "b", id: "product-b" }],
+          kind: "forward",
+          role: "reaction",
+        },
+      },
     });
     const geometry = await prepareFigure(compiled.entries, compiled.reference, {
       toolkit,
@@ -328,7 +404,7 @@ test("a changed implicit carbon stereocentre visibly marks its solid or hashed w
     let redBonds = 0;
     walkGeometry(geometry.root, (node) => {
       if (
-        node.attributes["data-bond"]?.startsWith("product-b:") &&
+        node.attributes["data-bond"]?.startsWith("1/product-b:") &&
         (node.paint.fill === style.values["--chemical-focus"] ||
           node.paint.stroke === style.values["--chemical-focus"])
       )
@@ -865,11 +941,15 @@ test("ring stereocentres use drawing-only hydrogen wedges without duplicating ex
 test("scene enclosures surround visible labels without changing molecular ink or coordinates", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    frames: [{ id: "one", smiles: "[CH3:1][CH2:2][OH:3]" }],
+    states: {
+      one: { compounds: { structure: { smiles: "[CH3:1][CH2:2][OH:3]" } } },
+    },
+    arrows: {},
+    views: { one: { items: ["one"] } },
   });
   const entry = compiled.entries[compiled.reference.ref];
-  assert.equal(entry.kind, "mechanism");
-  const scene = entry.frames[0].scene;
+  assert.equal(entry.kind, "figure");
+  const scene = drawingPanels(entry)[0].scene;
   const molecule = scene.molecules[0];
   const compound = compiled.entries[molecule.compound];
   assert.equal(compound.kind, "compound");
@@ -1180,8 +1260,18 @@ test("every saved compiler variant has its final label placement", async () => {
     {
       kind: "scheme",
       title: "Group transformation",
-      compounds: { a: smiles, b: "N1CCCCC1" },
-      steps: [{ from: "a", to: "b" }],
+      states: {
+        a: { compounds: { structure: { label: "a", smiles: smiles } } },
+        b: { compounds: { structure: { label: "b", smiles: "N1CCCCC1" } } },
+      },
+      arrows: {
+        "1": {
+          from: [{ state: "a", id: "a" }],
+          to: [{ state: "b", id: "product-b" }],
+          kind: "forward",
+          role: "reaction",
+        },
+      },
     },
     { [c.id]: c },
   );
@@ -1318,13 +1408,14 @@ test("the linear-centre rule distinguishes bent double-bond centres", async () =
 test("radical ions keep the electron beside the charge and use it as the arrow source", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    frames: [
-      {
-        id: "event",
-        smiles: "[O-:1].[CH3:2][CH3:3]",
+    states: {
+      event: {
         arrows: [{ from: "radical(1)", to: "atom(2)", electrons: 1 }],
+        compounds: { structure: { smiles: "[O-:1].[CH3:2][CH3:3]" } },
       },
-    ],
+    },
+    arrows: {},
+    views: { event: { items: ["event"] } },
   });
   const geometry = await prepareFigure(compiled.entries, compiled.reference, {
     toolkit,
@@ -1361,13 +1452,14 @@ test("radical ions keep the electron beside the charge and use it as the arrow s
 test("a small charged reagent uses a condensed label at its oxygen anchor", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    frames: [
-      {
-        id: "event",
-        smiles: "[CH3:1][O-:2].[CH2:3]=[O:4]",
+    states: {
+      event: {
         arrows: [{ from: "lp(2)", to: "atom(3)" }],
+        compounds: { structure: { smiles: "[CH3:1][O-:2].[CH2:3]=[O:4]" } },
       },
-    ],
+    },
+    arrows: {},
+    views: { event: { items: ["event"] } },
   });
   const geometry = await prepareFigure(compiled.entries, compiled.reference, {
     toolkit,
@@ -1403,9 +1495,8 @@ test("a referenced interior atom or disabled abbreviation keeps a reagent expand
   ] as const) {
     const compiled = await compileFigure({
       kind: "scheme",
-      frames: [
-        {
-          id: "event",
+      states: {
+        event: {
           compounds: {
             sample: {
               smiles: "[CH3:1][O-:2].[CH2:3]=[O:4]",
@@ -1414,7 +1505,9 @@ test("a referenced interior atom or disabled abbreviation keeps a reagent expand
             },
           },
         },
-      ],
+      },
+      arrows: {},
+      views: { event: { items: ["event"] } },
     });
     const geometry = await prepareFigure(compiled.entries, compiled.reference, {
       toolkit,
@@ -1433,13 +1526,18 @@ test("a referenced interior atom or disabled abbreviation keeps a reagent expand
 test("a protected substrate group does not disable a separate reagent label", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    frames: [
-      {
-        id: "event",
-        smiles: "[CH3:1][O:2][CH3:3].[CH3:4][O-:5].[CH2:6]=[O:7]",
+    states: {
+      event: {
         arrows: [{ from: "bond(2,3)", to: "atom(6)" }],
+        compounds: {
+          structure: {
+            smiles: "[CH3:1][O:2][CH3:3].[CH3:4][O-:5].[CH2:6]=[O:7]",
+          },
+        },
       },
-    ],
+    },
+    arrows: {},
+    views: { event: { items: ["event"] } },
   });
   const geometry = await prepareFigure(compiled.entries, compiled.reference, {
     toolkit,
@@ -1461,13 +1559,14 @@ test("declared donor pairs remain separate from the atom and charge", async () =
   ] as const) {
     const compiled = await compileFigure({
       kind: "scheme",
-      frames: [
-        {
-          id: "first",
-          smiles,
+      states: {
+        first: {
           arrows: [{ from: "lp(1)", to: "bond(1,2)" }],
+          compounds: { structure: { smiles } },
         },
-      ],
+      },
+      arrows: {},
+      views: { first: { items: ["first"] } },
     });
     const geometry = await prepareFigure(compiled.entries, compiled.reference, {
       toolkit,
@@ -1571,8 +1670,9 @@ test("scene preparation handles reaction, route and mechanism fixtures without a
     );
     const entry = compiled.entries[compiled.reference.ref];
     const references =
-      entry.kind === "mechanism"
-        ? entry.frames.map((frame) => ({
+      entry.kind === "figure" &&
+      !Object.values(entry.graph.arrows).some((arrow) => arrow.drawing)
+        ? drawingPanels(entry).map((frame) => ({
             ...compiled.reference,
             frame: frame.id,
           }))
@@ -1709,12 +1809,12 @@ test("wrapping measures SVG text without a trailing space", async () => {
     ),
   );
   const entry = compiled.entries[compiled.reference.ref];
-  if (entry.kind !== "reaction") throw new Error("Expected reaction fixture");
+  const arrow = arrowAt(entry);
   const { createFigureScene } =
     await import("../src/ui/library/scene-geometry.ts");
   const scene = createFigureScene(style, fonts);
-  entry.conditions = ["AAAA BBBB CCCC DDDD"];
-  entry.arrow.textWidth =
+  arrow.drawing.conditions = ["AAAA BBBB CCCC DDDD"];
+  arrow.drawing.arrow.textWidth =
     (scene.label(
       { x: 0, y: 0 },
       "AAAA BBBB CCCC",
@@ -1732,7 +1832,7 @@ test("wrapping measures SVG text without a trailing space", async () => {
   walkGeometry(geometry.root, (node) => {
     if (
       node.kind === "text" &&
-      node.attributes["data-label"]?.startsWith(entry.id + ":condition:1:")
+      node.attributes["data-label"]?.includes(":condition:1:")
     )
       lines.push(node.text);
   });
@@ -1841,7 +1941,10 @@ test("Node diagnostics detect duplicated charges, detached bonds and route conne
       "utf8",
     ),
   );
-  routeInput.steps[0].to = { id: 2, yield: "93%" };
+  routeInput.arrows[Object.keys(routeInput.arrows)[0]].to = {
+    state: "2",
+    yield: "93%",
+  };
   const compiled = await compileFigure(routeInput);
   const geometry = await prepareFigure(compiled.entries, compiled.reference, {
     toolkit,
@@ -1925,11 +2028,31 @@ test("condition text inside a filled structure is rejected even without crossing
 test("atom numbers clear folded group labels after an authored turn", async () => {
   const result = await compileFigure({
     kind: "scheme",
-    compounds: {
-      a: { smiles: "C[C@H]([C:21](=O)OC)O", numbers: true, rot: 90 },
-      b: "C[C@H]([C:21](=O)OC)O",
+    states: {
+      a: {
+        compounds: {
+          structure: {
+            label: "a",
+            smiles: "C[C@H]([C:21](=O)OC)O",
+            numbers: true,
+            rot: 90,
+          },
+        },
+      },
+      b: {
+        compounds: {
+          structure: { label: "b", smiles: "C[C@H]([C:21](=O)OC)O" },
+        },
+      },
     },
-    steps: [{ from: "a", to: "b" }],
+    arrows: {
+      "1": {
+        from: [{ state: "a", id: "a" }],
+        to: [{ state: "b", id: "product-b" }],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
   });
   const geometry = await prepareFigure(result.entries, result.reference, {
     toolkit,
@@ -1941,13 +2064,15 @@ test("atom numbers clear folded group labels after an authored turn", async () =
 
 test("scene arrow condition lines reserve their measured ink height", async () => {
   const compiled = await compileFigure({
-    title: "Comparison",
     kind: "scheme",
-    frames: [{ id: "first", smiles: "CCO", arrow: "none" }],
+    title: "Comparison",
+    states: { first: { compounds: { structure: { smiles: "CCO" } } } },
+    arrows: {},
+    views: { first: { items: ["first"] } },
   });
   const entry = compiled.entries[compiled.reference.ref];
-  assert.equal(entry.kind, "mechanism");
-  const scene = entry.frames[0].scene;
+  assert.equal(entry.kind, "figure");
+  const scene = drawingPanels(entry)[0].scene;
   scene.width = 24;
   scene.height = 12;
   scene.reactionArrows = [
@@ -1977,15 +2102,31 @@ test("compiled ester labels clear bonds and adjacent labels after saving aligned
   const compiled = await compileFigure({
     kind: "scheme",
     title: "Aligned ester",
-    anchor: "b",
-    compounds: {
+    states: {
       a: {
-        smiles: "CCC(c1ccccc1)(C(=O)OCC)CCC(=O)N",
-        abbreviations: ["CO2Et"],
+        compounds: {
+          structure: {
+            label: "a",
+            smiles: "CCC(c1ccccc1)(C(=O)OCC)CCC(=O)N",
+            abbreviations: ["CO2Et"],
+          },
+        },
       },
-      b: "CCC1(c2ccccc2)CCC(=O)NC1=O",
+      b: {
+        compounds: {
+          structure: { label: "b", smiles: "CCC1(c2ccccc2)CCC(=O)NC1=O" },
+        },
+      },
     },
-    steps: [{ from: "a", to: "b" }],
+    arrows: {
+      "1": {
+        from: [{ state: "a", id: "a" }],
+        to: [{ state: "b", id: "product-b" }],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
+    layout: { anchor: "b" },
   });
   const geometry = await prepareFigure(compiled.entries, compiled.reference, {
     toolkit,
@@ -1997,7 +2138,7 @@ test("compiled ester labels clear bonds and adjacent labels after saving aligned
   const abbreviations = new Set<string>();
   walkGeometry(geometry.root, (node, matrix) => {
     const id = node.attributes["data-label"];
-    if (!id?.startsWith("a:") || !node.bounds) return;
+    if (!id?.startsWith("1/a:") || !node.bounds) return;
     labels.set(
       id,
       unionBoxes([labels.get(id) ?? null, transformBox(node.bounds, matrix)])!,
@@ -2022,19 +2163,28 @@ test("compiled layouts reserve a three-digit number line for page references", a
   const input = {
     kind: "scheme",
     title: "Numbered reaction",
-    compounds: {
-      a: { smiles: "CC", label: "" },
-      b: { smiles: "CCC", label: "" },
-      c: { smiles: "CCCC", label: "" },
+    states: {
+      a: { compounds: { structure: { smiles: "CC", label: "" } } },
+      b: { compounds: { structure: { smiles: "CCC", label: "" } } },
+      c: { compounds: { structure: { smiles: "CCCC", label: "" } } },
     },
-    steps: [{ from: ["a", "b"], to: "c" }],
+    arrows: {
+      "1": {
+        from: [
+          { state: "a", id: "a" },
+          { state: "b", id: "b" },
+        ],
+        to: [{ state: "c", id: "product-c" }],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
   };
   const first = await compileFigure(input);
-  const reaction = first.entries[first.reference.ref];
-  assert.equal(reaction.kind, "reaction");
+  const reaction = arrowAt(first.entries[first.reference.ref]);
   const numbers = Object.fromEntries(
-    [...reaction.reactants, ...reaction.products].map((p, i) => [
-      p.id,
+    [...appearances(reaction.from), ...appearances(reaction.to)].map((p, i) => [
+      "1/" + p.id,
       String(i + 1).repeat(3),
     ]),
   );
@@ -2051,11 +2201,13 @@ test("compiled layouts reserve a three-digit number line for page references", a
 test("automatic circles use an outline when a neighbouring label crosses their boundary", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    frames: [{ id: "one", smiles: "CC(C)(C)O" }],
+    states: { one: { compounds: { structure: { smiles: "CC(C)(C)O" } } } },
+    arrows: {},
+    views: { one: { items: ["one"] } },
   });
   const entry = compiled.entries[compiled.reference.ref];
-  assert.equal(entry.kind, "mechanism");
-  const scene = entry.frames[0].scene;
+  assert.equal(entry.kind, "figure");
+  const scene = drawingPanels(entry)[0].scene;
   const p = scene.molecules[0];
   const compound = compiled.entries[p.compound];
   assert.equal(compound.kind, "compound");
@@ -2086,12 +2238,14 @@ test("automatic circles use an outline when a neighbouring label crosses their b
 test("figure canvas follows visible ink instead of saved scene whitespace", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    frames: [{ id: "one", smiles: "CCC" }],
+    states: { one: { compounds: { structure: { smiles: "CCC" } } } },
+    arrows: {},
+    views: { one: { items: ["one"] } },
   });
   const entry = compiled.entries[compiled.reference.ref];
-  assert.equal(entry.kind, "mechanism");
-  entry.frames[0].scene.width = 200;
-  entry.frames[0].scene.height = 100;
+  assert.equal(entry.kind, "figure");
+  drawingPanels(entry)[0].scene.width = 200;
+  drawingPanels(entry)[0].scene.height = 100;
   const geometry = await prepareFigure(compiled.entries, compiled.reference, {
     toolkit,
     fonts,
@@ -2117,7 +2271,8 @@ test("authored bond density reaches the website renderer", async () => {
     kind: "scheme",
     bond: 24,
     width: 400,
-    compounds: { a: "CCC" },
+    states: { a: { compounds: { a: "CCC" } } },
+    arrows: {},
   });
   const geometry = await prepareFigure(compiled.entries, compiled.reference, {
     toolkit,

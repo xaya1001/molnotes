@@ -8,7 +8,7 @@ import type { FigureGeometry } from "../../shared/chemical-library/geometry.ts";
 import type { UnitAsset } from "./content-files.ts";
 import { sha256 } from "../../shared/assets.ts";
 import {
-  figureFrames,
+  figureViewKeys,
   libraryDependencies,
 } from "../../shared/chemical-library/contract.ts";
 import { figureViewKey } from "../../shared/chemical-library/views.ts";
@@ -255,7 +255,7 @@ export function figureProofReferences(
         ? []
         : [
             { ref: entry.id },
-            ...figureFrames(library, entry).map(({ id }) => ({
+            ...figureViewKeys(entry).map((id) => ({
               ref: entry.id,
               frame: id,
             })),

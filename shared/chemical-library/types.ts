@@ -172,58 +172,110 @@ export interface Participant {
   ratio?: string;
   fraction?: number;
 }
-export interface Reaction extends EntryBase {
-  kind: "reaction";
-  reactants: Participant[];
-  products: Participant[];
-  reagents: string[];
-  reagentPosition?: "above-arrow" | "below-arrow";
-  conditions: string[];
-  tags?: string[];
-  plusAt?: Point[];
-  showPlus?: boolean;
-  scene: Scene;
-  mechanism?: Pick<Mechanism, "frames" | "maps">;
-  arrow: {
-    from: Point;
-    to: Point;
-    textWidth: number;
-    via?: Point[];
-    kind?: ArrowKind;
-    side?: "left" | "right";
+export type GraphParticipant = {
+  state: string;
+  placement?: string;
+  show?: "box" | "text" | "plus" | "none";
+  appearance?: Participant;
+};
+export type GraphState = {
+  title?: string;
+  text?: string;
+  compounds?: Record<string, { ref: string; variant?: string }>;
+  scene?: Scene;
+};
+export interface ArrowPath {
+  from: Point;
+  to: Point;
+  textWidth: number;
+  points?: Point[];
+  kind?: ArrowKind;
+  side?: "left" | "right";
+}
+export interface ArrowPlacement {
+  at: Point;
+  display?: Record<string, "structure" | "reference" | "hidden">;
+  placements?: Record<string, Point>;
+  reagents?: string[];
+  conditions?: string[];
+  boxes?: string[];
+  arrow?: ArrowPath;
+}
+export type FigureGraph = {
+  states: Record<string, GraphState>;
+  arrows: Record<string, GraphArrow>;
+  groups?: Record<
+    string,
+    {
+      title?: string;
+      subtitle?: string;
+      items: string[];
+      edges?: string[];
+      scene?: Scene;
+    }
+  >;
+  layout?: {
+    cols?: number;
+    anchor?: string;
+    wrap?: "serpentine";
+    radius?: number;
+    branch?: number;
+    panel?: Scene;
+    route?: {
+      connections?: { id: string; points: Point[] }[];
+      plusAt?: Point[];
+      width: number;
+      height: number;
+    };
   };
-}
-export interface Route extends EntryBase {
-  kind: "route";
-  steps: {
-    id: string;
-    reaction: string;
-    at: Point;
-    display?: Record<string, "structure" | "reference" | "hidden">;
-    placements?: Record<string, Point>;
-    reagents?: string[];
-    conditions?: string[];
-    boxes?: string[];
-    arrow?: Reaction["arrow"];
+  yields?: {
+    arrows: string[];
+    product: string;
+    yield: string;
+    sources?: Evidence[];
+    note?: string;
   }[];
-  connections?: { id: string; points: Point[] }[];
-  plusAt?: Point[];
-  edges: { from: string; to: string; product: string; reactant: string }[];
-  width: number;
-  height: number;
-}
-export interface Mechanism extends EntryBase {
-  kind: "mechanism";
-  category: "reaction" | "resonance" | "comparison" | "examples";
-  frames: {
-    id: string;
-    title: string;
+};
+export type GraphArrow = {
+  from: GraphParticipant[];
+  to: GraphParticipant[];
+  kind: ArrowKind;
+  role: "reaction" | "elementary" | "display";
+  title?: string;
+  above?: string[];
+  below?: string[];
+  sources?: Evidence[];
+  tags?: string[];
+  in?: string;
+  out?: string;
+  map?: { from: AtomRef; to: AtomRef }[];
+  settings?: {
+    others?: GraphParticipant["show"];
+    turn?: "down" | "elbow" | "wrap";
+    side?: "left" | "right";
+    reverse?: boolean;
+  };
+  via?: FigureGraph & {
+    bind?: { from?: Record<string, string>; to?: Record<string, string> };
+  };
+  drawing?: {
     scene: Scene;
-    arrow?: ArrowKind;
-    above?: string[];
-    below?: string[];
-  }[];
-  maps?: { from: AtomRef; to: AtomRef; fromFrame: string; toFrame: string }[];
+    arrow: ArrowPath;
+    reagents: string[];
+    conditions: string[];
+    plusAt?: Point[];
+    showPlus?: boolean;
+    reagentPosition?: "above-arrow" | "below-arrow";
+  };
+  placement?: ArrowPlacement;
+};
+export interface Figure extends EntryBase {
+  kind: "figure";
+  graph: FigureGraph;
+  views: Record<
+    string,
+    { items: string[]; arrows?: string[]; titles?: boolean }
+  >;
 }
 export interface LibraryImage extends EntryBase {
   kind: "image";
@@ -246,13 +298,7 @@ export interface Conformation extends EntryBase, ConformationSpec {
   kind: "conformation";
 }
 export type LibraryEntry =
-  | Compound
-  | Reaction
-  | Route
-  | Mechanism
-  | LibraryImage
-  | LibraryMarkush
-  | Conformation;
+  Compound | Figure | LibraryImage | LibraryMarkush | Conformation;
 export type Library = Record<string, LibraryEntry>;
 export interface FigureReference {
   ref: string;

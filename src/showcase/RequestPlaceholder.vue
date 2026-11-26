@@ -101,37 +101,30 @@ function jump(line: number) {
         />
       </div>
       <div
-        v-if="request.display.frames?.length && !request.errors.length"
+        v-if="request.display.states?.length && !request.errors.length"
         class="request-field"
       >
         <ol
-          class="request-frames"
-          :class="{ 'request-frames--wrap': request.display.frames.length > 4 }"
+          class="request-states"
+          :class="{ 'request-states--wrap': request.display.states.length > 4 }"
         >
           <li
-            v-for="(frame, i) in request.display.frames"
-            :key="i"
-            class="request-frame"
+            v-for="state in request.display.states"
+            :key="state.id"
+            class="request-state"
           >
-            <div class="request-frame-card">
-              <span class="request-frame-label">{{ frame.title }}</span>
+            <div class="request-state-card">
+              <span class="request-state-label">{{ state.title }}</span>
               <span
-                v-if="frame.smiles"
+                v-if="state.smiles"
                 class="request-smiles"
-                :title="frame.smiles"
-                >{{ frame.smiles }}</span
+                :title="state.smiles"
+                >{{ state.smiles }}</span
               >
-              <span v-if="frame.note" class="request-frame-note">{{
-                frame.note
+              <span v-if="state.note" class="request-state-note">{{
+                state.note
               }}</span>
             </div>
-            <span
-              v-if="i < request.display.frames.length - 1"
-              class="request-step"
-              aria-hidden="true"
-              ><svg viewBox="0 0 16 16">
-                <path d="M2 8h11M9.5 4.5L13 8l-3.5 3.5" /></svg
-            ></span>
           </li>
         </ol>
       </div>
@@ -362,7 +355,7 @@ function jump(line: number) {
 }
 
 /* Figure frames: a strip in reading order, as the figure will run. */
-.prose .request-frames {
+.prose .request-states {
   display: flex;
   align-items: stretch;
   gap: var(--space-2);
@@ -371,17 +364,17 @@ function jump(line: number) {
   list-style: none;
 }
 
-.prose .request-frames li + li {
+.prose .request-states li + li {
   margin-top: 0;
 }
 
-.request-frame {
+.request-state {
   display: flex;
   flex: 1 1 0;
   gap: var(--space-2);
   min-width: 0;
 }
-.request-frame-card {
+.request-state-card {
   display: flex;
   flex: 1 1 0;
   flex-direction: column;
@@ -394,10 +387,10 @@ function jump(line: number) {
   line-height: 1.5;
 }
 
-.request-frames--wrap {
+.request-states--wrap {
   flex-wrap: wrap;
 }
-.request-frames--wrap .request-frame {
+.request-states--wrap .request-state {
   flex-basis: calc((100% - 3 * var(--space-2)) / 4);
   flex-grow: 0;
 }
@@ -411,7 +404,7 @@ function jump(line: number) {
   display: block;
   text-align: center;
 }
-.request-frame-label {
+.request-state-label {
   color: var(--ink);
   font-weight: 500;
 }
@@ -427,27 +420,10 @@ function jump(line: number) {
   overflow-wrap: anywhere;
 }
 
-.request-frame-note {
+.request-state-note {
   margin-top: auto;
   color: var(--ink-muted);
   font-size: var(--text-xs);
-}
-
-.request-step {
-  display: flex;
-  flex: none;
-  align-items: center;
-  color: var(--rule-strong);
-}
-
-.request-step svg {
-  width: 1rem;
-  height: 1rem;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 /* YAML source with the note file's line numbers. */
@@ -584,22 +560,14 @@ function jump(line: number) {
     padding: var(--space-3) var(--space-4) var(--space-4);
   }
 
-  .prose .request-frames {
+  .prose .request-states {
     flex-direction: column;
   }
-  .request-frame {
+  .request-state {
     flex-direction: column;
   }
-  .request-frames--wrap .request-frame {
+  .request-states--wrap .request-state {
     flex-basis: auto;
-  }
-
-  .request-step {
-    justify-content: center;
-  }
-
-  .request-step svg {
-    transform: rotate(90deg);
   }
 
   .request-chart {

@@ -1,5 +1,11 @@
-import { figureFrames } from "../../../shared/chemical-library/contract.ts";
-import { mergeFrameAnnotations, reactionFrames } from "./reaction-frames.ts";
+import {
+  appearances,
+  drawnArrows,
+  graphPanels,
+  graphView,
+  panelArrows,
+} from "../../../shared/chemical-library/figure-layout.ts";
+import { arrowViaPanels, mergeBoundAnnotations } from "./figure-via.ts";
 import { fitFigureCanvas } from "./figure-canvas.ts";
 import { chemicalFigureStyle } from "../../../shared/chemical-library/style.ts";
 import { prepareMarkush } from "./markush-geometry.ts";
@@ -74,21 +80,21 @@ import {
   abbreviationLabel,
 } from "../../../shared/molecule-abbreviations.ts";
 import { reagentGroups } from "../../../shared/chemical-library/reagents.ts";
-import { routeMetrics } from "../../../shared/chemical-library/routes.ts";
 import type {
   Anchor,
   AtomRef,
   Compound,
   CompoundLayout,
+  ArrowPlacement,
+  FigureGraph,
   FigureReference,
   Focus,
+  GraphArrow,
   FocusGroup,
   Library,
-  Mechanism,
+  Participant,
   Point,
   Placement,
-  Reaction,
-  Route,
   Scene,
 } from "../../../shared/chemical-library/types.ts";
 
@@ -143,43 +149,40 @@ interface PrepareOptions {
   fonts: FigureFontResolver;
   style: FigureStyle;
   canvas?: "scene";
+  scene?: Scene;
   cardWidth?: number;
   cardWidths?: number[];
   cardScale?: number;
-  cardRoute?: Route;
+  graph?: FigureGraph;
+  items?: string[];
+  arrow?: string;
   frameFlow?: "right" | "left" | "down";
   framePrefix?: string;
   frameHeading?: string;
 }
 
-export function prepareReactionFrames(
+export function prepareVia(
   library: Library,
-  reaction: Reaction,
+  arrow: GraphArrow,
   reference: FigureReference,
   options: PrepareOptions,
-  flow: NonNullable<PrepareOptions["frameFlow"]>,
+  direction: NonNullable<PrepareOptions["frameFlow"]>,
   prefix = "",
   heading?: string,
 ) {
-  const { middle } = reactionFrames(reaction);
+  if (!arrow.via || !arrow.drawing) return;
+  const { middle } = arrowViaPanels(arrow, arrow.drawing.scene);
   if (!middle.length) return;
-  const mechanism: Mechanism = {
-    id: reaction.id,
-    title: reaction.title,
-    sources: reaction.sources,
-    style: reaction.style,
-    kind: "mechanism",
-    category: "reaction",
-    frames: middle,
-  };
   return prepareFigure(
-    { ...library, [mechanism.id]: mechanism },
-    { ...reference, ref: mechanism.id, frame: undefined },
+    library,
+    { ...reference, frame: undefined },
     {
       toolkit: options.toolkit,
       fonts: options.fonts,
       style: options.style,
-      frameFlow: flow,
+      graph: arrow.via,
+      items: middle.map(({ id }) => id),
+      frameFlow: direction,
       framePrefix: prefix,
       frameHeading: heading,
     },
@@ -219,31 +222,40 @@ export async function prepareFigure(
     ctx.setStyle(node, "fill", "none");
     return node;
   };
-  const entry = options.cardRoute ?? library[reference.ref];
-  const standalone = library[reference.ref]?.kind === "reaction";
+  const entry = library[reference.ref];
+  const rootGraph = entry?.kind === "figure" ? entry.graph : undefined;
+  const selectedView =
+    entry?.kind === "figure" && reference.frame
+      ? entry.views[reference.frame]
+      : undefined;
+  const target =
+    selectedView?.items.length === 1 && rootGraph
+      ? graphView(rootGraph, selectedView.items[0])
+      : undefined;
+  const graph = options.graph ?? target?.graph ?? rootGraph;
+  const graphEdges = graph ? drawnArrows(graph) : [];
+  const route = graph?.layout?.route;
+  const selectedArrow =
+    options.arrow && graphEdges.find(([id]) => id === options.arrow);
   let cardPlan: FigureGeometry["cardPlan"];
   if (!entry) throw new Error(`Unknown figure ${reference.ref}`);
   const figureNumbers: Record<string, string[]> = {};
   const participantNames: Record<string, string> = {};
-  const numbering = (reaction: Reaction, prefix = "") => {
-    for (const p of [...reaction.reactants, ...reaction.products]) {
+  const numbering = (participants: Participant[], prefix = "") => {
+    for (const p of participants) {
       if (p.name) participantNames[prefix + p.id] = p.name;
       if (p.number !== undefined || p.name)
         figureNumbers[prefix + p.id] = figureLabelLines(p.number, p.name);
     }
   };
-  if (entry.kind === "reaction" && !reference.frame) numbering(entry);
-  if (entry.kind === "route" && !reference.frame)
-    for (const step of entry.steps) {
-      const reaction = library[step.reaction];
-      if (reaction?.kind === "reaction")
-        numbering(reaction, standalone ? "" : step.id + "/");
-    }
+  if (!reference.frame && graphEdges.length)
+    for (const [id, arrow] of selectedArrow ? [selectedArrow] : graphEdges)
+      numbering(
+        [...appearances(arrow.from), ...appearances(arrow.to)],
+        !selectedArrow ? id + "/" : "",
+      );
   const svg = element("g", {
-    role:
-      !reference.frame && (entry.kind === "reaction" || entry.kind === "route")
-        ? "group"
-        : "img",
+    role: !reference.frame && graphEdges.length ? "group" : "img",
     "aria-label": entry.title,
     "data-figure": entry.id,
   });
@@ -1399,10 +1411,7 @@ export async function prepareFigure(
     hidden = new Set<string>(),
     others = new Set<string>(),
   ) {
-    if (
-      override &&
-      (prefix || (entry.kind === "reaction" && entry.mechanism))
-    ) {
+    if (override && (prefix || graphEdges.some(([, arrow]) => arrow.via))) {
       const placements = new Set(s.molecules.map(({ id }) => prefix + id));
       const arrows = new Set(s.arrows?.map(({ id }) => prefix + id));
       const within = (ref: AtomRef) => placements.has(ref.molecule);
@@ -1569,7 +1578,9 @@ export async function prepareFigure(
         chargeAims,
         deferredCharges,
         explicitRadicals,
-        ((entry.kind === "mechanism" || reference.frame !== undefined) &&
+        ((options.scene ||
+          (graph && !graphEdges.length) ||
+          reference.frame !== undefined) &&
           (s.molecules.length > 1 || c.smiles.includes("."))) ||
           others.has(p.id),
         protectedAtoms,
@@ -2205,14 +2216,19 @@ export async function prepareFigure(
       );
     }
   }
-  async function reaction(
+  async function drawTransformation(
     id: string,
+    edge: GraphArrow & { drawing: NonNullable<GraphArrow["drawing"]> },
     prefix = "",
     parent: FigureGroup = svg,
-    view?: Route["steps"][number],
+    view?: ArrowPlacement,
   ) {
-    const source = library[id];
-    if (source?.kind !== "reaction") throw new Error(`Missing reaction ${id}`);
+    const source = {
+      ...edge.drawing,
+      reactants: appearances(edge.from),
+      products: appearances(edge.to),
+      title: edge.title ?? entry.title,
+    };
     const r = view?.placements
       ? {
           ...source,
@@ -2235,12 +2251,12 @@ export async function prepareFigure(
           },
         }
       : source;
-    const sequence = reactionFrames(r);
+    const sequence = arrowViaPanels(edge, r.scene);
     const endpoints = [sequence.start, sequence.end].filter(
-      (frame) => frame !== undefined,
+      (panel) => panel !== undefined,
     );
     const merged = endpoints.length
-      ? mergeFrameAnnotations(r.scene, prefix, reference.focus, endpoints)
+      ? mergeBoundAnnotations(r.scene, prefix, reference.focus, endpoints)
       : undefined;
     const hidden = new Set(
       Object.entries(view?.display ?? {})
@@ -2261,7 +2277,7 @@ export async function prepareFigure(
       for (const [id, point] of Object.entries(atomPoints))
         if (id.startsWith(placement + ":"))
           atomPoints[alias + id.slice(placement.length)] = point;
-    const routePoints = [r.arrow.from, ...(r.arrow.via ?? []), r.arrow.to];
+    const routePoints = [r.arrow.from, ...(r.arrow.points ?? []), r.arrow.to];
     const a = mul(routePoints.at(-2)!, B),
       b = mul(r.arrow.to, B);
     const overhead = [...r.reactants, ...r.products]
@@ -2301,20 +2317,20 @@ export async function prepareFigure(
         };
       });
     const vertical = Math.abs(a.y - b.y) > Math.abs(a.x - b.x);
+    const direction = vertical ? "down" : a.x > b.x ? "left" : "right";
+    const heading = route && r.title !== entry.title ? r.title : undefined;
     const detail =
-      r.mechanism && options.canvas !== "scene"
-        ? await prepareReactionFrames(
+      options.canvas === "scene"
+        ? undefined
+        : await prepareVia(
             library,
-            r,
+            edge,
             reference,
             options,
-            vertical ? "down" : a.x > b.x ? "left" : "right",
+            direction,
             prefix,
-            entry.kind === "route" && r.title !== entry.title
-              ? r.title
-              : undefined,
-          )
-        : undefined;
+            heading,
+          );
     let firstEnd = b;
     let lastStart: Point | undefined;
     if (detail) {
@@ -2338,10 +2354,14 @@ export async function prepareFigure(
       for (const [id, point] of Object.entries(detail.atomPoints))
         atomPoints[id] = plus(point, shift);
     }
-    const firstKind = sequence.start
-      ? (sequence.start.frame.arrow ?? "forward")
-      : r.arrow.kind;
-    const lastFrame = sequence.middle.at(-1);
+    const opening = sequence.start?.outgoing?.[1];
+    const firstKind = opening?.kind ?? r.arrow.kind;
+    const lastPanel = sequence.middle.at(-1);
+    const outgoing =
+      edge.via &&
+      Object.entries(edge.via.arrows).find(([, arrow]) =>
+        arrow.from.some(({ state }) => state === lastPanel?.id),
+      );
     const arrowShape = solidArrow(a, firstEnd, B);
     await scene(
       {
@@ -2353,18 +2373,16 @@ export async function prepareFigure(
             id,
             from: mul(a, 1 / B),
             to: mul(firstEnd, 1 / B),
-            kind: r.mechanism && firstKind === "none" ? "forward" : firstKind,
+            kind: edge.via && firstKind === "none" ? "forward" : firstKind,
           },
-          ...(lastStart && lastFrame
+          ...(lastStart && outgoing
             ? [
                 {
-                  id: `next-${lastFrame.id}`,
+                  id: outgoing[0],
                   from: mul(lastStart, 1 / B),
                   to: mul(b, 1 / B),
                   kind:
-                    lastFrame.arrow && lastFrame.arrow !== "none"
-                      ? lastFrame.arrow
-                      : "forward",
+                    outgoing[1].kind === "none" ? "forward" : outgoing[1].kind,
                 },
               ]
             : []),
@@ -2427,12 +2445,8 @@ export async function prepareFigure(
         ctx.textWidth(text, conditionFont),
       );
     const reagentsBelow = r.reagentPosition === "below-arrow";
-    const frameAbove = view?.placements
-      ? []
-      : (sequence.start?.frame.above ?? []);
-    const frameBelow = view?.placements
-      ? []
-      : (sequence.start?.frame.below ?? []);
+    const frameAbove = view?.placements ? [] : (opening?.above ?? []);
+    const frameBelow = view?.placements ? [] : (opening?.below ?? []);
     arrowText(
       parent,
       prefix + id + ":condition",
@@ -2462,14 +2476,14 @@ export async function prepareFigure(
         ),
       },
     );
-    if (lastStart && lastFrame)
+    if (lastStart && outgoing)
       arrowText(
         parent,
-        prefix + "next-" + lastFrame.id,
+        prefix + outgoing[0],
         lastStart,
         b,
-        wrap(lastFrame.above ?? []),
-        wrap(lastFrame.below ?? []),
+        wrap(outgoing[1].above ?? []),
+        wrap(outgoing[1].below ?? []),
         { font: conditionFont, side: r.arrow.side },
       );
     for (const p of [...r.reactants, ...r.products]) {
@@ -2510,7 +2524,7 @@ export async function prepareFigure(
   ): FigureGeometry => {
     let w = targetWidth;
     let h = targetHeight;
-    if (entry.footnote) {
+    if (entry.footnote && !options.scene && !options.frameFlow) {
       const lines = wrapFigureText(
         entry.footnote.split("\n"),
         w - 3 * B,
@@ -2576,14 +2590,23 @@ export async function prepareFigure(
       : fitFigureCanvas(geometry, targetCardWidth || options.frameFlow ? 0 : B);
   };
   let cardPlans: FigureGeometry["cardPlans"];
-  if (reference.frame) {
-    const frame = figureFrames(library, entry).find(
-      (f) => f.id === reference.frame,
-    );
-    if (!frame) throw new Error("Unknown frame");
-    width = frame.scene.width * B;
-    height = frame.scene.height * B;
-    await scene(frame.scene, "", svg, reference.focus);
+  const selectedItems =
+    options.items ?? (target ? [target.item] : selectedView?.items);
+  const panelList = graph ? graphPanels(graph, selectedItems) : [];
+  const staticPanel = graph?.layout?.panel;
+  if (options.scene) {
+    width = options.scene.width * B;
+    height = options.scene.height * B;
+    await scene(options.scene);
+  } else if (entry.kind === "figure" && reference.frame && !selectedView) {
+    throw new Error(`Unknown view ${reference.frame}`);
+  } else if (
+    staticPanel &&
+    (!selectedItems || reference.frame === "overview")
+  ) {
+    width = staticPanel.width * B;
+    height = staticPanel.height * B;
+    await scene(staticPanel, "", svg, reference.focus);
   } else if (entry.kind === "conformation") {
     const group = conformationGeometry(entry, ctx);
     ctx.append(svg, group);
@@ -2641,38 +2664,46 @@ export async function prepareFigure(
       p.x += dx;
       p.y += dy;
     }
-  } else if (entry.kind === "reaction") {
-    width = entry.scene.width * B;
-    height = entry.scene.height * B;
-    await reaction(entry.id);
-  } else if (entry.kind === "mechanism") {
-    if (entry.frames.length === 1 && !options.frameFlow) {
-      const frame = entry.frames[0];
+  } else if (
+    !reference.frame &&
+    (selectedArrow || (graphEdges.length === 1 && !route))
+  ) {
+    const [id, arrow] = selectedArrow || graphEdges[0];
+    width = arrow.drawing.scene.width * B;
+    height = arrow.drawing.scene.height * B;
+    await drawTransformation(id, arrow, selectedArrow ? "" : id + "/");
+  } else if (
+    graph &&
+    panelList.length &&
+    (!graphEdges.length || reference.frame)
+  ) {
+    if (panelList.length === 1 && !options.frameFlow) {
+      const frame = panelList[0];
       width = frame.scene.width * B;
       height = frame.scene.height * B;
       await scene(frame.scene, "", svg, reference.focus);
     } else {
       const panels = new Map<string, { group: FigureGroup; box: FigureRect }>();
       const measures: Record<string, RouteMolecule> = {};
-      for (const frame of entry.frames) {
+      for (const frame of panelList) {
         const prefix = (options.framePrefix ?? "") + frame.id + "/";
+        const internalEdges = graph.groups?.[frame.id]?.edges;
         if (!options.frameFlow)
           for (const [id, number] of Object.entries(reference.numbers ?? {}))
-            figureNumbers[prefix + id] = figureLabelLines(number);
+            figureNumbers[id] = figureLabelLines(number);
         const group = element("g", { "data-frame": frame.id });
         ctx.append(svg, group);
         await scene(
           {
             ...frame.scene,
             reactionArrows: frame.scene.reactionArrows?.filter(
-              (arrow) => arrow.id !== `next-${frame.id}`,
+              (arrow) =>
+                !graph.arrows[arrow.id] || internalEdges?.includes(arrow.id),
             ),
           },
           prefix,
           group,
-          options.frameFlow
-            ? reference.focus
-            : prefixedFocus(reference.focus, prefix),
+          reference.focus,
         );
         if (!options.frameFlow || frame.title !== frame.id)
           addHeading(group, prefix + frame.id, frame.title);
@@ -2699,18 +2730,19 @@ export async function prepareFigure(
         ? structuredClone(atomPoints)
         : undefined;
       const limit = token("--chemical-route-width");
-      const steps = entry.frames.slice(0, -1).map((frame, index) => ({
-        id: frame.id,
-        from: [{ id: frame.id }],
-        to: [{ id: entry.frames[index + 1].id }],
-        above: frame.above ?? [],
-        below: frame.below ?? [],
+      const panelEdges = panelArrows(graph, panelList);
+      const steps = panelEdges.map(([id, arrow]) => ({
+        id,
+        from: arrow.from.map(({ state }) => ({ id: state })),
+        to: arrow.to.map(({ state }) => ({ id: state })),
+        above: arrow.above ?? [],
+        below: arrow.below ?? [],
         ...(options.frameFlow === "down" && {
           turn: "down" as const,
           reverse: false,
         }),
       }));
-      const assembleMechanism = async (
+      const layoutPanels = async (
         targetSvg: FigureGroup,
         targetPanels: Map<string, { group: FigureGroup; box: FigureRect }>,
         targetAtomPoints: Record<string, Point>,
@@ -2775,11 +2807,11 @@ export async function prepareFigure(
           : undefined;
         const layout =
           plan?.layout ??
-          (entry.frames.length === 1
+          (!steps.length
             ? undefined
             : layoutRoute(steps, measures, {
                 width:
-                  options.frameFlow || entry.frames.length === 2
+                  options.frameFlow || panelList.length === 2
                     ? Infinity
                     : limit,
                 bond: B,
@@ -2789,8 +2821,8 @@ export async function prepareFigure(
               }));
         if (!layout)
           return {
-            width: measures[entry.frames[0].id].width,
-            height: measures[entry.frames[0].id].top * 2,
+            width: measures[panelList[0].id].width,
+            height: measures[panelList[0].id].top * 2,
             cardPlan: undefined,
           };
         const w = layout.width;
@@ -2810,7 +2842,7 @@ export async function prepareFigure(
                 point.y += dy;
               }
           } else if (item.kind === "arrow") {
-            const frame = entry.frames.find((frame) => frame.id === item.step)!;
+            const edge = panelEdges.find(([id]) => id === item.step)![1];
             const points = item.points!.map(position);
             await scene(
               {
@@ -2819,10 +2851,10 @@ export async function prepareFigure(
                 molecules: [],
                 reactionArrows: [
                   {
-                    id: `next-${frame.id}`,
+                    id: item.step,
                     from: mul(points.at(-2)!, 1 / B),
                     to: mul(points.at(-1)!, 1 / B),
-                    kind: frame.arrow ?? "forward",
+                    kind: edge.kind ?? "forward",
                   },
                 ],
               },
@@ -2831,7 +2863,7 @@ export async function prepareFigure(
             );
             arrowText(
               targetSvg,
-              `${options.framePrefix ?? ""}${frame.id}:step`,
+              `${options.framePrefix ?? ""}${edge.from[0].state}:step`,
               points.at(-2)!,
               points.at(-1)!,
               item.above ?? [],
@@ -2849,7 +2881,7 @@ export async function prepareFigure(
         }
         return { width: w, height: h, cardPlan: resolvedCardPlan };
       };
-      const mainLayout = await assembleMechanism(
+      const mainLayout = await layoutPanels(
         svg,
         panels,
         atomPoints,
@@ -2876,7 +2908,7 @@ export async function prepareFigure(
             clonedPanels.set(id, { group: clonedGroup, box: p.box });
           }
           const clonedPoints = structuredClone(baseAtomPoints);
-          const cardLayout = await assembleMechanism(
+          const cardLayout = await layoutPanels(
             cardSvg,
             clonedPanels,
             clonedPoints,
@@ -2898,27 +2930,28 @@ export async function prepareFigure(
         }
       }
     }
-  } else if (entry.kind === "route") {
-    routeMetrics(entry, library);
-    width = entry.width * B;
-    height = entry.height * B;
-    for (const s of entry.steps) {
+  } else if (route) {
+    width = route.width * B;
+    height = route.height * B;
+    for (const [id, arrow] of graphEdges) {
+      const view = arrow.placement!;
       const group = element("g", {
-        transform: `translate(${s.at.x * B} ${s.at.y * B})`,
-        "data-step": s.id,
+        transform: `translate(${view.at.x * B} ${view.at.y * B})`,
+        "data-step": id,
       });
       ctx.append(svg, group);
-      const prefix = standalone ? "" : s.id + "/";
-      await reaction(s.reaction, prefix, group, s);
-      for (const [id, p] of Object.entries(atomPoints))
-        if (id.startsWith(prefix)) atomPoints[id] = plus(p, mul(s.at, B));
+      const prefix = id + "/";
+      await drawTransformation(id, arrow, prefix, group, view);
+      for (const [key, point] of Object.entries(atomPoints))
+        if (key.startsWith(prefix))
+          atomPoints[key] = plus(point, mul(view.at, B));
     }
-    for (const [index, point] of (entry.plusAt ?? []).entries()) {
+    for (const [index, point] of (route.plusAt ?? []).entries()) {
       const mark = label(mul(point, B), "+", "var(--chemical-plus-font)");
       ctx.setData(mark, "label", `${entry.id}:plus:${index}`);
       ctx.append(svg, mark);
     }
-    for (const connection of entry.connections ?? [])
+    for (const connection of route.connections ?? [])
       ctx.append(
         svg,
         stroke(

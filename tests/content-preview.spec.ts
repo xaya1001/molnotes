@@ -1,3 +1,4 @@
+import { panelGraph } from "./helpers/figure-graph.ts";
 import { serveFigureViews } from "./helpers/figure-views.ts";
 import { expect, test } from "./helpers/test.ts";
 import { createHash } from "node:crypto";
@@ -51,20 +52,21 @@ for (const width of [1366, 390]) {
       mec_example: {
         id: "mec_example",
         title: "Mechanism",
-        kind: "mechanism",
+        kind: "figure",
         sources,
-        category: "comparison",
-        frames: ["first", "second"].map((id) => ({
-          id,
-          title: id,
-          scene: {
-            width: 9,
-            height: 7,
-            molecules: [
-              { id: "structure", compound: c.id, at: { x: 4, y: 3 } },
-            ],
-          },
-        })),
+        ...panelGraph(
+          ["first", "second"].map((id) => ({
+            id,
+            title: id,
+            scene: {
+              width: 9,
+              height: 7,
+              molecules: [
+                { id: "structure", compound: c.id, at: { x: 4, y: 3 } },
+              ],
+            },
+          })),
+        ),
       },
     };
     const topic: TopicContent = {

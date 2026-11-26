@@ -1,3 +1,9 @@
+import {
+  appearances,
+  graphPanels,
+} from "../shared/chemical-library/figure-layout.ts";
+import type { SchemeState } from "../scripts/figure-input.ts";
+import { drawingPanels, figureEntry } from "./helpers/figure-graph.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { validateFigureInstance } from "../shared/chemical-library/contract.ts";
@@ -5,7 +11,6 @@ import { prepareLibraryFigure } from "../scripts/figure-preparation.ts";
 import { loadFigureStyle } from "../scripts/figure-route.ts";
 import { walkGeometry } from "../src/ui/library/geometry-walk.ts";
 import { compileFigure } from "../scripts/figure-scene.ts";
-import type { Mechanism } from "../shared/chemical-library/types.ts";
 import { figureChargeDiagnostics } from "../scripts/figure-chemistry-diagnostics.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import { prepareCompound } from "../shared/chemical-library/chemistry.ts";
@@ -14,25 +19,38 @@ test("compilation rejects an electron arrow from a positive charge", async () =>
   await assert.rejects(
     compileFigure({
       kind: "scheme",
-      frames: [
-        {
-          id: "event",
-          smiles: "[NH3+:1][CH3:2]",
+      states: {
+        event: {
           arrows: [{ id: "bad", from: "charge(1)", to: "atom(2)" }],
+          compounds: { structure: { smiles: "[NH3+:1][CH3:2]" } },
         },
-      ],
+      },
+      arrows: {},
+      views: { event: { items: ["event"] } },
     }),
-    /event.*arrow bad.*positive charge/,
+    /arrow bad.*positive charge/,
   );
 });
 
 test("lint reports a change in total formal charge between mechanism frames", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    frames: [
-      { id: "before", smiles: "[OH-:1]" },
-      { id: "after", smiles: "[OH2:1]" },
-    ],
+    states: {
+      before: { compounds: { structure: { smiles: "[OH-:1]" } } },
+      after: { compounds: { structure: { smiles: "[OH2:1]" } } },
+    },
+    arrows: {
+      ["next-" + "before"]: {
+        from: "before",
+        to: "after",
+        kind: "forward",
+        role: "elementary",
+      },
+    },
+    views: {
+      before: { items: ["before"], arrows: ["next-" + "before"] },
+      after: { items: ["after"] },
+    },
   });
   const diagnostics = figureChargeDiagnostics(
     compiled.entries,
@@ -50,14 +68,8 @@ test("lint reports a change in total formal charge between mechanism frames", as
 test("mechanism frames retain participant identity and electron events", async () => {
   const result = await compileFigure({
     kind: "scheme",
-    category: "resonance",
-    frames: [
-      {
-        id: "event",
-        compounds: {
-          donor: { smiles: "[OH-:1]", label: "Donor" },
-          acceptor: { smiles: "[CH2:1]=[O:2]", label: "Acceptor" },
-        },
+    states: {
+      event: {
         arrows: [
           {
             id: "attack",
@@ -65,17 +77,22 @@ test("mechanism frames retain participant identity and electron events", async (
             to: "between(donor:1,acceptor:1)",
           },
         ],
+        focus: { primary: ["attack"] },
         labels: [
           { id: "polar", at: "acceptor:2", kind: "partialCharge", text: "δ−" },
         ],
         partialBonds: [{ from: "donor:1", to: "acceptor:1" }],
-        focus: { primary: ["attack"] },
+        compounds: {
+          donor: { smiles: "[OH-:1]", label: "Donor" },
+          acceptor: { smiles: "[CH2:1]=[O:2]", label: "Acceptor" },
+        },
       },
-    ],
+    },
+    arrows: {},
+    views: { event: { items: ["event"] } },
   });
-  const entry = result.entries[result.reference.ref] as Mechanism;
-  assert.equal(entry.category, "resonance");
-  const scene = entry.frames[0].scene;
+  const entry = figureEntry(result.entries[result.reference.ref]);
+  const scene = drawingPanels(entry)[0].scene;
   assert.deepEqual(
     scene.molecules.map((m) => m.id),
     ["donor", "acceptor"],
@@ -103,14 +120,12 @@ test("mechanism frames retain participant identity and electron events", async (
 test("mechanism steps and qualified maps retain their roles across frames", async () => {
   const result = await compileFigure({
     kind: "scheme",
-    category: "examples",
-    frames: [
-      {
-        id: "before",
+    states: {
+      before: {
+        tone: "comparison",
         compounds: { input: { smiles: "[CH3:1][OH:2]", label: "Input" } },
       },
-      {
-        id: "after",
+      "after/reactant": {
         compounds: {
           reactant: {
             smiles: "[CH3:1][OH:2]",
@@ -118,26 +133,70 @@ test("mechanism steps and qualified maps retain their roles across frames", asyn
             arrows: [{ id: "cleavage", from: "bond(1,2)", to: "atom(2)" }],
             focus: { primary: ["cleavage"] },
           },
-          product: { smiles: "[CH2:1]=[O:2]", label: "Output" },
         },
-        steps: [
-          { from: "reactant", to: "product", above: "[O]", arrow: "forward" },
-        ],
+      },
+      "after/product": {
+        compounds: { product: { smiles: "[CH2:1]=[O:2]", label: "Output" } },
+      },
+    },
+    arrows: {
+      ["next-" + "before"]: {
+        from: "before",
+        to: "after",
+        kind: "forward",
+        role: "display",
         map: { "input:1": "product:1", "input:2": "product:2" },
       },
-    ],
+      "after/1": {
+        from: ["after/reactant"],
+        to: ["after/product"],
+        kind: "forward",
+        role: "elementary",
+        above: "[O]",
+      },
+    },
+    views: { before: { items: ["before"] }, after: { items: ["after"] } },
+    groups: {
+      after: {
+        tone: "comparison",
+        items: ["after/reactant", "after/product"],
+        edges: ["after/1"],
+      },
+    },
   });
-  const entry = result.entries[result.reference.ref] as Mechanism;
-  assert.equal(entry.category, "examples");
-  const scene = entry.frames[1].scene;
+  const entry = figureEntry(result.entries[result.reference.ref]);
+  assert.ok(Object.values(entry.graph.groups ?? {}).length);
+  const scene = drawingPanels(entry)[1].scene;
   const reactant = scene.molecules.find((m) => m.id === "reactant")!;
   const product = scene.molecules.find((m) => m.id === "product")!;
   assert.ok(reactant.at.x < product.at.x);
   assert.deepEqual(scene.reactionArrows?.[0].above, ["[O]"]);
   assert.equal(scene.reactionArrows?.[0].kind, "forward");
   assert.deepEqual(scene.focus?.primary?.arrows, ["reactant/cleavage"]);
+  const overview = await prepareLibraryFigure(
+    result.entries,
+    result.reference,
+    await loadFigureStyle(),
+  );
+  for (const drawing of [overview, overview.cardPlans!.at(-1)!.geometry]) {
+    const arrows = new Set<string>();
+    const labels = new Set<string>();
+    walkGeometry(drawing.root, (node) => {
+      const id = node.attributes["data-reaction-arrow"];
+      if (id) arrows.add(id);
+      if (node.kind === "text") labels.add(node.text);
+    });
+    assert.ok(arrows.has("after/after/1"));
+    assert.ok(arrows.has("next-before"));
+    assert.ok(labels.has("[O]"));
+  }
   assert.deepEqual(
-    entry.maps?.map((m) => [m.from.molecule, m.to.molecule]),
+    Object.values(entry.graph.arrows).flatMap(({ map }) =>
+      (map ?? []).map((m) => [
+        m.from.molecule.split("/").at(-1),
+        m.to.molecule.split("/").at(-1),
+      ]),
+    ),
     [
       ["input", "product"],
       ["input", "product"],
@@ -145,31 +204,44 @@ test("mechanism steps and qualified maps retain their roles across frames", asyn
   );
 });
 
-test("scheme frames require explicit maps across comparison and unconnected boundaries", async () => {
-  for (const [category, arrow] of [
-    ["comparison", undefined],
-    ["examples", undefined],
-    ["reaction", "none"],
-    ["reaction", "forward"],
+test("comparison states and absent arrowheads retain explicit atom maps", async () => {
+  for (const [tone, kind] of [
+    ["comparison", "forward"],
+    [undefined, "none"],
+    [undefined, "forward"],
   ] as const) {
-    const frames = [
-      { id: "before", smiles: "[CH3:1][OH:2]", ...(arrow && { arrow }) },
-      { id: "after", smiles: "[CH3:1][OH:2]", map: { 2: 2 } },
-    ];
-    const scheme = await compileFigure({ kind: "scheme", category, frames });
-    const entry = scheme.entries[scheme.reference.ref] as Mechanism;
+    const structure = { smiles: "[CH3:1][OH:2]" };
+    const compiled = await compileFigure({
+      kind: "scheme",
+      states: {
+        before: { compounds: { structure }, ...(tone && { tone }) },
+        after: { compounds: { structure } },
+      },
+      arrows: {
+        compare: {
+          from: "before",
+          to: "after",
+          kind,
+          role: "elementary",
+          map: { 2: 2 },
+        },
+      },
+    });
+    const entry = figureEntry(compiled.entries[compiled.reference.ref]);
     assert.deepEqual(
-      entry.maps?.map((map) => map.from.atom),
-      arrow === "forward" ? ["a1", "a2"] : ["a2"],
+      entry.graph.arrows.compare.map?.map(({ from }) => from.atom),
+      !tone && kind === "forward" ? ["a1", "a2"] : ["a2"],
     );
   }
 });
 
-async function frameDiagnostics(
-  frame: import("../scripts/figure-input.ts").FrameInput,
-) {
+async function stateDiagnostics(state: SchemeState) {
   const { drawFigure } = await import("../scripts/figure-draw.ts");
-  const compiled = await compileFigure({ kind: "scheme", frames: [frame] });
+  const compiled = await compileFigure({
+    kind: "scheme",
+    states: { event: state },
+    arrows: {},
+  });
   const diagnostics = [];
   for await (const rendered of drawFigure(compiled.entries, compiled.reference))
     diagnostics.push(...rendered.diagnostics);
@@ -177,9 +249,10 @@ async function frameDiagnostics(
 }
 
 test("electron shafts leave their own lone pair clear", async () => {
-  const diagnostics = await frameDiagnostics({
-    id: "event",
-    smiles: "[CH3:1][CH:2]=[O+:3][CH3:4].[CH3:5][OH:6]",
+  const diagnostics = await stateDiagnostics({
+    compounds: {
+      structure: { smiles: "[CH3:1][CH:2]=[O+:3][CH3:4].[CH3:5][OH:6]" },
+    },
     arrows: [
       { from: "lp(6)", to: "atom(2)" },
       { from: "pi(2,3)", to: "atom(3)" },
@@ -192,8 +265,7 @@ test("electron shafts leave their own lone pair clear", async () => {
 });
 
 test("electron shafts clear intervening ring bonds", async () => {
-  const diagnostics = await frameDiagnostics({
-    id: "event",
+  const diagnostics = await stateDiagnostics({
     compounds: {
       a: { smiles: "[Pd:1]", label: "" },
       b: { smiles: "[Br:2][c:3]1[cH:4][cH:5][cH:6][cH:7][cH:8]1", label: "" },
@@ -210,8 +282,7 @@ test("electron shafts clear intervening ring bonds", async () => {
 });
 
 test("electron shafts clear labels on the selected side", async () => {
-  const diagnostics = await frameDiagnostics({
-    id: "event",
+  const diagnostics = await stateDiagnostics({
     compounds: {
       a: { smiles: "[CH3:1][C:2](=[O:3])[C:4](=[O:5])[OH:6]", label: "" },
       b: { smiles: "[H-:7]", label: "" },
@@ -228,9 +299,10 @@ test("electron shafts clear labels on the selected side", async () => {
 });
 
 test("atom annotations occupy free space outside neighboring bonds", async () => {
-  const diagnostics = await frameDiagnostics({
-    id: "event",
-    smiles: "[CH3:1][N:2]([CH3:3])[CH2:4][CH2:5][OH:6]",
+  const diagnostics = await stateDiagnostics({
+    compounds: {
+      structure: { smiles: "[CH3:1][N:2]([CH3:3])[CH2:4][CH2:5][OH:6]" },
+    },
     labels: [{ id: "note", at: "structure:2", kind: "text", text: "Site" }],
   });
   assert.deepEqual(
@@ -240,9 +312,10 @@ test("atom annotations occupy free space outside neighboring bonds", async () =>
 });
 
 test("neighboring bond transfers retain a readable arc length and height", async () => {
-  const diagnostics = await frameDiagnostics({
-    id: "event",
-    smiles: "[CH3:1][C@H:2]1[CH:3]=[CH:4][C@H:5]1[CH3:6]",
+  const diagnostics = await stateDiagnostics({
+    compounds: {
+      structure: { smiles: "[CH3:1][C@H:2]1[CH:3]=[CH:4][C@H:5]1[CH3:6]" },
+    },
     arrows: [
       { from: "bond(5,2)", to: "bond(2,3)" },
       { from: "pi(3,4)", to: "bond(4,5)" },
@@ -257,8 +330,7 @@ test("neighboring bond transfers retain a readable arc length and height", async
 });
 
 test("electron heads clear neighboring charge markers", async () => {
-  const diagnostics = await frameDiagnostics({
-    id: "event",
+  const diagnostics = await stateDiagnostics({
     compounds: {
       a: {
         smiles: "[CH3:1][S+:2]([CH3:3])[CH2:4][CH:5]([O-:6])[CH3:7]",
@@ -277,9 +349,10 @@ test("electron heads clear neighboring charge markers", async () => {
 });
 
 test("lone-pair donation clears adjacent substituent bonds", async () => {
-  const diagnostics = await frameDiagnostics({
-    id: "event",
-    smiles: "[CH3:1][CH:2]([OH2+:3])[N:4]([CH3:5])[CH3:6]",
+  const diagnostics = await stateDiagnostics({
+    compounds: {
+      structure: { smiles: "[CH3:1][CH:2]([OH2+:3])[N:4]([CH3:5])[CH3:6]" },
+    },
     arrows: [
       { from: "lp(4)", to: "bond(2,4)" },
       { from: "bond(2,3)", to: "atom(3)" },
@@ -296,19 +369,24 @@ test("lone-pair donation clears adjacent substituent bonds", async () => {
 test("aromatic triple-bond pi sources retain their molecular graph", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    frames: [
-      {
-        id: "event",
-        smiles: "[c:1]1[cH:2][cH:3][cH:4][cH:5][c:6]#1.[NH2-:7]",
+    states: {
+      event: {
         arrows: [
           { from: "charge(7)", to: "atom(1)" },
           { from: "pi(1,6)", to: "atom(6)" },
         ],
+        compounds: {
+          structure: {
+            smiles: "[c:1]1[cH:2][cH:3][cH:4][cH:5][c:6]#1.[NH2-:7]",
+          },
+        },
       },
-    ],
+    },
+    arrows: {},
+    views: { event: { items: ["event"] } },
   });
-  const entry = compiled.entries[compiled.reference.ref] as Mechanism;
-  const placement = entry.frames[0].scene.molecules[0];
+  const entry = figureEntry(compiled.entries[compiled.reference.ref]);
+  const placement = drawingPanels(entry)[0].scene.molecules[0];
   const compound = compiled.entries[placement.compound];
   assert.ok(compound.kind === "compound");
   const { moleculeToolkit } = await import("../shared/molecule-toolkit.ts");
@@ -324,7 +402,7 @@ test("aromatic triple-bond pi sources retain their molecular graph", async () =>
       graph.bonds.filter((bond: { bo?: number }) => bond.bo === 3).length,
       1,
     );
-    assert.equal(entry.frames[0].scene.arrows?.length, 2);
+    assert.equal(drawingPanels(entry)[0].scene.arrows?.length, 2);
   } finally {
     molecule.delete();
   }
@@ -333,7 +411,8 @@ test("aromatic triple-bond pi sources retain their molecular graph", async () =>
 test("independent mechanism panels retain the library's saved depiction", async () => {
   const gallery = await compileFigure({
     kind: "scheme",
-    compounds: { a: "CCO" },
+    states: { a: { compounds: { a: "CCO" } } },
+    arrows: {},
   });
   const compound = Object.values(gallery.entries).find(
     (entry) => entry.kind === "compound",
@@ -345,12 +424,17 @@ test("independent mechanism panels retain the library's saved depiction", async 
     point.y = x;
   }
   const compiled = await compileFigure(
-    { kind: "scheme", frames: [{ id: "panel", compounds: { a: "CCO" } }] },
+    {
+      kind: "scheme",
+      states: { panel: { compounds: { a: "CCO" } } },
+      arrows: {},
+      views: { panel: { items: ["panel"] } },
+    },
     gallery.entries,
     "panel",
   );
-  const entry = compiled.entries[compiled.reference.ref] as Mechanism;
-  const placement = entry.frames[0].scene.molecules[0];
+  const entry = figureEntry(compiled.entries[compiled.reference.ref]);
+  const placement = drawingPanels(entry)[0].scene.molecules[0];
   const saved = compiled.entries[placement.compound];
   assert.ok(saved.kind === "compound");
   const layout = placement.variant
@@ -370,7 +454,9 @@ test("fragment placement preserves the compound's shared default layout", async 
   const compiled = await compileFigure(
     {
       kind: "scheme",
-      frames: [{ id: "mixture", compounds: { a: "CCO.N" } }],
+      states: { mixture: { compounds: { a: "CCO.N" } } },
+      arrows: {},
+      views: { mixture: { items: ["mixture"] } },
     },
     { [compound.id]: compound },
   );
@@ -386,9 +472,12 @@ test("fragment placement preserves the compound's shared default layout", async 
 test("reacting ends face each other across independent panels", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    frames: [
-      {
-        id: "event",
+    states: {
+      event: {
+        arrows: [
+          { from: "charge(b:9)", to: "between(b:9,a:2)" },
+          { from: "pi(a:2,a:1)", to: "atom(a:1)" },
+        ],
         compounds: {
           a: {
             smiles: "[O:1]=[CH:2][CH2:3][CH2:4][CH2:5][CH2:6][CH2:7][CH3:8]",
@@ -397,12 +486,10 @@ test("reacting ends face each other across independent panels", async () => {
           },
           b: { smiles: "[OH-:9]", label: "" },
         },
-        arrows: [
-          { from: "charge(b:9)", to: "between(b:9,a:2)" },
-          { from: "pi(a:2,a:1)", to: "atom(a:1)" },
-        ],
       },
-    ],
+    },
+    arrows: {},
+    views: { event: { items: ["event"] } },
   });
   const { prepareFigure } = await import("../src/ui/library/prepare.ts");
   const { loadFigureFonts } = await import("../scripts/figure-fonts.ts");
@@ -417,8 +504,8 @@ test("reacting ends face each other across independent panels", async () => {
       style: await loadFigureStyle(),
     },
   );
-  const entry = compiled.entries[compiled.reference.ref] as Mechanism;
-  const arrow = entry.frames[0].scene.arrows![0];
+  const entry = figureEntry(compiled.entries[compiled.reference.ref]);
+  const arrow = drawingPanels(entry)[0].scene.arrows![0];
   assert.ok(arrow.from.kind === "charge" && arrow.to.kind === "formingBond");
   const donor =
     geometry.atomPoints[`${arrow.from.at.molecule}:${arrow.from.at.atom}`];
@@ -443,24 +530,25 @@ test("partial bonds bring two compounds together while using the named layout", 
   const compiled = await compileFigure(
     {
       kind: "scheme",
-      frames: [
-        {
-          id: "contact",
-          compounds: {
-            a: { smiles: "[CH2:1]=[CH:2][CH:3]=[CH2:4]", label: "" },
-            b: { smiles: "[CH2:1]=[CH2:2]", label: "", variant: "contact" },
-          },
+      states: {
+        contact: {
           partialBonds: [
             { from: "a:1", to: "b:1" },
             { from: "b:2", to: "a:4" },
           ],
+          compounds: {
+            a: { smiles: "[CH2:1]=[CH:2][CH:3]=[CH2:4]", label: "" },
+            b: { smiles: "[CH2:1]=[CH2:2]", label: "", variant: "contact" },
+          },
         },
-      ],
+      },
+      arrows: {},
+      views: { contact: { items: ["contact"] } },
     },
     { [saved.id]: saved },
   );
-  const entry = compiled.entries[compiled.reference.ref] as Mechanism;
-  const scene = entry.frames[0].scene;
+  const entry = figureEntry(compiled.entries[compiled.reference.ref]);
+  const scene = drawingPanels(entry)[0].scene;
   assert.equal(scene.molecules[1].compound, saved.id);
   assert.equal(scene.molecules[1].variant, "contact");
   const retained = compiled.entries[saved.id];
@@ -505,27 +593,31 @@ test("compilation rejects a partial bond whose placements all run through anothe
     compileFigure(
       {
         kind: "scheme",
-        frames: [
-          {
-            id: "blocked",
+        states: {
+          blocked: {
+            partialBonds: [{ from: "fixed:1", to: "moving:6" }],
             compounds: {
               fixed: { smiles, variant: "surrounded" },
               moving: "[Li+:6]",
             },
-            partialBonds: [{ from: "fixed:1", to: "moving:6" }],
           },
-        ],
+        },
+        arrows: {},
+        views: { blocked: { items: ["blocked"] } },
       },
       { [saved.id]: saved },
     ),
-    /Frame blocked: no clear placement for partial bonds/,
+    /no clear placement for partial bonds/i,
   );
 });
 
 test("terminal charged atom hydrogens face away from their bond", async () => {
-  const diagnostics = await frameDiagnostics({
-    id: "event",
-    smiles: "[OH2+:1]/[N:2]=[C:3]1/[CH2:4][CH2:5][CH2:6][CH2:7][CH2:8]1",
+  const diagnostics = await stateDiagnostics({
+    compounds: {
+      structure: {
+        smiles: "[OH2+:1]/[N:2]=[C:3]1/[CH2:4][CH2:5][CH2:6][CH2:7][CH2:8]1",
+      },
+    },
     arrows: [
       { from: "bond(1,2)", to: "atom(1)" },
       { from: "bond(8,3)", to: "atom(2)" },
@@ -540,21 +632,26 @@ test("terminal charged atom hydrogens face away from their bond", async () => {
 test("a route step renders its mechanism in place and can reference one frame", async () => {
   const result = await compileFigure({
     kind: "scheme",
-    compounds: {
-      alcohol: { smiles: "[CH3:1][OH:2]", label: 1, name: "Alcohol" },
-      anion: "[CH3:1][O-:2]",
-      ether: "COC",
+    states: {
+      alcohol: {
+        compounds: {
+          structure: { smiles: "[CH3:1][OH:2]", label: 1, name: "Alcohol" },
+        },
+      },
+      anion: {
+        compounds: { structure: { label: "anion", smiles: "[CH3:1][O-:2]" } },
+      },
+      ether: { compounds: { structure: { label: "ether", smiles: "COC" } } },
     },
-    steps: [
-      {
-        id: "transfer",
-        from: "alcohol",
-        to: "anion",
-        mechanism: {
-          frames: [
-            {
-              id: "start",
-              compounds: { donor: { compound: "alcohol" } },
+    arrows: {
+      transfer: {
+        from: [{ state: "alcohol", id: "alcohol" }],
+        to: [{ state: "anion", id: "product-anion" }],
+        kind: "forward",
+        role: "reaction",
+        via: {
+          states: {
+            start: {
               arrows: [
                 {
                   id: "shift",
@@ -562,40 +659,62 @@ test("a route step renders its mechanism in place and can reference one frame", 
                   to: "atom(donor:2)",
                 },
               ],
+              compounds: { donor: { use: "alcohol" + "/structure" } },
             },
-            {
-              id: "intermediate",
-              compounds: { donor: { compound: "alcohol" }, solvent: "O" },
+            intermediate: {
+              compounds: {
+                donor: { use: "alcohol" + "/structure" },
+                solvent: "O",
+              },
             },
-            {
-              id: "end",
-              compounds: { donor: { compound: "anion" } },
+            end: { compounds: { donor: { use: "anion" + "/structure" } } },
+          },
+          arrows: {
+            ["next-" + "start"]: {
+              from: "start",
+              to: "intermediate",
+              kind: "forward",
+              role: "elementary",
             },
-          ],
+            ["next-" + "intermediate"]: {
+              from: "intermediate",
+              to: "end",
+              kind: "forward",
+              role: "elementary",
+            },
+          },
+          views: {
+            start: { items: ["start"] },
+            intermediate: { items: ["intermediate"] },
+            end: { items: ["end"] },
+          },
+          bind: {
+            from: { ["alcohol" + "/structure"]: "start" + "/" + "donor" },
+            to: { ["anion" + "/structure"]: "end" + "/" + "donor" },
+          },
         },
       },
-      { id: "finish", from: "anion", to: "ether" },
-    ],
+      finish: {
+        from: [{ state: "anion", id: "anion" }],
+        to: [{ state: "ether", id: "product-ether" }],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
   });
   const { entries, reference } = result;
-  const route = entries[reference.ref];
-  assert.equal(route.kind, "route");
-  const step = entries[route.steps[0].reaction];
-  assert.equal(step.kind, "reaction");
-  const mechanism = step.mechanism!;
+  const route = figureEntry(entries[reference.ref]);
+  const step = route.graph.arrows.transfer;
+  const via = step.via!;
   assert.equal(
-    mechanism.frames[0].scene.molecules[0].compound,
-    step.reactants[0].compound,
+    graphPanels(via)[0].scene.molecules[0].compound,
+    appearances(step.from)[0].compound,
   );
-  assert.equal(mechanism.maps?.length, 4);
-  assert.deepEqual(route.edges, [
-    {
-      from: "transfer",
-      to: "finish",
-      product: "product-anion",
-      reactant: "anion",
-    },
-  ]);
+  assert.equal(
+    Object.values(via.arrows).flatMap(({ map }) => map ?? []).length,
+    4,
+  );
+  assert.equal(step.to[0].state, route.graph.arrows.finish.from[0].state);
   const local = {
     ...reference,
     numbers: { "transfer/start/donor": "A" },
@@ -622,12 +741,10 @@ test("a route step renders its mechanism in place and can reference one frame", 
     attributes(visible, "data-label").includes("transfer/alcohol:number:0"),
   );
   assert.ok(
-    attributes(visible, "data-reaction-arrow").includes(
-      "finish/" + route.steps[1].reaction,
-    ),
+    attributes(visible, "data-reaction-arrow").includes("finish/finish"),
   );
   assert.ok(
-    attributes(visible, "data-reaction-arrow").includes("transfer/" + step.id),
+    attributes(visible, "data-reaction-arrow").includes("transfer/transfer"),
   );
 
   assert.ok(
