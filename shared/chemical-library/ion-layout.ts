@@ -1,11 +1,11 @@
 import type { ChemicalGraph } from "./chemistry.ts";
 import type { Point } from "./types.ts";
 
-/** Move disconnected counterions as rigid fragments; bonded geometry stays saved. */
-export function ionPairCoordinates(
+export const ionPairDistance = 1.5;
+
+export function counterionGroups(
   graph: ChemicalGraph,
-  points: Point[],
-  pinned: Set<number>,
+  pinned: ReadonlySet<number>,
 ) {
   const neighbours = graph.atoms.map((): number[] => []);
   for (const {
@@ -41,8 +41,35 @@ export function ionPairCoordinates(
   const parent = charged[0];
   // A charged mixture can contain a reactive ion as well as a counterion.
   // Its saved separation carries meaning; only pack charge-balanced salts.
-  if (!parent || charged.reduce((sum, f) => sum + f.charge, 0) !== 0)
-    return points;
+  if (!parent || charged.reduce((sum, f) => sum + f.charge, 0) !== 0) return [];
+  return charged.slice(1).flatMap((counterion) => {
+    if (
+      counterion.charge * parent.charge >= 0 ||
+      counterion.atoms.some((i) => pinned.has(i))
+    )
+      return [];
+    return [
+      {
+        atoms: counterion.atoms,
+        pivot: counterion.atoms.find(
+          (i) => (graph.atoms[i].chg ?? 0) * counterion.charge > 0,
+        )!,
+        centres: parent.atoms.filter(
+          (i) => (graph.atoms[i].chg ?? 0) * counterion.charge < 0,
+        ),
+      },
+    ];
+  });
+}
+
+/** Move disconnected counterions as rigid fragments; bonded geometry stays saved. */
+export function ionPairCoordinates(
+  graph: ChemicalGraph,
+  points: Point[],
+  pinned: Set<number>,
+) {
+  const counterions = counterionGroups(graph, pinned);
+  if (!counterions.length) return points;
   const result = points.map((p) => ({ ...p }));
   const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
   const segmentDistance = (p: Point, a: Point, b: Point) => {
@@ -54,22 +81,12 @@ export function ionPairCoordinates(
     );
     return distance(p, { x: a.x + t * dx, y: a.y + t * dy });
   };
-  for (const counterion of charged.slice(1)) {
-    if (
-      counterion.charge * parent.charge >= 0 ||
-      counterion.atoms.some((i) => pinned.has(i))
-    )
-      continue;
-    const moving = new Set(counterion.atoms);
+  for (const { atoms, pivot, centres } of counterions) {
+    const moving = new Set(atoms);
     const fixed = [...graph.atoms.keys()].filter((i) => !moving.has(i));
-    const pivot = counterion.atoms.find(
-      (i) => (graph.atoms[i].chg ?? 0) * counterion.charge > 0,
-    )!;
     let best: Point | undefined,
       clearance = -Infinity;
-    for (const centre of parent.atoms.filter(
-      (i) => (graph.atoms[i].chg ?? 0) * counterion.charge < 0,
-    )) {
+    for (const centre of centres) {
       const angle = Math.atan2(
         points[pivot].y - result[centre].y,
         points[pivot].x - result[centre].x,
@@ -77,11 +94,11 @@ export function ionPairCoordinates(
       for (let k = 0; k < 24; k++) {
         const a = angle + (k * Math.PI) / 12;
         const shift = {
-          x: result[centre].x + 1.5 * Math.cos(a) - points[pivot].x,
-          y: result[centre].y + 1.5 * Math.sin(a) - points[pivot].y,
+          x: result[centre].x + ionPairDistance * Math.cos(a) - points[pivot].x,
+          y: result[centre].y + ionPairDistance * Math.sin(a) - points[pivot].y,
         };
         let score = Infinity;
-        for (const i of counterion.atoms) {
+        for (const i of atoms) {
           const p = { x: points[i].x + shift.x, y: points[i].y + shift.y };
           for (const j of fixed)
             score = Math.min(score, distance(p, result[j]));
@@ -99,7 +116,7 @@ export function ionPairCoordinates(
       }
     }
     if (best)
-      for (const i of counterion.atoms)
+      for (const i of atoms)
         result[i] = { x: points[i].x + best.x, y: points[i].y + best.y };
   }
   return result;

@@ -7,6 +7,7 @@ import { validateConformationSpec } from "../shared/chemical-templates/conformat
 import { depictRoute, figureAbbreviations } from "./figure-depiction.ts";
 import { reactionChanges } from "./figure-changes.ts";
 import { placeArrowFragments } from "./figure-fragments.ts";
+import { counterionGroups } from "../shared/chemical-library/ion-layout.ts";
 import {
   compileRouteLayout,
   compileReactionLayout,
@@ -853,7 +854,6 @@ export async function compileFigure(
       layout = layoutOf(resolved),
       m = openMolecule(rd, c.smiles);
     if (resolved.spec.arrows?.length) layout.methylLabels = [];
-    layout.ionPairs = "keep";
     try {
       const full = graphOf(m),
         groups = compoundAbbreviations(rd, c, layout),
@@ -889,8 +889,19 @@ export async function compileFigure(
           ? [[to[0], to[1]] as [number, number]]
           : from.flatMap((i) => to.map((j) => [i, j] as [number, number]));
       });
-      const after = placeArrowFragments(graph, before, links),
-        coords = structuredClone(layout.coords);
+      const { points: after, contactAtoms } = placeArrowFragments(
+        graph,
+        before,
+        links,
+      );
+      const ionGroups = counterionGroups(full, new Set());
+      const activeAtoms = new Set([...contactAtoms].map((i) => visible[i]));
+      if (
+        !ionGroups.length ||
+        ionGroups.some(({ atoms }) => atoms.some((i) => activeAtoms.has(i)))
+      )
+        layout.ionPairs = "keep";
+      const coords = structuredClone(layout.coords);
       visible.forEach(
         (i, n) =>
           (coords[c.atomIds[i]] = {

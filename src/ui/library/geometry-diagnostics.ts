@@ -27,6 +27,7 @@ import type { FigureRect } from "../../../shared/chemical-library/geometry.ts";
 import { rectangle } from "./geometry-math.ts";
 import { walkGeometry } from "./geometry-walk.ts";
 import { minimumVisibleBondFraction } from "./geometry-spacing.ts";
+import { ionPairDistance } from "../../../shared/chemical-library/ion-layout.ts";
 import {
   samplePath,
   pathMetrics,
@@ -136,6 +137,31 @@ export function figureGeometryDiagnostics(
   )
     return errors;
   const charges = new Map<string, number>();
+  const ionPairLimit = ionPairDistance + 0.1;
+  for (const { data, bounds } of elements) {
+    if (data.unexpectedNativeMark)
+      add(
+        "UNDECLARED_COLORED_MARK",
+        [data.label ?? data.unexpectedNativeMark],
+        "Native structure contains a colored mark without a figure annotation",
+        { x: bounds.left, y: bounds.top },
+      );
+    if (data.ionPairDistances) {
+      const pairs: { atoms: string[]; distance: number }[] = JSON.parse(
+        data.ionPairDistances,
+      );
+      for (const { atoms, distance } of pairs)
+        if (distance > ionPairLimit)
+          add(
+            "COUNTERION_DISTANCE",
+            atoms,
+            "Place the counterion closer to its opposite charge centre (bond lengths)",
+            undefined,
+            distance,
+            ionPairLimit,
+          );
+    }
+  }
   for (const marker of elements.filter(
     (node) => node.data.chargeOwner !== undefined,
   )) {

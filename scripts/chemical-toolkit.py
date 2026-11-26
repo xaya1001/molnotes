@@ -68,6 +68,7 @@ def svg(mol, options):
     style = drawing.drawOptions()
     rdMolDraw2D.UpdateMolDrawOptionsFromJSON(style, json.dumps({k: v for k, v in options.items() if k not in ("atomLabels", "fontFile")}))
     style.useBWAtomPalette()
+    style.flagCloseContactsDist = -1
     style.fontFile = str(FONT)
     style.prepareMolsBeforeDrawing = False
     style.clearBackground = False
