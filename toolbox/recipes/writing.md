@@ -181,7 +181,8 @@ prompt: >-
 ### figure：机理与反应
 
 必填 `kind`、`caption`、`figure`；`figure` 内写完整化学图 YAML。
-机理用 `kind: mechanism` 与 `frames`，每帧有稳定 `id` 和带原子映射号的 `smiles`；相邻帧相同映射号对应同一原子。
+独立机理用 `kind: scheme` 与顶层 `frames`，每帧有稳定 `id` 和带原子映射号的 `smiles`。
+有箭头相连的机理帧默认按相同映射号对应原子。
 电子箭头 `arrows` 从 `lp(n)`（孤对电子）或 `pi(n,m)`（π 键）指向 `atom(n)` 或 `between(n,m)`（新键中点），`electrons: 2` 表示一对电子。
 以下两帧示例表示加成前后；需要其他端点时按需查[化学图 YAML](../../docs/content.md#figure-yaml-compilation)。
 
@@ -189,7 +190,7 @@ prompt: >-
 kind: figure
 caption: 加成前后的电子变化
 figure:
-  kind: mechanism
+  kind: scheme
   title: 加成示例
   frames:
     - id: before
@@ -203,13 +204,13 @@ figure:
       smiles: "[CH2:1]([O-:2])[OH:3]"
 ```
 
-单步反应用 `kind: route`，在 `compounds` 给结构编号，`steps` 的 `from`、`to` 引用这些编号，`above` 写箭头上方的试剂或条件。
+单步反应用 `kind: scheme`，在 `compounds` 给结构编号，`steps` 的 `from`、`to` 引用这些编号，`above` 写箭头上方的试剂或条件。
 
 ```request
 kind: figure
 caption: 单步转化示例
 figure:
-  kind: route
+  kind: scheme
   title: 氧化示例
   compounds:
     1: CCO

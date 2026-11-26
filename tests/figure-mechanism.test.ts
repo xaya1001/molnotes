@@ -140,6 +140,31 @@ test("mechanism steps and qualified maps retain their roles across frames", asyn
   );
 });
 
+test("scheme frames require explicit maps across comparison and unconnected boundaries", async () => {
+  for (const [category, arrow] of [
+    ["comparison", undefined],
+    ["examples", undefined],
+    ["reaction", "none"],
+    ["reaction", "forward"],
+  ] as const) {
+    const frames = [
+      { id: "before", smiles: "[CH3:1][OH:2]", ...(arrow && { arrow }) },
+      { id: "after", smiles: "[CH3:1][OH:2]", map: { 2: 2 } },
+    ];
+    const old = await compileFigure({ kind: "mechanism", category, frames });
+    const scheme = await compileFigure({ kind: "scheme", category, frames });
+    const oldEntry = old.entries[old.reference.ref] as Mechanism;
+    const schemeEntry = scheme.entries[scheme.reference.ref] as Mechanism;
+    assert.equal(oldEntry.maps?.length, 2);
+    assert.deepEqual(
+      schemeEntry.maps,
+      arrow === "forward"
+        ? oldEntry.maps
+        : oldEntry.maps?.filter((map) => map.from.atom === "a2"),
+    );
+  }
+});
+
 async function frameDiagnostics(
   frame: import("../scripts/figure-input.ts").FrameInput,
 ) {

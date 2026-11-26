@@ -724,7 +724,19 @@ Run `npm run figure:lint -- [<figure.yaml>... | --library <content-root>]` to li
 
 ### Figure YAML compilation
 
-Run `npm run figure:compile -- --source <figure.yaml> --library <content-root>`. One document describes a route (default), mechanism, gallery, grouped substrate scope, catalytic cycle, Markush formula or standalone `kind: conformation` drawing. The compiler stores the exact input in `library/sources/<figure-id>.yaml`; each generated figure records `sourceFile` relative to the content root, and route reactions also record `owner`. The first compilation derives its stable ID from the original source path. Recompiling that path or the saved source retains the ID, including after edits; unchanged input produces no file changes. A one-step route creates `rxn_…`, a longer route creates `rte_…` and owned `rxn_…` steps, and mechanisms, galleries, scopes and cycles create `mec_…`. Generated geometry uses three decimal places; optional empty arrays and empty focus groups are omitted. Step IDs and frame IDs are stable within a source; omitted route step IDs use their one-based position. Start a new source when changing between a single reaction, a multi-step route and a mechanism.
+Run `npm run figure:compile -- --source <figure.yaml> --library <content-root>`.
+Use `kind: scheme` with top-level `compounds` and `steps` for reactions and routes, or top-level `frames` for a standalone mechanism, resonance scheme or comparison.
+The compiler also reads route sources with `kind: route` or an omitted kind, and frame sources with `kind: mechanism`.
+Galleries, grouped substrate scopes, catalytic cycles, Markush formulas and standalone conformation drawings have their own kinds.
+
+The compiler stores the exact input in `library/sources/<figure-id>.yaml`.
+Each generated figure records `sourceFile` relative to the content root, and route reactions also record `owner`.
+The first compilation derives its stable ID from the original source path.
+Recompiling that path or the saved source retains the ID, including after edits.
+A one-step route creates `rxn_…`, a longer route creates `rte_…` and owned `rxn_…` steps, and mechanisms, galleries, scopes and cycles create `mec_…`.
+Generated geometry uses three decimal places and omits optional empty arrays and empty focus groups.
+Step IDs and frame IDs are stable within a source, and omitted route step IDs use their one-based position.
+Use a new source when the compiled entry needs a different kind.
 
 A SMILES structure or mechanism frame can select `drawing: perspective|flat`. The compiler matches the largest registered skeleton and constrains it to the saved view, then lays out external substituents. An explicit drawing request with no matching skeleton fails. Omitting `drawing` uses the ordinary layout. The selected layout stores its scaffold identity, matched bonds, projected depths or declared flat overpasses. Perspective depth changes plain single-bond weight and leaves gaps in rear bonds at crossings; native stereochemical wedges and the molecular graph remain authoritative. Template cores and bridges attached at both ends retain their projected lengths; singly attached external groups retain ordinary bond-length checks. Skeleton preparation adds the required ring stereocentre H before constraining and tidying the view, and saves their coordinates and wedge bonds. The native renderer draws those saved hydrogens without adding another set.
 
@@ -734,7 +746,11 @@ Reaction and route compilation compares each product with its largest common rea
 
 Structures and mechanism frames accept `enclose: [{id?,atoms?: [mapNumbers],bonds?: [[mapNumber,mapNumber]],shape?: auto|circle|rect|outline}]`. Each selection requires atoms or bonds. Step `enclose: {compoundKey: [...]}` replaces that structure's default for the step; an empty list clears it. These selections use the same geometry as page `focus` atom/bond groups and coexist with automatic red changes.
 
-A mechanism has `frames: [{id,title?,smiles,map?,above?,below?,arrow?,rot?,flip?,coordgen?,numbers?,notes?,arrows?,focus?,enclose?,scale?,bracket?}]`. Mapped atoms with equal numbers in adjacent frames correspond by default; `map: {previousNumber: currentNumber}` overrides this correspondence. Frame arrows retain website endpoint semantics: sources `lp(n)`, `charge(n)`, `radical(n)`, `bond(n,m)`, `pi(n,m)`; destinations `atom(n)`, `bond(n,m)`, `between(n,m)`. Atoms refer to SMILES maps.
+A mechanism has `frames: [{id,title?,smiles,map?,above?,below?,arrow?,rot?,flip?,coordgen?,numbers?,notes?,arrows?,focus?,enclose?,scale?,bracket?}]`.
+Adjacent frames connected by an arrow match equal SMILES map numbers by default, with `map: {previousNumber: currentNumber}` taking precedence.
+In a scheme, comparison and example frames, and pairs whose outgoing arrow is `none`, use only explicitly authored `map` entries.
+Sources using `kind: mechanism` also match equal numbers across those boundaries.
+Frame arrows use SMILES map numbers in the sources `lp(n)`, `charge(n)`, `radical(n)`, `bond(n,m)` and `pi(n,m)` and the destinations `atom(n)`, `bond(n,m)` and `between(n,m)`.
 Fragment placement follows cross-fragment electron arrows and keeps spectator counterions near the opposite charge centre.
 Figure lint reports unexpected color from the native drawing backend and automatic counterion spacing more than 0.1 base bond lengths above its target.
 Compilation rejects a positive charge as an electron-arrow source.
@@ -789,7 +805,7 @@ Group selection uses chemical identity while drawing variants retain their expli
 
 ```yaml
 title: Example transformation
-kind: route
+kind: scheme
 sources: [{ source: unknown, locator: Example, note: Authored fixture }]
 compounds:
   1: "CCO"

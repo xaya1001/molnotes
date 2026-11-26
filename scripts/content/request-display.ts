@@ -20,7 +20,14 @@ const figureNames: Record<string, string> = {
 };
 export function figureMeta(value: unknown) {
   if (!isObject(value)) return "";
-  const kind = typeof value.kind === "string" ? value.kind : "route";
+  const kind =
+    value.kind === "scheme"
+      ? "frames" in value
+        ? "mechanism"
+        : "route"
+      : typeof value.kind === "string"
+        ? value.kind
+        : "route";
   return figureNames[kind]
     ? `${figureNames[kind]}${Array.isArray(value.frames) ? ` · ${value.frames.length} 帧` : ""}`
     : "";
