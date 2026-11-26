@@ -1,3 +1,4 @@
+import { drawingPanels } from "./helpers/figure-graph.ts";
 import { pathContours } from "../src/ui/library/path-geometry.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -60,8 +61,18 @@ test("drawing selects a matched scaffold in route and mechanism compilation", as
   const smiles = "C1CC2CCC1C2";
   const ordinary = await compileFigure({
     kind: "scheme",
-    compounds: { a: smiles, b: smiles },
-    steps: [{ from: "a", to: "b" }],
+    states: {
+      a: { compounds: { structure: { label: "a", smiles: smiles } } },
+      b: { compounds: { structure: { label: "b", smiles: smiles } } },
+    },
+    arrows: {
+      "1": {
+        from: [{ state: "a", id: "a" }],
+        to: [{ state: "b", id: "product-b" }],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
   });
   for (const e of Object.values(ordinary.entries))
     if (e.kind === "compound")
@@ -72,18 +83,47 @@ test("drawing selects a matched scaffold in route and mechanism compilation", as
       kind === "route"
         ? {
             kind: "scheme",
-            compounds: {
-              a: { smiles, drawing: "perspective" },
-              b: { smiles, drawing: "flat" },
+            states: {
+              a: {
+                compounds: {
+                  structure: { label: "a", smiles, drawing: "perspective" },
+                },
+              },
+              b: {
+                compounds: {
+                  structure: { label: "b", smiles, drawing: "flat" },
+                },
+              },
             },
-            steps: [{ from: "a", to: "b" }],
+            arrows: {
+              "1": {
+                from: [{ state: "a", id: "a" }],
+                to: [{ state: "b", id: "product-b" }],
+                kind: "forward",
+                role: "reaction",
+              },
+            },
           }
         : {
             kind: "scheme",
-            frames: [
-              { id: "one", smiles, drawing: "perspective" },
-              { id: "two", smiles, drawing: "flat" },
-            ],
+            states: {
+              one: {
+                compounds: { structure: { smiles, drawing: "perspective" } },
+              },
+              two: { compounds: { structure: { smiles, drawing: "flat" } } },
+            },
+            arrows: {
+              ["next-" + "one"]: {
+                from: "one",
+                to: "two",
+                kind: "forward",
+                role: "elementary",
+              },
+            },
+            views: {
+              one: { items: ["one"], arrows: ["next-" + "one"] },
+              two: { items: ["two"] },
+            },
           };
     const result = await compileFigure(input);
     const modes = Object.values(result.entries).flatMap((e) =>
@@ -99,8 +139,22 @@ test("drawing selects a matched scaffold in route and mechanism compilation", as
   await assert.rejects(
     compileFigure({
       kind: "scheme",
-      compounds: { a: { smiles: "CCO", drawing: "perspective" }, b: "CC=O" },
-      steps: [{ from: "a", to: "b" }],
+      states: {
+        a: {
+          compounds: {
+            structure: { label: "a", smiles: "CCO", drawing: "perspective" },
+          },
+        },
+        b: { compounds: { structure: { label: "b", smiles: "CC=O" } } },
+      },
+      arrows: {
+        "1": {
+          from: [{ state: "a", id: "a" }],
+          to: [{ state: "b", id: "product-b" }],
+          kind: "forward",
+          role: "reaction",
+        },
+      },
     }),
     /no registered scaffold/,
   );
@@ -266,32 +320,65 @@ test("template structures participate in routes, panels and mechanism frames", a
   for (const input of [
     {
       kind: "scheme",
-      compounds: { a: "CCO", b: chair, c: "CC=O" },
-      steps: [
-        { from: "a", to: "b" },
-        { from: "b", to: "c" },
-      ],
-    },
-    {
-      kind: "scheme",
-      compounds: {
-        a: chair,
-        b: { template: "newman", front: ["H", "H", "CH3"] },
+      states: {
+        a: { compounds: { structure: { label: "a", smiles: "CCO" } } },
+        b: { compounds: { structure: { label: "b", ...chair } } },
+        c: { compounds: { structure: { label: "c", smiles: "CC=O" } } },
+      },
+      arrows: {
+        "1": {
+          from: [{ state: "a", id: "a" }],
+          to: [{ state: "b", id: "product-b" }],
+          kind: "forward",
+          role: "reaction",
+        },
+        "2": {
+          from: [{ state: "b", id: "b" }],
+          to: [{ state: "c", id: "product-c" }],
+          kind: "forward",
+          role: "reaction",
+        },
       },
     },
     {
       kind: "scheme",
-      frames: [
-        { id: "a", ...chair, above: "Heat" },
-        { id: "b", ...chair, flip: true },
-      ],
+      states: {
+        a: { compounds: { a: chair } },
+        b: {
+          compounds: { b: { template: "newman", front: ["H", "H", "CH3"] } },
+        },
+      },
+      arrows: {},
+    },
+    {
+      kind: "scheme",
+      states: {
+        a: { compounds: { structure: { ...chair } } },
+        b: { compounds: { structure: { ...chair, flip: true } } },
+      },
+      arrows: {
+        ["next-" + "a"]: {
+          from: "a",
+          to: "b",
+          kind: "forward",
+          role: "elementary",
+          above: "Heat",
+        },
+      },
+      views: {
+        a: { items: ["a"], arrows: ["next-" + "a"] },
+        b: { items: ["b"] },
+      },
     },
   ]) {
     const result = await compileFigure(input, {}, "embedded");
     const entry = result.entries[result.reference.ref];
     const refs =
-      entry.kind === "mechanism"
-        ? entry.frames.map((f) => ({ ...result.reference, frame: f.id }))
+      entry.kind === "figure" && Object.keys(entry.views).length > 0
+        ? drawingPanels(entry).map((f) => ({
+            ...result.reference,
+            frame: f.id,
+          }))
         : [result.reference];
     for (const ref of refs) {
       const geometry = await prepareFigure(result.entries, ref, {
@@ -309,7 +396,8 @@ test("template structures participate in routes, panels and mechanism frames", a
         if (id?.includes(":text")) labels.push(id);
       });
       assert.equal(new Set(labels).size, labels.length);
-      if (entry.kind === "route") assert.ok(svg.includes("data-number"));
+      if (entry.kind === "figure" && entry.graph.layout?.route)
+        assert.ok(svg.includes("data-number"));
     }
     assert.deepEqual(
       (await compileFigure(input, result.entries, "embedded")).entries,
@@ -323,12 +411,15 @@ test("ring hydrogen defaults and structure overrides are saved per depiction", a
   const result = await compileFigure({
     kind: "scheme",
     ring_h: false,
-    compounds: { a: { smiles }, b: { smiles, ring_h: true } },
+    states: {
+      a: { compounds: { a: { smiles } } },
+      b: { compounds: { b: { smiles, ring_h: true } } },
+    },
+    arrows: {},
   });
   const entry = result.entries[result.reference.ref];
-  assert.equal(entry.kind, "mechanism");
-  if (entry.kind !== "mechanism") return;
-  const layouts = entry.frames[0].scene.molecules.map((p) => {
+  assert.equal(entry.kind, "figure");
+  const layouts = drawingPanels(entry)[0].scene.molecules.map((p) => {
     const c = result.entries[p.compound];
     assert.equal(c.kind, "compound");
     if (c.kind !== "compound") throw new Error("Expected compound");
@@ -339,7 +430,7 @@ test("ring hydrogen defaults and structure overrides are saved per depiction", a
     [false, true],
   );
   const counts = [];
-  for (const p of entry.frames[0].scene.molecules) {
+  for (const p of drawingPanels(entry)[0].scene.molecules) {
     const c = result.entries[p.compound];
     assert.equal(c.kind, "compound");
     if (c.kind !== "compound") continue;

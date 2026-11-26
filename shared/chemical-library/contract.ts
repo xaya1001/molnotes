@@ -1,6 +1,7 @@
 import { validateMarkushFigure } from "./markush.ts";
 import { validateConformationSpec } from "../chemical-templates/conformation.ts";
 import { isObject } from "../json.ts";
+import { graphReferenceScenes, graphScenes } from "./figure-layout.ts";
 import type {
   Library,
   LibraryEntry,
@@ -341,39 +342,66 @@ function reactionArrow(value: unknown, w: string) {
     fail(w, "invalid arrow kind");
   number(value.textWidth, w);
   if (Number(value.textWidth) <= 0) fail(w, "positive text width required");
-  if (value.via !== undefined) {
-    list(value.via, w);
-    value.via.forEach((p) => point(p, w));
+  if (value.points !== undefined) {
+    list(value.points, w);
+    value.points.forEach((p) => point(p, w));
   }
 }
 
-function mechanismFrames(v: Record<string, unknown>, w: string) {
-  list(v.frames, w);
-  if (!v.frames.length) fail(w, "frames required");
-  for (const f of v.frames) {
-    object(f, w);
-    text(f.id, w);
-    text(f.title, w);
-    scene(f.scene, w);
+function figureGraph(value: unknown, where: string) {
+  object(value, where);
+  object(value.states, where);
+  object(value.arrows, where);
+  if (!Object.keys(value.states).length) fail(where, "requires states");
+  const groups = value.groups ?? {};
+  object(groups, where);
+  const hasItem = (id: string) =>
+    Object.hasOwn(value.states as object, id) || Object.hasOwn(groups, id);
+  for (const [id, state] of Object.entries(value.states)) {
+    const location = `${where}.states.${id}`;
+    object(state, location);
+    if (state.scene !== undefined) scene(state.scene, location);
+    if (state.title !== undefined) text(state.title, location);
+    if (state.text !== undefined) text(state.text, location);
+  }
+  for (const [id, group] of Object.entries(groups)) {
+    const location = `${where}.groups.${id}`;
+    object(group, location);
+    strings(group.items, location);
+    if (group.items.some((item) => !hasItem(item)))
+      fail(location, "unknown item");
+    if (group.scene !== undefined) scene(group.scene, location);
+  }
+  for (const [id, arrow] of Object.entries(value.arrows)) {
+    const location = `${where}.arrows.${id}`;
+    object(arrow, location);
     if (
-      f.arrow !== undefined &&
       !["forward", "equilibrium", "resonance", "retro", "none"].includes(
-        String(f.arrow),
+        String(arrow.kind),
       )
     )
-      fail(w, "unknown frame arrow");
-    for (const key of ["above", "below"])
-      if (f[key] !== undefined) strings(f[key], w);
-  }
-  if (v.maps !== undefined) {
-    list(v.maps, w);
-    for (const m of v.maps) {
-      object(m, w);
-      ref(m.from, w);
-      ref(m.to, w);
-      text(m.fromFrame, w);
-      text(m.toFrame, w);
+      fail(location, "invalid arrow kind");
+    if (!["reaction", "elementary", "display"].includes(String(arrow.role)))
+      fail(location, "invalid arrow role");
+    for (const endpoints of [arrow.from, arrow.to]) {
+      list(endpoints, location);
+      if (!endpoints.length) fail(location, "requires arrow endpoints");
+      for (const endpoint of endpoints) {
+        object(endpoint, location);
+        text(endpoint.state, location);
+        if (!hasItem(endpoint.state)) fail(location, "unknown endpoint");
+      }
     }
+    if (arrow.drawing !== undefined) {
+      object(arrow.drawing, location);
+      scene(arrow.drawing.scene, location);
+      reactionArrow(arrow.drawing.arrow, location);
+    }
+    if (arrow.via !== undefined) figureGraph(arrow.via, location + ".via");
+  }
+  if (value.layout !== undefined) {
+    object(value.layout, where);
+    if (value.layout.panel !== undefined) scene(value.layout.panel, where);
   }
 }
 export function validateLibraryEntry(
@@ -396,16 +424,15 @@ export function validateLibraryEntry(
   }
   const prefixes = {
     compound: "cmp",
-    reaction: "rxn",
-    route: "rte",
-    mechanism: "mec",
     image: "img",
     markush: "mku",
     conformation: "cnf",
   };
   if (
-    !Object.hasOwn(prefixes, String(v.kind)) ||
-    !v.id.startsWith(prefixes[v.kind as keyof typeof prefixes] + "_")
+    v.kind === "figure"
+      ? !/^(rxn|rte|mec)_/.test(v.id)
+      : !Object.hasOwn(prefixes, String(v.kind)) ||
+        !v.id.startsWith(prefixes[v.kind as keyof typeof prefixes] + "_")
   )
     fail(w, "ID kind mismatch");
   if (v.style !== undefined) {
@@ -439,122 +466,13 @@ export function validateLibraryEntry(
         strings(t.allowed, w);
       }
     }
-  } else if (v.kind === "reaction") {
-    const ids = new Set();
-    for (const k of ["reactants", "products"]) {
-      list(v[k], w);
-      if (!v[k].length) fail(w, `empty ${k}`);
-      for (const p of v[k]) {
-        object(p, w);
-        text(p.id, w);
-        text(p.compound, w);
-        if (p.other !== undefined && p.other !== true)
-          fail(w, "other must be true when present");
-        if (p.sourceKey !== undefined) text(p.sourceKey, w);
-        if (
-          p.position !== undefined &&
-          !["inline", "above-arrow", "below-arrow", "text", "none"].includes(
-            String(p.position),
-          )
-        )
-          fail(w, "invalid participant position");
-        if (ids.has(p.id)) fail(w, "duplicate participant");
-        ids.add(p.id);
-        for (const k of ["yield", "ratio", "number", "name"])
-          if (p[k] !== undefined && typeof p[k] !== "string")
-            fail(w, `${k} must be text`);
-        for (const n of ["equivalents", "fraction"]) {
-          if (p[n] === undefined) continue;
-          number(p[n], w);
-          if (Number(p[n]) < 0 || (n !== "equivalents" && Number(p[n]) > 1))
-            fail(w, `${n} out of range`);
-        }
-      }
+  } else if (v.kind === "figure") {
+    figureGraph(v.graph, w + ".graph");
+    object(v.views, w);
+    for (const [id, view] of Object.entries(v.views)) {
+      object(view, `${w}.views.${id}`);
+      strings(view.items, `${w}.views.${id}`);
     }
-    if (v.plusAt !== undefined) {
-      list(v.plusAt, w);
-      if (
-        v.plusAt.length !==
-        Math.max(
-          0,
-          (v.reactants as { position?: string }[]).filter(
-            (p) => !p.position || p.position === "inline",
-          ).length - 1,
-        )
-      )
-        fail(w, "one separator per additional reactant required");
-      v.plusAt.forEach((p) => point(p, w));
-    }
-    strings(v.reagents, w);
-    if (
-      v.reagentPosition !== undefined &&
-      !["above-arrow", "below-arrow"].includes(String(v.reagentPosition))
-    )
-      fail(w, "invalid reagent position");
-    strings(v.conditions, w);
-    if (v.tags !== undefined) strings(v.tags, w);
-    scene(v.scene, w);
-    reactionArrow(v.arrow, w);
-    if (v.mechanism !== undefined) {
-      object(v.mechanism, w);
-      mechanismFrames(v.mechanism, w);
-    }
-  } else if (v.kind === "route") {
-    list(v.steps, w);
-    const ids = new Set();
-    for (const s of v.steps) {
-      object(s, w);
-      text(s.id, w);
-      text(s.reaction, w);
-      point(s.at, w);
-      if (s.display !== undefined) {
-        object(s.display, w);
-        for (const value of Object.values(s.display))
-          if (!["structure", "reference", "hidden"].includes(String(value)))
-            fail(w, "invalid participant display");
-      }
-      if (s.placements !== undefined) {
-        object(s.placements, w);
-        Object.values(s.placements).forEach((p) => point(p, w));
-      }
-      for (const key of ["reagents", "conditions", "boxes"])
-        if (s[key] !== undefined) strings(s[key], w);
-      if (s.arrow !== undefined) reactionArrow(s.arrow, w);
-      if (ids.has(s.id)) fail(w, "duplicate route step");
-      ids.add(s.id);
-    }
-    list(v.edges, w);
-    for (const e of v.edges) {
-      object(e, w);
-      for (const k of ["from", "to", "product", "reactant"]) text(e[k], w);
-      if (!ids.has(e.from) || !ids.has(e.to)) fail(w, "unknown route step");
-    }
-    if (v.plusAt !== undefined) {
-      list(v.plusAt, w);
-      v.plusAt.forEach((p) => point(p, w));
-    }
-    if (v.connections !== undefined) {
-      list(v.connections, w);
-      for (const c of v.connections) {
-        object(c, w);
-        text(c.id, w);
-        list(c.points, w);
-        if (c.points.length < 2) fail(w, "connection needs two points");
-        c.points.forEach((p) => point(p, w));
-      }
-    }
-    number(v.width, w);
-    number(v.height, w);
-    if (Number(v.width) <= 0 || Number(v.height) <= 0)
-      fail(w, "positive canvas required");
-  } else if (v.kind === "mechanism") {
-    if (
-      !["reaction", "resonance", "comparison", "examples"].includes(
-        String(v.category),
-      )
-    )
-      fail(w, "unknown semantic category");
-    mechanismFrames(v, w);
   } else if (v.kind === "markush") {
     validateMarkushFigure(v, w);
   } else if (v.kind === "conformation") {
@@ -597,25 +515,16 @@ export function validateLibraryEntry(
 }
 export function libraryDependencies(entry: LibraryEntry): string[] {
   if (entry.kind === "image") return entry.derivedFrom ?? [];
-  if (entry.kind === "compound")
-    return entry.template?.flatMap((t) => t.allowed) ?? [];
-  if (entry.kind === "reaction")
+  if (entry.kind === "figure")
     return [
       ...new Set(
-        [
-          ...entry.reactants,
-          ...entry.products,
-          ...entry.scene.molecules,
-          ...(entry.mechanism?.frames.flatMap(({ scene }) => scene.molecules) ??
-            []),
-        ].map((p) => p.compound),
+        graphScenes(entry.graph).flatMap((scene) =>
+          scene.molecules.map(({ compound }) => compound),
+        ),
       ),
     ];
-  if (entry.kind === "route") return entry.steps.map((s) => s.reaction);
-  if (entry.kind === "mechanism")
-    return entry.frames.flatMap((f) =>
-      f.scene.molecules.map((m) => m.compound),
-    );
+  if (entry.kind === "compound")
+    return entry.template?.flatMap((t) => t.allowed) ?? [];
   return [];
 }
 function validateFocusReferences(
@@ -700,20 +609,8 @@ function validateSceneReferences(
     where,
   );
 }
-export function figureFrames(library: Library, entry: LibraryEntry) {
-  if (entry.kind === "mechanism") return entry.frames;
-  if (entry.kind === "reaction") return entry.mechanism?.frames ?? [];
-  if (entry.kind === "route")
-    return entry.steps.flatMap(({ id, reaction }) => {
-      const step = library[reaction];
-      return step?.kind === "reaction"
-        ? (step.mechanism?.frames ?? []).map((frame) => ({
-            ...frame,
-            id: id + "/" + frame.id,
-          }))
-        : [];
-    });
-  return [];
+export function figureViewKeys(entry: LibraryEntry) {
+  return entry.kind === "figure" ? Object.keys(entry.views) : [];
 }
 export function validateFigureInstance(
   library: Library,
@@ -733,42 +630,29 @@ export function validateFigureInstance(
     (entry.kind !== "compound" || !entry.variants?.[reference.variant])
   )
     fail(entry.id, "unknown layout variant");
-  const frame = reference.frame
-    ? figureFrames(library, entry).find(({ id }) => id === reference.frame)
-    : undefined;
-  if (reference.frame && !frame) fail(entry.id, "unknown frame");
-  let scenes: { scene: Pick<Scene, "molecules" | "arrows">; prefix: string }[] =
-    [];
-  if (frame) scenes = [{ scene: frame.scene, prefix: "" }];
-  else if (entry.kind === "compound")
-    scenes = [
-      {
-        scene: {
-          molecules: [
-            { id: "compound", compound: entry.id, at: { x: 0, y: 0 } },
-          ],
-        },
-        prefix: "",
-      },
-    ];
-  else if (entry.kind === "reaction")
-    scenes = [{ scene: entry.scene, prefix: "" }];
-  else if (entry.kind === "mechanism")
-    scenes = entry.frames.map(({ scene }) => ({ scene, prefix: "" }));
-  else if (entry.kind === "route")
-    scenes = entry.steps.map((s) => {
-      const reaction = library[s.reaction];
-      if (reaction?.kind !== "reaction")
-        fail(entry.id, "missing route reaction");
-      return { scene: reaction.scene, prefix: s.id + "/" };
-    });
-  if (!frame && (entry.kind === "reaction" || entry.kind === "route"))
-    scenes.push(
-      ...figureFrames(library, entry).map(({ id, scene }) => ({
-        scene,
-        prefix: id + "/",
-      })),
-    );
+  if (
+    reference.frame &&
+    (entry.kind !== "figure" || !entry.views[reference.frame])
+  )
+    fail(entry.id, "unknown graph view");
+  const scenes: {
+    scene: Pick<Scene, "molecules" | "arrows">;
+    prefix: string;
+  }[] =
+    entry.kind === "figure"
+      ? graphReferenceScenes(entry, reference.frame)
+      : entry.kind === "compound"
+        ? [
+            {
+              scene: {
+                molecules: [
+                  { id: "compound", compound: entry.id, at: { x: 0, y: 0 } },
+                ],
+              },
+              prefix: "",
+            },
+          ]
+        : [];
   const molecules = scenes.flatMap(({ scene, prefix }) =>
     scene.molecules.map((m) => ({ ...m, id: prefix + m.id })),
   );
@@ -808,45 +692,14 @@ export function validateLibrary(library: Library) {
     for (const id of libraryDependencies(entry)) {
       const other = library[id];
       if (!other) fail(entry.id, `missing reference ${id}`);
-      const kind =
-        entry.kind === "route"
-          ? "reaction"
-          : entry.kind === "image"
-            ? "image"
-            : "compound";
+      const kind = entry.kind === "image" ? "image" : "compound";
       if (
         other.kind !== kind &&
-        !(
-          (entry.kind === "reaction" || entry.kind === "mechanism") &&
-          other.kind === "conformation"
-        )
+        !(entry.kind === "figure" && other.kind === "conformation")
       )
         fail(entry.id, `expected ${kind}: ${id}`);
     }
-    if (entry.kind === "route")
-      for (const step of entry.steps) {
-        const reaction = library[step.reaction];
-        if (reaction.kind !== "reaction")
-          fail(entry.id, "route requires reaction");
-        const placements = new Set(reaction.scene.molecules.map((m) => m.id));
-        for (const id of new Set([
-          ...Object.keys(step.display ?? {}),
-          ...Object.keys(step.placements ?? {}),
-          ...(step.boxes ?? []),
-        ]))
-          if (!placements.has(id))
-            fail(entry.id, `unknown route placement ${step.id}/${id}`);
-      }
-    const mechanism =
-      entry.kind === "mechanism"
-        ? entry
-        : entry.kind === "reaction"
-          ? entry.mechanism
-          : undefined;
-    const scenes = [
-      ...(entry.kind === "reaction" ? [entry.scene] : []),
-      ...(mechanism?.frames.map(({ scene }) => scene) ?? []),
-    ];
+    const scenes = entry.kind === "figure" ? graphScenes(entry.graph) : [];
     for (const s of scenes) {
       const ids = new Set(s.molecules.map((m) => m.id));
       for (const m of s.molecules) {
@@ -856,34 +709,9 @@ export function validateLibrary(library: Library) {
         if (m.variant && (c.kind !== "compound" || !c.variants?.[m.variant]))
           fail(entry.id, `unknown variant ${m.variant}`);
       }
-      if (entry.kind === "reaction" && s === entry.scene)
-        for (const p of [...entry.reactants, ...entry.products]) {
-          if (p.position === "text" || p.position === "none") continue;
-          const m = s.molecules.find((m) => m.id === p.id);
-          if (!m || m.compound !== p.compound)
-            fail(entry.id, `participant not placed: ${p.id}`);
-        }
       if (ids.size !== s.molecules.length)
         fail(entry.id, "duplicate placement");
       validateSceneReferences(s, library, entry.id);
-    }
-    if (mechanism) {
-      if (
-        new Set(mechanism.frames.map((f) => f.id)).size !==
-        mechanism.frames.length
-      )
-        fail(entry.id, "duplicate frame");
-      for (const map of mechanism.maps ?? [])
-        for (const [frameId, ref] of [
-          [map.fromFrame, map.from],
-          [map.toFrame, map.to],
-        ] as const) {
-          const frame = mechanism.frames.find((f) => f.id === frameId);
-          if (!frame) fail(entry.id, `unknown mapped frame ${frameId}`);
-          validateSceneReferences(frame.scene, library, entry.id, {
-            primary: { atoms: [ref] },
-          });
-        }
     }
   }
   const visiting = new Set<string>(),

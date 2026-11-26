@@ -9,10 +9,11 @@ import {
 import type {
   AtomRef,
   Compound,
+  GraphArrow,
   Library,
   Participant,
-  Reaction,
 } from "../shared/chemical-library/types.ts";
+import { appearances } from "../shared/chemical-library/figure-layout.ts";
 
 type Graph = Omit<ChemicalGraph, "bonds"> & {
   bonds: {
@@ -264,7 +265,10 @@ function compare(
 export function reactionChanges(
   rd: Toolkit,
   library: Library,
-  reaction: Reaction,
+  arrow: GraphArrow & {
+    title: string;
+    drawing: NonNullable<GraphArrow["drawing"]>;
+  },
   options: {
     enabled?: boolean;
     numbers?: Record<string, Record<string, number>>;
@@ -276,8 +280,8 @@ export function reactionChanges(
     atoms: AtomRef[] = [],
     bonds: [AtomRef, AtomRef][] = [];
   if (options.enabled === false) {
-    delete reaction.scene.changes;
-    return [`${reaction.title}：变化标红关闭`];
+    delete arrow.drawing.scene.changes;
+    return [`${arrow.title}：变化标红关闭`];
   }
   const loaded: Substance[] = [];
   const load = (participant: Participant): Substance => {
@@ -296,14 +300,14 @@ export function reactionChanges(
     return s;
   };
   try {
-    const reactants = reaction.reactants
+    const reactants = appearances(arrow.from)
       .filter((p) => library[p.compound]?.kind !== "conformation")
       .map(load);
-    for (const participant of reaction.products) {
+    for (const participant of appearances(arrow.to)) {
       if (library[participant.compound]?.kind === "conformation") continue;
       const product = load(participant),
         name = participant.number || participant.sourceKey || participant.id;
-      const label = `${reaction.title} → 产物 ${name}`;
+      const label = `${arrow.title} → 产物 ${name}`;
       const cores = reactants
         .map((a) => ({
           a,
@@ -503,7 +507,7 @@ export function reactionChanges(
           ),
       );
     }
-    reaction.scene.changes = { atoms, bonds };
+    arrow.drawing.scene.changes = { atoms, bonds };
     return lines;
   } finally {
     loaded.forEach((s) => s.mol.delete());

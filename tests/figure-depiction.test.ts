@@ -1,3 +1,5 @@
+import { arrowAt } from "./helpers/figure-graph.ts";
+import { appearances } from "../shared/chemical-library/figure-layout.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
@@ -8,15 +10,25 @@ test("aligned route depictions preserve a linear triple-bond centre", async () =
   const { graphOf } = await import("../shared/chemical-library/chemistry.ts");
   const compiled = await compileFigure({
     kind: "scheme",
-    compounds: { a: "CCc1ccccc1", b: "C#Cc1ccccc1" },
-    steps: [{ from: "a", to: "b" }],
+    states: {
+      a: { compounds: { structure: { label: "a", smiles: "CCc1ccccc1" } } },
+      b: { compounds: { structure: { label: "b", smiles: "C#Cc1ccccc1" } } },
+    },
+    arrows: {
+      "1": {
+        from: [{ state: "a", id: "a" }],
+        to: [{ state: "b", id: "product-b" }],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
   });
-  const reaction = Object.values(compiled.entries).find(
-    (e) => e.kind === "reaction",
-  )!;
-  assert.equal(reaction.kind, "reaction");
-  const participant = reaction.products[0],
-    placement = reaction.scene.molecules.find((m) => m.id === participant.id)!;
+  const reaction = arrowAt(compiled.entries[compiled.reference.ref]);
+  assert.equal(reaction.role, "reaction");
+  const participant = appearances(reaction.to)[0],
+    placement = reaction.drawing.scene.molecules.find(
+      (m) => m.id === participant.id,
+    )!;
   const compound = compiled.entries[participant.compound];
   assert.equal(compound.kind, "compound");
   const layout = placement.variant
@@ -167,18 +179,37 @@ test("cyclic enone aligned to a same-ring tertiary alcohol places its carbonyl o
   const compiled = await compileFigure({
     kind: "scheme",
     title: "Ring carbonyl alignment",
-    anchor: "alcohol",
-    compounds: {
-      enone: "[O:1]=[C:2]1[CH:3]=[CH:4][CH2:5][CH2:6][CH2:7]1",
-      alcohol: "C[C:2]1([O:1])[CH:3]=[CH:4][CH2:5][CH2:6][CH2:7]1",
+    states: {
+      enone: {
+        compounds: {
+          structure: {
+            label: "enone",
+            smiles: "[O:1]=[C:2]1[CH:3]=[CH:4][CH2:5][CH2:6][CH2:7]1",
+          },
+        },
+      },
+      alcohol: {
+        compounds: {
+          structure: {
+            label: "alcohol",
+            smiles: "C[C:2]1([O:1])[CH:3]=[CH:4][CH2:5][CH2:6][CH2:7]1",
+          },
+        },
+      },
     },
-    steps: [{ id: "add", from: "enone", to: "alcohol" }],
+    arrows: {
+      add: {
+        from: [{ state: "enone", id: "enone" }],
+        to: [{ state: "alcohol", id: "product-alcohol" }],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
+    layout: { anchor: "alcohol" },
   });
-  const reaction = Object.values(compiled.entries).find(
-    (entry) => entry.kind === "reaction",
-  )!;
-  const participant = reaction.reactants[0];
-  const placement = reaction.scene.molecules.find(
+  const reaction = arrowAt(compiled.entries[compiled.reference.ref]);
+  const participant = appearances(reaction.from)[0];
+  const placement = reaction.drawing.scene.molecules.find(
     (molecule) => molecule.id === participant.id,
   )!;
   const compound = compiled.entries[placement.compound];

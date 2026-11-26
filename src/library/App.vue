@@ -8,7 +8,7 @@ import type {
   LibrarySnapshot,
 } from "../../shared/chemical-library/types.ts";
 import { figureViewKey } from "../../shared/chemical-library/views.ts";
-import { routeMetrics } from "../../shared/chemical-library/routes.ts";
+import { figureRouteMetrics } from "../../shared/chemical-library/routes.ts";
 const props = defineProps<{ library: LibrarySnapshot }>();
 const statuses = ref<Record<string, Diagnostic[]>>({});
 const opened = ref<Record<string, boolean>>({});
@@ -29,9 +29,7 @@ const query = ref("");
 const kind = ref("");
 const names = {
   compound: "化合物",
-  reaction: "反应",
-  route: "路线",
-  mechanism: "机理与比较",
+  figure: "化学图",
   image: "图片",
   markush: "通式与覆盖地图",
   conformation: "构象与投影式",
@@ -160,10 +158,13 @@ onMounted(() => {
           {{ entry.width }} × {{ entry.height }} · {{ entry.purpose }} ·
           {{ entry.rights }}
         </p>
-        <p v-if="entry.kind === 'route'">
-          最长线性步骤：{{
-            routeMetrics(entry, library.entries).longestLinearSteps
-          }}
+        <p
+          v-if="
+            entry.kind === 'figure' &&
+            figureRouteMetrics(entry).longestLinearSteps > 0
+          "
+        >
+          最长线性步骤：{{ figureRouteMetrics(entry).longestLinearSteps }}
         </p>
         <ul>
           <li v-for="use in library.uses[entry.id]" :key="use.path + use.title">

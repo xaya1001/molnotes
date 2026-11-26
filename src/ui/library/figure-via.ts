@@ -3,63 +3,71 @@ import type {
   AtomRef,
   Focus,
   FocusGroup,
-  Mechanism,
+  GraphArrow,
   Participant,
   Placement,
-  Reaction,
   Scene,
 } from "../../../shared/chemical-library/types.ts";
+import {
+  appearances,
+  graphPanels,
+  type GraphPanel,
+} from "../../../shared/chemical-library/figure-layout.ts";
 
-type Frame = Mechanism["frames"][number];
+type BoundPanel = { frame: GraphPanel; matches: Map<string, Placement> };
 
-function matchEndpoint(
-  frame: Frame,
-  participants: Participant[],
-  scene: Scene,
-) {
-  const placements = new Map(scene.molecules.map((p) => [p.id, p]));
-  const unused = participants.flatMap((p) => {
-    const placement = placements.get(p.id);
-    return placement ? [placement] : [];
-  });
-  if (
-    frame.scene.molecules.length !== unused.length ||
-    frame.scene.transitionState ||
-    frame.scene.molecules.some((p) => p.bracket === "ts") ||
-    frame.scene.reactionArrows?.some((arrow) => arrow.id !== "next-" + frame.id)
-  )
-    return;
-  const matches = new Map<string, Placement>();
-  for (const molecule of frame.scene.molecules) {
-    const index = unused.findIndex((p) => p.compound === molecule.compound);
-    if (index < 0) return;
-    matches.set(molecule.id, unused.splice(index, 1)[0]);
-  }
-  return { frame, matches };
-}
-
-export function reactionFrames(reaction: Reaction) {
-  const frames = reaction.mechanism?.frames ?? [];
-  const first = frames[0];
-  const last = frames.at(-1);
-  const start =
-    first && matchEndpoint(first, reaction.reactants, reaction.scene);
+export function arrowViaPanels(arrow: GraphArrow, scene: Scene) {
+  const via = arrow.via;
+  const panels = via ? graphPanels(via) : [];
+  const byId = new Map(
+    scene.molecules.map((placement) => [placement.id, placement]),
+  );
+  const match = (
+    panel: (typeof panels)[number] | undefined,
+    bindings: Record<string, string> | undefined,
+    participants: Participant[],
+  ) => {
+    if (!panel || !bindings || !panel.scene.molecules.length) return;
+    const located = new Map(
+      participants.map((p) => [p.sourceKey, byId.get(p.id)]),
+    );
+    const matches = new Map<string, Placement>();
+    for (const [outer, inner] of Object.entries(bindings)) {
+      const placement = located.get(outer);
+      const prefix = panel.id + "/";
+      if (placement && inner.startsWith(prefix))
+        matches.set(inner.slice(prefix.length), placement);
+    }
+    if (
+      panel.scene.molecules.every(
+        ({ id, compound }) => matches.get(id)?.compound === compound,
+      )
+    )
+      return {
+        frame: panel,
+        matches,
+        outgoing: Object.entries(via!.arrows).find(([, edge]) =>
+          edge.from.some(({ state }) => state === panel.id),
+        ),
+      };
+  };
+  const start = match(panels[0], via?.bind?.from, appearances(arrow.from));
   const end =
-    last && last !== start?.frame
-      ? matchEndpoint(last, reaction.products, reaction.scene)
+    panels.at(-1) !== start?.frame
+      ? match(panels.at(-1), via?.bind?.to, appearances(arrow.to))
       : undefined;
   return {
     start,
     end,
-    middle: frames.slice(start ? 1 : 0, end ? -1 : undefined),
+    middle: panels.slice(start ? 1 : 0, end ? -1 : undefined),
   };
 }
 
-export function mergeFrameAnnotations(
+export function mergeBoundAnnotations(
   scene: Scene,
   prefix: string,
   focus: Focus | undefined,
-  endpoints: NonNullable<ReturnType<typeof matchEndpoint>>[],
+  endpoints: BoundPanel[],
 ) {
   const merged = { ...scene };
   const aliases = new Map<string, string>();

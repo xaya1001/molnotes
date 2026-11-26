@@ -1,3 +1,7 @@
+import { drawnArrows } from "../shared/chemical-library/figure-layout.ts";
+import { validateFigureInstance } from "../shared/chemical-library/contract.ts";
+import { arrowAt, drawingPanels, figureEntry } from "./helpers/figure-graph.ts";
+import { appearances } from "../shared/chemical-library/figure-layout.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -24,13 +28,8 @@ import {
   compoundAbbreviations,
   compoundView,
 } from "../shared/chemical-library/chemistry.ts";
-import { routeMetrics } from "../shared/chemical-library/routes.ts";
-import type {
-  Compound,
-  Mechanism,
-  Reaction,
-  Route,
-} from "../shared/chemical-library/types.ts";
+import { figureRouteMetrics } from "../shared/chemical-library/routes.ts";
+import type { Compound } from "../shared/chemical-library/types.ts";
 const fixture = async (name: string) =>
   parse(
     await readFile(
@@ -44,16 +43,17 @@ test("forming arrows persist dashed bonds only when selected", async () => {
     const compiled = await compileFigure({
       kind: "scheme",
       forming: true,
-      frames: [
-        {
-          id: "addition",
-          smiles: "[O-:1].[CH2:2]=[O:3]",
+      states: {
+        addition: {
           arrows: [{ from: "lp(1)", to: "between(1,2)", forming }],
+          compounds: { structure: { smiles: "[O-:1].[CH2:2]=[O:3]" } },
         },
-      ],
+      },
+      arrows: {},
+      views: { addition: { items: ["addition"] } },
     });
-    const scene = (compiled.entries[compiled.reference.ref] as Mechanism)
-      .frames[0].scene;
+    const scene = drawingPanels(compiled.entries[compiled.reference.ref])[0]
+      .scene;
     assert.equal(scene.partialBonds?.length ?? 0, forming ? 1 : 0);
     assert.deepEqual(compiled.warnings, []);
   }
@@ -62,15 +62,20 @@ test("forming arrows persist dashed bonds only when selected", async () => {
 test("collection cells retain their selected forming bonds", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    compounds: {
+    states: {
       event: {
-        smiles: "[O-:1].[CH2:2]=[O:3]",
-        arrows: [{ from: "lp(1)", to: "between(1,2)", forming: true }],
+        compounds: {
+          event: {
+            smiles: "[O-:1].[CH2:2]=[O:3]",
+            arrows: [{ from: "lp(1)", to: "between(1,2)", forming: true }],
+          },
+        },
       },
     },
+    arrows: {},
   });
-  const scene = (compiled.entries[compiled.reference.ref] as Mechanism)
-    .frames[0].scene;
+  const scene = drawingPanels(compiled.entries[compiled.reference.ref])[0]
+    .scene;
   assert.equal(scene.partialBonds?.length, 1);
   assert.deepEqual(
     scene.partialBonds![0].atoms,
@@ -81,19 +86,24 @@ test("collection cells retain their selected forming bonds", async () => {
 test("collection electron events align their reacting fragments", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    compounds: {
+    states: {
       event: {
-        smiles: "[CH2:1]=[C:2](OC)[CH:5]=[CH2:6].[CH2:7]=[CH:8]C#N",
-        arrows: [
-          { from: "pi(1,2)", to: "between(1,7)", forming: true },
-          { from: "pi(5,6)", to: "bond(2,5)" },
-          { from: "pi(7,8)", to: "between(8,6)", forming: true },
-        ],
+        compounds: {
+          event: {
+            smiles: "[CH2:1]=[C:2](OC)[CH:5]=[CH2:6].[CH2:7]=[CH:8]C#N",
+            arrows: [
+              { from: "pi(1,2)", to: "between(1,7)", forming: true },
+              { from: "pi(5,6)", to: "bond(2,5)" },
+              { from: "pi(7,8)", to: "between(8,6)", forming: true },
+            ],
+          },
+        },
       },
     },
+    arrows: {},
   });
-  const scene = (compiled.entries[compiled.reference.ref] as Mechanism)
-    .frames[0].scene;
+  const scene = drawingPanels(compiled.entries[compiled.reference.ref])[0]
+    .scene;
   const placement = scene.molecules[0];
   const compound = compiled.entries[placement.compound] as Compound;
   const coords =
@@ -113,25 +123,42 @@ test("route electron events align reacting fragments after depiction", async () 
   const compiled = await compileFigure({
     kind: "scheme",
     changes: "off",
-    compounds: {
+    states: {
       event: {
-        smiles: "[CH2:1]=[C:2](OC)[CH:5]=[CH2:6].[CH2:7]=[CH:8]C#N",
-        arrows: [
-          { from: "pi(1,2)", to: "between(1,7)" },
-          { from: "pi(5,6)", to: "bond(2,5)" },
-          { from: "pi(7,8)", to: "between(8,6)" },
-        ],
+        compounds: {
+          structure: {
+            label: "event",
+            smiles: "[CH2:1]=[C:2](OC)[CH:5]=[CH2:6].[CH2:7]=[CH:8]C#N",
+            arrows: [
+              { from: "pi(1,2)", to: "between(1,7)" },
+              { from: "pi(5,6)", to: "bond(2,5)" },
+              { from: "pi(7,8)", to: "between(8,6)" },
+            ],
+          },
+        },
       },
-      product: "CCO",
-      final: "CC=O",
+      product: {
+        compounds: { structure: { label: "product", smiles: "CCO" } },
+      },
+      final: { compounds: { structure: { label: "final", smiles: "CC=O" } } },
     },
-    steps: [
-      { from: "event", to: "product" },
-      { from: "product", to: "final" },
-    ],
+    arrows: {
+      "1": {
+        from: [{ state: "event", id: "event" }],
+        to: [{ state: "product", id: "product-product" }],
+        kind: "forward",
+        role: "reaction",
+      },
+      "2": {
+        from: [{ state: "product", id: "product" }],
+        to: [{ state: "final", id: "product-final" }],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
   });
-  const route = compiled.entries[compiled.reference.ref] as Route;
-  const scene = (compiled.entries[route.steps[0].reaction] as Reaction).scene;
+  const route = figureEntry(compiled.entries[compiled.reference.ref]);
+  const scene = arrowAt(route, 0).drawing.scene;
   const placement = scene.molecules.find((m) => m.id === "event")!;
   const compound = compiled.entries[placement.compound] as Compound;
   const coords = compound.variants![placement.variant!].coords;
@@ -149,20 +176,23 @@ test("route electron events align reacting fragments after depiction", async () 
 test("disconnected electron events keep each fragment's free orientation", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    frames: [
-      {
-        id: "event",
-        smiles: "[2H:1][CH2:2][C:3](=[O:4])C.[OH-:5]",
+    states: {
+      event: {
         arrows: [
           { from: "charge(5)", to: "atom(1)" },
           { from: "bond(1,2)", to: "bond(2,3)" },
           { from: "pi(3,4)", to: "atom(4)" },
         ],
+        compounds: {
+          structure: { smiles: "[2H:1][CH2:2][C:3](=[O:4])C.[OH-:5]" },
+        },
       },
-    ],
+    },
+    arrows: {},
+    views: { event: { items: ["event"] } },
   });
-  const placement = (compiled.entries[compiled.reference.ref] as Mechanism)
-    .frames[0].scene.molecules[0];
+  const placement = drawingPanels(compiled.entries[compiled.reference.ref])[0]
+    .scene.molecules[0];
   const compound = compiled.entries[placement.compound] as Compound;
   const coords = compound.variants![placement.variant!].coords;
   // chemfig.depict: the free carbonyl fragment has its C=O vertical, O above C.
@@ -173,20 +203,25 @@ test("disconnected electron events keep each fragment's free orientation", async
 test("mixed electron events straighten once after orienting their fragments", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    frames: [
-      {
-        id: "event",
-        smiles: "[Br:1][CH2:2]CCCC=C.[Sn:8](CCCC)(CCCC)CCCC |^1:7|",
+    states: {
+      event: {
         arrows: [
           { from: "radical(8)", to: "atom(1)", electrons: 1 },
           { from: "bond(1,2)", to: "atom(8)", electrons: 1 },
           { from: "bond(1,2)", to: "atom(2)", electrons: 1 },
         ],
+        compounds: {
+          structure: {
+            smiles: "[Br:1][CH2:2]CCCC=C.[Sn:8](CCCC)(CCCC)CCCC |^1:7|",
+          },
+        },
       },
-    ],
+    },
+    arrows: {},
+    views: { event: { items: ["event"] } },
   });
-  const placement = (compiled.entries[compiled.reference.ref] as Mechanism)
-    .frames[0].scene.molecules[0];
+  const placement = drawingPanels(compiled.entries[compiled.reference.ref])[0]
+    .scene.molecules[0];
   const compound = compiled.entries[placement.compound] as Compound;
   const coords = compound.variants![placement.variant!].coords;
   // Mapped Br-C direction from chemfig.depict, in one-bond units with y down.
@@ -198,20 +233,37 @@ test("structures and reactions without electron events share their free orientat
   const smiles = "[2H:1][CH2:2][C:3](=[O:4])C.[OH-:5]";
   let expected: Compound["layout"]["coords"] | undefined;
   for (const input of [
-    { kind: "scheme", frames: [{ id: "event", smiles }] },
     {
       kind: "scheme",
-      anchor: "event",
+      states: { event: { compounds: { structure: { smiles } } } },
+      arrows: {},
+      views: { event: { items: ["event"] } },
+    },
+    {
+      kind: "scheme",
       changes: "off",
-      compounds: { event: smiles, product: "CCO" },
-      steps: [{ from: "event", to: "product" }],
+      states: {
+        event: { compounds: { structure: { label: "event", smiles: smiles } } },
+        product: {
+          compounds: { structure: { label: "product", smiles: "CCO" } },
+        },
+      },
+      arrows: {
+        "1": {
+          from: [{ state: "event", id: "event" }],
+          to: [{ state: "product", id: "product-product" }],
+          kind: "forward",
+          role: "reaction",
+        },
+      },
+      layout: { anchor: "event" },
     },
   ]) {
     const compiled = await compileFigure(input);
-    const entry = compiled.entries[compiled.reference.ref] as
-      Mechanism | Reaction;
-    const scene =
-      entry.kind === "mechanism" ? entry.frames[0].scene : entry.scene;
+    const entry = compiled.entries[compiled.reference.ref];
+    const scene = drawnArrows(figureEntry(entry).graph).length
+      ? arrowAt(entry).drawing.scene
+      : drawingPanels(entry)[0].scene;
     const placement = scene.molecules[0];
     const compound = compiled.entries[placement.compound] as Compound;
     const coords = compound.variants![placement.variant!].coords;
@@ -223,18 +275,23 @@ test("structures and reactions without electron events share their free orientat
 test("polar fragment contacts retain the source donor and carbonyl direction", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    compounds: {
+    states: {
       event: {
-        smiles: "N#[C-:1].C[C:2](=[O:3])C",
-        arrows: [
-          { from: "lp(1)", to: "atom(2)" },
-          { from: "pi(2,3)", to: "atom(3)" },
-        ],
+        compounds: {
+          event: {
+            smiles: "N#[C-:1].C[C:2](=[O:3])C",
+            arrows: [
+              { from: "lp(1)", to: "atom(2)" },
+              { from: "pi(2,3)", to: "atom(3)" },
+            ],
+          },
+        },
       },
     },
+    arrows: {},
   });
-  const scene = (compiled.entries[compiled.reference.ref] as Mechanism)
-    .frames[0].scene;
+  const scene = drawingPanels(compiled.entries[compiled.reference.ref])[0]
+    .scene;
   const placement = scene.molecules[0],
     compound = compiled.entries[placement.compound] as Compound;
   const coords = compound.variants![placement.variant!].coords;
@@ -254,18 +311,23 @@ test("polar fragment contacts retain the source donor and carbonyl direction", a
 test("fragment depiction retains a linear charged electrophile", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    compounds: {
+    states: {
       event: {
-        smiles: "[CH2:1]=[CH2:2].[O:5]=[N+:3]=[O:4]",
-        arrows: [
-          { from: "pi(1,2)", to: "atom(3)" },
-          { from: "pi(3,4)", to: "atom(4)" },
-        ],
+        compounds: {
+          event: {
+            smiles: "[CH2:1]=[CH2:2].[O:5]=[N+:3]=[O:4]",
+            arrows: [
+              { from: "pi(1,2)", to: "atom(3)" },
+              { from: "pi(3,4)", to: "atom(4)" },
+            ],
+          },
+        },
       },
     },
+    arrows: {},
   });
-  const scene = (compiled.entries[compiled.reference.ref] as Mechanism)
-    .frames[0].scene;
+  const scene = drawingPanels(compiled.entries[compiled.reference.ref])[0]
+    .scene;
   const placement = scene.molecules[0],
     compound = compiled.entries[placement.compound] as Compound;
   const coords = compound.variants![placement.variant!].coords;
@@ -282,29 +344,42 @@ test("fragment depiction retains a linear charged electrophile", async () => {
 test("sequential electron frames inherit the reacting chain direction", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    frames: [
-      {
-        id: "first",
-        smiles: "[Br:1][CH2:2]CCCC=C.[Sn:8](CCCC)(CCCC)CCCC |^1:7|",
+    states: {
+      first: {
         arrows: [
           { from: "radical(8)", to: "atom(1)", electrons: 1 },
           { from: "bond(1,2)", to: "atom(8)", electrons: 1 },
           { from: "bond(1,2)", to: "atom(2)", electrons: 1 },
         ],
+        compounds: {
+          structure: {
+            smiles: "[Br:1][CH2:2]CCCC=C.[Sn:8](CCCC)(CCCC)CCCC |^1:7|",
+          },
+        },
       },
-      {
-        id: "second",
-        smiles: "[CH2:1]CCC[CH:5]=[CH2:6]",
+      second: {
         arrows: [
           { from: "radical(1)", to: "atom(5)" },
           { from: "pi(5,6)", to: "atom(1)", electrons: 1 },
           { from: "pi(5,6)", to: "atom(6)", electrons: 1 },
         ],
+        compounds: { structure: { smiles: "[CH2:1]CCC[CH:5]=[CH2:6]" } },
       },
-    ],
+    },
+    arrows: {
+      ["next-" + "first"]: {
+        from: "first",
+        to: "second",
+        kind: "forward",
+        role: "elementary",
+      },
+    },
+    views: {
+      first: { items: ["first"], arrows: ["next-" + "first"] },
+      second: { items: ["second"] },
+    },
   });
-  const frame = (compiled.entries[compiled.reference.ref] as Mechanism)
-    .frames[1];
+  const frame = drawingPanels(compiled.entries[compiled.reference.ref])[1];
   const placement = frame.scene.molecules[0],
     compound = compiled.entries[placement.compound] as Compound;
   const coords = compound.variants![placement.variant!].coords;
@@ -314,17 +389,28 @@ test("sequential electron frames inherit the reacting chain direction", async ()
 test("inter-frame arrows center on the complete reacting fragments", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    frames: [
-      {
-        id: "first",
-        smiles: "[O-:1].[CH2:2]=[O:3]",
+    states: {
+      first: {
         arrows: [{ from: "lp(1)", to: "atom(2)" }],
+        compounds: { structure: { smiles: "[O-:1].[CH2:2]=[O:3]" } },
       },
-      { id: "second", smiles: "OCCO" },
-    ],
+      second: { compounds: { structure: { smiles: "OCCO" } } },
+    },
+    arrows: {
+      ["next-" + "first"]: {
+        from: "first",
+        to: "second",
+        kind: "forward",
+        role: "elementary",
+      },
+    },
+    views: {
+      first: { items: ["first"], arrows: ["next-" + "first"] },
+      second: { items: ["second"] },
+    },
   });
-  const scene = (compiled.entries[compiled.reference.ref] as Mechanism)
-    .frames[0].scene;
+  const scene = drawingPanels(compiled.entries[compiled.reference.ref])[0]
+    .scene;
   const placement = scene.molecules[0],
     compound = compiled.entries[placement.compound] as Compound;
   const coords = Object.values(compound.variants![placement.variant!].coords);
@@ -340,20 +426,39 @@ test("inter-frame arrows center on the complete reacting fragments", async () =>
 test("condensed reacting groups retain the source orientation across frames", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    frames: [
-      {
-        id: "first",
-        smiles: "CC(C)([O-:3])C#N.[H:4][O+:5]([H])[H]",
-        abbreviations: ["CN"],
+    states: {
+      first: {
         arrows: [
           { from: "lp(3)", to: "atom(4)" },
           { from: "bond(4,5)", to: "atom(5)" },
         ],
+        compounds: {
+          structure: {
+            smiles: "CC(C)([O-:3])C#N.[H:4][O+:5]([H])[H]",
+            abbreviations: ["CN"],
+          },
+        },
       },
-      { id: "second", smiles: "CC(C)(O)C#N", abbreviations: ["CN"] },
-    ],
+      second: {
+        compounds: {
+          structure: { smiles: "CC(C)(O)C#N", abbreviations: ["CN"] },
+        },
+      },
+    },
+    arrows: {
+      ["next-" + "first"]: {
+        from: "first",
+        to: "second",
+        kind: "forward",
+        role: "elementary",
+      },
+    },
+    views: {
+      first: { items: ["first"], arrows: ["next-" + "first"] },
+      second: { items: ["second"] },
+    },
   });
-  const frames = (compiled.entries[compiled.reference.ref] as Mechanism).frames;
+  const frames = drawingPanels(compiled.entries[compiled.reference.ref]);
   for (const frame of frames) {
     const placement = frame.scene.molecules[0],
       compound = compiled.entries[placement.compound] as Compound;
@@ -369,16 +474,21 @@ test("ring stereocentre hydrogens participate before depicting a reacting mixtur
   const compiled = await compileFigure({
     kind: "scheme",
     coordgen: true,
-    frames: [
-      {
-        id: "event",
-        smiles: "C=C1CC[CH:1]=[C:2](C)CC[C@@H]2[C@H]1CC2(C)C.[H+:3]",
+    states: {
+      event: {
         arrows: [{ from: "pi(1,2)", to: "atom(3)" }],
+        compounds: {
+          structure: {
+            smiles: "C=C1CC[CH:1]=[C:2](C)CC[C@@H]2[C@H]1CC2(C)C.[H+:3]",
+          },
+        },
       },
-    ],
+    },
+    arrows: {},
+    views: { event: { items: ["event"] } },
   });
-  const scene = (compiled.entries[compiled.reference.ref] as Mechanism)
-    .frames[0].scene;
+  const scene = drawingPanels(compiled.entries[compiled.reference.ref])[0]
+    .scene;
   const placement = scene.molecules[0],
     compound = compiled.entries[placement.compound] as Compound;
   const coords = compound.variants![placement.variant!].coords;
@@ -392,23 +502,44 @@ test("ring stereocentre hydrogens participate before depicting a reacting mixtur
 test("electron-event routes retain the chemistry of their unannotated anchor", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    anchor: "start",
     changes: "off",
-    compounds: {
-      start: { smiles: "CC#N", abbreviate: false },
-      event: {
-        smiles: "[O-:1].[CH2:2]=[O:3]",
-        arrows: [{ from: "lp(1)", to: "atom(2)" }],
+    states: {
+      start: {
+        compounds: {
+          structure: { label: "start", smiles: "CC#N", abbreviate: false },
+        },
       },
-      product: "CC(O)C#N",
+      event: {
+        compounds: {
+          structure: {
+            label: "event",
+            smiles: "[O-:1].[CH2:2]=[O:3]",
+            arrows: [{ from: "lp(1)", to: "atom(2)" }],
+          },
+        },
+      },
+      product: {
+        compounds: { structure: { label: "product", smiles: "CC(O)C#N" } },
+      },
     },
-    steps: [
-      { from: "start", to: "event" },
-      { from: "event", to: "product" },
-    ],
+    arrows: {
+      "1": {
+        from: [{ state: "start", id: "start" }],
+        to: [{ state: "event", id: "product-event" }],
+        kind: "forward",
+        role: "reaction",
+      },
+      "2": {
+        from: [{ state: "event", id: "event" }],
+        to: [{ state: "product", id: "product-product" }],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
+    layout: { anchor: "start" },
   });
-  const route = compiled.entries[compiled.reference.ref] as Route;
-  const scene = (compiled.entries[route.steps[0].reaction] as Reaction).scene;
+  const route = figureEntry(compiled.entries[compiled.reference.ref]);
+  const scene = arrowAt(route, 0).drawing.scene;
   const placement = scene.molecules.find((m) => m.id === "start")!,
     compound = compiled.entries[placement.compound] as Compound;
   const coords = compound.variants![placement.variant!].coords;
@@ -425,51 +556,77 @@ test("electron-event routes retain the chemistry of their unannotated anchor", a
 test("step enclosures override structure defaults and empty selections clear one step", async () => {
   const compiled = await compileFigure({
     kind: "scheme",
-    compounds: {
-      a: "CCO",
-      b: { smiles: "[CH3:1][CH:2]=[O:3]", enclose: [{ atoms: [3] }] },
-      c: "CC(=O)O",
+    states: {
+      a: { compounds: { structure: { label: "a", smiles: "CCO" } } },
+      b: {
+        compounds: {
+          structure: {
+            label: "b",
+            smiles: "[CH3:1][CH:2]=[O:3]",
+            enclose: [{ atoms: [3] }],
+          },
+        },
+      },
+      c: { compounds: { structure: { label: "c", smiles: "CC(=O)O" } } },
     },
-    steps: [
-      { from: "a", to: "b", enclose: { b: [] } },
-      { from: "b", to: "c" },
-    ],
+    arrows: {
+      "1": {
+        from: [{ state: "a", id: "a" }],
+        to: [{ state: "b", id: "product-b" }],
+        kind: "forward",
+        role: "reaction",
+        enclose: { b: [] },
+      },
+      "2": {
+        from: [{ state: "b", id: "b" }],
+        to: [{ state: "c", id: "product-c" }],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
   });
-  const route = compiled.entries[compiled.reference.ref] as Route;
-  const first = compiled.entries[route.steps[0].reaction] as Reaction;
-  const second = compiled.entries[route.steps[1].reaction] as Reaction;
-  assert.equal(first.scene.enclose, undefined);
-  assert.deepEqual(second.scene.enclose?.[0].atoms, [
-    { molecule: second.reactants[0].id, atom: "a3" },
+  const route = figureEntry(compiled.entries[compiled.reference.ref]);
+  const first = arrowAt(route, 0);
+  const second = arrowAt(route, 1);
+  assert.equal(first.drawing.scene.enclose, undefined);
+  assert.deepEqual(second.drawing.scene.enclose?.[0].atoms, [
+    { molecule: appearances(second.from)[0].id, atom: "a3" },
   ]);
   assert.deepEqual(compiled.warnings, []);
 });
 
 test("route YAML compiles linear, convergent and divergent step graphs", async () => {
+  const arcs = (route: ReturnType<typeof figureEntry>) => {
+    const edges = Object.values(route.graph.arrows);
+    const products = new Set(
+      edges.flatMap((arrow) => arrow.to.map((p) => p.state)),
+    );
+    return edges.flatMap((arrow) =>
+      arrow.from.filter((p) => products.has(p.state)),
+    ).length;
+  };
   for (const [name, edges, length] of [
     ["linear", 2, 3],
     ["convergent", 2, 2],
     ["branched", 2, 2],
   ] as const) {
     const r = await compileFigure(await fixture(name)),
-      route = r.entries[r.reference.ref] as Route;
-    assert.equal(route.kind, "route");
-    assert.equal(route.edges.length, edges);
-    assert.equal(routeMetrics(route, r.entries).longestLinearSteps, length);
-    assert.equal(route.steps.length, 3);
-    for (const step of route.steps)
-      assert.equal(r.entries[step.reaction].owner, route.id);
+      route = figureEntry(r.entries[r.reference.ref]);
+    assert.equal(route.kind, "figure");
+    assert.equal(arcs(route), edges);
+    assert.equal(figureRouteMetrics(route).longestLinearSteps, length);
+    assert.equal(drawnArrows(route.graph).length, 3);
     assert.deepEqual(
       (await compileFigure(await fixture(name), r.entries)).entries,
       r.entries,
     );
   }
   const input = await fixture("convergent");
-  input.steps[0].others = "text";
+  input.arrows.join.others = "text";
   const r = await compileFigure(input),
-    route = r.entries[r.reference.ref] as Route;
-  assert.equal(route.edges.length, 2);
-  assert.equal(routeMetrics(route, r.entries).longestLinearSteps, 2);
+    route = figureEntry(r.entries[r.reference.ref]);
+  assert.equal(arcs(route), 2);
+  assert.equal(figureRouteMetrics(route).longestLinearSteps, 2);
 });
 
 test("chemical identity ignores source maps and labels, retaining stereo, isotope, charge and salt", async () => {
@@ -482,18 +639,19 @@ test("chemical identity ignores source maps and labels, retaining stereo, isotop
   });
   const input = {
     kind: "scheme",
-    frames: [
-      {
-        id: "first",
-        smiles: "[OH:9][CH2:8][CH3:7]",
+    states: {
+      first: {
         arrows: [{ id: "lp", from: "lp(9)", to: "atom(8)" }],
+        compounds: { structure: { smiles: "[OH:9][CH2:8][CH3:7]" } },
       },
-    ],
+    },
+    arrows: {},
+    views: { first: { items: ["first"] } },
   };
   const r = await compileFigure(input, { [saved.id]: saved }),
-    m = r.entries[r.reference.ref] as Mechanism;
-  assert.equal(m.frames[0].scene.molecules[0].compound, saved.id);
-  assert.equal(m.frames[0].scene.labels![0].at.atom, "a23");
+    m = figureEntry(r.entries[r.reference.ref]);
+  assert.equal(drawingPanels(m)[0].scene.molecules[0].compound, saved.id);
+  assert.equal(drawingPanels(m)[0].scene.labels![0].at.atom, "a23");
   const retained = r.entries[saved.id] as Compound;
   assert.deepEqual(retained.atomIds, saved.atomIds);
   assert.equal(retained.graph, saved.graph);
@@ -501,11 +659,26 @@ test("chemical identity ignores source maps and labels, retaining stereo, isotop
   const route = await compileFigure(
     {
       kind: "scheme",
-      compounds: {
-        a: { smiles: "CCO", label: "A", name: "Local" },
-        b: "[CH3:4][CH2:5][OH:6]",
+      states: {
+        a: {
+          compounds: {
+            structure: { smiles: "CCO", label: "A", name: "Local" },
+          },
+        },
+        b: {
+          compounds: {
+            structure: { label: "b", smiles: "[CH3:4][CH2:5][OH:6]" },
+          },
+        },
       },
-      steps: [{ from: "a", to: "b" }],
+      arrows: {
+        "1": {
+          from: [{ state: "a", id: "a" }],
+          to: [{ state: "b", id: "product-b" }],
+          kind: "forward",
+          role: "reaction",
+        },
+      },
     },
     { [saved.id]: saved },
   );
@@ -514,7 +687,7 @@ test("chemical identity ignores source maps and labels, retaining stereo, isotop
     1,
   );
   assert.equal(
-    (route.entries[route.reference.ref] as Reaction).reactants[0].name,
+    appearances(arrowAt(route.entries[route.reference.ref]).from)[0].name,
     "Local",
   );
   const compounds = {
@@ -527,8 +700,20 @@ test("chemical identity ignores source maps and labels, retaining stereo, isotop
   };
   const distinct = await compileFigure({
     kind: "scheme",
-    compounds,
-    steps: [{ from: "a", to: ["b", "c", "d", "e", "f"] }],
+    states: Object.fromEntries(
+      Object.entries(compounds).map(([id, smiles]) => [
+        id,
+        { compounds: { structure: { smiles } } },
+      ]),
+    ),
+    arrows: {
+      expand: {
+        from: "a",
+        to: ["b", "c", "d", "e", "f"],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
   });
   assert.equal(
     Object.values(distinct.entries).filter((e) => e.kind === "compound").length,
@@ -548,20 +733,21 @@ test("explicit mapped hydrogens retain their endpoints beside an implicit-hydrog
   );
   const input = {
     kind: "scheme",
-    frames: [
-      {
-        id: "transfer",
-        smiles: "[H:10][OH:6].[OH-:9]",
+    states: {
+      transfer: {
         arrows: [
           { from: "lp(9)", to: "between(9,10)" },
           { from: "bond(6,10)", to: "atom(6)" },
         ],
+        compounds: { structure: { smiles: "[H:10][OH:6].[OH-:9]" } },
       },
-    ],
+    },
+    arrows: {},
+    views: { transfer: { items: ["transfer"] } },
   };
   const compiled = await compileFigure(input, { [implicit.id]: implicit });
-  const scene = (compiled.entries[compiled.reference.ref] as Mechanism)
-    .frames[0].scene;
+  const scene = drawingPanels(compiled.entries[compiled.reference.ref])[0]
+    .scene;
   const explicit = compiled.entries[scene.molecules[0].compound] as Compound;
   const layout = explicit.variants![scene.molecules[0].variant!];
   const view = compoundView(toolkit, explicit, layout);
@@ -579,8 +765,9 @@ test("explicit mapped hydrogens retain their endpoints beside an implicit-hydrog
     ),
   );
   const repeated = await compileFigure(input, compiled.entries);
-  const repeatedScene = (repeated.entries[repeated.reference.ref] as Mechanism)
-    .frames[0].scene;
+  const repeatedScene = drawingPanels(
+    repeated.entries[repeated.reference.ref],
+  )[0].scene;
   assert.equal(repeatedScene.molecules[0].compound, explicit.id);
   const { prepareFigure } = await import("../src/ui/library/prepare.ts");
   const { loadFigureStyle } = await import("../scripts/figure-route.ts");
@@ -599,8 +786,22 @@ test("explicit mapped hydrogens retain their endpoints beside an implicit-hydrog
 test("bracket abbreviations expand before graph deduplication", async () => {
   const r = await compileFigure({
     kind: "scheme",
-    compounds: { a: "CO[TBS]", b: "CO[Si](C)(C)C(C)(C)C" },
-    steps: [{ from: "a", to: "b" }],
+    states: {
+      a: { compounds: { structure: { label: "a", smiles: "CO[TBS]" } } },
+      b: {
+        compounds: {
+          structure: { label: "b", smiles: "CO[Si](C)(C)C(C)(C)C" },
+        },
+      },
+    },
+    arrows: {
+      "1": {
+        from: [{ state: "a", id: "a" }],
+        to: [{ state: "b", id: "product-b" }],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
   });
   const cs = Object.values(r.entries).filter(
     (e): e is Compound => e.kind === "compound",
@@ -610,8 +811,24 @@ test("bracket abbreviations expand before graph deduplication", async () => {
   assert.deepEqual(cs[0].layout.abbreviations, ["TBS"]);
   const ring = await compileFigure({
     kind: "scheme",
-    compounds: { a: "c1ccc(O[PMB])cc1", b: "c1ccc(OCc2ccc(OC)cc2)cc1" },
-    steps: [{ from: "a", to: "b" }],
+    states: {
+      a: {
+        compounds: { structure: { label: "a", smiles: "c1ccc(O[PMB])cc1" } },
+      },
+      b: {
+        compounds: {
+          structure: { label: "b", smiles: "c1ccc(OCc2ccc(OC)cc2)cc1" },
+        },
+      },
+    },
+    arrows: {
+      "1": {
+        from: [{ state: "a", id: "a" }],
+        to: [{ state: "b", id: "product-b" }],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
   });
   assert.equal(
     Object.values(ring.entries).filter((e) => e.kind === "compound").length,
@@ -621,15 +838,15 @@ test("bracket abbreviations expand before graph deduplication", async () => {
 
 test("reaction participants preserve product text and text-only reagents", async () => {
   const r = await compileFigure(await fixture("products")),
-    reaction = r.entries[r.reference.ref] as Reaction;
-  assert.equal(reaction.kind, "reaction");
-  assert.equal(reaction.arrow.kind, "equilibrium");
-  assert.equal(reaction.products[0].ratio, "45%");
-  assert.equal(reaction.products[1].yield, "82% combined");
-  assert.ok(reaction.reagents.includes("NH2OH"));
-  assert.equal(reaction.reactants.length, 1);
+    reaction = arrowAt(r.entries[r.reference.ref]);
+  assert.equal(reaction.role, "reaction");
+  assert.equal(reaction.kind, "equilibrium");
+  assert.equal(appearances(reaction.to)[0].ratio, "45%");
+  assert.equal(appearances(reaction.to)[1].yield, "82% combined");
+  assert.ok(reaction.drawing.reagents.includes("NH2OH"));
+  assert.equal(appearances(reaction.from).length, 1);
   assert.equal(
-    reaction.scene.captions?.filter((c) => c.text === "+").length,
+    reaction.drawing.scene.captions?.filter((c) => c.text === "+").length,
     1,
   );
   assert.deepEqual(
@@ -638,7 +855,7 @@ test("reaction participants preserve product text and text-only reagents", async
   );
 
   const rd = await moleculeToolkit();
-  for (const placement of reaction.scene.molecules) {
+  for (const placement of reaction.drawing.scene.molecules) {
     const compound = r.entries[placement.compound] as Compound;
     const layout = placement.variant
       ? compound.variants![placement.variant]
@@ -667,24 +884,45 @@ test("reaction participants preserve product text and text-only reagents", async
   for (const show of ["box", "text", "plus", "none"]) {
     const result = await compileFigure({
       kind: "scheme",
-      compounds: { a: "CCO", b: { smiles: "N", text: "Ammonia" }, c: "CCN" },
-      steps: [{ from: ["a", { id: "b", show }], to: "c" }],
+      states: {
+        a: { compounds: { structure: { label: "a", smiles: "CCO" } } },
+        b: {
+          compounds: {
+            structure: { label: "b", smiles: "N", text: "Ammonia" },
+          },
+        },
+        c: { compounds: { structure: { label: "c", smiles: "CCN" } } },
+      },
+      arrows: {
+        "1": {
+          from: [
+            { state: "a", id: "a" },
+            { state: "b", id: "b", show },
+          ],
+          to: [{ state: "c", id: "product-c" }],
+          kind: "forward",
+          role: "reaction",
+        },
+      },
     });
-    const reaction = result.entries[result.reference.ref] as Reaction;
+    const reaction = arrowAt(result.entries[result.reference.ref]);
     assert.equal(
-      reaction.scene.molecules.length,
+      reaction.drawing.scene.molecules.length,
       show === "box" || show === "plus" ? 3 : 2,
     );
-    assert.equal(reaction.reagents.includes("Ammonia"), show === "text");
+    assert.equal(
+      reaction.drawing.reagents.includes("Ammonia"),
+      show === "text",
+    );
   }
 });
 
 test("mechanism YAML preserves maps, arrow IDs and focus", async () => {
   const r = await compileFigure(await fixture("mechanism")),
-    m = r.entries[r.reference.ref] as Mechanism;
-  assert.equal(m.frames.length, 2);
-  assert.equal(m.maps?.length, 4);
-  const scene = m.frames[0].scene;
+    m = figureEntry(r.entries[r.reference.ref]);
+  assert.equal(drawingPanels(m).length, 2);
+  assert.equal(Object.values(m.graph.arrows)[0].map?.length, 4);
+  const scene = drawingPanels(m)[0].scene;
   assert.equal(scene.arrows![1].electrons, 1);
   assert.deepEqual(scene.focus, {
     primary: { arrows: ["main"] },
@@ -692,16 +930,19 @@ test("mechanism YAML preserves maps, arrow IDs and focus", async () => {
   });
   const aromatic = await compileFigure({
     kind: "scheme",
-    frames: [
-      {
-        id: "ring",
-        smiles: "[CH:1]1=[CH:2][CH:3]=[CH:4][CH:5]=[CH:6]1",
+    states: {
+      ring: {
         arrows: [{ id: "push", from: "pi(1,2)", to: "atom(2)" }],
+        compounds: {
+          structure: { smiles: "[CH:1]1=[CH:2][CH:3]=[CH:4][CH:5]=[CH:6]1" },
+        },
       },
-    ],
+    },
+    arrows: {},
+    views: { ring: { items: ["ring"] } },
   });
-  const ring = aromatic.entries[aromatic.reference.ref] as Mechanism,
-    placement = ring.frames[0].scene.molecules[0];
+  const ring = figureEntry(aromatic.entries[aromatic.reference.ref]),
+    placement = drawingPanels(ring)[0].scene.molecules[0];
   assert.ok(placement.variant);
   assert.ok(
     (aromatic.entries[placement.compound] as Compound).variants![
@@ -710,16 +951,34 @@ test("mechanism YAML preserves maps, arrow IDs and focus", async () => {
   );
   const same = await compileFigure({
     kind: "scheme",
-    frames: [
-      { id: "a", smiles: "[CH3:7][OH:8]" },
-      { id: "b", smiles: "[CH3:7][O-:8]" },
-    ],
+    states: {
+      a: { compounds: { structure: { smiles: "[CH3:7][OH:8]" } } },
+      b: { compounds: { structure: { smiles: "[CH3:7][O-:8]" } } },
+    },
+    arrows: {
+      ["next-" + "a"]: {
+        from: "a",
+        to: "b",
+        kind: "forward",
+        role: "elementary",
+      },
+    },
+    views: {
+      a: { items: ["a"], arrows: ["next-" + "a"] },
+      b: { items: ["b"] },
+    },
   });
-  assert.equal((same.entries[same.reference.ref] as Mechanism).maps?.length, 2);
+  assert.equal(
+    figureEntry(same.entries[same.reference.ref]).graph.arrows["next-a"].map
+      ?.length,
+    2,
+  );
   const comparison = await compileFigure(await fixture("comparison")),
-    cmp = comparison.entries[comparison.reference.ref] as Mechanism;
-  assert.equal(cmp.category, "comparison");
-  assert.equal(cmp.frames[0].scene.reactionArrows, undefined);
+    cmp = figureEntry(comparison.entries[comparison.reference.ref]);
+  assert.ok(
+    Object.values(cmp.graph.arrows).every(({ kind }) => kind === "none"),
+  );
+  assert.equal(drawingPanels(cmp)[0].scene.reactionArrows, undefined);
   for (const arrow of [
     "forward",
     "equilibrium",
@@ -729,45 +988,61 @@ test("mechanism YAML preserves maps, arrow IDs and focus", async () => {
   ]) {
     const r = await compileFigure({
       kind: "scheme",
-      compounds: { a: "CO", b: "C=O" },
-      steps: [{ from: "a", to: "b", arrow }],
+      states: {
+        a: { compounds: { structure: { label: "a", smiles: "CO" } } },
+        b: { compounds: { structure: { label: "b", smiles: "C=O" } } },
+      },
+      arrows: {
+        "1": {
+          from: [{ state: "a", id: "a" }],
+          to: [{ state: "b", id: "product-b" }],
+          kind: arrow,
+          role: "reaction",
+        },
+      },
     });
-    assert.equal((r.entries[r.reference.ref] as Reaction).arrow.kind, arrow);
+    assert.equal(arrowAt(r.entries[r.reference.ref]).drawing.arrow.kind, arrow);
   }
 });
 
 test("reaction sources preserve equivalents, mixture fractions, tags and reagent position", async () => {
   const input = {
     kind: "scheme",
-    compounds: { a: "CCO", b: "CC=O", c: "CC(=O)O" },
-    steps: [
-      {
+    states: {
+      a: { compounds: { structure: { label: "a", smiles: "CCO" } } },
+      b: { compounds: { structure: { label: "b", smiles: "CC=O" } } },
+      c: { compounds: { structure: { label: "c", smiles: "CC(=O)O" } } },
+    },
+    arrows: {
+      "1": {
+        from: [{ state: "a", id: "a", equivalents: 2 }],
+        to: [
+          { state: "b", id: "product-b", fraction: 0.45 },
+          { state: "c", id: "product-c", fraction: 0.55 },
+        ],
+        kind: "forward",
+        role: "reaction",
         title: "First step",
         sources: [
           { source: "unknown", locator: "step source", note: "Fixture" },
-        ],
-        from: [{ id: "a", equivalents: 2 }],
-        to: [
-          { id: "b", fraction: 0.45 },
-          { id: "c", fraction: 0.55 },
         ],
         tags: ["Oxidation"],
         reagentPosition: "below-arrow",
         above: "[O]",
       },
-    ],
+    },
   };
   const result = await compileFigure(input);
-  const reaction = result.entries[result.reference.ref] as Reaction;
-  assert.equal(reaction.reactants[0].equivalents, 2);
+  const reaction = arrowAt(result.entries[result.reference.ref]);
+  assert.equal(appearances(reaction.from)[0].equivalents, 2);
   assert.deepEqual(
-    reaction.products.map((p) => p.fraction),
+    appearances(reaction.to).map((p) => p.fraction),
     [0.45, 0.55],
   );
   assert.deepEqual(reaction.tags, ["Oxidation"]);
-  assert.equal(reaction.reagentPosition, "below-arrow");
+  assert.equal(reaction.drawing.reagentPosition, "below-arrow");
   assert.equal(reaction.title, "First step");
-  assert.deepEqual(reaction.sources, input.steps[0].sources);
+  assert.deepEqual(reaction.sources, input.arrows["1"].sources);
   assert.deepEqual(
     (await compileFigure(input, result.entries)).entries,
     result.entries,
@@ -777,8 +1052,18 @@ test("reaction sources preserve equivalents, mixture fractions, tags and reagent
 test("YAML boundary rejects unsupported style fields and validates deferred references", async () => {
   const input = {
     kind: "scheme",
-    compounds: { a: "CCO", b: "CC=O" },
-    steps: [{ from: "a", to: "b" }],
+    states: {
+      a: { compounds: { structure: { label: "a", smiles: "CCO" } } },
+      b: { compounds: { structure: { label: "b", smiles: "CC=O" } } },
+    },
+    arrows: {
+      "1": {
+        from: [{ state: "a", id: "a" }],
+        to: [{ state: "b", id: "product-b" }],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
   };
   for (const field of ["charges", "dots", "ring_h"])
     assert.throws(
@@ -787,38 +1072,38 @@ test("YAML boundary rejects unsupported style fields and validates deferred refe
     );
   const deferred = {
     kind: "scheme",
-    forming: true,
-    frames: [
-      {
-        id: "one",
-        smiles: "[CH3:1][OH:2]",
-        scale: 1.5,
-        enclose: [{ atoms: [1] }],
+    states: {
+      one: {
         arrows: [{ from: "lp(2)", to: "atom(1)", forming: true }],
+        enclose: [{ atoms: [1] }],
+        compounds: { structure: { smiles: "[CH3:1][OH:2]", scale: 1.5 } },
       },
-    ],
+    },
+    arrows: {},
+    views: { one: { items: ["one"] } },
   };
   const r = await compileFigure(deferred);
   assert.deepEqual(r.warnings, []);
   await assert.rejects(
     compileFigure({
       ...deferred,
-      frames: [{ ...deferred.frames[0], enclose: [{ atoms: [99] }] }],
+      states: { one: { ...deferred.states.one, enclose: [{ atoms: [99] }] } },
     }),
     /unknown atom/,
   );
   await assert.rejects(
     compileFigure({
       kind: "scheme",
-      frames: [
-        {
-          id: "a",
-          smiles: "[CH3:1][OH:2]",
+      states: {
+        a: {
           arrows: [{ from: "lp(99)", to: "atom(1)" }],
+          compounds: { structure: { smiles: "[CH3:1][OH:2]" } },
         },
-      ],
+      },
+      arrows: {},
+      views: { a: { items: ["a"] } },
     }),
-    /Unknown atom/,
+    /unknown atom/i,
   );
 });
 
@@ -838,7 +1123,7 @@ test("compilation stores source and stable entries, and recompilation writes no 
     id = stdout.trim().split("\n").at(-1)!;
   const scan = async () => {
     const files: Record<string, string> = {};
-    for (const dir of ["sources", "compounds", "reactions", "routes"]) {
+    for (const dir of ["sources", "compounds", "figures"]) {
       for (const name of await readdir(join(root, "library", dir))) {
         files[dir + "/" + name] = await readFile(
           join(root, "library", dir, name),
@@ -849,16 +1134,12 @@ test("compilation stores source and stable entries, and recompilation writes no 
     return files;
   };
   const before = await scan();
-  const first = parse(
-    before[
-      `reactions/${(parse(before[`routes/${id}.yaml`]) as Route).steps[0].reaction}.yaml`
-    ],
-  ) as Reaction;
-  assert.equal(first.scene.arrows, undefined);
-  assert.equal(first.scene.labels, undefined);
-  assert.equal(first.scene.focus, undefined);
+  const first = arrowAt(parse(before[`figures/${id}.yaml`]));
+  assert.equal(first.drawing.scene.arrows, undefined);
+  assert.equal(first.drawing.scene.labels, undefined);
+  assert.equal(first.drawing.scene.focus, undefined);
   assert.ok(
-    first.scene.molecules.every(
+    first.drawing.scene.molecules.every(
       (p) =>
         Number(p.at.x.toFixed(3)) === p.at.x &&
         Number(p.at.y.toFixed(3)) === p.at.y,
@@ -933,19 +1214,34 @@ test("shared intermediates draw their electron annotations once", async () => {
     { walkGeometry } = await import("../src/ui/library/geometry-walk.ts");
   const compiled = await compileFigure({
     kind: "scheme",
-    compounds: {
-      a: "CC(O)C",
+    states: {
+      a: { compounds: { structure: { label: "a", smiles: "CC(O)C" } } },
       b: {
-        smiles: "C[C:1](=[O:2])C",
-        arrows: [{ id: "push", from: "pi(1,2)", to: "atom(2)" }],
-        enclose: [{ id: "oxygen", atoms: [2] }],
+        compounds: {
+          structure: {
+            label: "b",
+            smiles: "C[C:1](=[O:2])C",
+            arrows: [{ id: "push", from: "pi(1,2)", to: "atom(2)" }],
+            enclose: [{ id: "oxygen", atoms: [2] }],
+          },
+        },
       },
-      c: "CC(O)C",
+      c: { compounds: { structure: { label: "c", smiles: "CC(O)C" } } },
     },
-    steps: [
-      { from: "a", to: "b" },
-      { from: "b", to: "c" },
-    ],
+    arrows: {
+      "1": {
+        from: [{ state: "a", id: "a" }],
+        to: [{ state: "b", id: "product-b" }],
+        kind: "forward",
+        role: "reaction",
+      },
+      "2": {
+        from: [{ state: "b", id: "b" }],
+        to: [{ state: "c", id: "product-c" }],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
   });
   const geometry = await prepareFigure(compiled.entries, compiled.reference, {
     toolkit: await moleculeToolkit(),
@@ -968,27 +1264,71 @@ test("route depiction propagates from its largest anchor independently of compou
     b: "CCOc1ccc(C=O)cc1",
     c: "CCOc1ccc(C(=O)OCCCCCCCC)cc1",
   };
-  const steps = [
-    { from: "a", to: "b" },
-    { from: "b", to: "c" },
-  ];
-  const forward = await compileFigure({ kind: "scheme", compounds, steps });
+  const arrows = {
+    "1": { from: "a", to: "b", kind: "forward", role: "reaction" },
+    "2": { from: "b", to: "c", kind: "forward", role: "reaction" },
+  };
+  const states = (order: [string, string][]) =>
+    Object.fromEntries(
+      order.map(([id, smiles]) => [
+        id,
+        { compounds: { structure: { smiles } } },
+      ]),
+    );
+  const forward = await compileFigure({
+    kind: "scheme",
+    states: states(Object.entries(compounds)),
+    arrows,
+  });
   const reverse = await compileFigure({
     kind: "scheme",
-    compounds: Object.fromEntries(Object.entries(compounds).reverse()),
-    steps,
+    states: states(Object.entries(compounds).reverse()),
+    arrows,
   });
   const layouts = (result: typeof forward) => {
-    const route = result.entries[result.reference.ref] as Route;
-    return route.steps.flatMap((s) => {
-      const reaction = result.entries[s.reaction] as Reaction;
-      return reaction.scene.molecules.map((p) => {
+    const route = figureEntry(result.entries[result.reference.ref]);
+    return drawnArrows(route.graph).flatMap(([, reaction]) => {
+      return reaction.drawing.scene.molecules.map((p) => {
         const c = result.entries[p.compound] as Compound;
         return p.variant ? c.variants![p.variant].coords : c.layout.coords;
       });
     });
   };
   assert.deepEqual(layouts(forward), layouts(reverse));
+
+  const route = figureEntry(forward.entries[forward.reference.ref]);
+  const { ref, variant } = route.graph.states.b.compounds!.structure;
+  const compound = forward.entries[ref] as Compound;
+  const edited = compound.variants![variant!];
+  edited.coords = Object.fromEntries(
+    Object.entries(edited.coords).map(([atom, { x, y }]) => [
+      atom,
+      { x: 0 - y, y: x },
+    ]),
+  );
+  const selected = await compileFigure(
+    {
+      kind: "scheme",
+      states: {
+        ...states(Object.entries(compounds)),
+        b: { compounds: { structure: { smiles: compounds.b, variant } } },
+      },
+      arrows,
+    },
+    forward.entries,
+  );
+  const updated = figureEntry(selected.entries[selected.reference.ref]);
+  const placements = drawnArrows(updated.graph).flatMap(([, arrow]) =>
+    arrow.drawing.scene.molecules.filter(
+      (molecule) => molecule.compound === ref,
+    ),
+  );
+  assert.equal(placements.length, 2);
+  assert.ok(placements.every((molecule) => molecule.variant === variant));
+  assert.deepEqual(
+    (selected.entries[ref] as Compound).variants![variant!].coords,
+    edited.coords,
+  );
 });
 
 test("figure substitutions preserve defaults and override one mapped instance", async () => {
@@ -1002,10 +1342,11 @@ test("figure substitutions preserve defaults and override one mapped instance", 
   ] as const) {
     const result = await compileFigure({
       kind: "scheme",
-      compounds: { a: { smiles, ...settings } },
+      states: { a: { compounds: { a: { smiles, ...settings } } } },
+      arrows: {},
     });
-    const gallery = result.entries[result.reference.ref] as Mechanism;
-    const placement = gallery.frames[0].scene.molecules[0];
+    const gallery = figureEntry(result.entries[result.reference.ref]);
+    const placement = drawingPanels(gallery)[0].scene.molecules[0];
     const compound = result.entries[placement.compound] as Compound;
     const layout = placement.variant
       ? compound.variants![placement.variant]
@@ -1040,11 +1381,26 @@ test("conditions retain reagent order and chemical digit typography", async () =
   assert.ok(azide.at(-1)!.shift < 0);
   const compiled = await compileFigure({
     kind: "scheme",
-    compounds: { a: "CCO", b: "CC=O", reagent: { text: "PhB(OH)2" } },
-    steps: [{ from: ["a", "reagent"], to: "b", above: "Pd(PPh3)4, K2CO3" }],
+    states: {
+      a: { compounds: { structure: { label: "a", smiles: "CCO" } } },
+      b: { compounds: { structure: { label: "b", smiles: "CC=O" } } },
+      reagent: { text: "PhB(OH)2" },
+    },
+    arrows: {
+      "1": {
+        from: [
+          { state: "a", id: "a" },
+          { state: "reagent", id: "reagent" },
+        ],
+        to: [{ state: "b", id: "product-b" }],
+        kind: "forward",
+        role: "reaction",
+        above: "Pd(PPh3)4, K2CO3",
+      },
+    },
   });
   assert.deepEqual(
-    (compiled.entries[compiled.reference.ref] as Reaction).reagents,
+    arrowAt(compiled.entries[compiled.reference.ref]).drawing.reagents,
     ["PhB(OH)2", "Pd(PPh3)4, K2CO3"],
   );
   const geometry = await prepareFigure(compiled.entries, compiled.reference, {
@@ -1070,55 +1426,38 @@ test("conditions retain reagent order and chemical digit typography", async () =
 test("recompilation preserves bound compound and participant identities", async () => {
   const input = await fixture("linear");
   const first = await compileFigure(input, {}, "saved");
-  const route = first.entries[first.reference.ref] as Route;
-  for (const step of route.steps) {
-    const reaction = first.entries[step.reaction] as Reaction;
-    for (const [role, participants] of [
-      ["input", reaction.reactants],
-      ["output", reaction.products],
-    ] as const) {
-      for (const [i, participant] of participants.entries()) {
-        reaction.scene.molecules.find((m) => m.id === participant.id)!.id =
-          `${role}${i + 1}`;
-        participant.id = `${role}${i + 1}`;
-      }
-    }
-  }
-  for (const edge of route.edges) {
-    edge.product = "output1";
-    edge.reactant = "input1";
-  }
+  const route = figureEntry(first.entries[first.reference.ref]);
   const compound = Object.values(first.entries).find(
     (entry): entry is Compound => entry.kind === "compound",
   )!;
   const duplicate = { ...structuredClone(compound), id: "cmp_duplicate" };
   const entries = { [duplicate.id]: duplicate, ...first.entries };
   const second = await compileFigure(input, entries, "saved");
-  const saved = second.entries[route.id] as Route;
+  const saved = figureEntry(second.entries[route.id]);
   assert.deepEqual(
-    saved.steps.map((s) => [s.id, s.reaction]),
-    route.steps.map((s) => [s.id, s.reaction]),
+    Object.keys(saved.graph.arrows),
+    Object.keys(route.graph.arrows),
   );
-  for (const step of saved.steps) {
-    const reaction = second.entries[step.reaction] as Reaction;
-    assert.equal(reaction.reactants[0].id, "input1");
-    assert.equal(reaction.products[0].id, "output1");
-    assert.equal(
-      reaction.reactants[0].compound,
-      (first.entries[step.reaction] as Reaction).reactants[0].compound,
-    );
-    assert.ok(reaction.reactants[0].compound !== duplicate.id);
-    assert.ok(step.display!.input1);
+  for (const [id, arrow] of drawnArrows(saved.graph)) {
+    assert.deepEqual(arrow.from, route.graph.arrows[id].from);
+    assert.deepEqual(arrow.to, route.graph.arrows[id].to);
+    assert.ok(appearances(arrow.from)[0].compound !== duplicate.id);
   }
   assert.deepEqual(
     (await compileFigure(input, second.entries, "saved")).entries,
     second.entries,
   );
-  const singleInput = { ...input, steps: input.steps.slice(0, 1) };
+  const singleInput = {
+    ...input,
+    arrows: Object.fromEntries(Object.entries(input.arrows).slice(0, 1)),
+  };
   const single = await compileFigure(singleInput, second.entries, "saved");
   assert.equal(single.reference.ref, route.id);
-  assert.equal(single.entries[route.id].kind, "route");
-  assert.equal((single.entries[route.id] as Route).steps.length, 1);
+  assert.equal(single.entries[route.id].kind, "figure");
+  assert.equal(
+    drawnArrows(figureEntry(single.entries[route.id]).graph).length,
+    1,
+  );
 });
 
 test("compiled reactions include boxed structures, placement brackets and styled footnotes", async () => {
@@ -1128,22 +1467,36 @@ test("compiled reactions include boxed structures, placement brackets and styled
   const { walkGeometry } = await import("../src/ui/library/geometry-walk.ts");
   const input = {
     kind: "scheme",
-    compounds: { a: { smiles: "CCO", bracket: "ts" }, b: "CC=O", c: "CBr" },
-    steps: [
-      {
-        from: ["a", "c"],
-        to: "b",
+    footnote: "^{a} t-BuOH, n-Hexane, 20 °C",
+    states: {
+      a: {
+        compounds: { structure: { label: "a", smiles: "CCO", bracket: "ts" } },
+      },
+      b: { compounds: { structure: { label: "b", smiles: "CC=O" } } },
+      c: { compounds: { structure: { label: "c", smiles: "CBr" } } },
+    },
+    arrows: {
+      "1": {
+        from: [
+          { state: "a", id: "a" },
+          { state: "c", id: "c" },
+        ],
+        to: [{ state: "b", id: "product-b" }],
+        kind: "forward",
+        role: "reaction",
         others: "box",
         above: "n-BuLi",
         below: "cis-isomer",
       },
-    ],
-    footnote: "^{a} t-BuOH, n-Hexane, 20 °C",
+    },
   };
   const compiled = await compileFigure(input),
-    reaction = compiled.entries[compiled.reference.ref] as Reaction;
-  assert.equal(reaction.scene.molecules[0].bracket, "ts");
-  assert.equal(reaction.footnote, input.footnote);
+    reaction = arrowAt(compiled.entries[compiled.reference.ref]);
+  assert.equal(reaction.drawing.scene.molecules[0].bracket, "ts");
+  assert.equal(
+    figureEntry(compiled.entries[compiled.reference.ref]).footnote,
+    input.footnote,
+  );
   const geometry = await prepareFigure(compiled.entries, compiled.reference, {
     toolkit: await moleculeToolkit(),
     fonts: await loadFigureFonts(),
@@ -1164,10 +1517,13 @@ test("compiled reactions include boxed structures, placement brackets and styled
     assert.ok(italic.includes(prefix), prefix);
   const vertical = await compileFigure({
     ...input,
-    steps: [{ ...input.steps[0], turn: "down" }],
+    arrows: { "1": { ...input.arrows["1"], turn: "down" } },
   });
-  const verticalReaction = vertical.entries[vertical.reference.ref] as Reaction;
-  assert.equal(verticalReaction.arrow.from.x, verticalReaction.arrow.to.x);
+  const verticalReaction = arrowAt(vertical.entries[vertical.reference.ref]);
+  assert.equal(
+    verticalReaction.drawing.arrow.from.x,
+    verticalReaction.drawing.arrow.to.x,
+  );
   const drawing = await prepareFigure(vertical.entries, vertical.reference, {
     toolkit: await moleculeToolkit(),
     fonts: await loadFigureFonts(),
@@ -1186,14 +1542,38 @@ test("compiled reactions include boxed structures, placement brackets and styled
 test("contracted CoordGen layouts retain the shared bond length", async () => {
   const result = await compileFigure({
     kind: "scheme",
-    compounds: {
-      a: { smiles: "N#CC1CCCCCCCCCCC1", coordgen: true, abbreviations: ["CN"] },
-      b: { smiles: "N#CC1CCCCCCCCCCC1", abbreviations: ["CN"] },
+    states: {
+      a: {
+        compounds: {
+          structure: {
+            label: "a",
+            smiles: "N#CC1CCCCCCCCCCC1",
+            coordgen: true,
+            abbreviations: ["CN"],
+          },
+        },
+      },
+      b: {
+        compounds: {
+          structure: {
+            label: "b",
+            smiles: "N#CC1CCCCCCCCCCC1",
+            abbreviations: ["CN"],
+          },
+        },
+      },
     },
-    steps: [{ from: "a", to: "b" }],
+    arrows: {
+      "1": {
+        from: [{ state: "a", id: "a" }],
+        to: [{ state: "b", id: "product-b" }],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
   });
-  const reaction = result.entries[result.reference.ref] as Reaction;
-  const placement = reaction.scene.molecules[0];
+  const reaction = arrowAt(result.entries[result.reference.ref]);
+  const placement = reaction.drawing.scene.molecules[0];
   const c = result.entries[placement.compound] as Compound;
   const layout = c.variants![placement.variant!];
   const mol = (await moleculeToolkit()).get_mol(c.smiles)!;
@@ -1215,21 +1595,32 @@ test("contracted CoordGen layouts retain the shared bond length", async () => {
 
 test("a mechanism rejects shortening an arrow-bearing group, while a reaction can abbreviate it", async () => {
   const smiles = "CCN[C:3](=[O:4])OC(C)(C)C";
-  const frame = {
-    id: "protonation",
-    smiles,
+  const state = {
+    compounds: { structure: { smiles } },
     arrows: [{ from: "lp(4)", to: "atom(4)" }],
   };
   await assert.rejects(
     compileFigure({
       kind: "scheme",
-      frames: [{ ...frame, abbreviations: ["Boc"] }],
+      states: {
+        protonation: {
+          ...state,
+          compounds: {
+            structure: { ...state.compounds.structure, abbreviations: ["Boc"] },
+          },
+        },
+      },
+      arrows: {},
     }),
-    /frames\.protonation\.abbreviations: Boc must be expanded at mechanism atom 4/,
+    /protonation.*Boc must be expanded.*atom 4/,
   );
-  const mechanism = await compileFigure({ kind: "scheme", frames: [frame] });
-  const entry = mechanism.entries[mechanism.reference.ref] as Mechanism;
-  const mechanismPlacement = entry.frames[0].scene.molecules[0];
+  const mechanism = await compileFigure({
+    kind: "scheme",
+    states: { protonation: state },
+    arrows: {},
+  });
+  const entry = figureEntry(mechanism.entries[mechanism.reference.ref]);
+  const mechanismPlacement = drawingPanels(entry)[0].scene.molecules[0];
   const mechanismCompound = mechanism.entries[
     mechanismPlacement.compound
   ] as Compound;
@@ -1244,14 +1635,25 @@ test("a mechanism rejects shortening an arrow-bearing group, while a reaction ca
 
   const result = await compileFigure({
     kind: "scheme",
-    compounds: {
-      a: { smiles, abbreviations: ["Boc"] },
-      b: "CCN",
+    states: {
+      a: {
+        compounds: {
+          structure: { label: "a", smiles, abbreviations: ["Boc"] },
+        },
+      },
+      b: { compounds: { structure: { label: "b", smiles: "CCN" } } },
     },
-    steps: [{ from: "a", to: "b" }],
+    arrows: {
+      "1": {
+        from: [{ state: "a", id: "a" }],
+        to: [{ state: "b", id: "product-b" }],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
   });
-  const reaction = result.entries[result.reference.ref] as Reaction;
-  const placement = reaction.scene.molecules[0];
+  const reaction = arrowAt(result.entries[result.reference.ref]);
+  const placement = reaction.drawing.scene.molecules[0];
   const compound = result.entries[placement.compound] as Compound;
   const layout = compound.variants![placement.variant!];
   assert.deepEqual(
@@ -1266,24 +1668,41 @@ test("a shared substituent keeps its direction when a ring bond is reduced", asy
   const result = await compileFigure({
     kind: "scheme",
     coordgen: true,
-    anchor: "a",
-    compounds: {
+    states: {
       a: {
-        smiles: "COC(=O)C1=CC[C@]2([H])CCN(C(C)=O)[C@@]12[H]",
-        abbreviations: ["CO₂Me", "Ac"],
+        compounds: {
+          structure: {
+            label: "a",
+            smiles: "COC(=O)C1=CC[C@]2([H])CCN(C(C)=O)[C@@]12[H]",
+            abbreviations: ["CO₂Me", "Ac"],
+          },
+        },
       },
       b: {
-        smiles: "COC(=O)[C@]1([H])CC[C@]2([H])CCN(C(C)=O)[C@@]12[H]",
-        abbreviations: ["CO₂Me", "Ac"],
+        compounds: {
+          structure: {
+            label: "b",
+            smiles: "COC(=O)[C@]1([H])CC[C@]2([H])CCN(C(C)=O)[C@@]12[H]",
+            abbreviations: ["CO₂Me", "Ac"],
+          },
+        },
       },
     },
-    steps: [{ from: "a", to: "b" }],
+    arrows: {
+      "1": {
+        from: [{ state: "a", id: "a" }],
+        to: [{ state: "b", id: "product-b" }],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
+    layout: { anchor: "a" },
   });
   const toolkit = await moleculeToolkit(),
-    reaction = result.entries[result.reference.ref] as Reaction,
+    reaction = arrowAt(result.entries[result.reference.ref]),
     query = toolkit.get_qmol("*C(=O)OC")!;
   try {
-    const vectors = reaction.scene.molecules.map((p) => {
+    const vectors = reaction.drawing.scene.molecules.map((p) => {
       const c = result.entries[p.compound] as Compound,
         layout = c.variants![p.variant!],
         mol = toolkit.get_mol(c.smiles)!;
@@ -1313,8 +1732,26 @@ test("CXSMILES repeat units retain their brackets and multiplier", async () => {
     { walkGeometry } = await import("../src/ui/library/geometry-walk.ts");
   const result = await compileFigure({
     kind: "scheme",
-    compounds: { a: "CCCOCC |Sg:n:2:n:ht|", b: "CCCOC=O |Sg:n:2:n:ht|" },
-    steps: [{ from: "a", to: "b" }],
+    states: {
+      a: {
+        compounds: {
+          structure: { label: "a", smiles: "CCCOCC |Sg:n:2:n:ht|" },
+        },
+      },
+      b: {
+        compounds: {
+          structure: { label: "b", smiles: "CCCOC=O |Sg:n:2:n:ht|" },
+        },
+      },
+    },
+    arrows: {
+      "1": {
+        from: [{ state: "a", id: "a" }],
+        to: [{ state: "b", id: "product-b" }],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
   });
   const geometry = await prepareFigure(result.entries, result.reference, {
     toolkit: await moleculeToolkit(),
@@ -1339,11 +1776,23 @@ test("CXSMILES repeat units retain their brackets and multiplier", async () => {
 test("an authored structure scale enlarges saved bond geometry", async () => {
   const result = await compileFigure({
     kind: "scheme",
-    compounds: { a: { smiles: "CCO", scale: 1.45 }, b: "CC=O" },
-    steps: [{ from: "a", to: "b" }],
+    states: {
+      a: {
+        compounds: { structure: { label: "a", smiles: "CCO", scale: 1.45 } },
+      },
+      b: { compounds: { structure: { label: "b", smiles: "CC=O" } } },
+    },
+    arrows: {
+      "1": {
+        from: [{ state: "a", id: "a" }],
+        to: [{ state: "b", id: "product-b" }],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
   });
-  const reaction = result.entries[result.reference.ref] as Reaction,
-    p = reaction.scene.molecules[0],
+  const reaction = arrowAt(result.entries[result.reference.ref]),
+    p = reaction.drawing.scene.molecules[0],
     c = result.entries[p.compound] as Compound,
     coords = c.variants![p.variant!].coords;
   const a = coords[c.atomIds[0]],
@@ -1357,9 +1806,19 @@ test("positive authored rotation turns counterclockwise and propagates from the 
     { figureStyle } = await import("./fixtures/figures/style.ts");
   const input = {
     kind: "scheme",
-    anchor: "a",
-    compounds: { a: { smiles: "CC(O)C=O" }, b: "CC(O)C=O" },
-    steps: [{ from: "a", to: "b" }],
+    states: {
+      a: { compounds: { structure: { label: "a", smiles: "CC(O)C=O" } } },
+      b: { compounds: { structure: { label: "b", smiles: "CC(O)C=O" } } },
+    },
+    arrows: {
+      "1": {
+        from: [{ state: "a", id: "a" }],
+        to: [{ state: "b", id: "product-b" }],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
+    layout: { anchor: "a" },
   };
   const fonts = await loadFigureFonts(),
     toolkit = await moleculeToolkit();
@@ -1367,22 +1826,29 @@ test("positive authored rotation turns counterclockwise and propagates from the 
     result: Awaited<ReturnType<typeof compileFigure>>,
     role: "reactants" | "products",
   ) => {
-    const r = result.entries[result.reference.ref] as Reaction,
-      p = r[role][0],
+    const r = arrowAt(result.entries[result.reference.ref]),
+      p = appearances(role === "reactants" ? r.from : r.to)[0],
       c = result.entries[p.compound] as Compound;
     const g = await prepareFigure(result.entries, result.reference, {
       toolkit,
       fonts,
       style: figureStyle,
     });
-    const a = g.atomPoints[p.id + ":" + c.atomIds[0]],
-      b = g.atomPoints[p.id + ":" + c.atomIds[2]];
+    const a = g.atomPoints["1/" + p.id + ":" + c.atomIds[0]],
+      b = g.atomPoints["1/" + p.id + ":" + c.atomIds[2]];
     return { x: b.x - a.x, y: b.y - a.y };
   };
   const base = await compileFigure(input),
     rotated = await compileFigure({
       ...input,
-      compounds: { ...input.compounds, a: { ...input.compounds.a, rot: 90 } },
+      states: {
+        ...input.states,
+        a: {
+          compounds: {
+            structure: { ...input.states.a.compounds.structure, rot: 90 },
+          },
+        },
+      },
     });
   const original = await vector(base, "reactants"),
     actual = await vector(rotated, "reactants"),
@@ -1400,11 +1866,26 @@ test("authored atom maps render as native atom numbers", async () => {
     { walkGeometry } = await import("../src/ui/library/geometry-walk.ts");
   const result = await compileFigure({
     kind: "scheme",
-    compounds: {
-      a: { smiles: "[CH3:7][CH:14]([OH:21])C=O", numbers: true },
-      b: "CC(O)C=O",
+    states: {
+      a: {
+        compounds: {
+          structure: {
+            label: "a",
+            smiles: "[CH3:7][CH:14]([OH:21])C=O",
+            numbers: true,
+          },
+        },
+      },
+      b: { compounds: { structure: { label: "b", smiles: "CC(O)C=O" } } },
     },
-    steps: [{ from: "a", to: "b" }],
+    arrows: {
+      "1": {
+        from: [{ state: "a", id: "a" }],
+        to: [{ state: "b", id: "product-b" }],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
   });
   const g = await prepareFigure(result.entries, result.reference, {
     toolkit: await moleculeToolkit(),
@@ -1434,8 +1915,24 @@ test("new depictions place charge markers for their new bond directions", async 
   const input = {
     kind: "scheme",
     title: "Charged transformation",
-    compounds: { a: "COC(=O)c1cccnc1", b: "COC(=O)c1ccc[n+](C)c1" },
-    steps: [{ from: "a", to: "b" }],
+    states: {
+      a: {
+        compounds: { structure: { label: "a", smiles: "COC(=O)c1cccnc1" } },
+      },
+      b: {
+        compounds: {
+          structure: { label: "b", smiles: "COC(=O)c1ccc[n+](C)c1" },
+        },
+      },
+    },
+    arrows: {
+      "1": {
+        from: [{ state: "a", id: "a" }],
+        to: [{ state: "b", id: "product-b" }],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
   };
   const first = await compileFigure(input);
   const rd = await moleculeToolkit();
@@ -1468,20 +1965,21 @@ test("new depictions place charge markers for their new bond directions", async 
 test("schemes with compounds save grouped panels and grids with ordered labels", async () => {
   const input = {
     kind: "scheme",
-    compounds: {
-      a: { smiles: "CCO", yield: "80%", note: "1 h" },
-      b: { smiles: "CCCO", label: "**B**", yield: "72%" },
-      c: "CC(C)O",
+    states: {
+      a: { compounds: { a: { smiles: "CCO", yield: "80%", note: "1 h" } } },
+      b: { compounds: { b: { smiles: "CCCO", label: "**B**", yield: "72%" } } },
+      c: { compounds: { c: "CC(C)O" } },
     },
-    groups: [
-      { title: "First group", items: ["b", "a"] },
-      { subtitle: "Second group", items: ["c"] },
-    ],
+    arrows: {},
+    groups: {
+      group1: { title: "First group", items: ["b", "a"] },
+      group2: { subtitle: "Second group", items: ["c"] },
+    },
   };
   const result = await compileFigure(input, {}, "scope");
-  const entry = result.entries[result.reference.ref] as Mechanism;
-  const scene = entry.frames[0].scene;
-  assert.equal(entry.category, "examples");
+  const entry = figureEntry(result.entries[result.reference.ref]);
+  const scene = drawingPanels(entry)[0].scene;
+  assert.equal(Object.keys(entry.graph.groups ?? {}).length, 2);
   assert.deepEqual(
     scene.molecules.map((m) => m.id),
     ["b", "a", "c"],
@@ -1495,45 +1993,109 @@ test("schemes with compounds save grouped panels and grids with ordered labels",
   );
   const gallery = await compileFigure({
     kind: "scheme",
-    cols: 2,
-    compounds: input.compounds,
+    layout: { cols: 2 },
+    states: input.states,
+    arrows: {},
   });
-  const grid = (gallery.entries[gallery.reference.ref] as Mechanism).frames[0]
-    .scene;
+  const grid = drawingPanels(gallery.entries[gallery.reference.ref])[0].scene;
   assert.deepEqual(
     grid.molecules.map((m) => m.id),
     ["a", "b", "c"],
   );
   assert.ok(grid.molecules[2].at.y > grid.molecules[0].at.y);
+  const comparison = await compileFigure({
+    kind: "scheme",
+    states: {
+      sideBySide: {
+        title: "Comparison",
+        tone: "comparison",
+        compounds: {
+          a: { smiles: "[CH3:1]O", label: "A" },
+          b: { smiles: "CCO", label: "B" },
+        },
+        labels: [
+          {
+            id: "note",
+            at: "a:1",
+            kind: "text",
+            text: "C",
+            offset: { x: -1, y: 0.5 },
+          },
+        ],
+      },
+    },
+    arrows: {},
+  });
+  const panel = drawingPanels(comparison.entries[comparison.reference.ref])[0]
+    .scene;
+  assert.deepEqual(
+    panel.captions?.map(({ text }) => text),
+    ["**A**", "**B**"],
+  );
+  assert.deepEqual(panel.labels?.find(({ id }) => id === "note")?.offset, {
+    x: -1,
+    y: 0.5,
+  });
   const defaults = await compileFigure({
     kind: "scheme",
-    compounds: { a: "CCO", b: "CCCO", c: "CC(C)O", d: "CCF", e: "CCCl" },
+    states: {
+      a: { compounds: { a: "CCO" } },
+      b: { compounds: { b: "CCCO" } },
+      c: { compounds: { c: "CC(C)O" } },
+      d: { compounds: { d: "CCF" } },
+      e: { compounds: { e: "CCCl" } },
+    },
+    arrows: {},
   });
-  const molecules = (defaults.entries[defaults.reference.ref] as Mechanism)
-    .frames[0].scene.molecules;
+  const molecules = drawingPanels(defaults.entries[defaults.reference.ref])[0]
+    .scene.molecules;
   assert.ok(molecules[3].at.x > molecules[2].at.x);
   assert.ok(molecules[4].at.x < molecules[3].at.x);
   assert.ok(molecules[4].at.y > molecules[3].at.y);
-  assert.throws(
-    () => validateFigureInput({ ...input, groups: [{ items: ["missing"] }] }),
-    /unknown compound/,
+  await assert.rejects(
+    compileFigure({ ...input, groups: { extra: { items: ["missing"] } } }),
+    /unknown|undefined/i,
   );
 });
 
 test("cycle YAML saves clockwise closed steps with incoming and outgoing branches", async () => {
   const input = {
-    kind: "cycle",
-    nodes: ["A", { smiles: "CCO", label: "B" }, "C", "D"],
-    steps: [
-      { in: "X", out: "Y", label: "Exchange" },
-      {},
-      { out: "Z" },
-      { in: "W" },
-    ],
+    kind: "scheme",
+    states: {
+      "1": { text: "A" },
+      "2": { compounds: { "2": { smiles: "CCO", label: "B" } } },
+      "3": { text: "C" },
+      "4": { text: "D" },
+    },
+    arrows: {
+      "step-1": {
+        from: "1",
+        to: "2",
+        role: "elementary",
+        kind: "forward",
+        in: "X",
+        out: "Y",
+        title: "Exchange",
+      },
+      "step-2": { from: "2", to: "3", role: "elementary", kind: "forward" },
+      "step-3": {
+        from: "3",
+        to: "4",
+        role: "elementary",
+        kind: "forward",
+        out: "Z",
+      },
+      "step-4": {
+        from: "4",
+        to: "1",
+        role: "elementary",
+        kind: "forward",
+        in: "W",
+      },
+    },
   };
   const result = await compileFigure(input, {}, "cycle");
-  const scene = (result.entries[result.reference.ref] as Mechanism).frames[0]
-    .scene;
+  const scene = drawingPanels(result.entries[result.reference.ref])[0].scene;
   const arrows = scene.reactionArrows!;
   assert.deepEqual(
     arrows.filter((a) => a.id.startsWith("step-")).map((a) => a.id),
@@ -1558,17 +2120,22 @@ test("cycle YAML saves clockwise closed steps with incoming and outgoing branche
     result.entries,
   );
   assert.throws(
-    () => validateFigureInput({ ...input, steps: [{}] }),
-    /one step per species/,
+    () => validateFigureInput({ ...input, arrows: { incomplete: {} } }),
+    /from/,
   );
 });
 
 test("gallery line spacing includes superscripts and subscripts in adjacent captions", async () => {
   const result = await compileFigure({
     kind: "scheme",
-    compounds: {
-      a: { smiles: "CCO", yield: "46% yield^b,e", note: "**Me3N**\n1 h" },
+    states: {
+      a: {
+        compounds: {
+          a: { smiles: "CCO", yield: "46% yield^b,e", note: "**Me3N**\n1 h" },
+        },
+      },
     },
+    arrows: {},
   });
   const { prepareFigure } = await import("../src/ui/library/prepare.ts");
   const { loadFigureStyle } = await import("../scripts/figure-route.ts");
@@ -1587,26 +2154,47 @@ test("a route inherits the core after an electron event places its fragments", a
   const compiled = await compileFigure({
     kind: "scheme",
     changes: "off",
-    compounds: {
-      precursor: "CCC=C",
-      event: {
-        smiles: "[CH3:1][C:2](=[O:3])[CH3:4].[CH3:5][CH2:6][CH:7]=[CH2:8]",
-        arrows: [
-          { from: "pi(7,8)", to: "between(8,2)" },
-          { from: "pi(2,3)", to: "atom(3)" },
-        ],
+    states: {
+      precursor: {
+        compounds: { structure: { label: "precursor", smiles: "CCC=C" } },
       },
-      product: "C=CCCC",
+      event: {
+        compounds: {
+          structure: {
+            label: "event",
+            smiles: "[CH3:1][C:2](=[O:3])[CH3:4].[CH3:5][CH2:6][CH:7]=[CH2:8]",
+            arrows: [
+              { from: "pi(7,8)", to: "between(8,2)" },
+              { from: "pi(2,3)", to: "atom(3)" },
+            ],
+          },
+        },
+      },
+      product: {
+        compounds: { structure: { label: "product", smiles: "C=CCCC" } },
+      },
     },
-    steps: [
-      { from: "precursor", to: "event" },
-      { from: "event", to: "product" },
-    ],
+    arrows: {
+      "1": {
+        from: [{ state: "precursor", id: "precursor" }],
+        to: [{ state: "event", id: "product-event" }],
+        kind: "forward",
+        role: "reaction",
+      },
+      "2": {
+        from: [{ state: "event", id: "event" }],
+        to: [{ state: "product", id: "product-product" }],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
   });
-  const route = compiled.entries[compiled.reference.ref] as Route;
-  const reaction = compiled.entries[route.steps[0].reaction] as Reaction;
+  const route = figureEntry(compiled.entries[compiled.reference.ref]);
+  const reaction = arrowAt(route, 0);
   const points = (id: string) => {
-    const placement = reaction.scene.molecules.find((m) => m.id === id)!;
+    const placement = reaction.drawing.scene.molecules.find(
+      (m) => m.id === id,
+    )!;
     return (compiled.entries[placement.compound] as Compound).variants![
       placement.variant!
     ].coords;
@@ -1634,10 +2222,59 @@ test("figure density fields survive compilation and library validation", async (
     kind: "scheme",
     bond: 24,
     width: 600,
-    compounds: { a: "CCO", b: "CC=O" },
-    steps: [{ from: "a", to: "b" }],
+    states: {
+      a: { compounds: { structure: { label: "a", smiles: "CCO" } } },
+      b: { compounds: { structure: { label: "b", smiles: "CC=O" } } },
+    },
+    arrows: {
+      "1": {
+        from: [{ state: "a", id: "a" }],
+        to: [{ state: "b", id: "product-b" }],
+        kind: "forward",
+        role: "reaction",
+      },
+    },
   });
   const entry = result.entries[result.reference.ref];
   assert.equal(entry.style?.bond, 24);
   assert.equal(entry.style?.width, 600);
+});
+test("compiles state graphs for convergence, substitution, resonance and a catalytic cycle", async () => {
+  for (const name of ["convergence", "substitution", "resonance", "cycle"]) {
+    const { entries, reference, generated } = await compileFigure(
+      await fixture("graph/" + name),
+      {},
+      name,
+    );
+    const figure = entries[reference.ref];
+    assert.equal(figure.kind, "figure");
+    assert.equal(
+      generated.filter((id) => entries[id].kind === "figure").length,
+      1,
+    );
+    if (name === "convergence") {
+      assert.equal(figureRouteMetrics(figure).longestLinearSteps, 2);
+      assert.deepEqual(
+        figure.graph.arrows.couple.from.map(({ state }) => state),
+        ["acyl", "amine"],
+      );
+      assert.equal(
+        figure.graph.arrows.couple.via?.arrows.add.role,
+        "elementary",
+      );
+      validateFigureInstance(entries, {
+        ...reference,
+        frame: "couple/tetrahedral",
+      });
+    } else if (name === "substitution") {
+      assert.equal(figure.graph.states.encounter.scene?.arrows?.length, 2);
+      assert.equal(figure.graph.arrows.substitution.map?.length, 3);
+    } else if (name === "resonance") {
+      assert.equal(figure.graph.arrows.delocalization.kind, "resonance");
+      assert.equal(figure.graph.arrows.delocalization.map?.length, 3);
+    } else {
+      assert.equal(figure.graph.states.excited.text, "\\*PC");
+      assert.equal(figure.graph.arrows["step-3"].to[0].state, "ground");
+    }
+  }
 });

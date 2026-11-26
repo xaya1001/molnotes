@@ -1,11 +1,54 @@
 kind: scheme
 title: Branched transformation
-compounds:
-  1: CCO
-  2: CC=O
-  3: CC(=O)O
-  4: CC(=O)OC
-steps:
-  - { id: start, from: 1, to: 2, above: "[O]" }
-  - { id: a, from: 2, to: 3, above: "[O]" }
-  - { id: b, from: 2, to: 4, above: "MeOH, [O]" }
+states:
+  "1":
+    compounds:
+      structure:
+        label: "1"
+        smiles: CCO
+  "2":
+    compounds:
+      structure:
+        label: "2"
+        smiles: CC=O
+  "3":
+    compounds:
+      structure:
+        label: "3"
+        smiles: CC(=O)O
+  "4":
+    compounds:
+      structure:
+        label: "4"
+        smiles: CC(=O)OC
+arrows:
+  start:
+    from:
+      - state: "1"
+        id: "1"
+    to:
+      - state: "2"
+        id: product-2
+    kind: forward
+    role: reaction
+    above: "[O]"
+  a:
+    from:
+      - state: "2"
+        id: "2"
+    to:
+      - state: "3"
+        id: product-3
+    kind: forward
+    role: reaction
+    above: "[O]"
+  b:
+    from:
+      - state: "2"
+        id: "2"
+    to:
+      - state: "4"
+        id: product-4
+    kind: forward
+    role: reaction
+    above: MeOH, [O]

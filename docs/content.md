@@ -543,11 +543,11 @@ The geometry preparation toolkit represents native chemical paths, text runs, la
 
 Run `npm run figure:compare -- compare --before <observations.json> --after <observations.json> --out <report.json>` directly to compare saved geometry observations. Each view retains element identities, boxes, paths, sampled traces, atom positions and diagnostics. The report lists changed and unmatched views sorted by displacement, with element additions/removals and diagnostic-set or measured-value differences. Identical observations pass directly; comparison does not alter publication thresholds.
 
-The reader mounts each published view's SVG and reads its saved diagnostics. Frame selection, local numbering and focus select the corresponding saved view.
-Reaction, route and multi-frame mechanism views include precomputed reading-width, wide and phone layouts.
+The reader mounts each published view's SVG and reads its saved diagnostics. A named view, local numbering and focus select the corresponding saved drawing.
+Connected comparison and transformation graphs include precomputed reading-width, wide and phone layouts.
 The site selects the layout for the available space and keeps the published readability floor for other chemical drawings. Table cells crop outer whitespace from the same SVG, share a fitting scale within each table, retain every drawing's published readability floor, and open the full view. Chemical geometry is prepared in Node during publication or authoring preview. `content:preview` prepares only the selected unit's referenced views and serves them with the preview, without publishing or making library thumbnails.
 
-The content root owns `library/compounds/`, `library/reactions/`, `library/routes/`, `library/mechanisms/`, `library/images/` and `library/conformations/`. Each JSON or YAML (`.yaml` / `.yml`) file is named after its permanent ID (`cmp_…`, `rxn_…`, `rte_…`, `mec_…`, `img_…`, `cnf_…`). Entries contain `kind`, `id`, `title` and `sources: [{source, locator, note?}]`. The source ID refers to `sources.json`. If external provenance is unverified, use the reserved `source: "unknown"`, a precise original content location and a required `note` explaining what remains unverified; do not invent a registered source. Image bytes live in `library/assets/<sha256>.<extension>`; the content build verifies their hashes. `/library/` shows the complete inventory, previews, layout checks and reverse references.
+The content root owns `library/compounds/`, `library/figures/`, `library/images/` and `library/conformations/`. Each JSON or YAML (`.yaml` / `.yml`) file is named after its permanent ID (`cmp_…`, `rxn_…`, `rte_…`, `mec_…`, `img_…`, `cnf_…`). Entries contain `kind`, `id`, `title` and `sources: [{source, locator, note?}]`. The source ID refers to `sources.json`. If external provenance is unverified, use the reserved `source: "unknown"`, a precise original content location and a required `note` explaining what remains unverified; do not invent a registered source. Image bytes live in `library/assets/<sha256>.<extension>`; the content build verifies their hashes. `/library/` shows the complete inventory, previews, layout checks and reverse references.
 
 A topic block uses `{type:"figure-ref", ref:"cmp_example", numbers:{compound:"4"}, caption:"…"}`. An excerpt can supply `figure: {ref:"img_example", caption:"…"}`. Notes use a YAML fence:
 
@@ -555,13 +555,13 @@ A topic block uses `{type:"figure-ref", ref:"cmp_example", numbers:{compound:"4"
 ```figure-ref
 ref: rxn_example
 numbers:
-  input: "1"
-  output: "2"
+  oxidize/input: "1"
+  oxidize/output: "2"
 caption: Example transformation
 ```
 ````
 
-References accept only `ref`, `variant`, `frame`, `numbers`, `focus`, `caption`, image-only accessible `alt`, and image-only `presentation`; the block also accepts its standard `type` and `id`. Molecular facts, coordinates, reagents and conditions belong to entries. `numbers` keys name placements (`compound` for a standalone structure, `step/participant` in a route). A reference cannot change the chemical graph. Missing entries, placements, variants, atoms and frames fail the build.
+References accept only `ref`, `variant`, `frame`, `numbers`, `focus`, `caption`, image-only accessible `alt`, and image-only `presentation`; the block also accepts its standard `type` and `id`. Molecular facts, coordinates, reagents and conditions belong to entries. `numbers` keys name placements (`compound` for a standalone structure, `arrow/participant` in a transformation, and `state/placement` in an overview with multiple panels). A reference cannot change the chemical graph. Missing entries, placements, variants, atoms and views fail the build.
 
 Compounds store mapped `smiles`, the unmapped canonical isomeric `graph` signature, persistent `atomIds` of the form `a<map number>`, and `layout`. The IDs are checked against the explicit SMILES atom maps. `layout.coords` maps every ID to `{x,y}` in bond units, with positive y downward; `pins` replaces individual positions, `labels` offsets atom labels, `abbreviations` selects shared whitelist groups, and `stereoAnnotations` opts into configuration labels. `variants` stores named layouts. Rotation and mirrored placement regenerate wedges from the same chemical graph. `--prepare` imports a verified 2D molfile and rejects differing connectivity or stereochemistry. Template compounds declare `template: [{atom,label,allowed,description}]`; allowed substituent entries declare one terminal dummy `attachment` ID. Instantiation joins only the selected permitted attachments.
 
@@ -591,9 +591,9 @@ Authored mark offsets and `chargeAngles` take precedence.
 `LABEL_IN_RING` reports a folded terminal label whose box centre lies inside a visible ring that does not contain its label-bearing atom.
 Disconnected components remain valid.
 
-Mechanism references without `frame` display every saved frame in one static overview, using the route layout and its downward serpentine turns.
-Step arrows retain their declared kind and nearby titles.
-References with `frame` display only that frame.
+A reference without `frame` displays the complete graph.
+The `frame` selector names an authored view of a state, display group or an inner graph reached through `via`.
+Inside a single selected state or group, atom and placement keys are local.
 
 Publication prepares chemical geometry in two Node worker threads and runs the existing diagnostics on that geometry at the desktop proof scale.
 The input cache includes recursive entry dependencies, SVG-affecting reference fields (`ref`, `variant`, `frame`, `numbers` and `focus`), preparation sources, chemical style values, pinned font bytes and the locked rendering dependency closure.
@@ -622,11 +622,24 @@ Every authored topic structure slot that accepts `smiles` also accepts `ref: cmp
 
 Indexed controls depend on SMILES parser atom and bond order. To preserve an existing input, save its exact string as the variant's `inputSmiles`; it must describe the same molecular graph, stereochemistry and isotopes. It retains authored coordinates and parser order, so existing answers and stored selections keep their meaning. Prepare one with `figure:render -- --library <content-root> --prepare <request.json> --out <output>`, where the request is `{ "compound": <saved-entry>, "variant": "input-order", "inputSmiles": "<original input>", "abbreviations": [] }`. Omitting `abbreviations` keeps the indexed input unfolded. The output is the updated compound entry. Reference that variant when migrating an indexed slot; keep question IDs and record keys unchanged.
 
-Reaction entries declare `reactants` and `products` as `{id,compound,sourceKey?,position?,number?,name?,equivalents?,yield?,ratio?,fraction?}`, plus `reagents`, `conditions`, optional free-text `tags`, a `scene`, and `arrow: {from,to,textWidth,via?,kind?,side?}`. Product `yield` and `ratio` are source-reported text; `fraction` remains a separate mixture fraction in [0,1]. Participant `number` and `name` belong to this figure. A scene saves `width`, `height` and `molecules: [{id,compound,variant?,at,rotate?,mirror?,bracket?}]`. `plusAt` optionally saves the position of each separator between reactants. Conditions wrap at separator or whitespace boundaries within the declared text width; reagent/solvent names and quantities with units stay intact. An oversized token occupies its own line. Product values stay with their products.
+A saved chemical figure has `kind: figure`, a stable ID, a `graph` and a map of named `views`.
+The graph stores `states`, `arrows`, optional `groups`, `layout` and source-reported `yields`.
+A state can contain structures, conformations or species text.
+A structural placement retains its permanent compound ID, named variant, depiction coordinates and annotations.
+Scenes retain their canvas dimensions and placements, along with electron arrows, labels, emphasis, partial bonds and transition-state brackets.
+Chemical arrows store ordered endpoints and a stable ID within the graph.
+Their participants carry their own display treatment, numbers, names, quantities, yields and mixture proportions.
+Arrow geometry retains paths and measured text regions.
+A shared intermediate occurs in successive arrows through the same state and placement, and is drawn once.
+The longest linear sequence uses the product-to-input dependencies of top-level reaction arrows.
+A bound inner graph uses its parent arrow's endpoints and retains the views of its individual states.
+Figure references and backlinks resolve to the containing figure.
 
-Routes save `steps: [{id,reaction,at,display?,placements?,arrow?,reagents?,conditions?,boxes?}]`, `edges: [{from,to,product,reactant}]`, optional branch `connections: [{id,points}]`, `plusAt` and canvas dimensions. Compilation lays out the step graph at the shared desktop width and creates owned reaction entries. `placements` and `arrow` override the owned scene relative to the step origin. `reagents`, `conditions` and `boxes` save measured text and boxed-reactant selection. `display` selects a saved participant’s structure, number-only reference or omission in that route; standalone reaction views retain their full participants. Shared intermediates appear once, and wrapped rows continue with their arrow. Converging branch ends align; a short branch may run backwards into a downward product step when the product does not fit at the right. Unsupported branch combinations use compound numbers. The longest linear sequence is computed from the graph. Product yields are text.
-
-Mechanisms declare `category` (`reaction`, `resonance`, `comparison` or `examples`) and static `frames: [{id,title,scene}]`. `maps` can record explicit `{from,to,fromFrame,toFrame}` atom correspondences. Scene labels declare `{id,at:{molecule,atom},offset,kind,text?}`; kinds are `lonePair`, `charge`, `partialCharge` and `text`. Electron arrows use `{id,from,to,electrons,bend?}`. Anchors name an atom or charge (`at`), a real or forming bond (`atoms`, optional `fraction`), or a displayed lone pair (`label`). The renderer generates curved-arrow candidates, scores label, bond and filled-head clearance, and retries competing arrow orders. `bend: left|right` selects a side. Endpoints clear complete displayed label boxes; two electrons use a full head and one electron a fishhook. Short arcs require a height of at least 0.35 bond lengths, and the first sampled shaft segment must turn less than 12° from its departure tangent. `partialBonds` and `transitionState` add dashed bonds and transition-state brackets.
+Electron arrows use `{id,from,to,electrons,bend?}`.
+Anchors identify an atom or charge, a real or forming bond, or a displayed lone pair.
+Electron arrowheads use a full head for two electrons and a fishhook for one.
+The renderer tests curved paths against drawn labels, bonds, charges and arrows.
+Short arcs require a height of at least 0.35 bond lengths, and the first shaft segment must turn less than 12° from its departure tangent.
 
 A `focus` has one optional `primary` group and at most two `supporting` groups. Groups reference `atoms`, `bonds` and `arrows`. Atom and bond groups draw red dashed enclosures; electron-arrow primary and supporting styles retain their emphasis. Unchanged structure retains normal ink. Scene `enclose` stores `{id,atoms?,bonds?,shape?}` with permanent atom references. Shapes are `auto`, `circle`, `rect` and `outline`; auto tries a circle, rounded rectangle and outward rounded convex outline in that order. Each shape keeps selected atom points and their complete label boxes (including subscripts) fully inside, and unselected visible atoms and their complete label boxes outside. Both sides require at least one enclosure gap (6.4 px) from the boundary ink. Disconnected selections are handled per connected component. If any component has no qualifying shape, the entire selection uses solid focus coloring for its selected atoms and bonds without enclosures. Primary and supporting coloring retain their respective line widths and colors. Explicit shapes retain the author's choice and report conflicts. Circle boundaries participate in label, unrelated-bond, arrow and enclosure overlap checks; selected interiors and bonds entering the selected group remain valid; covering an unselected atom or label is diagnosed even for an explicit circle. Scene `changes` stores product-only red `atoms` and `bonds` independently from explanatory enclosures. The build also prepares a narrow layout for multi-frame mechanisms.
 Individual frames retain their electron-arrow geometry and allow local scrolling when they exceed the readable scale.
@@ -724,107 +737,76 @@ Run `npm run figure:lint -- [<figure.yaml>... | --library <content-root>]` to li
 
 ### Figure YAML compilation
 
-Run `npm run figure:compile -- --source <figure.yaml> --library <content-root>`.
-Use `kind: scheme` with top-level `compounds` and `steps` for reactions and routes, or top-level `frames` for a standalone mechanism, resonance scheme or comparison.
-A step can include `mechanism: {frames: [...]}`.
-A matching first or last frame uses the route's reactant or product structures and keeps their labels, with frame annotations drawn on those structures.
-Distinct frames sit between the reaction endpoints, and the step's reagents and conditions follow its first reaction arrow.
-They use the standalone frame syntax, and a frame can place a route structure with `compounds: {placementId: {compound: routeCompoundKey}}`.
-The placement uses that compound's saved identity while keeping its own placement key.
-Use `frame: stepId/frameId` on a route reference or `frame: frameId` on a reaction reference to show a single attached frame.
-In the complete figure, number and focus keys for attached placements start with `stepId/frameId/` on a route and `frameId/` on a reaction.
-An individual frame uses its local placement keys.
-A `scheme` with `compounds` and no `steps` or `frames` draws a structure grid or grouped panels.
-The other source kinds are `cycle`, `markush` and `conformation`.
-
-The compiler stores the exact input in `library/sources/<figure-id>.yaml`.
-Each generated figure records `sourceFile` relative to the content root, and route reactions also record `owner`.
-The first compilation derives its stable ID from the original source path.
-Recompiling that path or the saved source retains the ID, including after edits.
-A one-step route creates `rxn_…`, a longer route creates `rte_…` and owned `rxn_…` steps, and mechanisms, structure panels and cycles create `mec_…`.
-Generated geometry uses three decimal places and omits optional empty arrays and empty focus groups.
-Step IDs and frame IDs are stable within a source, and omitted route step IDs use their one-based position.
-Use a new source when the compiled entry needs a different kind.
-
-A SMILES structure or mechanism frame can select `drawing: perspective|flat`. The compiler matches the largest registered skeleton and constrains it to the saved view, then lays out external substituents. An explicit drawing request with no matching skeleton fails. Omitting `drawing` uses the ordinary layout. The selected layout stores its scaffold identity, matched bonds, projected depths or declared flat overpasses. Perspective depth changes plain single-bond weight and leaves gaps in rear bonds at crossings; native stereochemical wedges and the molecular graph remain authoritative. Template cores and bridges attached at both ends retain their projected lengths; singly attached external groups retain ordinary bond-length checks. Skeleton preparation adds the required ring stereocentre H before constraining and tidying the view, and saves their coordinates and wedge bonds. The native renderer draws those saved hydrogens without adding another set.
-
-A route has `title`, `sources: [{source,locator?,note?}]`, `footnote?`, `wrap?: serpentine`, optional `abbreviate: [Ph,Tr,Bz]`, `compounds` and `steps`. Compound keys are figure-local numbers. Values are SMILES strings or `{smiles?,text?,label?,name?,rot?,flip?,align?,coordgen?,drawing?,abbreviate?,numbers?,notes?,arrows?,focus?,enclose?,scale?,bracket?,mark?,yield?,note?}`; a text-only reagent has no SMILES. Each step has `id?`, `title?`, `sources?`, `from`, `to`, `above?`, `below?`, `others?`, `arrow?`, `turn?`, `side?`, `reverse?`, `changes?`, `enclose?`, `tags?`, `reagentPosition?`. `from` and `to` accept one compound key or a list; reactant items can be `{id,show?:box|text|plus|none,equivalents?}`, products `{id,ratio?,yield?,fraction?}`. A source compound's `text`, then `label`/`name`/key, supplies text-only reagents. Box draws a bordered structure above the arrow; plus uses inline placement; text/none retain structural participants for graph identity while omitting their drawing. Numbers and names appear as `number: name`, with a bold number; yields appear in parentheses. Products keep their own number and quantity text. Step title and sources override the figure defaults. Dependency edges connect steps through local compound keys, including convergent and divergent paths, independently of source order.
-
-Reaction and route compilation compares each product with its largest common reactant core, using other structural reactants to identify imported fragments. New, removed and changed bonds, atoms, charge, hydrogen count and isotope changes produce product marks. Tetrahedral and alkene stereochemistry use mapped ligand order, including a uniquely determined replacement ligand. Ambiguous, small or timed-out matches report why they were not compared. Large changes suppress automatic marks while retaining the review. Figure `changes: false|off` disables all comparisons; step `changes: false|off` disables that step. Step `changes: {add: [mapNumbers], remove: [mapNumbers]}` applies manual marks last; removal also clears incident red bonds. Each map number must identify exactly one product. The normal compile output lists readable positions, source numbers, stable atom IDs and comparison outcomes before the final figure ID; this review is not published.
-
-Structures and mechanism frames accept `enclose: [{id?,atoms?: [mapNumbers],bonds?: [[mapNumber,mapNumber]],shape?: auto|circle|rect|outline}]`. Each selection requires atoms or bonds. Step `enclose: {compoundKey: [...]}` replaces that structure's default for the step; an empty list clears it. These selections use the same geometry as page `focus` atom/bond groups and coexist with automatic red changes.
-
-A mechanism has `frames: [{id,title?,smiles,map?,above?,below?,arrow?,rot?,flip?,coordgen?,numbers?,notes?,arrows?,focus?,enclose?,scale?,bracket?}]`.
-Adjacent frames connected by an arrow match equal SMILES map numbers by default, with `map: {previousNumber: currentNumber}` taking precedence.
-Comparison and example frames, and pairs whose outgoing arrow is `none`, use only explicitly authored `map` entries.
-Frame arrows use SMILES map numbers in the sources `lp(n)`, `charge(n)`, `radical(n)`, `bond(n,m)` and `pi(n,m)` and the destinations `atom(n)`, `bond(n,m)` and `between(n,m)`.
-Fragment placement follows cross-fragment electron arrows and keeps spectator counterions near the opposite charge centre.
-Figure lint reports unexpected color from the native drawing backend and automatic counterion spacing more than 0.1 base bond lengths above its target.
-Compilation rejects a positive charge as an electron-arrow source.
-Lint reports changes in total formal charge between adjacent frames as warnings.
-Electron arrows accept `id?`, `from`, `to`, `electrons: 1|2`, `side?`, `bend?`, `forming?`; a radical source defaults to one electron. `between(n,m)` targets the forming-bond midpoint; `forming: true` also draws that bond dashed. Compilation positions disconnected fragments from their arrow contacts and saves an explicit Kekulé variant for aromatic π sources. Frame `scale` enlarges bond geometry while keeping label size. `focus: {primary:[arrowIds],supporting:[arrowIds]}` selects one primary event and up to two supporting arrows. `arrow: none` expresses a comparison; step/frame arrows otherwise accept `forward` (default), `equilibrium`, `resonance` and `retro`.
-
-A mechanism can declare `category: reaction|resonance|comparison|examples`. For independent participants, replace a frame's `smiles` with `compounds: {placementId: structure}` using the same structure fields as routes and galleries. Placement keys remain in the saved scene. Frame `steps: [{id?,from,to,above?,below?,arrow?}]` uses the route vocabulary to arrange an in-frame transformation; frames without steps use a gallery grid. Compound `label`, `name`, `yield` and `note` own their attached captions. Electron endpoints qualify atom maps with placement keys, such as `lp(donor:1)` and `between(donor:1,acceptor:2)`. Qualified `map: {"before:1": "after:2"}` entries describe correspondence across frames. Standalone annotations use `labels: [{id,at: "placement:mapNumber",kind,text?}]`, where `kind` is `lonePair`, `radical`, `charge`, `partialCharge` or `text`; their positions come from the molecular geometry. `partialBonds: [{from: "placement:mapNumber",to: "placement:mapNumber",order?}]` saves a dashed bond, with order 1 by default.
-A frame with two compounds connected by `partialBonds` places the molecules together using the specified atom contacts.
-Compilation requires a placement that keeps the bonds clear of crossings and unrelated atoms.
-Within frame `compounds`, set `variant` beside `smiles` to select a saved layout by name for that compound.
-
-SMILES identity includes stereochemistry, isotopes, charges and disconnected salt fragments. Bracket abbreviations expand before matching the saved canonical graph; maps do not enter identity. New compounds use permanent sequential atom IDs; input maps are translated through a full graph match when a compound already exists. Compound keys, names and labels stay in figure participants or captions. Saved compound variants and their atom IDs remain available to existing figures.
-
-For a `scheme` without `steps` or `frames`, `compounds` lists structures in display order and optional positive integer `cols` sets the grid's column count (default 4).
-For grouped panels, use `groups: [{title?,subtitle?,items: [compoundKeys]}]` in place of `cols`. Products flow across the figure width and wrap within each group.
-Each structure shows its `label` (default the compound key), `name`, `yield` and `note` underneath.
-Both layouts compile to one static `overview` frame in an `examples` mechanism entry, using stable compound identity.
-Structure `rot`, `flip`, `coordgen`, abbreviations, brackets, electron arrows and enclosures retain their normal meaning.
-The `substrate-scope` block validates R-value rows against its generic product, which uses the same mapped terminal attachment atoms as Markush cores.
+Use `kind: scheme` and write `states` and `arrows` as maps keyed by stable IDs.
+An empty arrow map lays out the states as a grid.
+A directed acyclic graph lays out connected transformations with convergence, branching and wrapping.
+A simple directed cycle draws sequential states clockwise, starting from `layout.anchor` or the first authored state.
+Markush and standalone conformations have their own source contracts.
 
 ```yaml
 kind: scheme
-title: Product scope
-groups:
-  - { title: Primary products, items: [a, b] }
-compounds:
-  a: { smiles: CCO, yield: "80%", note: "1 h" }
-  b: { smiles: CCCO, yield: "72%" }
+title: Example oxidation
+states:
+  input:
+    compounds:
+      structure: { smiles: CCO }
+  output:
+    compounds:
+      structure: { smiles: CC=O }
+arrows:
+  oxidize:
+    from: { state: input, id: input }
+    to: { state: output, id: output, yield: "93%" }
+    kind: forward
+    role: reaction
+    above: "[O]"
 ```
 
-`kind: cycle` accepts clockwise `nodes` starting at the top. A node is rich text, `{text: ...}`, or a structure specification with `smiles` and optional `label`. Optional `steps` has exactly one item per node; item n connects node n to the next, and the last returns to the first. Each item accepts `in`, `out` and `label` rich text. Missing `steps` still draws the closed cycle. `radius` is the prototype reference-pixel radius (default 150 at a reference bond length of 17), scaled to the website bond length; `branch` is the outer branch radius relative to the cycle radius (default 0.3). Compilation saves molecules, text, curved reaction arrows and their controls in one static `overview` scene. Saved scene positions remain editable. Increase `radius` when species consume their connecting arc. Mobile uses the same geometry and local scrolling at the readable scale.
+An arrow endpoint is a state ID, an ordered list of state IDs or an object with `state`, optional `placement` and `id`.
+An input can carry `show: box|text|plus|none` and `equivalents`.
+A product can carry `yield`, `ratio` and a numeric mixture `fraction` in [0,1].
+The arrow owns `above`, `below`, `title`, `sources`, `tags` and `reagentPosition`.
+Its `kind` is `forward`, `equilibrium`, `resonance`, `retro` or `none`.
+Use `role: reaction` for counted transformations, `elementary` for mechanistic and cyclic edges, and `display` for links involving a composite display group.
+`none` supports juxtaposition without a drawn arrow.
+A reported yield spanning several arrows belongs to `yields: [{arrows, product, yield, sources?, note?}]`, with a named product placement and a source-supported path.
+`layout.cols` controls a grid's column count.
+`groups.<id>` uses ordered `items`, optional `title` and `subtitle`, and optional internal `edges` for a composite panel.
+In a cycle, the arrows own rich text `in`, `out` and `title`.
+`layout.radius` uses reference pixels at a 17px reference bond with a default of 150.
+`layout.branch` is a fraction of the radius and defaults to 0.3.
 
-```yaml
-kind: cycle
-title: Catalytic cycle
-nodes: ["M^{II}", "M^{III}–R", "M^{I}"]
-steps:
-  - { in: R–X, out: X, label: Addition }
-  - { out: Product, label: Elimination }
-  - { in: Oxidant, label: Oxidation }
-```
+`states.<id>.compounds.<placement>` uses `smiles`, `ref` or an inline conformation template.
+Use a saved `cmp_` or `cnf_` ID with `ref` and an optional named `variant` for a compound.
+A state can supply `text` for a species without a structure.
+Structures accept `label`, `name`, `yield`, `note`, `bracket`, `scale`, `rot`, `flip`, `align`, `coordgen`, `drawing`, `abbreviate`, `abbreviations` and `numbers`.
+Positive rotation is counterclockwise after the flip.
+Orientation propagates from `layout.anchor` or the largest uncrowded compound across connected reactants and products.
+`align: false` keeps an independent orientation. A named placement aligns to the selected structure.
+`layout.wrap: serpentine` reverses the next row after a downward turn.
+An arrow can specify `turn: down|elbow|wrap`, `side: left|right` and `reverse: false`.
+Structures reserve a row for page numbers and report yields beside the participant.
 
-`bond` and `width` accept positive pixel values and persist in the entry’s `style` object. `bond` scales figure typography, strokes and spacing from the default 32px bond; `width` overrides the 1882px wrapping limit. The exported canvas fits visible ink with a shared margin of 0.8 bond lengths; width is a layout limit, not a fixed canvas size. Structure and frame `scale` enlarge coordinates while retaining the atom font size. Markush `scale` controls the core structure, defaulting to 1.3 for formulas and 1.7 for maps and overlays. `charges`, `dots` and `ring_h` are rejected with their field path. Deferred drawing fields (`mark`, numeric arrow `bend`, and atom notes) are validated and retained in the source, with a warning that rendering awaits implementation. Compilation measures native structures, numbers, quantities and condition text before saving route positions. Every structure reserves one number line, at least as wide as a bold three-digit number; wider default labels and quantity lines retain their measured bounds. Page numbers use this reserved space without a separate compilation input; `rot`/`flip` are figure placements: positive YAML `rot` is counterclockwise after the flip, while saved scene `rotate` uses SVG clockwise angles; orientation starts at the largest uncrowded compound (or `anchor`) and propagates along reaction links, constraining the shared core and its unchanged substituents, then falling back to pinned shared atoms or a rigid turn; `align: false` disables inheritance and a compound key selects another completed reference, `wrap: serpentine` reverses the next row after a downward turn; `turn` requests down/elbow/wrap, `reverse: false` retains direction, and `side` sets condition placement on downward arrows. Placement `bracket: true|ts` encloses one molecule; `ts` includes ‡. Figure `footnote` sits below the diagram. The [default figure abbreviation list](../shared/molecule-abbreviations.ts) folds common protecting groups and terminal functional groups.
-`abbreviate: false` keeps the whole structure expanded, including any eligible small reagent.
-A structure or mechanism frame can enable a group with `abbreviations: [Ph]`.
-`abbreviations: [{name: NO2, atom: 22}]` folds only the NO2 group whose attachment-side nitrogen has SMILES atom map `:22`.
-`abbreviations: [{name: NO2, atom: 22, expand: true}]` expands that match and leaves the other defaults active.
-The saved layout records the attachment atom’s zero-based index in its SMILES.
-Labels face the attachment bond, for example NO₂ on the right and O₂N on the left.
-A mechanism frame automatically expands groups whose hidden atoms carry arrow endpoints, charges, lone pairs or unpaired electrons.
-Lint reports an explicit fold of a participating group.
-Ordinary reaction schemes can abbreviate participating groups such as Boc on a deprotection reactant.
-Figure-level `abbreviate: [Ph, Tr, Bz]` enables those matching groups across the figure.
-Mechanisms abbreviate recognized small fragments in multi-component frames and preserve the skeletal depiction of an isolated small molecule.
-Routes and reactions abbreviate eligible participants with the `other` role.
-Arrows and charge marks attach to individual glyphs in a condensed label.
-A reference to an internal atom without a distinct glyph or to an internal bond keeps that fragment expanded.
-An explicit structure-level `abbreviate` value is saved as `reagentAbbreviate`.
-Group selection uses chemical identity while drawing variants retain their explicit bond orders. Condition text, labels and footnotes automatically subscript digits following letters, closing parentheses or brackets (for example `H2O` and `Pd(PPh3)4`); a backslash escapes a literal character. They share chemical italic prefixes, `*italic*`/`**bold**`, Unicode subscripts and `^{superscript}`. Participant `sourceKey` binds its source compound key, retaining saved compound and participant IDs on recompilation. CXSMILES SRU groups (`|Sg:n:2:n:ht|`) compile to variant `repeatUnits: [{atoms,label}]`, using permanent atom IDs; each bond crossing the unit receives a bracket and the last bracket carries the multiplier. A compound's `scale` enlarges its saved coordinates while retaining the atom font size. `numbers: true` saves the authored SMILES map numbers as variant `atomNumbers` bound to permanent atom IDs, and renders them with native atom-note positioning at 0.62 of the atom font. Compound-level `coordgen: true` retains the selected depiction engine, with the same normalized bond length after expanding folded groups.
+State `arrows` supply electron flow using mapped atoms.
+Use `lp(n)`, `charge(n)`, `radical(n)`, `bond(n,m)`, `pi(n,m)`, `atom(n)` and `between(n,m)`.
+Qualify an atom with its placement for multi-structure states, such as `lp(donor:1)`.
+`forming: true` draws the named forming bond dashed.
+State `labels` bind a lone pair, radical, charge, partial charge or text to a mapped atom.
+A label can specify `offset: {x, y}` in bond lengths from its atom.
+`partialBonds`, `transitionState`, `focus` and `enclose` also belong to the state.
+An arrow `map` maps pairs of source atom numbers, optionally qualified by placement.
+State `tone: comparison` selects comparison ink.
+In a reaction route, `via` is an inner graph at the parent arrow.
+An inner `{use: state/placement}` references the outer structure.
+Write `via.bind.from` and `via.bind.to` from outer to inner placement addresses to overlay matching endpoints.
+`views.<id>` selects `items` and optionally includes named `arrows`.
+Use `arrow/via/state` to reach a state in an inner graph.
 
-```yaml
-title: Example transformation
-kind: scheme
-sources: [{ source: unknown, locator: Example, note: Authored fixture }]
-compounds:
-  1: "CCO"
-  2: "CC=O"
-steps:
-  - { id: oxidation, from: 1, to: { id: 2, yield: "93%" }, above: "[O]" }
-```
+Chemical identity retains stereochemistry, isotope, charge and disconnected components.
+SMILES maps translate to saved atom IDs and stay separate from identity.
+`changes: false|off` may disable change coloring on a graph or an arrow.
+An arrow may specify `changes: {add: [mapNumbers], remove: [mapNumbers]}` to apply reviewed corrections to its products.
+Condition text, labels and footnotes use chemical subscripts, escaped locants and rich text.
+Figure-level `abbreviate: [Ph, Tr, Bz]` opts into named groups.
+`abbreviate: false` expands a structure, and `abbreviations` selects a specific mapped occurrence.
+`numbers: true` renders authored map numbers. Page `numbers` and `focus` decorate a view.

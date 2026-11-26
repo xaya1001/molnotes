@@ -1,0 +1,31 @@
+kind: scheme
+title: 甲氧基对溴甲烷的取代
+states:
+  encounter:
+    title: 亲核进攻
+    compounds:
+      nucleophile: { smiles: "C[O-:1]", label: "" }
+      substrate: { smiles: "[CH3:2][Br:3]", label: "" }
+    arrows:
+      - { id: attack, from: "lp(nucleophile:1)", to: "atom(substrate:2)" }
+      - {
+          id: leave,
+          from: "bond(substrate:2,substrate:3)",
+          to: "atom(substrate:3)",
+        }
+  products:
+    compounds:
+      ether: { smiles: "C[O:1][CH3:2]", label: "" }
+      bromide: { smiles: "[Br-:3]", label: "" }
+arrows:
+  substitution:
+    from: [encounter]
+    to: [products]
+    kind: forward
+    role: elementary
+    map:
+      "nucleophile:1": "ether:1"
+      "substrate:2": "ether:2"
+      "substrate:3": "bromide:3"
+views:
+  encounter: { items: [encounter] }

@@ -1,12 +1,61 @@
 kind: scheme
 title: Convergent transformation
-compounds:
-  1: CCO
-  2: CC(=O)O
-  3: CBr
-  4: CO
-  5: CC(=O)OC
-steps:
-  - { id: join, from: [2, 4], to: 5, above: "H+" }
-  - { id: left, from: 1, to: 2, above: "[O]" }
-  - { id: right, from: 3, to: 4, above: "NaOH" }
+states:
+  "1":
+    compounds:
+      structure:
+        label: "1"
+        smiles: CCO
+  "2":
+    compounds:
+      structure:
+        label: "2"
+        smiles: CC(=O)O
+  "3":
+    compounds:
+      structure:
+        label: "3"
+        smiles: CBr
+  "4":
+    compounds:
+      structure:
+        label: "4"
+        smiles: CO
+  "5":
+    compounds:
+      structure:
+        label: "5"
+        smiles: CC(=O)OC
+arrows:
+  join:
+    from:
+      - state: "2"
+        id: "2"
+      - state: "4"
+        id: "4"
+    to:
+      - state: "5"
+        id: product-5
+    kind: forward
+    role: reaction
+    above: H+
+  left:
+    from:
+      - state: "1"
+        id: "1"
+    to:
+      - state: "2"
+        id: product-2
+    kind: forward
+    role: reaction
+    above: "[O]"
+  right:
+    from:
+      - state: "3"
+        id: "3"
+    to:
+      - state: "4"
+        id: product-4
+    kind: forward
+    role: reaction
+    above: NaOH

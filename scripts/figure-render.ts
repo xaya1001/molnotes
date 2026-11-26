@@ -1,4 +1,4 @@
-import { figureFrames } from "../shared/chemical-library/contract.ts";
+import { figureViewKeys } from "../shared/chemical-library/contract.ts";
 import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { readChemicalLibrary } from "./content/chemical-library.ts";
@@ -121,9 +121,9 @@ if (input) {
         ? references.filter((r) => r.ref === entry.id)
         : [
             { ref: entry.id },
-            ...figureFrames(entries, entry).map((f) => ({
+            ...figureViewKeys(entry).map((id) => ({
               ref: entry.id,
-              frame: f.id,
+              frame: id,
             })),
           ];
       for (const ref of refs) {

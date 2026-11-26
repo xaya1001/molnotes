@@ -1,3 +1,4 @@
+import { drawnArrows } from "../shared/chemical-library/figure-layout.ts";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { parse } from "yaml";
@@ -20,8 +21,10 @@ export function figureViews(
   reference: FigureReference,
 ): FigureReference[] {
   const entry = library[reference.ref];
-  return entry.kind === "mechanism"
-    ? entry.frames.map((frame) => ({ ...reference, frame: frame.id }))
+  return entry.kind === "figure" &&
+    !reference.frame &&
+    !drawnArrows(entry.graph).length
+    ? Object.keys(entry.views).map((frame) => ({ ...reference, frame }))
     : [reference];
 }
 
@@ -65,7 +68,13 @@ export async function compileFigureFile(source: string) {
         : undefined;
   return compileFigure(
     single
-      ? { kind: "scheme", compounds: { single: { label: "", ...single } } }
+      ? {
+          kind: "scheme",
+          states: {
+            single: { compounds: { structure: { label: "", ...single } } },
+          },
+          arrows: {},
+        }
       : value,
     {},
     figureKey(resolve(source)),

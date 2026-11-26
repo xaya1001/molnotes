@@ -1,5 +1,28 @@
-title: Structure comparison
 kind: scheme
-frames:
-  - { id: first, title: Alcohol, smiles: "[CH3:1][OH:2]", arrow: none }
-  - { id: second, title: Alkoxide, smiles: "[CH3:1][O-:2]", arrow: none }
+title: Structure comparison
+states:
+  first:
+    title: Alcohol
+    compounds:
+      structure:
+        smiles: "[CH3:1][OH:2]"
+  second:
+    title: Alkoxide
+    compounds:
+      structure:
+        smiles: "[CH3:1][O-:2]"
+arrows:
+  next-first:
+    from: first
+    to: second
+    kind: none
+    role: elementary
+views:
+  first:
+    items:
+      - first
+    arrows:
+      - next-first
+  second:
+    items:
+      - second

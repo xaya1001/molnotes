@@ -38,8 +38,13 @@ test("resource requests retain source positions and completion skills in Markdow
       caption: "Example route",
       figure: {
         kind: "scheme",
-        compounds: { a: "CCO", b: "CC=O" },
-        steps: [{ from: "a", to: "b" }],
+        states: {
+          a: { compounds: { structure: "CCO" } },
+          b: { compounds: { structure: "CC=O" } },
+        },
+        arrows: {
+          oxidize: { from: "a", to: "b", kind: "forward", role: "reaction" },
+        },
       },
     },
     {
@@ -71,7 +76,7 @@ test("resource requests retain source positions and completion skills in Markdow
         file: "example.md",
         line: 14,
       },
-      { kind: "chart", skill: "note-figures", file: "example.md", line: 27 },
+      { kind: "chart", skill: "note-figures", file: "example.md", line: 34 },
     ],
   );
   assert.deepEqual(
@@ -92,7 +97,7 @@ test("resource requests retain source positions and completion skills in Markdow
     "example.md",
     14,
   );
-  assert.equal(preview.display.meta, "路线");
+  assert.equal(preview.display.meta, "化学图 · 2 个状态");
 });
 
 test("resource request validation rejects invalid fields and figure inputs at the source fence", async () => {
@@ -119,14 +124,21 @@ test("resource request validation rejects invalid fields and figure inputs at th
     {
       kind: "figure",
       caption: "Example",
-      figure: { kind: "scheme", compounds: { a: "invalid-smiles" } },
+      figure: {
+        kind: "scheme",
+        states: { a: { compounds: { structure: "invalid-smiles" } } },
+        arrows: {},
+      },
     },
     {
       kind: "figure",
       caption: "Example",
       figure: {
         kind: "scheme",
-        frames: [{ id: "a", smiles: "invalid-smiles" }],
+        states: {
+          a: { compounds: { structure: { smiles: "invalid-smiles" } } },
+        },
+        arrows: {},
       },
     },
     {
@@ -162,23 +174,23 @@ test("resource request validation rejects invalid fields and figure inputs at th
     /example\.md:\d+: request:/,
   );
   const source =
-    "kind: figure\ncaption: Example\nfigure:\n  kind: scheme\n  frames:\n    - id: first\n      title: First\n      smiles: invalid-smiles\n    - id: second\n      title: Second\n      smiles: invalid-smiles\n";
+    "kind: figure\ncaption: Example\nfigure:\n  kind: scheme\n  states:\n    first:\n      title: First\n      compounds:\n        structure: {smiles: invalid-smiles}\n    second:\n      title: Second\n      compounds:\n        structure: {smiles: invalid-smiles}\n  arrows: {}\n";
   const invalid = await inspectRequest(source, "example.md", 10);
   assert.deepEqual(
     invalid.errors.map(({ line, path }) => ({ line, path })),
     [
-      { line: 18, path: "figure.frames[0].smiles" },
-      { line: 21, path: "figure.frames[1].smiles" },
+      { line: 19, path: "figure.states.first.compounds.structure.smiles" },
+      { line: 23, path: "figure.states.second.compounds.structure.smiles" },
     ],
   );
-  assert.equal(invalid.display.frames, undefined);
+  assert.equal(invalid.display.states, undefined);
   const valid = await inspectRequest(
     source.replaceAll("invalid-smiles", "CCO"),
     "example.md",
     10,
   );
   assert.deepEqual(
-    valid.display.frames?.map((frame) => [frame.title, frame.smiles]),
+    valid.display.states?.map((frame) => [frame.title, frame.smiles]),
     [
       ["First", "CCO"],
       ["Second", "CCO"],

@@ -10,48 +10,38 @@ const words = (value: unknown) =>
       ? stringify(value).trimEnd()
       : String(value);
 
-const figureNames: Record<string, string> = {
-  cycle: "催化循环",
-  markush: "通式",
-};
 export function figureMeta(value: unknown) {
   if (!isObject(value)) return "";
-  let name = figureNames[String(value.kind)];
-  if (value.kind === "scheme") {
-    if ("frames" in value) name = "机理";
-    else if ("steps" in value) name = "路线";
-    else name = "groups" in value ? "底物范围" : "结构";
-  }
-  return name
-    ? `${name}${Array.isArray(value.frames) ? ` · ${value.frames.length} 帧` : ""}`
-    : "";
+  if (value.kind === "markush") return "通式";
+  if (value.kind !== "scheme" || !isObject(value.states)) return "";
+  return `化学图 · ${Object.keys(value.states).length} 个状态`;
 }
 export function figureDisplay(
   value: unknown,
-): Pick<RequestDisplay, "meta" | "frames"> {
+): Pick<RequestDisplay, "meta" | "states"> {
   const { input } = validateFigureInput(value);
-  const frames = input.frames?.map((frame, i) => ({
-    title: words(frame.title) || `帧 ${i + 1}`,
-    smiles:
-      frame.smiles ??
-      Object.values(frame.compounds ?? {})
-        .flatMap((compound) =>
-          typeof compound === "string"
-            ? [compound]
-            : compound.smiles
-              ? [compound.smiles]
-              : [],
-        )
-        .join(" · "),
-    ...(frame.arrows?.length
-      ? { note: `${frame.arrows.length} 个电子箭头` }
-      : frame.partialBonds?.length
-        ? { note: `${frame.partialBonds.length} 处部分键` }
-        : {}),
-  }));
+  if (input.kind === "markush") return { meta: figureMeta(input) };
   return {
-    meta: figureMeta(value),
-    ...(frames ? { frames } : {}),
+    meta: figureMeta(input),
+    states: Object.entries(input.states).map(([id, state]) => ({
+      id,
+      title: words(state.title) || id,
+      smiles: Object.values(state.compounds ?? {})
+        .map((compound) =>
+          typeof compound === "string"
+            ? compound
+            : (compound.smiles ?? compound.ref ?? compound.use),
+        )
+        .filter(Boolean)
+        .join(" · "),
+      note:
+        words(state.text) ||
+        (state.arrows?.length
+          ? `${state.arrows.length} 个电子箭头`
+          : state.partialBonds?.length
+            ? `${state.partialBonds.length} 处部分键`
+            : undefined),
+    })),
   };
 }
 

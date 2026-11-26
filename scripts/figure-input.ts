@@ -13,7 +13,7 @@ import {
   type AbbreviationName,
   type MoleculeAbbreviation,
 } from "../shared/molecule-abbreviations.ts";
-import type { ArrowKind } from "../shared/chemical-library/types.ts";
+import type { ArrowKind, Point } from "../shared/chemical-library/types.ts";
 
 type Key = string | number;
 export interface PushInput {
@@ -60,13 +60,56 @@ export interface StructureInput extends Omit<
   yield?: string;
   note?: Key;
 }
-export interface StepInput {
-  enclose?: Record<string, NonNullable<StructureInput["enclose"]>>;
-  id?: Key;
+export type Show = "box" | "text" | "plus" | "none";
+type Sources = { source: Key; locator?: Key; note?: Key }[];
+type MarkushInput = MarkushFigureData & {
+  kind: "markush";
   title?: Key;
-  sources?: FigureInput["sources"];
-  from: Key | (Key | { id: Key; show?: Show; equivalents?: number })[];
-  to: Key | ProductInput | (Key | ProductInput)[];
+  sources?: Sources;
+  footnote?: Key;
+  bond?: number;
+  width?: number;
+};
+
+export type SchemeCompound = StructureInput & {
+  ref?: string;
+  use?: string;
+  variant?: string;
+};
+type StateAnnotations = {
+  labels?: {
+    id: Key;
+    at: string;
+    kind: "lonePair" | "radical" | "charge" | "partialCharge" | "text";
+    text?: Key;
+    offset?: Point;
+  }[];
+  arrows?: PushInput[];
+  focus?: StructureInput["focus"];
+  enclose?: StructureInput["enclose"];
+  partialBonds?: { from: string; to: string; order?: number }[];
+  transitionState?: boolean;
+  tone?: "comparison";
+};
+export type SchemeState = StateAnnotations & {
+  title?: Key;
+  compounds?: Record<string, string | SchemeCompound>;
+  text?: Key;
+};
+export type SchemeParticipant = {
+  state: string;
+  placement?: string;
+  id?: string;
+  show?: Show;
+  equivalents?: number;
+  yield?: string;
+  ratio?: string;
+  fraction?: number;
+};
+export type SchemeEndpoint = string | SchemeParticipant;
+export type SchemeArrow = {
+  title?: Key;
+  sources?: Sources;
   above?: Key;
   below?: Key;
   others?: Show;
@@ -74,81 +117,66 @@ export interface StepInput {
   side?: "left" | "right";
   reverse?: boolean;
   changes?: boolean | "on" | "off" | { add?: number[]; remove?: number[] };
-  arrow?: ArrowKind;
+  enclose?: Record<string, NonNullable<StructureInput["enclose"]>>;
   tags?: string[];
-  mechanism?: { frames: FrameInput<FrameStructureInput | { compound: Key }>[] };
   reagentPosition?: "above-arrow" | "below-arrow";
-}
-export type Show = "box" | "text" | "plus" | "none";
-export type ProductInput = {
-  id: Key;
-  ratio?: string;
-  yield?: string;
-  fraction?: number;
-};
-interface FrameStructureInput extends StructureInput {
-  variant?: string;
-}
-export interface FrameInput<Spec = FrameStructureInput> extends StructureInput {
-  id: Key;
-  title?: Key;
-  compounds?: Record<string, string | Spec>;
-  steps?: Pick<StepInput, "id" | "from" | "to" | "above" | "below" | "arrow">[];
-  labels?: {
-    id: Key;
-    at: string;
-    kind: "lonePair" | "radical" | "charge" | "partialCharge" | "text";
-    text?: Key;
-  }[];
-  partialBonds?: { from: string; to: string; order?: number }[];
-  map?: Record<string, number | string>;
-  above?: Key;
-  below?: Key;
-  arrow?: ArrowKind;
-}
-export interface CycleStepInput {
+  from: SchemeEndpoint | SchemeEndpoint[];
+  to: SchemeEndpoint | SchemeEndpoint[];
+  kind: ArrowKind;
+  role: "reaction" | "elementary" | "display";
+  map?: Record<string, Key>;
+  via?: SchemeGraph & {
+    bind?: { from?: Record<string, string>; to?: Record<string, string> };
+  };
   in?: Key;
   out?: Key;
-  label?: Key;
-}
-export interface FigureInput {
-  category?: "reaction" | "comparison" | "resonance" | "examples";
+};
+export type SchemeGraph = {
+  states: Record<string, SchemeState>;
+  arrows: Record<string, SchemeArrow>;
+  groups?: Record<
+    string,
+    StateAnnotations & {
+      title?: Key;
+      subtitle?: Key;
+      items: string[];
+      edges?: string[];
+    }
+  >;
+  layout?: {
+    cols?: number;
+    anchor?: string;
+    wrap?: "serpentine";
+    radius?: number;
+    branch?: number;
+  };
+  views?: Record<
+    string,
+    { items: string[]; arrows?: string[]; titles?: boolean }
+  >;
+  yields?: {
+    arrows: string[];
+    product: string;
+    yield: string;
+    sources?: Sources;
+    note?: Key;
+  }[];
+};
+export type SchemeInput = SchemeGraph & {
+  kind: "scheme";
+  id?: string;
+  title?: Key;
   bond?: number;
   width?: number;
-  scale?: number;
-  abbreviate?: AbbreviationName[];
-  kind: "route" | "mechanism" | "scheme" | "markush" | "cycle";
-  core?: MarkushFigureData["core"];
-  groups?: MarkushFigureData["groups"];
-  view?: MarkushFigureData["view"];
-  name?: string;
-  note?: string;
-  unmodeled?: string;
-  patents?: MarkushFigureData["patents"];
-  gaps?: MarkushFigureData["gaps"];
-  gaps_title?: string;
-  rot?: number;
-  flip?: "h" | "v";
-  title?: Key;
-  sources?: { source: Key; locator?: Key; note?: Key }[];
-  compounds?: Record<string, string | StructureInput>;
-  steps?: StepInput[];
-  cycleSteps?: CycleStepInput[];
-  scopeGroups?: { title?: Key; subtitle?: Key; items: Key[] }[];
-  cols?: number;
-  nodes?: (Key | StructureInput)[];
-  radius?: number;
-  branch?: number;
-  frames?: FrameInput[];
-  coordgen?: boolean;
-  forming?: boolean;
-  ring_h?: boolean;
-  anchor?: Key;
-  wrap?: "serpentine";
+  sources?: Sources;
   footnote?: Key;
+  coordgen?: boolean;
+  ring_h?: boolean;
+  forming?: boolean;
+  abbreviate?: AbbreviationName[];
   mark?: string;
   changes?: boolean | "on" | "off";
-}
+};
 
 type Rule = (v: unknown, path: string) => void;
 function fail(p: string, message: string): never {
@@ -214,22 +242,10 @@ const figureAbbreviations: Rule = (value, where) => {
 const styles = new Set(["charges", "dots"]);
 const deferred = new Set(["mark", "notes", "bend"]);
 export function validateFigureInput(source: unknown): {
-  input: FigureInput;
+  input: MarkushInput | SchemeInput;
   warnings: string[];
 } {
   if (!isObject(source)) fail("figure", "expected YAML mapping");
-  const authoredKind = source.kind;
-  choice("scheme", "markush", "cycle")(authoredKind, "figure.kind");
-  const kind =
-    authoredKind === "scheme"
-      ? "frames" in source
-        ? "mechanism"
-        : "steps" in source
-          ? "route"
-          : "scheme"
-      : authoredKind;
-  const grouped = kind === "scheme" && "groups" in source;
-  const value: Record<string, unknown> = { ...source, kind };
   const warnings: string[] = [];
   const object =
     (fields: Record<string, Rule>, required: string[] = []): Rule =>
@@ -315,23 +331,12 @@ export function validateFigureInput(source: unknown): {
       if (Number(v) < 0 || Number(v) > maximum)
         fail(p, "quantity out of range");
     };
-  const product = object(
-    { id: text, ratio: string, yield: string, fraction: quantity(1) },
-    ["id"],
-  );
-  const from = either(
-    text,
-    list(
-      either(text, object({ id: text, show, equivalents: quantity() }, ["id"])),
-    ),
-  );
-  const to = either(text, product, list(either(text, product)));
   const sources = list(
     object({ source: text, locator: text, note: text }, ["source"]),
   );
 
-  if (kind === "markush") {
-    validateMarkushFigure(value, "figure");
+  if (source.kind === "markush") {
+    validateMarkushFigure(source, "figure");
     object(
       {
         bond: positiveNumber,
@@ -354,22 +359,9 @@ export function validateFigureInput(source: unknown): {
         flip: choice("h", "v"),
       },
       ["core", "groups"],
-    )(value, "figure");
-    return { input: value as unknown as FigureInput, warnings };
+    )(source, "figure");
+    return { input: source as unknown as MarkushInput, warnings };
   }
-  const shared = {
-    bond: positiveNumber,
-    width: positiveNumber,
-    kind: choice("route", "mechanism", "scheme", "cycle"),
-    title: text,
-    sources,
-    coordgen: bool,
-    forming: bool,
-    ring_h: bool,
-    footnote: text,
-    abbreviate: list(choice(...optionalFigureAbbreviations)),
-    mark: string,
-  };
   const structureRule: Rule = (v, p) => {
     if (isObject(v) && "template" in v) {
       const common = ["label", "name", "yield", "note", "text"];
@@ -378,243 +370,182 @@ export function validateFigureInput(source: unknown): {
         if (v[key] !== undefined) text(v[key], `${p}.${key}`);
     } else object(structure)(v, p);
   };
-  const compounds = map((v, p) =>
-    typeof v === "string" ? string(v, p) : structureRule(v, p),
-  );
-  const frameStructure: Rule = (v, p) => {
-    if (typeof v === "string") string(v, p);
-    else if (isObject(v) && "variant" in v)
-      object({ ...structure, variant: string }, ["smiles", "variant"])(v, p);
-    else structureRule(v, p);
-  };
-  const positive: Rule = (v, p) => {
-    number(v, p);
-    if (Number(v) <= 0) fail(p, "expected positive number");
-  };
-  const frames = (nested: boolean): Rule =>
-    list((v, p) => {
-      const frame = {
+  const labels = list(
+    object(
+      {
         id: text,
-        title: text,
-        map: map(either(number, string)),
-        above: text,
-        below: text,
-        arrow: arrowKind,
-        labels: list(
-          object(
-            {
-              id: text,
-              at: string,
-              kind: choice(
-                "lonePair",
-                "radical",
-                "charge",
-                "partialCharge",
-                "text",
-              ),
-              text,
-            },
-            ["id", "at", "kind"],
-          ),
-        ),
-        partialBonds: list(
-          object({ from: string, to: string, order: positive }, ["from", "to"]),
-        ),
-      };
-      if (isObject(v) && "template" in v) {
-        validateConformationSpec(v, p, Object.keys(frame));
-        for (const [key, rule] of Object.entries(frame))
-          if (v[key] !== undefined) rule(v[key], `${p}.${key}`);
-        if (v.id === undefined) fail(`${p}.id`, "required");
-      } else if (isObject(v) && "compounds" in v)
-        object(
-          {
-            ...frame,
-            compounds: map((v, p) =>
-              nested && isObject(v) && "compound" in v
-                ? object({ compound: text }, ["compound"])(v, p)
-                : frameStructure(v, p),
-            ),
-            arrows,
-            focus,
-            steps: list(
-              object(
-                {
-                  id: text,
-                  from: either(text, list(text)),
-                  to: either(text, list(text)),
-                  above: text,
-                  below: text,
-                  arrow: arrowKind,
-                },
-                ["from", "to"],
-              ),
-            ),
-          },
-          ["id", "compounds"],
-        )(v, p);
-      else
-        object(
-          {
-            smiles: string,
-            rot: number,
-            flip: choice("h", "v"),
-            coordgen: bool,
-            drawing: structure.drawing,
-            ring_h: bool,
-            abbreviate: bool,
-            abbreviations: figureAbbreviations,
-            bracket: structure.bracket,
-            scale: structure.scale,
-            numbers: bool,
-            notes: map(text),
-            arrows,
-            focus,
-            enclose,
-            ...frame,
-          },
-          ["id", "smiles"],
-        )(v, p);
-    });
-  const step = object(
-    {
-      id: text,
-      title: text,
-      sources,
-      from,
-      to,
-      above: text,
-      below: text,
-      others: show,
-      turn: choice("down", "elbow", "wrap"),
-      side: choice("left", "right"),
-      reverse: bool,
-      changes: either(
-        choice(true, false, "on", "off"),
-        object({ add: list(number), remove: list(number) }),
-      ),
-      enclose: map(enclose),
-      arrow: arrowKind,
-      tags: list(string),
-      mechanism: object({ frames: frames(true) }, ["frames"]),
-      reagentPosition: choice("above-arrow", "below-arrow"),
-    },
-    ["from", "to"],
+        at: string,
+        kind: choice("lonePair", "radical", "charge", "partialCharge", "text"),
+        text,
+        offset: object({ x: number, y: number }, ["x", "y"]),
+      },
+      ["id", "at", "kind"],
+    ),
   );
-  if (kind === "scheme")
-    object(
-      {
-        ...shared,
-        compounds,
-        ...(!grouped
-          ? {
-              cols: (v: unknown, p: string) => {
-                positive(v, p);
-                if (!Number.isInteger(v)) fail(p, "expected integer");
-              },
-            }
-          : {
-              groups: list(
-                object({ title: text, subtitle: text, items: list(text) }, [
-                  "items",
-                ]),
-              ),
-            }),
-      },
-      grouped ? ["compounds", "groups"] : ["compounds"],
-    )(value, "figure");
-  else if (kind === "cycle")
-    object(
-      {
-        ...shared,
-        nodes: list(either(text, structureRule)),
-        steps: list(object({ in: text, out: text, label: text })),
-        radius: positive,
-        branch: positive,
-      },
-      ["nodes"],
-    )(value, "figure");
-  else if (kind === "route")
-    object(
-      {
-        ...shared,
-        compounds,
-        steps: list(step),
-        anchor: text,
-        wrap: choice("serpentine"),
-        changes: choice(true, false, "on", "off"),
-      },
-      ["compounds", "steps"],
-    )(value, "figure");
-  else
-    object(
-      {
-        ...shared,
-        category: choice("reaction", "comparison", "resonance", "examples"),
-        frames: frames(false),
-      },
-      ["frames"],
-    )(value, "figure");
-  // The complete untrusted boundary above establishes the authoring type.
-  // Scope groups and cycle steps retain their separate validated contracts.
-  const input = (kind === "cycle"
-    ? { ...value, steps: undefined, cycleSteps: value.steps }
-    : grouped
-      ? { ...value, groups: undefined, scopeGroups: value.groups }
-      : value) as unknown as FigureInput;
-  if (
-    kind === "route" &&
-    (!input.steps!.length || !Object.keys(input.compounds!).length)
-  )
-    fail("figure", "requires compounds and steps");
-  const validateFrames = (group: FrameInput<unknown>[], where: string) => {
-    if (!group.length) fail(where, "requires frames");
-    for (const [i, frame] of group.entries()) {
-      if (
-        [frame.smiles, frame.template, frame.compounds].filter(
-          (v) => v !== undefined,
-        ).length !== 1
-      )
-        fail(`${where}.${i}`, "requires one of smiles, template or compounds");
-      if (frame.compounds && !Object.keys(frame.compounds).length)
-        fail(`${where}.${i}.compounds`, "requires compounds");
-      if (frame.steps && !frame.compounds)
-        fail(`${where}.${i}.steps`, "requires compounds");
-    }
+  const annotations = {
+    labels,
+    arrows,
+    focus,
+    enclose,
+    tone: choice("comparison"),
+    transitionState: bool,
+    partialBonds: list(
+      object({ from: string, to: string, order: positiveNumber }, [
+        "from",
+        "to",
+      ]),
+    ),
   };
-  if (input.frames) validateFrames(input.frames, "figure.frames");
-  for (const [i, step] of (input.steps ?? []).entries())
-    if (step.mechanism)
-      validateFrames(
-        step.mechanism.frames,
-        `figure.steps.${i}.mechanism.frames`,
-      );
-  if (kind === "scheme" && !Object.keys(input.compounds!).length)
-    fail("figure.compounds", "requires compounds");
-  if (input.scopeGroups) {
-    if (!input.scopeGroups.length) fail("figure.groups", "requires groups");
-    for (const [i, group] of input.scopeGroups.entries()) {
-      if (!group.items.length)
-        fail(`figure.groups[${i}].items`, "requires compounds");
-      for (const key of group.items)
-        if (!Object.hasOwn(input.compounds!, String(key)))
-          fail(`figure.groups[${i}].items`, `unknown compound ${key}`);
-    }
-  }
-  if (kind === "cycle") {
-    if (input.nodes!.length < 2)
-      fail("figure.nodes", "requires at least two species");
-    if (input.cycleSteps && input.cycleSteps.length !== input.nodes!.length)
-      fail("figure.steps", "requires one step per species");
-  }
-  const pending =
-    kind === "scheme" || kind === "cycle"
-      ? warnings.filter((path) => !path.endsWith(".mark"))
-      : warnings;
+  const compound: Rule = (v, p) => {
+    if (typeof v === "string") return;
+    if (isObject(v) && "template" in v) return structureRule(v, p);
+    object({ ...structure, ref: string, use: string, variant: string })(v, p);
+    if (
+      !isObject(v) ||
+      [v.smiles, v.ref, v.use].filter((item) => item !== undefined).length !== 1
+    )
+      fail(p, "requires one of smiles, ref or use");
+  };
+  const item: Rule = (v, p) => {
+    if (typeof v === "string") return;
+    object(
+      {
+        state: string,
+        placement: string,
+        id: string,
+        show,
+        equivalents: quantity(),
+        yield: string,
+        ratio: string,
+        fraction: quantity(1),
+      },
+      ["state"],
+    )(v, p);
+  };
+  const end: Rule = (v, p) => {
+    if (!Array.isArray(v)) return item(v, p);
+    if (!v.length) fail(p, "requires an endpoint");
+    list(item)(v, p);
+  };
+  const fields = {
+    states: map((v, p) => {
+      object({
+        ...annotations,
+        title: text,
+        text,
+        compounds: map(compound),
+      })(v, p);
+      if (
+        isObject(v) &&
+        v.text === undefined &&
+        (!isObject(v.compounds) || !Object.keys(v.compounds).length)
+      )
+        fail(p, "requires compounds or text");
+    }),
+    arrows: map((v, p) =>
+      object(
+        {
+          from: end,
+          to: end,
+          kind: arrowKind,
+          role: choice("reaction", "elementary", "display"),
+          title: text,
+          sources,
+          above: text,
+          below: text,
+          others: show,
+          turn: choice("down", "elbow", "wrap"),
+          side: choice("left", "right"),
+          reverse: bool,
+          changes: either(
+            choice(true, false, "on", "off"),
+            object({ add: list(number), remove: list(number) }),
+          ),
+          enclose: map(enclose),
+          tags: list(string),
+          reagentPosition: choice("above-arrow", "below-arrow"),
+          map: map(either(number, string)),
+          in: text,
+          out: text,
+          via: (v, p) => {
+            object(
+              {
+                ...fields,
+                bind: object({ from: map(string), to: map(string) }),
+              },
+              ["states", "arrows"],
+            )(v, p);
+          },
+        },
+        ["from", "to", "kind", "role"],
+      )(v, p),
+    ),
+    groups: map(
+      object(
+        {
+          ...annotations,
+          title: text,
+          subtitle: text,
+          items: list(string),
+          edges: list(string),
+        },
+        ["items"],
+      ),
+    ),
+    layout: object({
+      cols: (v, p) => {
+        positiveNumber(v, p);
+        if (!Number.isInteger(v)) fail(p, "expected integer");
+      },
+      anchor: string,
+      wrap: choice("serpentine"),
+      radius: positiveNumber,
+      branch: positiveNumber,
+    }),
+    views: map(
+      object({ items: list(string), arrows: list(string), titles: bool }, [
+        "items",
+      ]),
+    ),
+    yields: list(
+      object(
+        {
+          arrows: list(string),
+          product: string,
+          yield: string,
+          sources,
+          note: text,
+        },
+        ["arrows", "product", "yield"],
+      ),
+    ),
+  } satisfies Record<string, Rule>;
+  object(
+    {
+      ...fields,
+      kind: choice("scheme"),
+      id: (v, p) => {
+        if (typeof v !== "string" || !/^(rxn|rte|mec)_[a-z0-9_-]+$/.test(v))
+          fail(p, "invalid figure ID");
+      },
+      title: text,
+      bond: positiveNumber,
+      width: positiveNumber,
+      sources,
+      footnote: text,
+      coordgen: bool,
+      ring_h: bool,
+      forming: bool,
+      abbreviate: list(choice(...optionalFigureAbbreviations)),
+      mark: string,
+      changes: choice(true, false, "on", "off"),
+    },
+    ["states", "arrows"],
+  )(source, "figure");
   return {
-    input,
-    warnings: pending.length
-      ? [`已保存、渲染待实现: ${pending.join(", ")}`]
+    input: source as unknown as SchemeInput,
+    warnings: warnings.length
+      ? [`已保存、渲染待实现: ${warnings.join(", ")}`]
       : [],
   };
 }

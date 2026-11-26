@@ -1,3 +1,8 @@
+import {
+  appearances,
+  graphPanels,
+} from "../shared/chemical-library/figure-layout.ts";
+import type { FigureGraph } from "../shared/chemical-library/types.ts";
 import type {
   Conformation,
   Diagnostic,
@@ -126,10 +131,7 @@ function checkParticipants(
   }
 }
 
-function entryLocantDiagnostics(
-  entry: LibraryEntry,
-  entries: Library,
-): Diagnostic[] {
+function entryLocantDiagnostics(entry: LibraryEntry): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   const visit = (field: string, text?: string) => {
     if (!text) return;
@@ -146,38 +148,40 @@ function entryLocantDiagnostics(
     });
   };
   visit("footnote", entry.footnote);
-  if (entry.kind === "reaction") {
-    for (const [i, line] of entry.reagents.entries())
-      visit(`reagents[${i}]`, line);
-    for (const [i, line] of entry.conditions.entries())
-      visit(`conditions[${i}]`, line);
-    checkParticipants("", [...entry.reactants, ...entry.products], visit);
-    checkSceneText("scene", entry.scene, visit);
-  } else if (entry.kind === "route") {
-    for (const step of entry.steps) {
-      for (const [i, line] of (step.reagents ?? []).entries())
-        visit(`step(${step.id}).reagents[${i}]`, line);
-      for (const [i, line] of (step.conditions ?? []).entries())
-        visit(`step(${step.id}).conditions[${i}]`, line);
-      const reaction = entries[step.reaction];
-      if (reaction?.kind === "reaction") {
-        checkParticipants(
-          `step(${step.id}).`,
-          [...reaction.reactants, ...reaction.products],
-          visit,
-        );
-        checkSceneText(`step(${step.id}).scene`, reaction.scene, visit);
+  if (entry.kind === "figure") {
+    function visitGraph(graph: FigureGraph, prefix = "") {
+      for (const panel of graphPanels(graph)) {
+        visit(prefix + `state(${panel.id}).title`, panel.title);
+        checkSceneText(prefix + `state(${panel.id}).scene`, panel.scene, visit);
+      }
+      if (graph.layout?.panel)
+        checkSceneText(prefix + "layout", graph.layout.panel, visit);
+      for (const [id, arrow] of Object.entries(graph.arrows)) {
+        const base = prefix + `arrow(${id}).`;
+        const reagents =
+          arrow.placement?.reagents ??
+          arrow.drawing?.reagents ??
+          arrow.above ??
+          [];
+        const conditions =
+          arrow.placement?.conditions ??
+          arrow.drawing?.conditions ??
+          arrow.below ??
+          [];
+        reagents.forEach((line, i) => visit(`${base}above[${i}]`, line));
+        conditions.forEach((line, i) => visit(`${base}below[${i}]`, line));
+        if (arrow.drawing) {
+          checkParticipants(
+            base,
+            [...appearances(arrow.from), ...appearances(arrow.to)],
+            visit,
+          );
+          checkSceneText(base + "scene", arrow.drawing.scene, visit);
+        }
+        if (arrow.via) visitGraph(arrow.via, base + "via.");
       }
     }
-  } else if (entry.kind === "mechanism") {
-    for (const frame of entry.frames) {
-      visit(`frame(${frame.id}).title`, frame.title);
-      for (const [i, line] of (frame.above ?? []).entries())
-        visit(`frame(${frame.id}).above[${i}]`, line);
-      for (const [i, line] of (frame.below ?? []).entries())
-        visit(`frame(${frame.id}).below[${i}]`, line);
-      checkSceneText(`frame(${frame.id}).scene`, frame.scene, visit);
-    }
+    visitGraph(entry.graph);
   } else if (entry.kind === "conformation") {
     checkConformationText(entry, visit);
   }
@@ -187,14 +191,7 @@ function entryLocantDiagnostics(
 /** Report unescaped atom locants in figure text fields formatted by chemicalTextRuns. */
 export function figureLocantDiagnostics(entries: Library): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
-  for (const entry of Object.values(entries)) {
-    if (
-      entry.kind === "reaction" &&
-      entry.owner &&
-      entries[entry.owner]?.kind === "route"
-    )
-      continue;
-    diagnostics.push(...entryLocantDiagnostics(entry, entries));
-  }
+  for (const entry of Object.values(entries))
+    diagnostics.push(...entryLocantDiagnostics(entry));
   return diagnostics;
 }

@@ -181,10 +181,10 @@ prompt: >-
 ### figure：机理与反应
 
 必填 `kind`、`caption`、`figure`；`figure` 内写完整化学图 YAML。
-独立机理用 `kind: scheme` 与顶层 `frames`，每帧有稳定 `id` 和带原子映射号的 `smiles`。
-有箭头相连的机理帧默认按相同映射号对应原子。
-电子箭头 `arrows` 从 `lp(n)`（孤对电子）或 `pi(n,m)`（π 键）指向 `atom(n)` 或 `between(n,m)`（新键中点），`electrons: 2` 表示一对电子。
-以下两帧示例表示加成前后；需要其他端点时按需查[化学图 YAML](../../docs/content.md#figure-yaml-compilation)。
+用 `kind: scheme`、`states` 和 `arrows` 记录结构状态及它们之间的变化。
+状态中的电子箭头用 `lp(n)`、`pi(n,m)`、`atom(n)` 或 `between(n,m)` 引用 SMILES 原子映射号。
+两电子箭头可写 `electrons: 2`。
+其他端点和布局字段见[化学图 YAML](../../docs/content.md#figure-yaml-compilation)。
 
 ```request
 kind: figure
@@ -192,32 +192,23 @@ caption: 加成前后的电子变化
 figure:
   kind: scheme
   title: 加成示例
-  frames:
-    - id: before
+  states:
+    before:
       title: 成键与电子转移
-      smiles: "[CH2:1]=[O:2].[OH-:3]"
+      compounds:
+        structure: { smiles: "[CH2:1]=[O:2].[OH-:3]" }
       arrows:
         - { from: "lp(3)", to: "between(3,1)", electrons: 2 }
         - { from: "pi(1,2)", to: "atom(2)", electrons: 2 }
-    - id: after
+    after:
       title: 加成后
-      smiles: "[CH2:1]([O-:2])[OH:3]"
+      compounds:
+        structure: { smiles: "[CH2:1]([O-:2])[OH:3]" }
+  arrows:
+    add: { from: before, to: after, kind: forward, role: elementary }
 ```
 
-单步反应用 `kind: scheme`，在 `compounds` 给结构编号，`steps` 的 `from`、`to` 引用这些编号，`above` 写箭头上方的试剂或条件。
-
-```request
-kind: figure
-caption: 单步转化示例
-figure:
-  kind: scheme
-  title: 氧化示例
-  compounds:
-    1: CCO
-    2: CC=O
-  steps:
-    - { id: oxidation, from: 1, to: 2, above: "[O]" }
-```
+单步转化也使用同一模型。在箭头上写 `role: reaction` 与需要展示的 `above` 或 `below`。
 
 ### chart：数据图
 

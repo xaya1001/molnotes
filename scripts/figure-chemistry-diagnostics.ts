@@ -1,3 +1,8 @@
+import {
+  drawnArrows,
+  graphPanels,
+} from "../shared/chemical-library/figure-layout.ts";
+import type { FigureGraph } from "../shared/chemical-library/types.ts";
 import type { ChemicalToolkit } from "../shared/chemical-toolkit.ts";
 import type {
   Diagnostic,
@@ -36,55 +41,63 @@ export function figureChargeDiagnostics(
       0,
     );
   for (const entry of Object.values(entries)) {
-    const mechanism =
-      entry.kind === "mechanism"
-        ? entry
-        : entry.kind === "reaction"
-          ? entry.mechanism
-          : undefined;
-    const scenes = [
-      ...(entry.kind === "reaction"
-        ? [{ id: "scene", scene: entry.scene }]
-        : []),
-      ...(mechanism?.frames ?? []),
-    ];
-    for (const frame of scenes) {
-      for (const arrow of frame.scene.arrows ?? []) {
-        if (arrow.from.kind !== "charge") continue;
-        const ref = arrow.from.at;
-        const placement = frame.scene.molecules.find(
-          (p) => p.id === ref.molecule,
-        )!;
-        const compound = entries[placement.compound];
-        if (compound.kind !== "compound") continue;
-        if (atomCharges(compound.id)[compound.atomIds.indexOf(ref.atom)] > 0)
-          diagnostics.push({
-            code: "POSITIVE_CHARGE_SOURCE",
-            severity: "warning",
-            object: entry.id,
-            elements: [frame.id, arrow.id],
-            message: "Electron arrow starts at a positive charge",
-          });
-      }
-    }
-    if (mechanism) {
-      for (let i = 1; i < mechanism.frames.length; i++) {
-        const previous = mechanism.frames[i - 1],
-          current = mechanism.frames[i];
-        const before = total(previous.scene),
-          after = total(current.scene);
+    if (entry.kind !== "figure") continue;
+    const figureId = entry.id;
+    function inspect(graph: FigureGraph, prefix = "") {
+      const panels = graphPanels(graph);
+      const scenes = [
+        ...panels,
+        ...drawnArrows(graph).map(([id, arrow]) => ({
+          id,
+          scene: arrow.drawing.scene,
+        })),
+        ...(graph.layout?.panel
+          ? [{ id: "overview", scene: graph.layout.panel }]
+          : []),
+      ];
+      for (const { id, scene } of scenes)
+        for (const arrow of scene.arrows ?? []) {
+          if (arrow.from.kind !== "charge") continue;
+          const ref = arrow.from.at;
+          const placement = scene.molecules.find((p) => p.id === ref.molecule)!;
+          const compound = entries[placement.compound];
+          if (compound.kind !== "compound") continue;
+          if (atomCharges(compound.id)[compound.atomIds.indexOf(ref.atom)] > 0)
+            diagnostics.push({
+              code: "POSITIVE_CHARGE_SOURCE",
+              severity: "warning",
+              object: figureId,
+              elements: [prefix + id, arrow.id],
+              message: "Electron arrow starts at a positive charge",
+            });
+        }
+      for (const [id, arrow] of Object.entries(graph.arrows)) {
+        if (arrow.via) inspect(arrow.via, prefix + id + "/");
+        if (
+          arrow.role !== "elementary" ||
+          arrow.kind === "none" ||
+          arrow.from.length !== 1 ||
+          arrow.to.length !== 1
+        )
+          continue;
+        const from = panels.find(({ id }) => id === arrow.from[0].state);
+        const to = panels.find(({ id }) => id === arrow.to[0].state);
+        if (!from || !to) continue;
+        const before = total(from.scene),
+          after = total(to.scene);
         if (before !== after)
           diagnostics.push({
             code: "FRAME_CHARGE_CHANGE",
             severity: "warning",
-            object: entry.id,
-            elements: [previous.id, current.id],
+            object: figureId,
+            elements: [prefix + from.id, prefix + to.id],
             message: `Total formal charge changes from ${before} to ${after}`,
             actual: after,
             required: before,
           });
       }
     }
+    inspect(entry.graph);
   }
   return diagnostics;
 }
