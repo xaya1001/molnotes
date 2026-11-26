@@ -117,7 +117,7 @@ export interface FigureInput {
   width?: number;
   scale?: number;
   abbreviate?: AbbreviationName[];
-  kind: "route" | "mechanism" | "markush" | "gallery" | "scope" | "cycle";
+  kind: "route" | "mechanism" | "scheme" | "markush" | "cycle";
   core?: MarkushFigureData["core"];
   groups?: MarkushFigureData["groups"];
   view?: MarkushFigureData["view"];
@@ -219,20 +219,16 @@ export function validateFigureInput(source: unknown): {
 } {
   if (!isObject(source)) fail("figure", "expected YAML mapping");
   const authoredKind = source.kind;
-  if (authoredKind === "table") fail("figure.kind", "尚未支持");
-  choice(
-    "scheme",
-    "markush",
-    "gallery",
-    "scope",
-    "cycle",
-  )(authoredKind, "figure.kind");
+  choice("scheme", "markush", "cycle")(authoredKind, "figure.kind");
   const kind =
     authoredKind === "scheme"
       ? "frames" in source
         ? "mechanism"
-        : "route"
+        : "steps" in source
+          ? "route"
+          : "scheme"
       : authoredKind;
+  const grouped = kind === "scheme" && "groups" in source;
   const value: Record<string, unknown> = { ...source, kind };
   const warnings: string[] = [];
   const object =
@@ -364,7 +360,7 @@ export function validateFigureInput(source: unknown): {
   const shared = {
     bond: positiveNumber,
     width: positiveNumber,
-    kind: choice("route", "mechanism", "gallery", "scope", "cycle"),
+    kind: choice("route", "mechanism", "scheme", "cycle"),
     title: text,
     sources,
     coordgen: bool,
@@ -505,12 +501,12 @@ export function validateFigureInput(source: unknown): {
     },
     ["from", "to"],
   );
-  if (kind === "gallery" || kind === "scope")
+  if (kind === "scheme")
     object(
       {
         ...shared,
         compounds,
-        ...(kind === "gallery"
+        ...(!grouped
           ? {
               cols: (v: unknown, p: string) => {
                 positive(v, p);
@@ -525,7 +521,7 @@ export function validateFigureInput(source: unknown): {
               ),
             }),
       },
-      kind === "scope" ? ["compounds", "groups"] : ["compounds"],
+      grouped ? ["compounds", "groups"] : ["compounds"],
     )(value, "figure");
   else if (kind === "cycle")
     object(
@@ -563,7 +559,7 @@ export function validateFigureInput(source: unknown): {
   // Scope groups and cycle steps retain their separate validated contracts.
   const input = (kind === "cycle"
     ? { ...value, steps: undefined, cycleSteps: value.steps }
-    : kind === "scope"
+    : grouped
       ? { ...value, groups: undefined, scopeGroups: value.groups }
       : value) as unknown as FigureInput;
   if (
@@ -593,14 +589,11 @@ export function validateFigureInput(source: unknown): {
         step.mechanism.frames,
         `figure.steps.${i}.mechanism.frames`,
       );
-  if (
-    (kind === "gallery" || kind === "scope") &&
-    !Object.keys(input.compounds!).length
-  )
+  if (kind === "scheme" && !Object.keys(input.compounds!).length)
     fail("figure.compounds", "requires compounds");
-  if (kind === "scope") {
-    if (!input.scopeGroups!.length) fail("figure.groups", "requires groups");
-    for (const [i, group] of input.scopeGroups!.entries()) {
+  if (input.scopeGroups) {
+    if (!input.scopeGroups.length) fail("figure.groups", "requires groups");
+    for (const [i, group] of input.scopeGroups.entries()) {
       if (!group.items.length)
         fail(`figure.groups[${i}].items`, "requires compounds");
       for (const key of group.items)
@@ -614,9 +607,10 @@ export function validateFigureInput(source: unknown): {
     if (input.cycleSteps && input.cycleSteps.length !== input.nodes!.length)
       fail("figure.steps", "requires one step per species");
   }
-  const pending = ["gallery", "scope", "cycle"].includes(String(kind))
-    ? warnings.filter((path) => !path.endsWith(".mark"))
-    : warnings;
+  const pending =
+    kind === "scheme" || kind === "cycle"
+      ? warnings.filter((path) => !path.endsWith(".mark"))
+      : warnings;
   return {
     input,
     warnings: pending.length

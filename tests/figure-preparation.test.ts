@@ -45,7 +45,7 @@ test("a single frame keeps the next arrowhead clear of a reagent label", async (
 
 test("electron events use the shared red accent and draw selected forming bonds", async () => {
   const compiled = await compileFigure({
-    kind: "gallery",
+    kind: "scheme",
     compounds: {
       event: {
         smiles: "[O-:1].[CH2:2]=[O:3]",
@@ -2114,7 +2114,7 @@ test("figure canvas follows visible ink instead of saved scene whitespace", asyn
 
 test("authored bond density reaches the website renderer", async () => {
   const compiled = await compileFigure({
-    kind: "gallery",
+    kind: "scheme",
     bond: 24,
     width: 400,
     compounds: { a: "CCC" },

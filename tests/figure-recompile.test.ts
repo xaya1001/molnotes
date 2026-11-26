@@ -129,7 +129,7 @@ test("whole-library recompilation refreshes saved scenes, keeps identity and con
   const inputs = [
     "kind: scheme\ntitle: Route\ncompounds: {a: CCO, b: 'CC=O', c: 'CC(=O)O'}\nsteps:\n  - {id: first, from: a, to: b}\n  - {id: second, from: b, to: c}\n",
     "kind: scheme\nframes: [{id: event, smiles: CCO}]\n",
-    "kind: gallery\ncompounds: {a: CCO}\n",
+    "kind: scheme\ncompounds: {a: CCO}\n",
   ];
   const compiled = [];
   for (const [index, text] of inputs.entries()) {

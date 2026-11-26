@@ -332,7 +332,7 @@ test("aromatic triple-bond pi sources retain their molecular graph", async () =>
 
 test("independent mechanism panels retain the library's saved depiction", async () => {
   const gallery = await compileFigure({
-    kind: "gallery",
+    kind: "scheme",
     compounds: { a: "CCO" },
   });
   const compound = Object.values(gallery.entries).find(

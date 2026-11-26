@@ -22,7 +22,7 @@ async function drawing(input: unknown) {
   return { geometry, nodes, style };
 }
 const scope = {
-  kind: "scope",
+  kind: "scheme",
   mark: "[#6]-F",
   compounds: { a: { smiles: "CCF", yield: "80%" } },
   groups: [{ title: "Products", items: ["a"] }],

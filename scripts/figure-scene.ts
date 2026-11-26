@@ -1472,7 +1472,7 @@ export async function compileFigure(
   }
 
   let top: LibraryEntry;
-  if (kind === "gallery" || kind === "scope" || kind === "cycle") {
+  if (kind === "scheme" || kind === "cycle") {
     const cells: PanelCell[] = [];
     const items: (readonly [string, StructureInput])[] =
       kind === "cycle"

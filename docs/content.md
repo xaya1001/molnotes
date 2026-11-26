@@ -734,13 +734,14 @@ The placement uses that compound's saved identity while keeping its own placemen
 Use `frame: stepId/frameId` on a route reference or `frame: frameId` on a reaction reference to show a single attached frame.
 In the complete figure, number and focus keys for attached placements start with `stepId/frameId/` on a route and `frameId/` on a reaction.
 An individual frame uses its local placement keys.
-Galleries, grouped substrate scopes, catalytic cycles, Markush formulas and standalone conformation drawings have their own kinds.
+A `scheme` with `compounds` and no `steps` or `frames` draws a structure grid or grouped panels.
+The other source kinds are `cycle`, `markush` and `conformation`.
 
 The compiler stores the exact input in `library/sources/<figure-id>.yaml`.
 Each generated figure records `sourceFile` relative to the content root, and route reactions also record `owner`.
 The first compilation derives its stable ID from the original source path.
 Recompiling that path or the saved source retains the ID, including after edits.
-A one-step route creates `rxn_…`, a longer route creates `rte_…` and owned `rxn_…` steps, and mechanisms, galleries, scopes and cycles create `mec_…`.
+A one-step route creates `rxn_…`, a longer route creates `rte_…` and owned `rxn_…` steps, and mechanisms, structure panels and cycles create `mec_…`.
 Generated geometry uses three decimal places and omits optional empty arrays and empty focus groups.
 Step IDs and frame IDs are stable within a source, and omitted route step IDs use their one-based position.
 Use a new source when the compiled entry needs a different kind.
@@ -770,10 +771,15 @@ Within frame `compounds`, set `variant` beside `smiles` to select a saved layout
 
 SMILES identity includes stereochemistry, isotopes, charges and disconnected salt fragments. Bracket abbreviations expand before matching the saved canonical graph; maps do not enter identity. New compounds use permanent sequential atom IDs; input maps are translated through a full graph match when a compound already exists. Compound keys, names and labels stay in figure participants or captions. Saved compound variants and their atom IDs remain available to existing figures.
 
-`kind: gallery` accepts `compounds` in display order and optional positive integer `cols` (default 4). Each cell draws its saved structure with `label` (default the compound key), `name`, `yield` and `note` underneath. `kind: scope` uses the same compounds plus ordered `groups: [{title?,subtitle?,items: [compoundKeys]}]`; products flow across the shared figure width and wrap within each group. Both compile to one static `overview` frame in an `examples` mechanism entry, reusing stable compound identity and the website renderer. Structure `rot`, `flip`, `coordgen`, abbreviations, brackets, electron arrows and enclosures retain their normal meaning. The existing `substrate-scope` block continues to use its generic scheme, R-value rows and product-substitution validation; its generic product uses the same mapped terminal attachment atoms as Markush cores.
+For a `scheme` without `steps` or `frames`, `compounds` lists structures in display order and optional positive integer `cols` sets the grid's column count (default 4).
+For grouped panels, use `groups: [{title?,subtitle?,items: [compoundKeys]}]` in place of `cols`. Products flow across the figure width and wrap within each group.
+Each structure shows its `label` (default the compound key), `name`, `yield` and `note` underneath.
+Both layouts compile to one static `overview` frame in an `examples` mechanism entry, using stable compound identity.
+Structure `rot`, `flip`, `coordgen`, abbreviations, brackets, electron arrows and enclosures retain their normal meaning.
+The `substrate-scope` block validates R-value rows against its generic product, which uses the same mapped terminal attachment atoms as Markush cores.
 
 ```yaml
-kind: scope
+kind: scheme
 title: Product scope
 groups:
   - { title: Primary products, items: [a, b] }
@@ -794,7 +800,7 @@ steps:
   - { in: Oxidant, label: Oxidation }
 ```
 
-`bond` and `width` accept positive pixel values and persist in the entry’s `style` object. `bond` scales figure typography, strokes and spacing from the default 32px bond; `width` overrides the 1882px wrapping limit. The exported canvas fits visible ink with a shared margin of 0.8 bond lengths; width is a layout limit, not a fixed canvas size. Structure and frame `scale` enlarge coordinates while retaining the atom font size. Markush `scale` controls the core structure, defaulting to 1.3 for formulas and 1.7 for maps and overlays. `charges`, `dots` and `ring_h` are rejected with their field path. `table` and compound templates report unsupported input. Deferred drawing fields (`mark`, numeric arrow `bend`, and atom notes) are validated and retained in the source, with a warning that rendering awaits implementation. Compilation measures native structures, numbers, quantities and condition text before saving route positions. Every structure reserves one number line, at least as wide as a bold three-digit number; wider default labels and quantity lines retain their measured bounds. Page numbers use this reserved space without a separate compilation input; `rot`/`flip` are figure placements: positive YAML `rot` is counterclockwise after the flip, while saved scene `rotate` uses SVG clockwise angles; orientation starts at the largest uncrowded compound (or `anchor`) and propagates along reaction links, constraining the shared core and its unchanged substituents, then falling back to pinned shared atoms or a rigid turn; `align: false` disables inheritance and a compound key selects another completed reference, `wrap: serpentine` reverses the next row after a downward turn; `turn` requests down/elbow/wrap, `reverse: false` retains direction, and `side` sets condition placement on downward arrows. Placement `bracket: true|ts` encloses one molecule; `ts` includes ‡. Figure `footnote` sits below the diagram. The [default figure abbreviation list](../shared/molecule-abbreviations.ts) folds common protecting groups and terminal functional groups.
+`bond` and `width` accept positive pixel values and persist in the entry’s `style` object. `bond` scales figure typography, strokes and spacing from the default 32px bond; `width` overrides the 1882px wrapping limit. The exported canvas fits visible ink with a shared margin of 0.8 bond lengths; width is a layout limit, not a fixed canvas size. Structure and frame `scale` enlarge coordinates while retaining the atom font size. Markush `scale` controls the core structure, defaulting to 1.3 for formulas and 1.7 for maps and overlays. `charges`, `dots` and `ring_h` are rejected with their field path. Deferred drawing fields (`mark`, numeric arrow `bend`, and atom notes) are validated and retained in the source, with a warning that rendering awaits implementation. Compilation measures native structures, numbers, quantities and condition text before saving route positions. Every structure reserves one number line, at least as wide as a bold three-digit number; wider default labels and quantity lines retain their measured bounds. Page numbers use this reserved space without a separate compilation input; `rot`/`flip` are figure placements: positive YAML `rot` is counterclockwise after the flip, while saved scene `rotate` uses SVG clockwise angles; orientation starts at the largest uncrowded compound (or `anchor`) and propagates along reaction links, constraining the shared core and its unchanged substituents, then falling back to pinned shared atoms or a rigid turn; `align: false` disables inheritance and a compound key selects another completed reference, `wrap: serpentine` reverses the next row after a downward turn; `turn` requests down/elbow/wrap, `reverse: false` retains direction, and `side` sets condition placement on downward arrows. Placement `bracket: true|ts` encloses one molecule; `ts` includes ‡. Figure `footnote` sits below the diagram. The [default figure abbreviation list](../shared/molecule-abbreviations.ts) folds common protecting groups and terminal functional groups.
 `abbreviate: false` keeps the whole structure expanded, including any eligible small reagent.
 A structure or mechanism frame can enable a group with `abbreviations: [Ph]`.
 `abbreviations: [{name: NO2, atom: 22}]` folds only the NO2 group whose attachment-side nitrogen has SMILES atom map `:22`.

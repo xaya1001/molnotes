@@ -273,7 +273,7 @@ test("template structures participate in routes, panels and mechanism frames", a
       ],
     },
     {
-      kind: "gallery",
+      kind: "scheme",
       compounds: {
         a: chair,
         b: { template: "newman", front: ["H", "H", "CH3"] },
@@ -321,7 +321,7 @@ test("template structures participate in routes, panels and mechanism frames", a
 test("ring hydrogen defaults and structure overrides are saved per depiction", async () => {
   const smiles = "C1CC[C@H]2CCCC[C@@H]2C1";
   const result = await compileFigure({
-    kind: "gallery",
+    kind: "scheme",
     ring_h: false,
     compounds: { a: { smiles }, b: { smiles, ring_h: true } },
   });

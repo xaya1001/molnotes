@@ -11,23 +11,19 @@ const words = (value: unknown) =>
       : String(value);
 
 const figureNames: Record<string, string> = {
-  route: "路线",
-  mechanism: "机理",
-  gallery: "结构",
-  scope: "底物范围",
   cycle: "催化循环",
   markush: "通式",
 };
 export function figureMeta(value: unknown) {
   if (!isObject(value)) return "";
-  const kind =
-    value.kind === "scheme"
-      ? "frames" in value
-        ? "mechanism"
-        : "route"
-      : String(value.kind);
-  return figureNames[kind]
-    ? `${figureNames[kind]}${Array.isArray(value.frames) ? ` · ${value.frames.length} 帧` : ""}`
+  let name = figureNames[String(value.kind)];
+  if (value.kind === "scheme") {
+    if ("frames" in value) name = "机理";
+    else if ("steps" in value) name = "路线";
+    else name = "groups" in value ? "底物范围" : "结构";
+  }
+  return name
+    ? `${name}${Array.isArray(value.frames) ? ` · ${value.frames.length} 帧` : ""}`
     : "";
 }
 export function figureDisplay(

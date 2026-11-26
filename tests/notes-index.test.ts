@@ -119,7 +119,7 @@ test("resource request validation rejects invalid fields and figure inputs at th
     {
       kind: "figure",
       caption: "Example",
-      figure: { kind: "gallery", compounds: { a: "invalid-smiles" } },
+      figure: { kind: "scheme", compounds: { a: "invalid-smiles" } },
     },
     {
       kind: "figure",
