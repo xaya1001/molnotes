@@ -40,6 +40,7 @@ export async function compilePanelScene(
   cells: PanelCell[],
   style: FigureStyle,
   placementCaptions = false,
+  origins?: Record<string, Point>,
 ): Promise<Scene> {
   const fonts = await loadFigureFonts(),
     toolkit = await moleculeToolkit();
@@ -260,7 +261,16 @@ export async function compilePanelScene(
       height: Math.max(cell.height, bodyHeight),
     });
   };
-  if (input.kind === "cycle") {
+  if (origins) {
+    for (const cell of measured) {
+      const { x, y } = origins[cell.key];
+      putCell(
+        cell,
+        x + cell.body.x + cell.body.width / 2,
+        y + cell.body.y + cell.height / 2,
+      );
+    }
+  } else if (input.kind === "cycle") {
     // Prototype radius is in reference pixels at a 17px bond length.
     const radius = (input.radius ?? 150) / 17,
       branch = radius * (input.branch ?? 0.3);

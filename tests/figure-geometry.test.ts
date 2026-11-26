@@ -86,6 +86,8 @@ test("curve bounds use analytic extrema and ignore disconnected moveto positions
     width: 100,
     height: 75,
   });
+  const almostQuadratic = pathBox("M0 10C10 -10 20 -10 30 10.000000000000002")!;
+  close(almostQuadratic.y, -5);
   assert.deepEqual(pathBox("M10 20h-5v-8z"), {
     x: 5,
     y: 12,

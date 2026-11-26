@@ -15,6 +15,62 @@ const turn = (p: Point, a: number) => ({
   y: p.x * Math.sin(a) + p.y * Math.cos(a),
 });
 
+/** Move a placement as a rigid drawing so its dashed contacts close the ring. */
+export function placeBondContacts(
+  fixed: Point[],
+  moving: Point[],
+  contacts: [Point, Point][],
+) {
+  const [p, q] = contacts[0];
+  const next = contacts.find(([a, b]) => dist(a, p) > 0 && dist(b, q) > 0);
+  const midpoint = (a: Point, b: Point) => mul(add(a, b), 0.5);
+  let fixedCenter = p,
+    movingCenter = q,
+    angle = 0,
+    directions = [
+      { x: 1, y: 0 },
+      { x: -1, y: 0 },
+      { x: 0, y: 1 },
+      { x: 0, y: -1 },
+    ];
+  if (next) {
+    const a = sub(next[0], p),
+      b = sub(next[1], q);
+    angle = Math.atan2(a.y, a.x) - Math.atan2(b.y, b.x);
+    fixedCenter = midpoint(p, next[0]);
+    movingCenter = midpoint(q, next[1]);
+    const normal = mul({ x: a.y, y: -a.x }, 1 / norm(a));
+    directions = [normal, mul(normal, -1)];
+  }
+  const target = 1.35;
+  const candidates = directions.flatMap((direction) =>
+    [target, 1.6, 1.85].map((gap) => {
+      const at = sub(
+        add(fixedCenter, mul(direction, gap)),
+        turn(movingCenter, angle),
+      );
+      const points = moving.map((point) => add(at, turn(point, angle)));
+      const clearance = Math.min(
+        ...points.flatMap((point) =>
+          fixed.map((anchor) => dist(point, anchor)),
+        ),
+      );
+      const contactError =
+        contacts.reduce(
+          (sum, [a, b]) =>
+            sum + (dist(a, add(at, turn(b, angle))) - target) ** 2,
+          0,
+        ) / contacts.length;
+      return {
+        at,
+        score: contactError + 4 * Math.max(0, 0.9 - clearance) ** 2,
+      };
+    }),
+  );
+  const best = candidates.reduce((a, b) => (a.score <= b.score ? a : b));
+  return { at: best.at, rotate: (angle * 180) / Math.PI };
+}
+
 /** Port of arrows.place_fragments; coordinates use one bond as their unit, y upward. */
 export function placeArrowFragments(
   graph: ChemicalGraph,

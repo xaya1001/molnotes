@@ -42,6 +42,7 @@ test("native close-contact flags do not draw colored atom marks", async () => {
 
 test("compiled reaction places a spectator ion beside its charge centre", async () => {
   const { entries, reference } = await compileFigure({
+    kind: "scheme",
     compounds: { salt: "CC(=O)[O-].[Li+]", product: "CC(=O)O" },
     steps: [{ from: "salt", to: "product" }],
   });

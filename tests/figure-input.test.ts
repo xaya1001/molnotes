@@ -42,7 +42,7 @@ const fixture = async (name: string) =>
 test("forming arrows persist dashed bonds only when selected", async () => {
   for (const forming of [false, true]) {
     const compiled = await compileFigure({
-      kind: "mechanism",
+      kind: "scheme",
       forming: true,
       frames: [
         {
@@ -111,7 +111,7 @@ test("collection electron events align their reacting fragments", async () => {
 
 test("route electron events align reacting fragments after depiction", async () => {
   const compiled = await compileFigure({
-    kind: "route",
+    kind: "scheme",
     changes: "off",
     compounds: {
       event: {
@@ -148,7 +148,7 @@ test("route electron events align reacting fragments after depiction", async () 
 
 test("disconnected electron events keep each fragment's free orientation", async () => {
   const compiled = await compileFigure({
-    kind: "mechanism",
+    kind: "scheme",
     frames: [
       {
         id: "event",
@@ -172,7 +172,7 @@ test("disconnected electron events keep each fragment's free orientation", async
 
 test("mixed electron events straighten once after orienting their fragments", async () => {
   const compiled = await compileFigure({
-    kind: "mechanism",
+    kind: "scheme",
     frames: [
       {
         id: "event",
@@ -198,9 +198,9 @@ test("structures and reactions without electron events share their free orientat
   const smiles = "[2H:1][CH2:2][C:3](=[O:4])C.[OH-:5]";
   let expected: Compound["layout"]["coords"] | undefined;
   for (const input of [
-    { kind: "mechanism", frames: [{ id: "event", smiles }] },
+    { kind: "scheme", frames: [{ id: "event", smiles }] },
     {
-      kind: "route",
+      kind: "scheme",
       anchor: "event",
       changes: "off",
       compounds: { event: smiles, product: "CCO" },
@@ -281,7 +281,7 @@ test("fragment depiction retains a linear charged electrophile", async () => {
 
 test("sequential electron frames inherit the reacting chain direction", async () => {
   const compiled = await compileFigure({
-    kind: "mechanism",
+    kind: "scheme",
     frames: [
       {
         id: "first",
@@ -313,7 +313,7 @@ test("sequential electron frames inherit the reacting chain direction", async ()
 
 test("inter-frame arrows center on the complete reacting fragments", async () => {
   const compiled = await compileFigure({
-    kind: "mechanism",
+    kind: "scheme",
     frames: [
       {
         id: "first",
@@ -339,7 +339,7 @@ test("inter-frame arrows center on the complete reacting fragments", async () =>
 
 test("condensed reacting groups retain the source orientation across frames", async () => {
   const compiled = await compileFigure({
-    kind: "mechanism",
+    kind: "scheme",
     frames: [
       {
         id: "first",
@@ -367,7 +367,7 @@ test("condensed reacting groups retain the source orientation across frames", as
 
 test("ring stereocentre hydrogens participate before depicting a reacting mixture", async () => {
   const compiled = await compileFigure({
-    kind: "mechanism",
+    kind: "scheme",
     coordgen: true,
     frames: [
       {
@@ -391,7 +391,7 @@ test("ring stereocentre hydrogens participate before depicting a reacting mixtur
 
 test("electron-event routes retain the chemistry of their unannotated anchor", async () => {
   const compiled = await compileFigure({
-    kind: "route",
+    kind: "scheme",
     anchor: "start",
     changes: "off",
     compounds: {
@@ -424,7 +424,7 @@ test("electron-event routes retain the chemistry of their unannotated anchor", a
 
 test("step enclosures override structure defaults and empty selections clear one step", async () => {
   const compiled = await compileFigure({
-    kind: "route",
+    kind: "scheme",
     compounds: {
       a: "CCO",
       b: { smiles: "[CH3:1][CH:2]=[O:3]", enclose: [{ atoms: [3] }] },
@@ -481,7 +481,7 @@ test("chemical identity ignores source maps and labels, retaining stereo, isotop
     sources: [{ source: "unknown", locator: "Fixture", note: "Authored" }],
   });
   const input = {
-    kind: "mechanism",
+    kind: "scheme",
     frames: [
       {
         id: "first",
@@ -500,6 +500,7 @@ test("chemical identity ignores source maps and labels, retaining stereo, isotop
   assert.equal(retained.title, "Saved");
   const route = await compileFigure(
     {
+      kind: "scheme",
       compounds: {
         a: { smiles: "CCO", label: "A", name: "Local" },
         b: "[CH3:4][CH2:5][OH:6]",
@@ -525,6 +526,7 @@ test("chemical identity ignores source maps and labels, retaining stereo, isotop
     f: "CC[O-].[Na+]",
   };
   const distinct = await compileFigure({
+    kind: "scheme",
     compounds,
     steps: [{ from: "a", to: ["b", "c", "d", "e", "f"] }],
   });
@@ -545,7 +547,7 @@ test("explicit mapped hydrogens retain their endpoints beside an implicit-hydrog
     }),
   );
   const input = {
-    kind: "mechanism",
+    kind: "scheme",
     frames: [
       {
         id: "transfer",
@@ -596,6 +598,7 @@ test("explicit mapped hydrogens retain their endpoints beside an implicit-hydrog
 
 test("bracket abbreviations expand before graph deduplication", async () => {
   const r = await compileFigure({
+    kind: "scheme",
     compounds: { a: "CO[TBS]", b: "CO[Si](C)(C)C(C)(C)C" },
     steps: [{ from: "a", to: "b" }],
   });
@@ -606,6 +609,7 @@ test("bracket abbreviations expand before graph deduplication", async () => {
   assert.ok(!cs[0].smiles.includes("TBS"));
   assert.deepEqual(cs[0].layout.abbreviations, ["TBS"]);
   const ring = await compileFigure({
+    kind: "scheme",
     compounds: { a: "c1ccc(O[PMB])cc1", b: "c1ccc(OCc2ccc(OC)cc2)cc1" },
     steps: [{ from: "a", to: "b" }],
   });
@@ -662,6 +666,7 @@ test("reaction participants preserve product text and text-only reagents", async
 
   for (const show of ["box", "text", "plus", "none"]) {
     const result = await compileFigure({
+      kind: "scheme",
       compounds: { a: "CCO", b: { smiles: "N", text: "Ammonia" }, c: "CCN" },
       steps: [{ from: ["a", { id: "b", show }], to: "c" }],
     });
@@ -686,7 +691,7 @@ test("mechanism YAML preserves maps, arrow IDs and focus", async () => {
     supporting: [{ arrows: ["support"] }],
   });
   const aromatic = await compileFigure({
-    kind: "mechanism",
+    kind: "scheme",
     frames: [
       {
         id: "ring",
@@ -704,7 +709,7 @@ test("mechanism YAML preserves maps, arrow IDs and focus", async () => {
     ].molblock,
   );
   const same = await compileFigure({
-    kind: "mechanism",
+    kind: "scheme",
     frames: [
       { id: "a", smiles: "[CH3:7][OH:8]" },
       { id: "b", smiles: "[CH3:7][O-:8]" },
@@ -723,6 +728,7 @@ test("mechanism YAML preserves maps, arrow IDs and focus", async () => {
     "none",
   ]) {
     const r = await compileFigure({
+      kind: "scheme",
       compounds: { a: "CO", b: "C=O" },
       steps: [{ from: "a", to: "b", arrow }],
     });
@@ -732,6 +738,7 @@ test("mechanism YAML preserves maps, arrow IDs and focus", async () => {
 
 test("reaction sources preserve equivalents, mixture fractions, tags and reagent position", async () => {
   const input = {
+    kind: "scheme",
     compounds: { a: "CCO", b: "CC=O", c: "CC(=O)O" },
     steps: [
       {
@@ -769,7 +776,7 @@ test("reaction sources preserve equivalents, mixture fractions, tags and reagent
 
 test("YAML boundary rejects unsupported kinds and style fields, validates deferred references", async () => {
   const input = {
-    kind: "route",
+    kind: "scheme",
     compounds: { a: "CCO", b: "CC=O" },
     steps: [{ from: "a", to: "b" }],
   };
@@ -781,7 +788,7 @@ test("YAML boundary rejects unsupported kinds and style fields, validates deferr
   for (const kind of ["table"])
     assert.throws(() => validateFigureInput({ ...input, kind }), /尚未支持/);
   const deferred = {
-    kind: "mechanism",
+    kind: "scheme",
     forming: true,
     frames: [
       {
@@ -804,7 +811,7 @@ test("YAML boundary rejects unsupported kinds and style fields, validates deferr
   );
   await assert.rejects(
     compileFigure({
-      kind: "mechanism",
+      kind: "scheme",
       frames: [
         {
           id: "a",
@@ -927,6 +934,7 @@ test("shared intermediates draw their electron annotations once", async () => {
     { figureStyle } = await import("./fixtures/figures/style.ts"),
     { walkGeometry } = await import("../src/ui/library/geometry-walk.ts");
   const compiled = await compileFigure({
+    kind: "scheme",
     compounds: {
       a: "CC(O)C",
       b: {
@@ -966,8 +974,9 @@ test("route depiction propagates from its largest anchor independently of compou
     { from: "a", to: "b" },
     { from: "b", to: "c" },
   ];
-  const forward = await compileFigure({ compounds, steps });
+  const forward = await compileFigure({ kind: "scheme", compounds, steps });
   const reverse = await compileFigure({
+    kind: "scheme",
     compounds: Object.fromEntries(Object.entries(compounds).reverse()),
     steps,
   });
@@ -1032,6 +1041,7 @@ test("conditions retain reagent order and chemical digit typography", async () =
   assert.equal(azide.map((run) => run.text).join(""), "N3−");
   assert.ok(azide.at(-1)!.shift < 0);
   const compiled = await compileFigure({
+    kind: "scheme",
     compounds: { a: "CCO", b: "CC=O", reagent: { text: "PhB(OH)2" } },
     steps: [{ from: ["a", "reagent"], to: "b", above: "Pd(PPh3)4, K2CO3" }],
   });
@@ -1119,6 +1129,7 @@ test("compiled reactions include boxed structures, placement brackets and styled
   const { figureStyle } = await import("./fixtures/figures/style.ts");
   const { walkGeometry } = await import("../src/ui/library/geometry-walk.ts");
   const input = {
+    kind: "scheme",
     compounds: { a: { smiles: "CCO", bracket: "ts" }, b: "CC=O", c: "CBr" },
     steps: [
       {
@@ -1176,6 +1187,7 @@ test("compiled reactions include boxed structures, placement brackets and styled
 
 test("contracted CoordGen layouts retain the shared bond length", async () => {
   const result = await compileFigure({
+    kind: "scheme",
     compounds: {
       a: { smiles: "N#CC1CCCCCCCCCCC1", coordgen: true, abbreviations: ["CN"] },
       b: { smiles: "N#CC1CCCCCCCCCCC1", abbreviations: ["CN"] },
@@ -1212,12 +1224,12 @@ test("a mechanism rejects shortening an arrow-bearing group, while a reaction ca
   };
   await assert.rejects(
     compileFigure({
-      kind: "mechanism",
+      kind: "scheme",
       frames: [{ ...frame, abbreviations: ["Boc"] }],
     }),
     /frames\.protonation\.abbreviations: Boc must be expanded at mechanism atom 4/,
   );
-  const mechanism = await compileFigure({ kind: "mechanism", frames: [frame] });
+  const mechanism = await compileFigure({ kind: "scheme", frames: [frame] });
   const entry = mechanism.entries[mechanism.reference.ref] as Mechanism;
   const mechanismPlacement = entry.frames[0].scene.molecules[0];
   const mechanismCompound = mechanism.entries[
@@ -1233,6 +1245,7 @@ test("a mechanism rejects shortening an arrow-bearing group, while a reaction ca
   );
 
   const result = await compileFigure({
+    kind: "scheme",
     compounds: {
       a: { smiles, abbreviations: ["Boc"] },
       b: "CCN",
@@ -1253,6 +1266,7 @@ test("a mechanism rejects shortening an arrow-bearing group, while a reaction ca
 
 test("a shared substituent keeps its direction when a ring bond is reduced", async () => {
   const result = await compileFigure({
+    kind: "scheme",
     coordgen: true,
     anchor: "a",
     compounds: {
@@ -1300,6 +1314,7 @@ test("CXSMILES repeat units retain their brackets and multiplier", async () => {
     { figureStyle } = await import("./fixtures/figures/style.ts"),
     { walkGeometry } = await import("../src/ui/library/geometry-walk.ts");
   const result = await compileFigure({
+    kind: "scheme",
     compounds: { a: "CCCOCC |Sg:n:2:n:ht|", b: "CCCOC=O |Sg:n:2:n:ht|" },
     steps: [{ from: "a", to: "b" }],
   });
@@ -1325,6 +1340,7 @@ test("CXSMILES repeat units retain their brackets and multiplier", async () => {
 
 test("an authored structure scale enlarges saved bond geometry", async () => {
   const result = await compileFigure({
+    kind: "scheme",
     compounds: { a: { smiles: "CCO", scale: 1.45 }, b: "CC=O" },
     steps: [{ from: "a", to: "b" }],
   });
@@ -1342,6 +1358,7 @@ test("positive authored rotation turns counterclockwise and propagates from the 
     { loadFigureFonts } = await import("../scripts/figure-fonts.ts"),
     { figureStyle } = await import("./fixtures/figures/style.ts");
   const input = {
+    kind: "scheme",
     anchor: "a",
     compounds: { a: { smiles: "CC(O)C=O" }, b: "CC(O)C=O" },
     steps: [{ from: "a", to: "b" }],
@@ -1384,6 +1401,7 @@ test("authored atom maps render as native atom numbers", async () => {
     { figureStyle } = await import("./fixtures/figures/style.ts"),
     { walkGeometry } = await import("../src/ui/library/geometry-walk.ts");
   const result = await compileFigure({
+    kind: "scheme",
     compounds: {
       a: { smiles: "[CH3:7][CH:14]([OH:21])C=O", numbers: true },
       b: "CC(O)C=O",
@@ -1416,6 +1434,7 @@ test("new depictions place charge markers for their new bond directions", async 
     { figureGeometryDiagnostics } =
       await import("../src/ui/library/geometry-diagnostics.ts");
   const input = {
+    kind: "scheme",
     title: "Charged transformation",
     compounds: { a: "COC(=O)c1cccnc1", b: "COC(=O)c1ccc[n+](C)c1" },
     steps: [{ from: "a", to: "b" }],
@@ -1555,6 +1574,7 @@ test("gallery line spacing includes superscripts and subscripts in adjacent capt
 
 test("a route inherits the core after an electron event places its fragments", async () => {
   const compiled = await compileFigure({
+    kind: "scheme",
     changes: "off",
     compounds: {
       precursor: "CCC=C",
@@ -1600,6 +1620,7 @@ test("a route inherits the core after an electron event places its fragments", a
 
 test("figure density fields survive compilation and library validation", async () => {
   const result = await compileFigure({
+    kind: "scheme",
     bond: 24,
     width: 600,
     compounds: { a: "CCO", b: "CC=O" },
