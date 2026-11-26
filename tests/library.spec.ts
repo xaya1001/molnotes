@@ -671,7 +671,7 @@ test("adjacent bond transfers use a readable arc when space is available", async
   const { compileFigure } = await import("../scripts/figure-scene.ts");
   const { entries, reference } = await compileFigure({
     title: "Bond transfer",
-    kind: "mechanism",
+    kind: "scheme",
     frames: [
       {
         id: "transfer",

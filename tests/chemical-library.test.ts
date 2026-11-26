@@ -500,7 +500,7 @@ test("content reads compiled YAML figures with shared compound identity", async 
     join(process.env.TMPDIR ?? tmpdir(), "chemical-library-"),
   );
   const compiled = await compileFigure({
-    kind: "mechanism",
+    kind: "scheme",
     frames: [
       { id: "first", smiles: "CCO" },
       { id: "second", smiles: "CCO", rot: 90, arrow: "none" },

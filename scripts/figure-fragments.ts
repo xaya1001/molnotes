@@ -1,5 +1,6 @@
 import type { ChemicalGraph } from "../shared/chemical-library/chemistry.ts";
 import type { Point } from "../shared/chemical-library/types.ts";
+import { segmentDistance } from "../src/ui/library/geometry-collision.ts";
 const add = (a: Point, b: Point): Point => ({ x: a.x + b.x, y: a.y + b.y });
 const sub = (a: Point, b: Point): Point => ({ x: a.x - b.x, y: a.y - b.y });
 const mul = (a: Point, k: number): Point => ({ x: a.x * k, y: a.y * k });
@@ -27,6 +28,7 @@ export function placeBondContacts(
   let fixedCenter = p,
     movingCenter = q,
     angle = 0,
+    offsets = [{ x: 0, y: 0 }],
     directions = [
       { x: 1, y: 0 },
       { x: -1, y: 0 },
@@ -41,31 +43,46 @@ export function placeBondContacts(
     movingCenter = midpoint(q, next[1]);
     const normal = mul({ x: a.y, y: -a.x }, 1 / norm(a));
     directions = [normal, mul(normal, -1)];
+    offsets = [0, -0.3, 0.3, -0.6, 0.6].map((offset) =>
+      mul(a, offset / norm(a)),
+    );
   }
   const target = 1.35;
+  const rotated = moving.map((point) => turn(point, angle));
+  const rotatedCenter = turn(movingCenter, angle);
   const candidates = directions.flatMap((direction) =>
-    [target, 1.6, 1.85].map((gap) => {
-      const at = sub(
-        add(fixedCenter, mul(direction, gap)),
-        turn(movingCenter, angle),
-      );
-      const points = moving.map((point) => add(at, turn(point, angle)));
-      const clearance = Math.min(
-        ...points.flatMap((point) =>
-          fixed.map((anchor) => dist(point, anchor)),
-        ),
-      );
-      const contactError =
-        contacts.reduce(
-          (sum, [a, b]) =>
-            sum + (dist(a, add(at, turn(b, angle))) - target) ** 2,
-          0,
-        ) / contacts.length;
-      return {
-        at,
-        score: contactError + 4 * Math.max(0, 0.9 - clearance) ** 2,
-      };
-    }),
+    offsets.flatMap((offset) =>
+      [target, 1.5, 1.65, 1.8].map((gap) => {
+        const targetCenter = add(add(fixedCenter, offset), mul(direction, gap));
+        const at = sub(targetCenter, rotatedCenter);
+        const points = rotated.map((point) => add(at, point));
+        const clearance = Math.min(
+          ...points.flatMap((point) =>
+            fixed.map((anchor) => dist(point, anchor)),
+          ),
+        );
+        const contactError =
+          contacts.reduce((sum, [a, b]) => {
+            const end = points[moving.indexOf(b)];
+            const nearby = [
+              ...fixed.filter((point) => point !== a),
+              ...points.filter((point) => point !== end),
+            ];
+            const room = Math.min(
+              ...nearby.map((point) => segmentDistance(point, a, end)),
+            );
+            return (
+              sum +
+              (dist(a, end) - target) ** 2 +
+              6 * Math.max(0, 0.5 - room) ** 2
+            );
+          }, 0) / contacts.length;
+        return {
+          at,
+          score: contactError + 4 * Math.max(0, 0.9 - clearance) ** 2,
+        };
+      }),
+    ),
   );
   const best = candidates.reduce((a, b) => (a.score <= b.score ? a : b));
   return { at: best.at, rotate: (angle * 180) / Math.PI };
