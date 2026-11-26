@@ -30,11 +30,12 @@ const keys = (
 export async function compileMechanismFrameLayout(
   library: Library,
   entry: Mechanism,
-  frame: FrameInput,
+  frame: Pick<FrameInput, "id" | "steps">,
   cells: PanelCell[],
   input: FigureInput,
   style: FigureStyle,
   contacts: [AtomRef, AtomRef][],
+  placementCaptions: boolean,
 ): Promise<Scene> {
   if (!frame.steps?.length) {
     const forward = await compilePanelScene(
@@ -43,6 +44,7 @@ export async function compileMechanismFrameLayout(
       { ...input, kind: "gallery" },
       cells,
       style,
+      placementCaptions,
     );
     if (cells.length !== 2 || !contacts.length) return forward;
     const reverse = await compilePanelScene(
@@ -51,6 +53,7 @@ export async function compileMechanismFrameLayout(
       { ...input, kind: "gallery" },
       [...cells].reverse(),
       style,
+      placementCaptions,
     );
     const options = {
       style,
@@ -150,7 +153,12 @@ export async function compileMechanismFrameLayout(
   await compileRouteLayout(
     working,
     route,
-    { ...input, kind: "route", compounds: frame.compounds, steps: frame.steps },
+    {
+      ...input,
+      kind: "route",
+      compounds: Object.fromEntries(cells.map(({ key, spec }) => [key, spec])),
+      steps: frame.steps,
+    },
     raw,
     style,
   );
@@ -175,6 +183,7 @@ export async function compileMechanismFrameLayout(
         { ...input, kind: "gallery" },
         [cell],
         style,
+        placementCaptions,
       );
       const origin = labeled.molecules[0].at,
         dx = at.x + step.at.x - origin.x,

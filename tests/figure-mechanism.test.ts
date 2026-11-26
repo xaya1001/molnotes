@@ -1,5 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { validateFigureInstance } from "../shared/chemical-library/contract.ts";
+import { prepareLibraryFigure } from "../scripts/figure-preparation.ts";
+import { loadFigureStyle } from "../scripts/figure-route.ts";
+import { walkGeometry } from "../src/ui/library/geometry-walk.ts";
 import { compileFigure } from "../scripts/figure-scene.ts";
 import type { Mechanism } from "../shared/chemical-library/types.ts";
 import { figureChargeDiagnostics } from "../scripts/figure-chemistry-diagnostics.ts";
@@ -446,4 +450,113 @@ test("terminal charged atom hydrogens face away from their bond", async () => {
     diagnostics.filter((d) => d.code === "BOND_LABEL_OVERLAP"),
     [],
   );
+});
+
+test("a route step renders its mechanism in place and can reference one frame", async () => {
+  const result = await compileFigure({
+    kind: "scheme",
+    compounds: {
+      alcohol: { smiles: "[CH3:1][OH:2]", label: 1, name: "Alcohol" },
+      anion: "[CH3:1][O-:2]",
+      ether: "COC",
+    },
+    steps: [
+      {
+        id: "transfer",
+        from: "alcohol",
+        to: "anion",
+        mechanism: {
+          frames: [
+            {
+              id: "start",
+              compounds: { donor: { compound: "alcohol" } },
+              arrows: [
+                {
+                  id: "shift",
+                  from: "bond(donor:1,donor:2)",
+                  to: "atom(donor:2)",
+                },
+              ],
+            },
+            {
+              id: "intermediate",
+              compounds: { donor: { compound: "alcohol" }, solvent: "O" },
+            },
+            {
+              id: "end",
+              compounds: { donor: { compound: "anion" } },
+            },
+          ],
+        },
+      },
+      { id: "finish", from: "anion", to: "ether" },
+    ],
+  });
+  const { entries, reference } = result;
+  const route = entries[reference.ref];
+  assert.equal(route.kind, "route");
+  const step = entries[route.steps[0].reaction];
+  assert.equal(step.kind, "reaction");
+  const mechanism = step.mechanism!;
+  assert.equal(
+    mechanism.frames[0].scene.molecules[0].compound,
+    step.reactants[0].compound,
+  );
+  assert.equal(mechanism.maps?.length, 4);
+  assert.deepEqual(route.edges, [
+    {
+      from: "transfer",
+      to: "finish",
+      product: "product-anion",
+      reactant: "anion",
+    },
+  ]);
+  const local = {
+    ...reference,
+    numbers: { "transfer/start/donor": "A" },
+    focus: {
+      primary: { atoms: [{ molecule: "transfer/start/donor", atom: "a2" }] },
+    },
+  };
+  validateFigureInstance(entries, local);
+  const style = await loadFigureStyle();
+  const drawing = await prepareLibraryFigure(entries, local, style);
+  const visible = drawing.cardPlans!.at(-1)!.geometry;
+  const attributes = (geometry: typeof drawing, name: string) => {
+    const values: string[] = [];
+    walkGeometry(geometry.root, (node) => {
+      if (node.attributes[name]) values.push(node.attributes[name]);
+    });
+    return values;
+  };
+  assert.deepEqual(attributes(visible, "data-frame"), ["intermediate"]);
+  assert.ok(
+    attributes(visible, "data-arrow-head").includes("transfer/start/shift"),
+  );
+  assert.ok(
+    attributes(visible, "data-label").includes("transfer/alcohol:number:0"),
+  );
+  assert.ok(
+    attributes(visible, "data-reaction-arrow").includes(
+      "finish/" + route.steps[1].reaction,
+    ),
+  );
+  assert.ok(
+    attributes(visible, "data-reaction-arrow").includes("transfer/" + step.id),
+  );
+
+  assert.ok(
+    attributes(visible, "data-reaction-arrow").includes(
+      "transfer/next-intermediate",
+    ),
+  );
+  const selected = {
+    ...reference,
+    frame: "transfer/end",
+    numbers: { donor: "B" },
+  };
+  validateFigureInstance(entries, selected);
+  const independent = await prepareLibraryFigure(entries, selected, style);
+  assert.deepEqual(attributes(independent, "data-molecule"), ["donor"]);
+  assert.deepEqual(attributes(independent, "data-number"), ["donor:number"]);
 });

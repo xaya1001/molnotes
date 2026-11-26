@@ -87,6 +87,7 @@ export interface Placement {
   at: Point;
   rotate?: number;
   mirror?: boolean;
+  caption?: { number: string; name?: string; yield?: string; note?: string };
   bracket?: boolean | "ts";
 }
 export type Anchor =
@@ -182,6 +183,7 @@ export interface Reaction extends EntryBase {
   plusAt?: Point[];
   showPlus?: boolean;
   scene: Scene;
+  mechanism?: Pick<Mechanism, "frames" | "maps">;
   arrow: {
     from: Point;
     to: Point;

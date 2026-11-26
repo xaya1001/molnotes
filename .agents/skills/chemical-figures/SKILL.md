@@ -33,6 +33,11 @@ steps:
   - { id: second, from: 2, to: 3, above: "[O]" }
 ```
 
+In a route scheme, put authored mechanism frames in `steps[].mechanism.frames`.
+They render in that step in the complete figure.
+Reuse a route compound in a frame with `compounds: {placementId: {compound: routeCompoundKey}}`.
+For a single attached frame, use `frame: stepId/frameId` on a route or `frame: frameId` on a reaction.
+
 For process diagrams, use inline `flow` with `steps: [{at,title,text,block?}]`; `at` names a node or existing edge, and `block` labels an inhibited edge. Use `panels` for separate state images. Preview these blocks with `content:preview`. Timeline and flow fields are in the [data-figure recipe](../../../toolbox/recipes/figures.md) and [content contract](../../../docs/content.md#static-composite-figures).
 
 ## 按请求补全

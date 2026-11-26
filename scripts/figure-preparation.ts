@@ -28,7 +28,9 @@ export async function prepareLibraryFigure(
     ...options,
     ...(mechanismCardWidths && { cardWidths: mechanismCardWidths }),
   });
-  const routes = await prepareCardRoutes(library, reference, style);
+  const routes = reference.frame
+    ? undefined
+    : await prepareCardRoutes(library, reference, style);
   if (routes) {
     geometry.cardPlans = [];
     for (const { route, width, rows, scale } of routes) {

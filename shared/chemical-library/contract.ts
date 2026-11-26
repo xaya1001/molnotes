@@ -199,6 +199,13 @@ function scene(v: unknown, w: string): asserts v is Scene {
       m.bracket !== "ts"
     )
       fail(w, "invalid bracket");
+    if (m.caption !== undefined) {
+      object(m.caption, w);
+      if (typeof m.caption.number !== "string")
+        fail(w, "placement caption needs a number");
+      for (const key of ["name", "yield", "note"])
+        if (m.caption[key] !== undefined) text(m.caption[key], w);
+    }
     point(m.at, w);
     if (m.rotate !== undefined) number(m.rotate, w);
     if (m.mirror !== undefined && typeof m.mirror !== "boolean")
@@ -340,6 +347,35 @@ function reactionArrow(value: unknown, w: string) {
   }
 }
 
+function mechanismFrames(v: Record<string, unknown>, w: string) {
+  list(v.frames, w);
+  if (!v.frames.length) fail(w, "frames required");
+  for (const f of v.frames) {
+    object(f, w);
+    text(f.id, w);
+    text(f.title, w);
+    scene(f.scene, w);
+    if (
+      f.arrow !== undefined &&
+      !["forward", "equilibrium", "resonance", "retro", "none"].includes(
+        String(f.arrow),
+      )
+    )
+      fail(w, "unknown frame arrow");
+    for (const key of ["above", "below"])
+      if (f[key] !== undefined) strings(f[key], w);
+  }
+  if (v.maps !== undefined) {
+    list(v.maps, w);
+    for (const m of v.maps) {
+      object(m, w);
+      ref(m.from, w);
+      ref(m.to, w);
+      text(m.fromFrame, w);
+      text(m.toFrame, w);
+    }
+  }
+}
 export function validateLibraryEntry(
   v: unknown,
   w = "library",
@@ -459,6 +495,10 @@ export function validateLibraryEntry(
     if (v.tags !== undefined) strings(v.tags, w);
     scene(v.scene, w);
     reactionArrow(v.arrow, w);
+    if (v.mechanism !== undefined) {
+      object(v.mechanism, w);
+      mechanismFrames(v.mechanism, w);
+    }
   } else if (v.kind === "route") {
     list(v.steps, w);
     const ids = new Set();
@@ -514,24 +554,7 @@ export function validateLibraryEntry(
       )
     )
       fail(w, "unknown semantic category");
-    list(v.frames, w);
-    if (!v.frames.length) fail(w, "frames required");
-    for (const f of v.frames) {
-      object(f, w);
-      text(f.id, w);
-      text(f.title, w);
-      scene(f.scene, w);
-    }
-    if (v.maps !== undefined) {
-      list(v.maps, w);
-      for (const m of v.maps) {
-        object(m, w);
-        ref(m.from, w);
-        ref(m.to, w);
-        text(m.fromFrame, w);
-        text(m.toFrame, w);
-      }
-    }
+    mechanismFrames(v, w);
   } else if (v.kind === "markush") {
     validateMarkushFigure(v, w);
   } else if (v.kind === "conformation") {
@@ -579,9 +602,13 @@ export function libraryDependencies(entry: LibraryEntry): string[] {
   if (entry.kind === "reaction")
     return [
       ...new Set(
-        [...entry.reactants, ...entry.products, ...entry.scene.molecules].map(
-          (p) => p.compound,
-        ),
+        [
+          ...entry.reactants,
+          ...entry.products,
+          ...entry.scene.molecules,
+          ...(entry.mechanism?.frames.flatMap(({ scene }) => scene.molecules) ??
+            []),
+        ].map((p) => p.compound),
       ),
     ];
   if (entry.kind === "route") return entry.steps.map((s) => s.reaction);
@@ -673,6 +700,21 @@ function validateSceneReferences(
     where,
   );
 }
+export function figureFrames(library: Library, entry: LibraryEntry) {
+  if (entry.kind === "mechanism") return entry.frames;
+  if (entry.kind === "reaction") return entry.mechanism?.frames ?? [];
+  if (entry.kind === "route")
+    return entry.steps.flatMap(({ id, reaction }) => {
+      const step = library[reaction];
+      return step?.kind === "reaction"
+        ? (step.mechanism?.frames ?? []).map((frame) => ({
+            ...frame,
+            id: id + "/" + frame.id,
+          }))
+        : [];
+    });
+  return [];
+}
 export function validateFigureInstance(
   library: Library,
   reference: FigureReference,
@@ -691,15 +733,14 @@ export function validateFigureInstance(
     (entry.kind !== "compound" || !entry.variants?.[reference.variant])
   )
     fail(entry.id, "unknown layout variant");
-  if (
-    reference.frame &&
-    (entry.kind !== "mechanism" ||
-      !entry.frames.some((f) => f.id === reference.frame))
-  )
-    fail(entry.id, "unknown frame");
+  const frame = reference.frame
+    ? figureFrames(library, entry).find(({ id }) => id === reference.frame)
+    : undefined;
+  if (reference.frame && !frame) fail(entry.id, "unknown frame");
   let scenes: { scene: Pick<Scene, "molecules" | "arrows">; prefix: string }[] =
     [];
-  if (entry.kind === "compound")
+  if (frame) scenes = [{ scene: frame.scene, prefix: "" }];
+  else if (entry.kind === "compound")
     scenes = [
       {
         scene: {
@@ -710,21 +751,24 @@ export function validateFigureInstance(
         prefix: "",
       },
     ];
-  if (entry.kind === "reaction") scenes = [{ scene: entry.scene, prefix: "" }];
-  if (entry.kind === "mechanism")
-    scenes = entry.frames
-      .filter((frame) => !reference.frame || frame.id === reference.frame)
-      .map((frame) => ({
-        scene: frame.scene,
-        prefix: "",
-      }));
-  if (entry.kind === "route")
+  else if (entry.kind === "reaction")
+    scenes = [{ scene: entry.scene, prefix: "" }];
+  else if (entry.kind === "mechanism")
+    scenes = entry.frames.map(({ scene }) => ({ scene, prefix: "" }));
+  else if (entry.kind === "route")
     scenes = entry.steps.map((s) => {
       const reaction = library[s.reaction];
       if (reaction?.kind !== "reaction")
         fail(entry.id, "missing route reaction");
       return { scene: reaction.scene, prefix: s.id + "/" };
     });
+  if (!frame && (entry.kind === "reaction" || entry.kind === "route"))
+    scenes.push(
+      ...figureFrames(library, entry).map(({ id, scene }) => ({
+        scene,
+        prefix: id + "/",
+      })),
+    );
   const molecules = scenes.flatMap(({ scene, prefix }) =>
     scene.molecules.map((m) => ({ ...m, id: prefix + m.id })),
   );
@@ -793,12 +837,16 @@ export function validateLibrary(library: Library) {
           if (!placements.has(id))
             fail(entry.id, `unknown route placement ${step.id}/${id}`);
       }
-    const scenes =
-      entry.kind === "reaction"
-        ? [entry.scene]
-        : entry.kind === "mechanism"
-          ? entry.frames.map((f) => f.scene)
-          : [];
+    const mechanism =
+      entry.kind === "mechanism"
+        ? entry
+        : entry.kind === "reaction"
+          ? entry.mechanism
+          : undefined;
+    const scenes = [
+      ...(entry.kind === "reaction" ? [entry.scene] : []),
+      ...(mechanism?.frames.map(({ scene }) => scene) ?? []),
+    ];
     for (const s of scenes) {
       const ids = new Set(s.molecules.map((m) => m.id));
       for (const m of s.molecules) {
@@ -808,7 +856,7 @@ export function validateLibrary(library: Library) {
         if (m.variant && (c.kind !== "compound" || !c.variants?.[m.variant]))
           fail(entry.id, `unknown variant ${m.variant}`);
       }
-      if (entry.kind === "reaction")
+      if (entry.kind === "reaction" && s === entry.scene)
         for (const p of [...entry.reactants, ...entry.products]) {
           if (p.position === "text" || p.position === "none") continue;
           const m = s.molecules.find((m) => m.id === p.id);
@@ -819,15 +867,18 @@ export function validateLibrary(library: Library) {
         fail(entry.id, "duplicate placement");
       validateSceneReferences(s, library, entry.id);
     }
-    if (entry.kind === "mechanism") {
-      if (new Set(entry.frames.map((f) => f.id)).size !== entry.frames.length)
+    if (mechanism) {
+      if (
+        new Set(mechanism.frames.map((f) => f.id)).size !==
+        mechanism.frames.length
+      )
         fail(entry.id, "duplicate frame");
-      for (const map of entry.maps ?? [])
+      for (const map of mechanism.maps ?? [])
         for (const [frameId, ref] of [
           [map.fromFrame, map.from],
           [map.toFrame, map.to],
         ] as const) {
-          const frame = entry.frames.find((f) => f.id === frameId);
+          const frame = mechanism.frames.find((f) => f.id === frameId);
           if (!frame) fail(entry.id, `unknown mapped frame ${frameId}`);
           validateSceneReferences(frame.scene, library, entry.id, {
             primary: { atoms: [ref] },

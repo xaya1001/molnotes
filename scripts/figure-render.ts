@@ -1,3 +1,4 @@
+import { figureFrames } from "../shared/chemical-library/contract.ts";
 import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { readChemicalLibrary } from "./content/chemical-library.ts";
@@ -17,7 +18,10 @@ import {
   prepareInputVariant,
   validateCompound,
 } from "../shared/chemical-library/chemistry.ts";
-import type { Compound } from "../shared/chemical-library/types.ts";
+import type {
+  Compound,
+  FigureReference,
+} from "../shared/chemical-library/types.ts";
 const args = process.argv.slice(2);
 const value = (flag: string) => {
   const i = args.indexOf(flag);
@@ -90,8 +94,7 @@ if (input) {
   const started = performance.now();
   const widths = value("--width")?.split(",").map(Number) ?? [1366];
   const entries = (await readChemicalLibrary(resolve(root))).entries;
-  const references: import("../shared/chemical-library/types.ts").FigureReference[] =
-    [];
+  const references: FigureReference[] = [];
   if (refsFile) {
     const values: unknown = JSON.parse(await readFile(refsFile, "utf8"));
     if (!Array.isArray(values)) throw new Error("References must be an array");
@@ -114,14 +117,15 @@ if (input) {
         (!selected || e.id === selected) &&
         (!refsFile || references.some((r) => r.ref === e.id)),
     )) {
-      const refs = refsFile
+      const refs: FigureReference[] = refsFile
         ? references.filter((r) => r.ref === entry.id)
-        : entry.kind === "mechanism"
-          ? [
-              { ref: entry.id },
-              ...entry.frames.map((f) => ({ ref: entry.id, frame: f.id })),
-            ]
-          : [{ ref: entry.id }];
+        : [
+            { ref: entry.id },
+            ...figureFrames(entries, entry).map((f) => ({
+              ref: entry.id,
+              frame: f.id,
+            })),
+          ];
       for (const ref of refs) {
         const prepared = await runner.prepare(ref, 0);
         for (const width of widths) {
@@ -158,7 +162,7 @@ if (input) {
             await browser.prepareBatch();
             result = await browser.render(ref, width);
           }
-          const name = `${ref.ref}${"frame" in ref ? "-" + ref.frame : ""}${"variant" in ref && ref.variant ? "-" + ref.variant : ""}-${width}`;
+          const name = `${ref.ref}${ref.frame ? "-" + ref.frame.replaceAll("/", "__") : ""}${"variant" in ref && ref.variant ? "-" + ref.variant : ""}-${width}`;
           if (!args.includes("--check") && result.svg !== null)
             await writeFile(join(out, name + ".svg"), result.svg);
           await writeFile(

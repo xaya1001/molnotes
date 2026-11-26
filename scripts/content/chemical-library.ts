@@ -91,8 +91,14 @@ export async function readChemicalLibrary(root: string, stage?: AssetStage) {
     if (e.kind === "route") routeMetrics(e, entries);
     if (e.kind === "reaction")
       validateSceneChemistry(toolkit!, entries, e.scene, e.id);
-    if (e.kind === "mechanism")
-      for (const frame of e.frames)
+    const mechanism =
+      e.kind === "mechanism"
+        ? e
+        : e.kind === "reaction"
+          ? e.mechanism
+          : undefined;
+    if (mechanism)
+      for (const frame of mechanism.frames)
         validateSceneChemistry(
           toolkit!,
           entries,

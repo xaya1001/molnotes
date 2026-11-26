@@ -39,6 +39,7 @@ export async function compilePanelScene(
   input: FigureInput,
   cells: PanelCell[],
   style: FigureStyle,
+  placementCaptions = false,
 ): Promise<Scene> {
   const fonts = await loadFigureFonts(),
     toolkit = await moleculeToolkit();
@@ -151,7 +152,9 @@ export async function compilePanelScene(
                 ? [
                     input.kind === "scope"
                       ? `**${cell.spec.yield}**`
-                      : cell.spec.yield,
+                      : placementCaptions
+                        ? `(${cell.spec.yield})`
+                        : cell.spec.yield,
                   ]
                 : []),
               ...(cell.spec.note === undefined ? [] : [words(cell.spec.note)]),
@@ -178,6 +181,14 @@ export async function compilePanelScene(
     for (const molecule of cell.scene.molecules)
       scene.molecules.push({
         ...molecule,
+        ...(placementCaptions && {
+          caption: {
+            number: words(cell.spec.label ?? cell.key),
+            name: words(cell.spec.name) || undefined,
+            yield: cell.spec.yield,
+            note: words(cell.spec.note) || undefined,
+          },
+        }),
         at: { x: molecule.at.x + dx, y: molecule.at.y + dy },
       });
     (scene.arrows ??= []).push(...(cell.scene.arrows ?? []));
@@ -225,7 +236,7 @@ export async function compilePanelScene(
       ];
     }
     const top = cy - cell.height / 2;
-    if (cell.label) {
+    if (cell.label && !placementCaptions) {
       const start = scene.captions!.length;
       putText(
         cell.label,
