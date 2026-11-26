@@ -81,7 +81,7 @@ async function baselineDiagnostics(
     ...Object.values(libraryEntryFolders).map((dir) => `library/${dir}`),
   ];
   if (typeof page !== "string") {
-    paths.push(`${page.unit}/site.json`);
+    paths.push(`${page.unit}/site.json`, "notes");
     if (!page.chapter || page.chapter.startsWith("chapters/"))
       paths.push(`${page.unit}/${page.chapter ?? "chapters"}`);
   }

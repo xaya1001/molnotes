@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { test } from "node:test";
@@ -81,6 +88,44 @@ test("page check rejects a new diagnostic in an unselected compound variant", ()
   commit();
   const grandfathered = cli(dir, "check", file, "--figure-base", "HEAD");
   assert.equal(grandfathered.status, 0, grandfathered.stderr);
+});
+
+test("figure baseline of a practice chapter includes the note it reads", () => {
+  const dir = join(root, "practice-baseline");
+  for (const entry of [
+    "glossary.json",
+    "prose-terms.json",
+    "library",
+    "notes/reader-test",
+    "sites/sample",
+  ])
+    cpSync(join("tests/fixtures/content", entry), join(dir, entry), {
+      recursive: true,
+    });
+  const file = "sites/sample/chapters/written.md";
+  appendFileSync(
+    join(dir, file),
+    "\n```figure-ref\nref: cmp_table_sample\n```\n",
+  );
+  const git = (...args: string[]) =>
+    execFileSync(
+      "git",
+      [
+        "-C",
+        dir,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.org",
+        ...args,
+      ],
+      { encoding: "utf8" },
+    );
+  git("init", "-q");
+  git("add", ".");
+  git("commit", "-qm", "fixture");
+  const check = cli(dir, "check", file, "--figure-base", "HEAD");
+  assert.equal(check.status, 0, check.stderr);
 });
 
 test("series follows order and lists first terms without reading author plans", () => {
