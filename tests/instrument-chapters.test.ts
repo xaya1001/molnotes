@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 import { withInstrumentChapters } from "./helpers/instrument-chapters.ts";
 import {
   validateTopicContent,
-  chapterPredictions,
+  chapterExercises,
 } from "../shared/topic-content.ts";
 
 const fixture: typeof FixtureFixture = JSON.parse(
@@ -27,12 +27,12 @@ test("focused browser chapters preserve the composed sample, records and publica
   assert.deepEqual(content.data, before.data);
   assert.deepEqual(
     content.chapters.flatMap((chapter) =>
-      chapterPredictions(
+      chapterExercises(
         chapter as import("../src/ui/topic/content.ts").TopicChapter,
       ).map(({ id }) => id),
     ),
     before.chapters.flatMap((chapter) =>
-      chapterPredictions(
+      chapterExercises(
         chapter as import("../src/ui/topic/content.ts").TopicChapter,
       ).map(({ id }) => id),
     ),

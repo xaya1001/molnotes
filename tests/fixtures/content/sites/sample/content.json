@@ -21,7 +21,8 @@
           "text": "乙醇 ethanol 是中性结构演示，也是本章的样品。"
         },
         {
-          "type": "prediction",
+          "type": "choice",
+          "id": "start",
           "question": "哪个样品更多？",
           "options": ["A", "B"],
           "answer": 0,
@@ -102,9 +103,8 @@
           }
         },
         {
-          "type": "prediction",
+          "type": "number",
           "id": "difference",
-          "kind": "number",
           "question": "A 有两个，B 有一个，相差多少？",
           "input": {
             "label": "数量差",

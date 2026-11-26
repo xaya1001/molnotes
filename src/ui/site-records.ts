@@ -1,16 +1,20 @@
 import { shallowReactive } from "vue";
-import { predictionField, predictionMistaken } from "./topic/prediction.ts";
+import {
+  answerOf,
+  exerciseField,
+  exerciseMistaken,
+  isTextChoice,
+} from "./topic/exercise.ts";
 import { problemField, type ProblemAnswer } from "./topic/problem.ts";
-import type { PredictionAnswer } from "./topic/content.ts";
+import type { ExerciseAnswer } from "./topic/content.ts";
 import { api } from "./api.ts";
 import { topicBase, type CatalogSite } from "./catalog.ts";
 import type { IndexedTopic } from "../../shared/topic-index.ts";
-import { isObject } from "../contracts/records.ts";
+import { isObject, RECORD_VERSION } from "../contracts/records.ts";
 
 /**
  * `none`: nothing recorded yet; `outdated`: saved before the unified record
- * format (no `diagnostic`, or another version) and updated the next time the
- * topic opens; `unreadable`: not JSON, or a field of the wrong type.
+ * format (no `diagnostic` or another version); `unreadable`: not JSON, or a field of the wrong type.
  */
 export type SiteRecordState = "none" | "ok" | "outdated" | "unreadable";
 
@@ -23,11 +27,11 @@ export interface SiteTopicRecords {
   notes: Record<string, string>;
   /** Chosen option per review question id. */
   answers: Record<string, number>;
-  /** Wrong quiz and prediction answers and open problems rated unknown. */
+  /** Wrong quiz and exercise answers and open problems rated unknown. */
   mistakes: string[];
-  predictions: Record<string, PredictionAnswer>;
+  exercises: Record<string, ExerciseAnswer>;
   problems: Record<string, ProblemAnswer>;
-  predictionMistakes: string[];
+  exerciseMistakes: string[];
   problemMistakes: string[];
 }
 
@@ -74,9 +78,9 @@ function empty(slug: string, state: SiteRecordState): SiteTopicRecords {
     notes: {},
     answers: {},
     mistakes: [],
-    predictions: {},
+    exercises: {},
     problems: {},
-    predictionMistakes: [],
+    exerciseMistakes: [],
     problemMistakes: [],
   };
 }
@@ -90,7 +94,7 @@ function parse(topic: IndexedTopic, raw: string | null): SiteTopicRecords {
     return empty(topic.slug, "unreadable");
   }
   if (!isObject(value)) return empty(topic.slug, "unreadable");
-  if (value.version !== 1 || !isObject(value.diagnostic))
+  if (value.version !== RECORD_VERSION || !isObject(value.diagnostic))
     return empty(topic.slug, "outdated");
   const { complete, bookmarks, notes, answers } = value;
   if (
@@ -115,33 +119,38 @@ function parse(topic: IndexedTopic, raw: string | null): SiteTopicRecords {
     records.answers[id] = option;
     if (option !== correct) records.mistakes.push(id);
   }
+  for (const { id, exercise } of topic.exercises) {
+    if (!isTextChoice(exercise)) continue;
+    const option = (answers as Record<string, number>)[id];
+    if (option !== undefined) records.answers[id] = option;
+  }
   try {
-    if (value.predictions !== undefined && !isObject(value.predictions))
+    if (value.exercises !== undefined && !isObject(value.exercises))
       return empty(topic.slug, "unreadable");
-    const predictions = value.predictions;
-    records.predictions = predictionField(topic.predictions).parse(
-      predictions === undefined
+    const exercises = value.exercises;
+    records.exercises = exerciseField(topic.exercises).parse(
+      exercises === undefined
         ? undefined
         : Object.fromEntries(
-            topic.predictions
-              .filter(({ id }) => predictions[id] !== undefined)
-              .map(({ id }) => [id, predictions[id]]),
+            topic.exercises
+              .filter(({ id }) => exercises[id] !== undefined)
+              .map(({ id }) => [id, exercises[id]]),
           ),
     );
     records.problems = problemField(topic.problems).parse(value.problems);
   } catch {
     return empty(topic.slug, "unreadable");
   }
-  records.predictionMistakes = topic.predictions
-    .filter(({ id, prediction }) =>
-      predictionMistaken(prediction, records.predictions[id]),
+  records.exerciseMistakes = topic.exercises
+    .filter(({ exercise }) =>
+      exerciseMistaken(exercise, answerOf(exercise, records)),
     )
     .map(({ id }) => id);
   records.problemMistakes = topic.problems
     .filter(({ id }) => records.problems[id]?.rating === "unknown")
     .map(({ id }) => id);
   records.mistakes.push(
-    ...records.predictionMistakes,
+    ...records.exerciseMistakes,
     ...records.problemMistakes,
   );
   const recorded =
@@ -149,7 +158,7 @@ function parse(topic: IndexedTopic, raw: string | null): SiteTopicRecords {
     records.bookmarks.length ||
     Object.keys(records.notes).length ||
     Object.keys(records.answers).length ||
-    Object.keys(records.predictions).length ||
+    Object.keys(records.exercises).length ||
     Object.keys(records.problems).length;
   return recorded ? records : empty(topic.slug, "none");
 }
@@ -211,7 +220,7 @@ export function readChapterProgress(site: CatalogSite) {
     return { ...chapterProgress(site.chapterIds, []), error: "" };
   if (!isObject(value) || !isStringList(value.complete))
     return { ...chapterProgress(site.chapterIds, []), error: "记录无法读取" };
-  if (value.version !== 1 || !isObject(value.diagnostic))
+  if (value.version !== RECORD_VERSION || !isObject(value.diagnostic))
     return {
       ...chapterProgress(site.chapterIds, []),
       error: "记录是旧格式，请打开专题更新",

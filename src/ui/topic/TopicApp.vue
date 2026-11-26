@@ -15,7 +15,7 @@ import { chapterMistakes } from "./navigation.ts";
 
 /**
  * The default topic shell: the directory groups with each chapter's read
- * mark, bookmark and open mistakes (wrong quiz and prediction answers and
+ * mark, bookmark and open mistakes (wrong quiz and exercise answers and
  * problems rated unknown), and, when the topic has learning paths and the
  * current chapter lies on the chosen one, previous and next along that path.
  */

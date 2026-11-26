@@ -1,3 +1,4 @@
+import { RECORD_VERSION } from "../src/contracts/records.ts";
 import { validateTopicContent } from "../shared/topic-content.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -11,7 +12,7 @@ assert.ok(unit.kind === "sites");
 const content = unit.content;
 test("recent chapters are validated and retained with slug records", () => {
   const codec = topicRecordsCodec(validateTopicContent(content));
-  const base = { version: 1, ...codec.empty() };
+  const base = { version: RECORD_VERSION, ...codec.empty() };
   const recent = { chapter: "next", opened: 123 };
   assert.deepEqual(codec.parseRecords({ ...base, recent }).recent, recent);
   for (const recent of [

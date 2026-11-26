@@ -1,14 +1,13 @@
+import type { ExerciseRecords } from "./exercise.ts";
 import type { ProblemAnswer } from "./problem.ts";
 import type { PatentRecords } from "./patent.ts";
 import { inject, provide, type InjectionKey } from "vue";
-import type { CheckedTopic, PredictionAnswer, Topic } from "./content.ts";
+import type { CheckedTopic, Topic } from "./content.ts";
 import type { TopicRecordsStore } from "./records.ts";
 import type { GlossaryTerm } from "../../../shared/glossary.ts";
 
 /** The record field every topic mounted by `mountTopic` keeps beside the shared ones. */
-export interface TopicPredictionRecords extends PatentRecords {
-  /** The reader's answer per prediction id. */
-  predictions: Record<string, PredictionAnswer>;
+export interface TopicExerciseRecords extends PatentRecords, ExerciseRecords {
   problems: Record<string, ProblemAnswer>;
   /** The chosen learning path id, when the topic has `paths`. */
   path?: string;
@@ -16,7 +15,7 @@ export interface TopicPredictionRecords extends PatentRecords {
 
 /** What the shared topic pages and components read; `mountTopic` provides it once. */
 export interface TopicRuntime<
-  E extends object = TopicPredictionRecords,
+  E extends object = TopicExerciseRecords,
   C extends Topic = CheckedTopic,
 > {
   slug: string;
@@ -38,7 +37,7 @@ export function provideTopic(runtime: TopicRuntime<object, Topic>) {
  * injection is the one place the type is asserted.
  */
 export function useTopic<
-  E extends object = TopicPredictionRecords,
+  E extends object = TopicExerciseRecords,
 >(): TopicRuntime<E> {
   const runtime = inject(key, null);
   if (!runtime)

@@ -101,7 +101,7 @@ export async function compileUnit(
     const found: BlockReferences = {
       excerpts: [],
       quiz: [],
-      predictionIds: new Set(),
+      exerciseIds: new Set(),
       pathPicker: false,
     };
     validateTopicChapter(chapter, data, where, found);

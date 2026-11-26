@@ -1,6 +1,6 @@
 import { validateFigureReference } from "./chemical-library/contract.ts";
 import type { TopicBlock } from "../src/ui/topic/blocks.ts";
-import type { PredictionEntry, TopicContent } from "../src/ui/topic/content.ts";
+import type { ExerciseEntry, TopicContent } from "../src/ui/topic/content.ts";
 import { isInteger, isList, isObject, type JsonObject } from "./json.ts";
 import { validatePatentData } from "./patent-contract.ts";
 import { contentCitations, parseCitation } from "./source-citations.ts";
@@ -9,7 +9,7 @@ import { contentCitations, parseCitation } from "./source-citations.ts";
 // references between its parts, and it runs during publication
 // (content build) and when a topic module loads (defineTopicContent).
 import {
-  chapterPredictions,
+  chapterExercises,
   validateBlocks,
   validateExerciseProse,
   validateStaticBlocks,
@@ -18,7 +18,7 @@ import {
 
 export {
   blockSearchText,
-  chapterPredictions,
+  chapterExercises,
   resolveData,
 } from "./topic-blocks.ts";
 
@@ -210,15 +210,15 @@ function checkTopicContent(
     assert(isObject(content.data), `${name}: data must be an object`);
   validatePatentData({ chapters: content.chapters, data: content.data }, name);
   const chapterIds = new Set<unknown>();
-  // Cross references the blocks and predictions make, checked once the
+  // Cross references the blocks and exercises make, checked once the
   // excerpts and quiz are known.
   const found: BlockReferences = {
     excerpts: [],
     quiz: [],
-    predictionIds: new Set(),
+    exerciseIds: new Set(),
     pathPicker: false,
   };
-  const chapters: ChapterHead[] = [];
+  const chapters: (ChapterHead & { blocks: TopicBlock[] })[] = [];
   for (const chapter of content.chapters) {
     validateTopicChapter(chapter, content.data, name, found, chapterIds);
     chapters.push(chapter);
@@ -288,7 +288,7 @@ function checkTopicContent(
         intro.blocks,
         content.data,
         `${name}: sourcesIntro`,
-        found.predictionIds,
+        found.exerciseIds,
       );
       found.excerpts.push(...intros.excerpts);
     }
@@ -356,16 +356,23 @@ function checkTopicContent(
       );
     validateSourceReferences(question.refs, sourceIds, where);
   });
+  for (const chapter of chapters)
+    for (const block of chapter.blocks)
+      if (block.type === "choice" && block.kind === undefined)
+        assert(
+          !quizIds.has(block.id),
+          `${name}: choice ${block.id} conflicts with a quiz question`,
+        );
   validateBlockReferences(found.quiz, quizIds, "quiz question");
 }
 
-/** Every prediction of the topic with the id its records are kept under and its chapter. */
-export function topicPredictions(content: {
+/** Every exercise of the topic with the id its records are kept under and its chapter. */
+export function topicExercises(content: {
   chapters: readonly { id: string; blocks: readonly TopicBlock[] }[];
   data?: Record<string, unknown>;
-}): PredictionEntry[] {
+}): ExerciseEntry[] {
   return content.chapters.flatMap((chapter) =>
-    chapterPredictions(chapter, content.data).map((entry) => ({
+    chapterExercises(chapter, content.data).map((entry) => ({
       ...entry,
       chapter: chapter.id,
     })),

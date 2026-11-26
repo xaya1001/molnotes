@@ -258,6 +258,7 @@ optionExplanations: [A 有两个。, B 有一个。]
 `question` 围栏内是 YAML，每题必填稳定且在专题内唯一的 `id`。
 缺失或重复 id、非法 YAML 和无法换算的原子映射号会报告文件与行号。
 `type` 选择题型，其余字段沿用现有块契约；选择题、结构题、排序题和数值题都使用 `question` 与 `explanation`。
+JSON 章在原位置写 `type: choice`、`type: structure`、`type: ranking` 或 `type: number`，并显式填写专题内唯一的 `id`。
 `source` 写题目来源，`evidence` 引用专题的原文区 id，`context` 写题设，`reset: true` 开启重新作答。
 选择题的 `options`、`optionExplanations` 逐项对应，`answer` 从 0 起计数。
 JSON 与 Markdown 练习的 `question`、`options`、`explanation`、`optionExplanations` 和开放题的 `prompt`、`parts`、`answer.text` 支持化学名、斜体、加粗与行内公式，开放题的这三个字段也支持 Markdown 列表。
@@ -279,7 +280,7 @@ answer:
 ```
 
 结构题的 `molecule` 写 `name` 和带原子映射号的 `smiles`。
-答案使用 SMILES 中的映射号，发布时换算成现有预测块的零起始下标；映射号无需连续，也无需按 SMILES 顺序排列。
+答案使用 SMILES 中的映射号，发布时换算成结构题所用的零起始下标；映射号无需连续，也无需按 SMILES 顺序排列。
 同一结构中的非零映射号必须唯一，答案引用的映射号必须存在。
 `labels` 的键也写原子映射号。
 
@@ -344,6 +345,25 @@ answer: 3
 tolerance: 0
 explanation: 两个加一个是三个。
 ```
+
+### JSON 练习的点选载体
+
+文字单选用 `type: choice`。可用 `alsoCorrect` 列出其他可接受的选项下标。
+图片单选也用 `type: choice`，填写 `kind: image-points`、`image` 和 `points`。
+`image` 是图片引用或 `{ src, alt }`，`points` 的每项含 `id`、`label` 及百分比坐标 `x` 和 `y`。
+`answer` 列出可接受的点位 ID；可附文字单选 `options` 和 `optionAnswer`，两项同时正确才算做对。
+
+结构题用 `type: structure`。
+`kind: atoms` 与 `kind: bonds` 在 `molecule` 上分别点原子和键，`answer` 是下标数组。
+`kind: atom-set` 用 `molecules` 提供多张结构及各自的原子集合 `answer`，配置 `gradeAtoms: false` 时所选原子只记录与展示。
+`kind: arrows` 用 `molecule` 和 `answer: { from, to }` 指定有方向的端点，作答时先点起点再点终点。
+原子集合与箭头可带文字单选 `options` 和 `optionAnswer`，与结构选择一并提交。
+`kind: design` 用 `groups` 提供参考原子分组，用 `options` 与 `answer` 给出方案选项和参考下标。
+每组至少选择一个原子，所选原子必须属于参考分组，同时要选对方案。
+`atomExplanation` 解释参考位置，`optionExplanations` 按选项顺序给出解释。
+
+数值题可用 `readout: { model, input }` 把提交的数值交给模型计算并显示读数。
+只提供模型读数的题记录提交值并展示结果。
 
 ### 数据驱动的实验输入
 
@@ -598,7 +618,7 @@ The `build` and `publish` commands share the persistent figure proof cache.
 
 For aromatic electron flow, save a named variant with `coords` and a mapped `molblock` containing explicit Kekulé single/double bonds. Its atom order and maps must match `atomIds`; its aromatized graph, stereochemistry and isotopes must match the compound identity. Scene placements select it with `variant`. Rendering retains its explicit bond orders and saved coordinates, and π anchors require a multiple bond in that selected variant.
 
-Every authored topic structure slot that accepts `smiles` also accepts `ref: cmp_…` and optional `variant` in its place, including comparisons, properties, prediction molecules and matrix rows. Local names, highlights, answers and controls stay with the page. Content compilation resolves these references to the existing molecule-control input contract and records reverse references; pages cannot combine `ref` with `smiles` or `abbreviations`. The selected layout owns abbreviations and the default saved coordinates.
+Every authored topic structure slot that accepts `smiles` also accepts `ref: cmp_…` and optional `variant` in its place, including comparisons, properties, exercise molecules and matrix rows. Local names, highlights, answers and controls stay with the page. Content compilation resolves these references to the existing molecule-control input contract and records reverse references; pages cannot combine `ref` with `smiles` or `abbreviations`. The selected layout owns abbreviations and the default saved coordinates.
 
 Indexed controls depend on SMILES parser atom and bond order. To preserve an existing input, save its exact string as the variant's `inputSmiles`; it must describe the same molecular graph, stereochemistry and isotopes. It retains authored coordinates and parser order, so existing answers and stored selections keep their meaning. Prepare one with `figure:render -- --library <content-root> --prepare <request.json> --out <output>`, where the request is `{ "compound": <saved-entry>, "variant": "input-order", "inputSmiles": "<original input>", "abbreviations": [] }`. Omitting `abbreviations` keeps the indexed input unfolded. The output is the updated compound entry. Reference that variant when migrating an indexed slot; keep question IDs and record keys unchanged.
 

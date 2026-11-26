@@ -7,8 +7,13 @@ import {
   createRecordCodec,
   RECORD_VERSION,
 } from "../../src/contracts/records.ts";
-import { predictionField, pathField } from "../../src/ui/topic/prediction.ts";
-import { topicPredictions } from "../../shared/topic-content.ts";
+import {
+  exerciseField,
+  matrixField,
+  choiceQuestions,
+  pathField,
+} from "../../src/ui/topic/exercise.ts";
+import { topicExercises } from "../../shared/topic-content.ts";
 import type { TopicContent } from "../../src/ui/topic/content.ts";
 import type { LoadedSnapshot } from "./content-cache.ts";
 
@@ -25,14 +30,16 @@ interface NotesRecord {
 }
 
 export function topicRecordsCodec(content: TopicContent) {
+  const exercises = topicExercises(content);
   return createRecordCodec({
     chapterIds: content.chapters.map((c) => c.id),
-    quiz: content.quiz ?? [],
+    quiz: choiceQuestions(content.quiz ?? [], exercises),
     diagnostic: content.placement ?? content.quiz ?? [],
     extras: {
       ...patentRecordFields(content),
       problems: problemField(topicProblems(content)),
-      predictions: predictionField(topicPredictions(content)),
+      exercises: exerciseField(exercises),
+      matrices: matrixField(exercises),
       ...(content.paths ? { path: pathField(content.paths) } : {}),
     },
   });

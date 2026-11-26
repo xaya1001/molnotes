@@ -223,7 +223,7 @@ test("published content, records and HTTP assets", async () => {
       "etag",
     )!;
     record.complete = ["start"];
-    record.predictions = { start: { option: 0 } };
+    record.answers = { start: 0 };
     const put = async (value: unknown) =>
       call("/api/records/topics/sample", {
         method: "PUT",
@@ -273,7 +273,7 @@ test("published content, records and HTTP assets", async () => {
     );
     assert.equal((await put({ ...record, complete: ["missing"] })).status, 400);
     assert.equal(
-      (await put({ ...record, predictions: { start: { option: 99 } } })).status,
+      (await put({ ...record, answers: { start: 99 } })).status,
       400,
     );
     const notes = { "/notes/reader-test/first": { opened: 123, read: true } };

@@ -9,7 +9,7 @@ test("blocks: source numbers everywhere, terms at their first occurrence across 
     [
       { type: "paragraph", text: "占有率先于 IC50 [1]。" },
       {
-        type: "prediction",
+        type: "choice",
         id: "p",
         question: "?",
         options: ["a", "b"],

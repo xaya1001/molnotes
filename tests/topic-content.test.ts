@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   blockSearchText,
-  chapterPredictions,
+  chapterExercises,
   chapterRoutePath,
   validateTopicContent,
 } from "../shared/topic-content.ts";
@@ -32,7 +32,8 @@ function content(overrides = {}) {
           { type: "heading", text: "正文" },
           { type: "paragraph", text: "一段" },
           {
-            type: "prediction",
+            type: "choice",
+            id: "a",
             question: "哪个？",
             options: ["x", "y"],
             answer: 1,
@@ -123,7 +124,8 @@ test("cross references and answer ranges are checked", () => {
             ...content().chapters[0],
             blocks: [
               {
-                type: "prediction",
+                type: "choice",
+                id: "a",
                 question: "?",
                 options: ["x", "y"],
                 answer: 3,
@@ -144,9 +146,10 @@ test("cross references and answer ranges are checked", () => {
     assert.throws(() => validateTopicContent(content(overrides)), message);
 });
 
-test("structure predictions name the molecule, the right indices and a known excerpt", () => {
+test("structure exercises name the molecule, the right indices and a known excerpt", () => {
   const structure = {
-    type: "prediction",
+    type: "structure",
+    id: "a",
     kind: "atoms",
     question: "哪个碳？",
     molecule: { name: "m", smiles: "ClC1=CC=CC=C1" },
@@ -190,7 +193,8 @@ function blocksContent(blocks: unknown, extra = {}) {
   return { ...base, ...extra, chapters: [{ ...base.chapters[0], blocks }] };
 }
 const choice = {
-  type: "prediction",
+  type: "choice",
+  id: "a",
   question: "哪个？",
   options: ["x", "y"],
   answer: 1,
@@ -220,7 +224,7 @@ test("a blocks chapter passes when every block fits the catalogue", () => {
       { type: "excerpt", excerpt: "e1" },
       { type: "reading", scope: "topic" },
       {
-        type: "prediction",
+        type: "structure",
         id: "second",
         kind: "atoms",
         question: "?",
@@ -242,7 +246,7 @@ test("a blocks chapter passes when every block fits the catalogue", () => {
   );
   assert.equal(validateTopicContent(value), value);
   assert.deepEqual(
-    chapterPredictions(validateTopicContent(value).chapters[0]).map(
+    chapterExercises(validateTopicContent(value).chapters[0]).map(
       (entry) => entry.id,
     ),
     ["a", "second"],
@@ -252,7 +256,9 @@ test("a blocks chapter passes when every block fits the catalogue", () => {
 test("blocks are checked against the catalogue and their references", () => {
   const cases = [
     [[{ type: "poem", text: "x" }], /is not a block type/],
-    [[choice, { ...choice, id: undefined }], /repeats prediction id a/],
+    [[choice, { ...choice }], /repeats id a/],
+    [[{ ...choice, id: undefined }], /id must be text/],
+    [[{ ...choice, type: "prediction" }], /is not a block type/],
     [
       [{ type: "table", caption: "表", columns: ["x", "y"], rows: [["1"]] }],
       /one text, link or structure cell per column/,
@@ -318,7 +324,7 @@ const structureInput = {
   ],
 };
 
-test("data components, formulas and the other prediction kinds are blocks too", () => {
+test("data components, formulas and the other exercise kinds are blocks too", () => {
   const value = blocksContent(
     [
       { type: "formula", tex: "k = A e^{-E_a/RT}", caption: "Arrhenius" },
@@ -334,7 +340,7 @@ test("data components, formulas and the other prediction kinds are blocks too", 
       { type: "data-table", table: tableInput, title: "表", label: "数据" },
       { type: "structure-lab", set: structureInput, ids: ["5V3O"] },
       {
-        type: "prediction",
+        type: "structure",
         id: "set",
         kind: "atom-set",
         question: "?",
@@ -342,7 +348,7 @@ test("data components, formulas and the other prediction kinds are blocks too", 
         explanation: "e",
       },
       {
-        type: "prediction",
+        type: "structure",
         id: "arrow",
         kind: "arrows",
         question: "?",
@@ -354,12 +360,15 @@ test("data components, formulas and the other prediction kinds are blocks too", 
     { data: { grid: matrixInput } },
   );
   assert.equal(validateTopicContent(value), value);
-  const predictions = chapterPredictions(
+  const predictions = chapterExercises(
     validateTopicContent(value).chapters[0],
     validateTopicContent(value).data,
   );
   assert.deepEqual(
-    predictions.map((entry) => [entry.id, entry.prediction.kind]),
+    predictions.map((entry) => [
+      entry.id,
+      entry.exercise.kind ?? entry.exercise.type,
+    ]),
     [
       ["grid", "matrix"],
       ["set", "atom-set"],
@@ -367,12 +376,12 @@ test("data components, formulas and the other prediction kinds are blocks too", 
     ],
   );
   assert.ok(
-    predictions[0].prediction.kind === "matrix" &&
-      predictions[0].prediction.model.isComplete({ "a:x": 0 }),
+    predictions[0].exercise.type === "matrix" &&
+      predictions[0].exercise.model.isComplete({ "a:x": 0 }),
   );
 });
 
-test("bad data component input and unknown prediction kinds are rejected with the block named", () => {
+test("bad data component input and unknown exercise kinds are rejected with the block named", () => {
   const cases = [
     [
       [
@@ -406,13 +415,14 @@ test("bad data component input and unknown prediction kinds are rejected with th
       /missing/,
     ],
     [
-      [{ type: "prediction", kind: "rank", question: "?", explanation: "e" }],
+      [{ type: "structure", kind: "rank", question: "?", explanation: "e" }],
       /kind rank is not in the catalogue/,
     ],
     [
       [
         {
-          type: "prediction",
+          type: "structure",
+          id: "a",
           kind: "arrows",
           question: "?",
           molecule: { name: "m", smiles: "CC" },
@@ -425,7 +435,8 @@ test("bad data component input and unknown prediction kinds are rejected with th
     [
       [
         {
-          type: "prediction",
+          type: "structure",
+          id: "a",
           kind: "atom-set",
           question: "?",
           molecules: [{ name: "m", smiles: "CC", answer: [] }],
@@ -439,12 +450,12 @@ test("bad data component input and unknown prediction kinds are rejected with th
     assert.throws(() => validateTopicContent(blocksContent(blocks)), message);
 });
 
-test("number predictions, lab presets and reveal, linked cells and sources blocks", () => {
+test("number exercises, lab presets and reveal, linked cells and sources blocks", () => {
   const value = blocksContent(
     [
       {
-        type: "prediction",
-        kind: "number",
+        type: "number",
+        id: "a",
         question: "估计 ΔΔG？",
         input: { label: "ΔΔG", unit: "kJ/mol", min: 0, step: 0.1 },
         answer: 8.5,
@@ -490,8 +501,8 @@ test("number predictions, lab presets and reveal, linked cells and sources block
     [
       [
         {
-          type: "prediction",
-          kind: "number",
+          type: "number",
+          id: "a",
           question: "?",
           input: { label: "x" },
           tolerance: 1,
@@ -503,8 +514,8 @@ test("number predictions, lab presets and reveal, linked cells and sources block
     [
       [
         {
-          type: "prediction",
-          kind: "number",
+          type: "number",
+          id: "a",
           question: "?",
           input: { label: "x" },
           readout: { model: "plate-capacity", input: "capacity" },
@@ -543,7 +554,7 @@ test("number predictions, lab presets and reveal, linked cells and sources block
       validateTopicContent(
         blocksContent([], { sourcesIntro: { title: "t", blocks: [choice] } }),
       ),
-    /sourcesIntro cannot hold a prediction block/,
+    /sourcesIntro cannot hold a choice block/,
   );
 });
 
@@ -593,7 +604,7 @@ test("spectrum blocks list peaks of one molecule and may hold the assignment bac
           assignAfter: ["a"],
         },
       ],
-      /assignAfter must list predictions earlier/,
+      /assignAfter must list exercises earlier/,
     ],
   ])
     assert.throws(() => validateTopicContent(blocksContent(blocks)), message);
@@ -605,7 +616,7 @@ test("quiz blocks have stable ids; arrows may carry a choice; molecules compare 
       { type: "quiz", id: "start", questions: ["q1"], diagnostic: true },
       { type: "paragraph", text: "教材案例" },
       {
-        type: "prediction",
+        type: "structure",
         id: "sn",
         kind: "arrows",
         question: "?",
@@ -630,9 +641,9 @@ test("quiz blocks have stable ids; arrows may carry a choice; molecules compare 
   );
   assert.equal(validateTopicContent(value), value);
   assert.deepEqual(
-    chapterPredictions(validateTopicContent(value).chapters[0]).map((entry) => [
+    chapterExercises(validateTopicContent(value).chapters[0]).map((entry) => [
       entry.id,
-      entry.prediction.kind,
+      entry.exercise.kind ?? entry.exercise.type,
     ]),
     [
       ["start", "quiz"],
@@ -643,7 +654,8 @@ test("quiz blocks have stable ids; arrows may carry a choice; molecules compare 
     [
       [
         {
-          type: "prediction",
+          type: "structure",
+          id: "a",
           kind: "arrows",
           question: "?",
           molecule: { name: "m", smiles: "CC" },
@@ -675,9 +687,10 @@ test("quiz blocks have stable ids; arrows may carry a choice; molecules compare 
     assert.throws(() => validateTopicContent(blocksContent(blocks)), message);
 });
 
-test("design and ranking predictions are checked", () => {
+test("design and ranking exercises are checked", () => {
   const design = {
-    type: "prediction",
+    type: "structure",
+    id: "a",
     kind: "design",
     question: "?",
     molecule: { name: "m", smiles: "CCCC" },
@@ -687,9 +700,8 @@ test("design and ranking predictions are checked", () => {
     explanation: "e",
   };
   const ranking = {
-    type: "prediction",
+    type: "ranking",
     id: "r",
-    kind: "ranking",
     question: "?",
     options: ["a", "b"],
     answer: 0,
@@ -720,7 +732,8 @@ test("chart domains, diagnostic summaries and atom sets with a choice are checke
         },
         { type: "diagnostic-summary", title: "你的阅读建议" },
         {
-          type: "prediction",
+          type: "structure",
+          id: "a",
           kind: "atom-set",
           question: "?",
           molecules: [{ name: "m", smiles: "CC", answer: [0] }],
@@ -872,9 +885,10 @@ test("search text reads panels, table cells and tab contents kept in data", () =
   );
 });
 
-test("image-points predictions name their points and answer", () => {
+test("image-point exercises name their points and answer", () => {
   const picture = {
-    type: "prediction",
+    type: "choice",
+    id: "a",
     kind: "image-points",
     question: "?",
     image: { src: "/x.svg", alt: "图" },
@@ -916,7 +930,7 @@ test("image-points predictions name their points and answer", () => {
   );
 });
 
-test("atom counts bound prediction indices; reading blocks may show the chapter's guide", () => {
+test("atom counts bound exercise indices; reading blocks may show the chapter's guide", () => {
   assert.doesNotThrow(() =>
     validateTopicContent(
       blocksContent([{ type: "reading", scope: "chapter" }]),
@@ -927,7 +941,8 @@ test("atom counts bound prediction indices; reading blocks may show the chapter'
       validateTopicContent(
         blocksContent([
           {
-            type: "prediction",
+            type: "structure",
+            id: "a",
             kind: "atoms",
             question: "?",
             molecule: { name: "m", smiles: "CC", atoms: 2 },
@@ -1007,7 +1022,7 @@ test("tabs hold static block sequences with independent contents", () => {
           },
         ]),
       ),
-    /cannot hold a prediction block/,
+    /cannot hold a choice block/,
   );
   assert.throws(
     () =>
@@ -1141,7 +1156,7 @@ test("problem contract checks required fields, whitelists, shared ids and eviden
     refs: [],
     blocks: [{ ...problem(), evidence: [] }],
   });
-  assert.throws(() => validateTopicContent(duplicate), /repeats prediction id/);
+  assert.throws(() => validateTopicContent(duplicate), /repeats exercise id/);
   const outside = withProblem(problem());
   outside.chapters[0].excerpts = [];
   validateTopicContent(outside);
@@ -1155,7 +1170,7 @@ test("problem contract checks required fields, whitelists, shared ids and eviden
   );
 });
 
-test("prediction source accepts only nonempty text", () => {
+test("exercise source accepts only nonempty text", () => {
   const value = content();
   value.chapters[0].blocks[2].source = "Neutral source";
   validateTopicContent(value);
@@ -1165,7 +1180,7 @@ test("prediction source accepts only nonempty text", () => {
   }
 });
 
-test("prediction evidence references topic excerpts and rejects malformed or missing ids", () => {
+test("exercise evidence references topic excerpts and rejects malformed or missing ids", () => {
   const value = content();
   value.chapters[0].excerpts = [];
   value.chapters[0].blocks[2].evidence = ["e1"];

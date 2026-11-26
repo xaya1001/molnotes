@@ -69,7 +69,7 @@ test("topic structure slots resolve compound variants while preserving indexed i
       ],
     },
     {
-      type: "prediction",
+      type: "structure",
       id: "pick",
       kind: "atoms",
       question: "Pick the oxygen",
@@ -95,12 +95,12 @@ test("topic structure slots resolve compound variants while preserving indexed i
   assert.deepEqual(compare.items[0].highlightAtoms, [0]);
   assert.equal(compare.items[0].caption, "Local caption");
   assert.equal(unit.compoundReferences.length, 4);
-  const prediction = unit.content.chapters[0].blocks[2];
-  if (prediction.type !== "prediction" || prediction.kind !== "atoms")
+  const exercise = unit.content.chapters[0].blocks[2];
+  if (exercise.type !== "structure" || exercise.kind !== "atoms")
     throw new Error("Invalid fixture");
-  assert.deepEqual(prediction.answer, [0]);
-  assert.equal(prediction.id, "pick");
-  assert.equal(prediction.molecule.smiles, "OCC");
+  assert.deepEqual(exercise.answer, [0]);
+  assert.equal(exercise.id, "pick");
+  assert.equal(exercise.molecule.smiles, "OCC");
 });
 
 test("compound slots resolve all nested structures and reject ambiguous or changed molecular facts", async () => {

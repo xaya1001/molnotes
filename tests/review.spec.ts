@@ -1,16 +1,17 @@
+import { RECORD_VERSION } from "../src/contracts/records.ts";
 import { putRecords } from "./helpers/records.ts";
 import { test, expect } from "./helpers/test.ts";
 test.describe.configure({ mode: "serial" });
 test.beforeEach(async ({ request }) => {
   await putRecords(request, "/api/records/topics/sample", {
     data: {
-      version: 1,
+      version: RECORD_VERSION,
       complete: [],
       bookmarks: [],
       notes: {},
       answers: {},
       diagnostic: {},
-      predictions: {},
+      exercises: {},
       problems: {},
       path: "all",
     },
@@ -24,15 +25,15 @@ test("prediction survives reload and a fresh browser; review exports the shared 
   await expect(
     page.getByRole("heading", { name: "样品预测", exact: true }),
   ).toBeVisible();
-  const exercise = page.getByTestId("prediction-start");
+  const exercise = page.getByTestId("exercise-start");
   await exercise.getByRole("radio", { name: "A", exact: true }).check();
-  await exercise.getByRole("button", { name: "提交预测" }).click();
+  await exercise.getByRole("button", { name: "提交" }).click();
   await expect(exercise).toContainText("A 有两个，B 有一个。");
   await expect
     .poll(
       async () =>
         (await (await page.request.get("/api/records/topics/sample")).json())
-          .predictions.start?.option,
+          .answers.start,
       { intervals: [100] },
     )
     .toBe(0);
@@ -42,7 +43,7 @@ test("prediction survives reload and a fresh browser; review exports the shared 
   try {
     const other = await context.newPage();
     await other.goto(new URL("/practice/sample/start", page.url()).href);
-    await expect(other.getByTestId("prediction-start")).toContainText(
+    await expect(other.getByTestId("exercise-start")).toContainText(
       "A 有两个，B 有一个。",
     );
   } finally {
@@ -63,9 +64,9 @@ test("failed saves preserve the answer and can be retried", async ({
       await route.fulfill({ status: 503, json: { error: "暂时无法保存" } });
     else await route.continue();
   });
-  const exercise = page.getByTestId("prediction-start");
+  const exercise = page.getByTestId("exercise-start");
   await exercise.getByRole("radio", { name: "B", exact: true }).check();
-  await exercise.getByRole("button", { name: "提交预测" }).click();
+  await exercise.getByRole("button", { name: "提交" }).click();
   await expect(page.getByRole("alert")).toContainText("未保存");
   await expect(exercise).toContainText("A 有两个，B 有一个。");
   await page.unroute("**/api/records/topics/sample");
@@ -75,7 +76,7 @@ test("failed saves preserve the answer and can be retried", async ({
   await expect(exercise).toContainText("A 有两个，B 有一个。");
   expect(
     (await (await page.request.get("/api/records/topics/sample")).json())
-      .predictions.start.option,
+      .answers.start,
   ).toBe(1);
 });
 
@@ -158,7 +159,7 @@ test("open responses and prediction mistakes enter review and leave after correc
     await context.close();
   }
   await page.goto("/practice/sample/start");
-  const prediction = page.getByTestId("prediction-start");
+  const prediction = page.getByTestId("exercise-start");
   await expect(page.locator("#counting-evidence")).toHaveCount(0);
   await prediction.getByRole("radio").nth(1).check();
   await prediction.getByRole("button").click();
@@ -172,14 +173,14 @@ test("open responses and prediction mistakes enter review and leave after correc
     .poll(
       async () =>
         (await (await page.request.get("/api/records/topics/sample")).json())
-          .predictions.start?.option,
+          .answers.start,
       { intervals: [100] },
     )
     .toBe(1);
   await page.goto("/review/");
   await expect(page.locator(".mistake")).toHaveCount(2);
   await expect(
-    page.getByTestId("mistake-prediction-start").locator(".mistake-question"),
+    page.getByTestId("mistake-exercise-start").locator(".mistake-question"),
   ).toHaveText([
     "在同一观察范围内计数：A 有两个，B 有一个。",
     "哪个样品更多？",
@@ -189,7 +190,7 @@ test("open responses and prediction mistakes enter review and leave after correc
     "在同一区域计数，相差一个。",
   );
   await expect(
-    page.getByTestId("mistake-prediction-start").locator("dd"),
+    page.getByTestId("mistake-exercise-start").locator("dd"),
   ).toHaveText(["B", "A"]);
   await openMistake.getByRole("link").click();
   await problem.getByRole("button").first().click();
@@ -210,7 +211,7 @@ test("open responses and prediction mistakes enter review and leave after correc
     .poll(
       async () =>
         (await (await page.request.get("/api/records/topics/sample")).json())
-          .predictions.start?.option,
+          .answers.start,
       { intervals: [100] },
     )
     .toBe(0);
@@ -340,16 +341,16 @@ test("structure prediction mistakes remain visible alongside saved matrix answer
   request,
 }) => {
   const seed = {
-    version: 1,
+    version: RECORD_VERSION,
     complete: [],
     bookmarks: [],
     notes: {},
     answers: {},
     diagnostic: {},
-    predictions: {
+    exercises: {
       instruments: { selected: [0] },
-      grid: { cells: { "a:x": 0 } },
     },
+    matrices: { grid: { cells: { "a:x": 0 } } },
     problems: {},
   };
   const result = await putRecords(request, "/api/records/topics/instruments", {
@@ -358,7 +359,7 @@ test("structure prediction mistakes remain visible alongside saved matrix answer
   expect(result.ok()).toBe(true);
   try {
     await page.goto("/review/");
-    const mistake = page.getByTestId("mistake-prediction-instruments");
+    const mistake = page.getByTestId("mistake-exercise-instruments");
     await expect(mistake).toBeVisible();
     await expect(mistake.locator("dl")).toHaveCount(0);
     await expect(mistake.getByRole("link")).toHaveAttribute(
@@ -368,14 +369,14 @@ test("structure prediction mistakes remain visible alongside saved matrix answer
     await putRecords(request, "/api/records/topics/instruments", {
       data: {
         ...seed,
-        predictions: { ...seed.predictions, instruments: { selected: [2] } },
+        exercises: { ...seed.exercises, instruments: { selected: [2] } },
       },
     });
     await page.reload();
     await expect(mistake).toHaveCount(0);
   } finally {
     await putRecords(request, "/api/records/topics/instruments", {
-      data: { ...seed, predictions: {} },
+      data: { ...seed, exercises: {} },
     });
   }
 });
@@ -385,13 +386,13 @@ test("the topic sidebar marks each chapter's read state, bookmark and open mista
   request,
 }) => {
   const empty = {
-    version: 1,
+    version: RECORD_VERSION,
     complete: [],
     bookmarks: [],
     notes: {},
     answers: {},
     diagnostic: {},
-    predictions: {},
+    exercises: {},
     problems: {},
     path: "all",
   };
@@ -400,8 +401,7 @@ test("the topic sidebar marks each chapter's read state, bookmark and open mista
       ...empty,
       complete: ["start"],
       bookmarks: ["next"],
-      answers: { q1: 1 },
-      predictions: { start: { option: 1 } },
+      answers: { q1: 1, start: 1 },
       problems: { "compare-zh": { response: "", rating: "unknown" } },
     },
   });

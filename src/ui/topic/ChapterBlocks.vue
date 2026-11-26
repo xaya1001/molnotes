@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isExerciseBlock } from "./blocks.ts";
 import LibraryReference from "../library/LibraryReference.vue";
 import ProblemBlock from "./ProblemBlock.vue";
 import SourcePages from "./SourcePages.vue";
@@ -26,13 +27,13 @@ import TimelineFigure from "../diagrams/TimelineFigure.vue";
 import { defineFlow } from "../diagrams/flow.ts";
 import { defineTimeline } from "../diagrams/model.ts";
 import type { TopicBlock } from "./blocks.ts";
-import ChapterPrediction from "./ChapterPrediction.vue";
+import ChapterExercise from "./ChapterExercise.vue";
 import { blockPieces, inlinePieces, sourceIdsOf } from "./chapter-text.ts";
 import ChapterText from "./ChapterText.vue";
 import { useTopic } from "./context.ts";
 import LabBlock from "./LabBlock.vue";
 import MatrixBlock from "./MatrixBlock.vue";
-import { predictionAnswered } from "./prediction.ts";
+import { exerciseAnswered } from "./exercise.ts";
 import QuizQuestion from "./QuizQuestion.vue";
 import DiagnosticSummary from "./DiagnosticSummary.vue";
 import PathPicker from "./PathPicker.vue";
@@ -49,16 +50,6 @@ const terms = computed(
   () => content.chapters.find((c) => c.id === props.chapter)?.terms ?? [],
 );
 const sourceIds = sourceIdsOf(content.sources);
-const firstPrediction = computed(() =>
-  props.blocks.findIndex((block) => block.type === "prediction"),
-);
-const hasPredictionHeading = computed(
-  () =>
-    props.blocks[firstPrediction.value - 1]?.type === "heading" ||
-    props.blocks.some(
-      (block) => block.type === "heading" && block.text === "先预测，再揭晓",
-    ),
-);
 const pieces = computed(() =>
   blockPieces(props.blocks, terms.value, sourceIds),
 );
@@ -95,8 +86,8 @@ const structureSet = (index: number) => {
   return set;
 };
 const entryOf = (id: string) => {
-  const entry = content.predictions.find((item) => item.id === id);
-  if (!entry) throw new Error(`Unknown prediction ${id}`);
+  const entry = content.exercises.find((item) => item.id === id);
+  if (!entry) throw new Error(`Unknown exercise ${id}`);
   return entry;
 };
 const answeredCount = (block: {
@@ -237,7 +228,7 @@ const toneClass = (tone?: string) =>
       :block="block"
       :assigned="
         (block.assignAfter ?? []).every((id) =>
-          predictionAnswered(entryOf(id), records.records),
+          exerciseAnswered(entryOf(id), records.records),
         )
       "
     />
@@ -305,16 +296,11 @@ const toneClass = (tone?: string) =>
       :block="block"
       :chapter="chapter"
     />
-    <template v-else-if="block.type === 'prediction'">
-      <h2 v-if="index === firstPrediction && !hasPredictionHeading">
-        先预测，再揭晓
-      </h2>
-      <ChapterPrediction
-        :id="block.id ?? chapter"
-        :key="block.id ?? chapter"
-        :prediction="block"
-      />
-    </template>
+    <ChapterExercise
+      v-else-if="isExerciseBlock(block)"
+      :key="block.id"
+      :exercise="block"
+    />
     <MatrixBlock
       v-else-if="block.type === 'matrix'"
       :id="block.id ?? chapter"

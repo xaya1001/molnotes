@@ -1,3 +1,4 @@
+import { exerciseBlockTypes, isExerciseBlock } from "../src/ui/topic/blocks.ts";
 import {
   validateFigureReference,
   validateImageReference,
@@ -25,7 +26,7 @@ import type {
   TableRow,
   TopicBlock,
 } from "../src/ui/topic/blocks.ts";
-import type { PredictionEntry } from "../src/ui/topic/content.ts";
+import type { ExerciseEntry } from "../src/ui/topic/content.ts";
 import {
   isFiniteNumber,
   isInteger,
@@ -38,7 +39,7 @@ import {
 export interface BlockReferences {
   excerpts: [string, string][];
   quiz: [string, string][];
-  predictionIds: Set<string>;
+  exerciseIds: Set<string>;
   pathPicker: boolean;
 }
 
@@ -119,7 +120,7 @@ function molecule(
     `${where} needs a name and a smiles`,
   );
   validateAbbreviations(value.abbreviations, where);
-  // Optional atom and bond counts bound the indices a prediction accepts.
+  // Optional atom and bond counts bound the indices a exercise accepts.
   for (const name of ["atoms", "bonds"]) {
     const count = value[name];
     assert(
@@ -220,21 +221,21 @@ function points(
 }
 
 /** An optional choice submitted together with a structure pick (`options` + `optionAnswer`). */
-function choiceWithStructure(prediction: JsonObject, where: string) {
-  if (prediction.options !== undefined) {
+function choiceWithStructure(exercise: JsonObject, where: string) {
+  if (exercise.options !== undefined) {
     assert(
-      isList(prediction.options) && prediction.options.length >= 2,
+      isList(exercise.options) && exercise.options.length >= 2,
       `${where} options need at least two entries`,
     );
     assert(
-      isInteger(prediction.optionAnswer) &&
-        prediction.optionAnswer >= 0 &&
-        prediction.optionAnswer < prediction.options.length,
+      isInteger(exercise.optionAnswer) &&
+        exercise.optionAnswer >= 0 &&
+        exercise.optionAnswer < exercise.options.length,
       `${where} optionAnswer is out of range`,
     );
   } else
     assert(
-      prediction.optionAnswer === undefined,
+      exercise.optionAnswer === undefined,
       `${where} optionAnswer needs options`,
     );
 }
@@ -259,23 +260,31 @@ function defined<Input, Output>(
 }
 
 /**
- * Checks one `prediction` block: one of the kinds the shared ChapterPrediction
- * runs. Returns the excerpt ids the prediction shows with its result.
+ * Checks one `exercise` block: one of the kinds the shared ChapterExercise
+ * runs. Returns the excerpt ids the exercise shows with its result.
  */
-export function validatePrediction(
-  prediction: unknown,
-  where: string,
-): string[] {
-  assert(isObject(prediction), `${where} must be an object`);
-  const kind = prediction.kind ?? "choice";
-  text(kind, `${where} kind`);
-  text(prediction.question, `${where} question`);
-  text(prediction.explanation, `${where} explanation`);
-  validateExerciseProse(prediction.prose, where);
-  optionalText(prediction.source, `${where} source`);
-  optionalText(prediction.context, `${where} context`);
+function validateExercise(exercise: JsonObject, where: string): string[] {
+  const { type } = exercise;
+  const kind = type === "structure" ? exercise.kind : (exercise.kind ?? type);
+  assert(
+    (type === "choice" &&
+      (exercise.kind === undefined || kind === "image-points")) ||
+      (type === "structure" &&
+        ["atoms", "bonds", "atom-set", "arrows", "design"].includes(
+          String(kind),
+        )) ||
+      ((type === "ranking" || type === "number") &&
+        exercise.kind === undefined),
+    `${where} kind ${kind} is not in the catalogue`,
+  );
+  text(exercise.id, `${where} id`);
+  text(exercise.question, `${where} question`);
+  text(exercise.explanation, `${where} explanation`);
+  validateExerciseProse(exercise.prose, where);
+  optionalText(exercise.source, `${where} source`);
+  optionalText(exercise.context, `${where} context`);
   if (kind === "choice") {
-    const { options, answer } = prediction;
+    const { options, answer } = exercise;
     assert(
       isList(options) && options.length >= 2,
       `${where} needs at least two options`,
@@ -285,65 +294,65 @@ export function validatePrediction(
       `${where} answer is out of range`,
     );
     assert(
-      prediction.alsoCorrect === undefined ||
-        (isList(prediction.alsoCorrect) &&
-          prediction.alsoCorrect.every(
+      exercise.alsoCorrect === undefined ||
+        (isList(exercise.alsoCorrect) &&
+          exercise.alsoCorrect.every(
             (i) => isInteger(i) && i >= 0 && i < options.length,
           )),
       `${where} alsoCorrect must list option indices`,
     );
   } else if (kind === "atoms" || kind === "bonds") {
-    molecule(prediction.molecule, `${where} molecule`);
-    indices(prediction.answer, `${where} answer`);
+    molecule(exercise.molecule, `${where} molecule`);
+    indices(exercise.answer, `${where} answer`);
     assert(
-      prediction.answer.length > 0,
+      exercise.answer.length > 0,
       `${where} answer must list the right ${kind}`,
     );
-    within(prediction.answer, prediction.molecule[kind], `${where} answer`);
-    labels(prediction.labels, where);
+    within(exercise.answer, exercise.molecule[kind], `${where} answer`);
+    labels(exercise.labels, where);
     // How many picks the reader submits and how they are graded: by default
     // one pick that must be in `answer`; with a range, `exact` wants the set
     // of answers and `subset` accepts any picks that all lie in `answer`.
-    const min = prediction.minSelections ?? 1;
-    const max = prediction.maxSelections ?? min;
+    const min = exercise.minSelections ?? 1;
+    const max = exercise.maxSelections ?? min;
     assert(
       isInteger(min) && isInteger(max) && min >= 1 && max >= min,
       `${where} minSelections / maxSelections must be integers with 1 <= min <= max`,
     );
     assert(
-      prediction.match === undefined ||
-        prediction.match === "exact" ||
-        prediction.match === "subset",
+      exercise.match === undefined ||
+        exercise.match === "exact" ||
+        exercise.match === "subset",
       `${where} match must be "exact" or "subset"`,
     );
   } else if (kind === "atom-set") {
     // Several atoms per molecule; the reader's set must match each one.
     assert(
-      isList(prediction.molecules) && prediction.molecules.length > 0,
+      isList(exercise.molecules) && exercise.molecules.length > 0,
       `${where} needs molecules with their answer sets`,
     );
-    prediction.molecules.forEach((item, index) => {
+    exercise.molecules.forEach((item, index) => {
       const at = `${where} molecule ${index + 1}`;
       molecule(item, at);
       indices(item.answer, `${at} answer`);
       assert(item.answer.length > 0, `${at} answer must list atoms`);
       within(item.answer, item.atoms, `${at} answer`);
     });
-    labels(prediction.labels, where);
+    labels(exercise.labels, where);
     assert(
-      prediction.gradeAtoms === undefined ||
-        typeof prediction.gradeAtoms === "boolean",
+      exercise.gradeAtoms === undefined ||
+        typeof exercise.gradeAtoms === "boolean",
       `${where} gradeAtoms must be a boolean`,
     );
-    choiceWithStructure(prediction, where);
+    choiceWithStructure(exercise, where);
   } else if (kind === "design") {
     // Atoms and a choice in one submission: every group of atoms must be
     // represented and no stray atom picked; the choice must match `answer`.
-    molecule(prediction.molecule, `${where} molecule`);
+    molecule(exercise.molecule, `${where} molecule`);
     assert(
-      isList(prediction.groups) &&
-        prediction.groups.length > 0 &&
-        prediction.groups.every(
+      isList(exercise.groups) &&
+        exercise.groups.length > 0 &&
+        exercise.groups.every(
           (group): group is number[] =>
             isList(group) &&
             group.length > 0 &&
@@ -351,38 +360,34 @@ export function validatePrediction(
         ),
       `${where} groups must be non-empty lists of atom indices`,
     );
-    within(
-      prediction.groups.flat(),
-      prediction.molecule.atoms,
-      `${where} groups`,
-    );
+    within(exercise.groups.flat(), exercise.molecule.atoms, `${where} groups`);
     assert(
-      isList(prediction.options) && prediction.options.length >= 2,
+      isList(exercise.options) && exercise.options.length >= 2,
       `${where} needs at least two options`,
     );
     assert(
-      isInteger(prediction.answer) &&
-        prediction.answer >= 0 &&
-        prediction.answer < prediction.options.length,
+      isInteger(exercise.answer) &&
+        exercise.answer >= 0 &&
+        exercise.answer < exercise.options.length,
       `${where} answer is out of range`,
     );
-    optionalText(prediction.atomExplanation, `${where} atomExplanation`);
-    labels(prediction.labels, where);
+    optionalText(exercise.atomExplanation, `${where} atomExplanation`);
+    labels(exercise.labels, where);
   } else if (kind === "ranking") {
     // The reader ranks every option; only the first place is graded.
     assert(
-      isList(prediction.options) && prediction.options.length >= 2,
+      isList(exercise.options) && exercise.options.length >= 2,
       `${where} needs at least two options`,
     );
     assert(
-      isInteger(prediction.answer) &&
-        prediction.answer >= 0 &&
-        prediction.answer < prediction.options.length,
+      isInteger(exercise.answer) &&
+        exercise.answer >= 0 &&
+        exercise.answer < exercise.options.length,
       `${where} answer is out of range`,
     );
   } else if (kind === "image-points") {
     // One point picked on a picture, optionally with a choice.
-    const { image, points: pts, answer } = prediction;
+    const { image, points: pts, answer } = exercise;
     assert(isObject(image), `${where} image must be { src, alt }`);
     if ("ref" in image) validateImageReference(image, `${where} image`);
     else {
@@ -413,11 +418,11 @@ export function validatePrediction(
       isList(answer) && answer.length > 0 && answer.every((id) => ids.has(id)),
       `${where} answer must list point ids`,
     );
-    choiceWithStructure(prediction, where);
+    choiceWithStructure(exercise, where);
   } else if (kind === "number") {
     // The reader types an estimate; `answer` ± `tolerance` grades it, and
     // `readout` hands the estimate to a lab model whose result shows with it.
-    const { input, answer, tolerance, readout } = prediction;
+    const { input, answer, tolerance, readout } = exercise;
     assert(isObject(input), `${where} input must describe the number field`);
     text(input.label, `${where} input label`);
     optionalText(input.unit, `${where} input unit`);
@@ -454,8 +459,8 @@ export function validatePrediction(
     }
   } else if (kind === "arrows") {
     // One curved arrow: the reader picks its source atom, then its target.
-    molecule(prediction.molecule, `${where} molecule`);
-    const { answer } = prediction;
+    molecule(exercise.molecule, `${where} molecule`);
+    const { answer } = exercise;
     assert(
       isObject(answer) &&
         isInteger(answer.from) &&
@@ -465,54 +470,49 @@ export function validatePrediction(
         answer.from !== answer.to,
       `${where} answer must be { from, to } atom indices`,
     );
-    labels(prediction.labels, where);
-    choiceWithStructure(prediction, where);
+    labels(exercise.labels, where);
+    choiceWithStructure(exercise, where);
   } else {
     throw new Error(`${where} kind ${kind} is not in the catalogue`);
   }
-  if (kind !== "atom-set" && prediction.molecules !== undefined) {
-    assert(isList(prediction.molecules), `${where} molecules must be an array`);
-    for (const item of prediction.molecules)
-      molecule(item, `${where} molecules`);
+  if (kind !== "atom-set" && exercise.molecules !== undefined) {
+    assert(isList(exercise.molecules), `${where} molecules must be an array`);
+    for (const item of exercise.molecules) molecule(item, `${where} molecules`);
   }
-  optionalText(prediction.excerpt, `${where} excerpt`);
+  optionalText(exercise.excerpt, `${where} excerpt`);
   assert(
-    prediction.reset === undefined || typeof prediction.reset === "boolean",
+    exercise.reset === undefined || typeof exercise.reset === "boolean",
     `${where} reset must be a boolean`,
   );
   const evidence: string[] = [];
-  if (prediction.evidence !== undefined) {
-    assert(isList(prediction.evidence), `${where} evidence must be an array`);
-    for (const id of prediction.evidence) {
+  if (exercise.evidence !== undefined) {
+    assert(isList(exercise.evidence), `${where} evidence must be an array`);
+    for (const id of exercise.evidence) {
       text(id, `${where} evidence`);
       evidence.push(id);
     }
   }
   return [
-    ...(prediction.excerpt === undefined ? [] : [prediction.excerpt]),
+    ...(exercise.excerpt === undefined ? [] : [exercise.excerpt]),
     ...evidence,
   ];
 }
 
 /**
- * The predictions of a chapter with the ids their records are kept under: the
- * chapter id unless a block names its own. A `matrix` block is a prediction
- * too, answered once every required cell is; a `quiz` block with an id is
- * answered once every question is.
+ * The exercises and answer gates of a chapter, with their record IDs.
  */
-export function chapterPredictions(
+export function chapterExercises(
   chapter: { id: string; blocks: readonly TopicBlock[] },
   data?: Record<string, unknown>,
-): Omit<PredictionEntry, "chapter">[] {
-  const found: Omit<PredictionEntry, "chapter">[] = [];
+): Omit<ExerciseEntry, "chapter">[] {
+  const found: Omit<ExerciseEntry, "chapter">[] = [];
   for (const block of chapter.blocks) {
-    if (block.type === "prediction")
-      found.push({ id: block.id ?? chapter.id, prediction: block });
+    if (isExerciseBlock(block)) found.push({ id: block.id, exercise: block });
     if (block.type === "quiz" && block.id !== undefined)
       found.push({
         id: block.id,
-        prediction: {
-          kind: "quiz",
+        exercise: {
+          type: "quiz",
           questions: block.questions,
           diagnostic: block.diagnostic === true,
         },
@@ -520,8 +520,8 @@ export function chapterPredictions(
     if (block.type === "matrix")
       found.push({
         id: block.id ?? chapter.id,
-        prediction: {
-          kind: "matrix",
+        exercise: {
+          type: "matrix",
           model: defineMatrix(resolveData(block.matrix, data, "matrix")),
         },
       });
@@ -618,6 +618,11 @@ export function resolveData<T>(
 }
 
 /** Allowed fields for each block type; shared identity fields apply to every block. */
+const exerciseFields =
+  "question source context explanation molecules excerpt reset activity chapter data evidence inputExcerpt mode quizId refs result sourceContext title prose".split(
+    " ",
+  );
+
 const blockFields: Record<string, string[]> = {
   "figure-ref":
     "ref variant frame numbers focus caption alt presentation".split(" "),
@@ -656,10 +661,35 @@ const blockFields: Record<string, string[]> = {
   problem: "lang label source task prompt parts answer evidence prose".split(
     " ",
   ),
-  prediction:
-    "kind question source context explanation molecules excerpt reset options answer alsoCorrect optionExplanations molecule labels minSelections maxSelections match optionAnswer gradeAtoms groups atomExplanation image points input tolerance readout activity chapter data evidence inputExcerpt mode quizId refs result sourceContext title prose".split(
-      " ",
-    ),
+  choice: [
+    ...exerciseFields,
+    "kind",
+    "options",
+    "answer",
+    "alsoCorrect",
+    "optionExplanations",
+    "image",
+    "points",
+    "optionAnswer",
+  ],
+  structure: [
+    ...exerciseFields,
+    "kind",
+    "options",
+    "answer",
+    "optionExplanations",
+    "molecule",
+    "labels",
+    "minSelections",
+    "maxSelections",
+    "match",
+    "optionAnswer",
+    "gradeAtoms",
+    "groups",
+    "atomExplanation",
+  ],
+  ranking: [...exerciseFields, "options", "answer", "optionExplanations"],
+  number: [...exerciseFields, "input", "answer", "tolerance", "readout"],
   matrix:
     "matrix question label caption rowHeader heading instruction quoteLang".split(
       " ",
@@ -675,8 +705,8 @@ const tones: readonly unknown[] = ["note", "caution", "evidence"];
 /**
  * Checks a chapter's blocks against the catalogue and returns what the rest
  * of the content check needs: the excerpt ids and quiz ids the blocks refer
- * to. `data` is the topic's `data`; `predictionIds` collects the ids every
- * prediction's records are kept under, across the topic.
+ * to. `data` is the topic's `data`; `exerciseIds` collects the ids every
+ * exercise's records are kept under, across the topic.
  */
 export function validateBlocks(
   chapter: { id: string; blocks: unknown },
@@ -687,16 +717,16 @@ export function validateBlocks(
 ): asserts chapter is { id: string; blocks: TopicBlock[] } {
   const { blocks } = chapter;
   assert(isList(blocks), `${where} blocks must be an array`);
-  // Spectrum assignments can depend on earlier predictions or external chapter records.
-  const availablePredictions = new Set<unknown>(external);
+  // Spectrum assignments can depend on earlier exercises or external chapter records.
+  const availableExercises = new Set<unknown>(external);
   const ids = new Set<unknown>();
-  const registerPrediction = (id: string, here: string) => {
+  const registerExercise = (id: string, here: string) => {
     assert(
-      !found.predictionIds.has(id),
-      `${here} repeats prediction id ${id}; give each prediction of a chapter its own id`,
+      !found.exerciseIds.has(id),
+      `${here} repeats exercise id ${id}; give each exercise of a chapter its own id`,
     );
-    found.predictionIds.add(id);
-    availablePredictions.add(id);
+    found.exerciseIds.add(id);
+    availableExercises.add(id);
   };
   blocks.forEach((block, index) => {
     const at = `${where} block ${index + 1}`;
@@ -715,7 +745,12 @@ export function validateBlocks(
       assert(!ids.has(block.id), `${here} repeats id ${block.id}`);
       ids.add(block.id);
     }
-    if (block.type === "prediction" && block.optionExplanations !== undefined) {
+    if (
+      (block.type === "choice" ||
+        block.type === "structure" ||
+        block.type === "ranking") &&
+      block.optionExplanations !== undefined
+    ) {
       assert(
         isList(block.options) &&
           isList(block.optionExplanations) &&
@@ -917,8 +952,8 @@ export function validateBlocks(
           assert(
             isList(block.assignAfter) &&
               block.assignAfter.length > 0 &&
-              block.assignAfter.every((id) => availablePredictions.has(id)),
-            `${here} assignAfter must list predictions earlier in the chapter`,
+              block.assignAfter.every((id) => availableExercises.has(id)),
+            `${here} assignAfter must list exercises earlier in the chapter`,
           );
         break;
       case "data-table":
@@ -1010,7 +1045,7 @@ export function validateBlocks(
             item.blocks,
             data,
             at,
-            availablePredictions,
+            availableExercises,
           );
           found.excerpts.push(...inner.excerpts);
           found.quiz.push(...inner.quiz);
@@ -1086,13 +1121,17 @@ export function validateBlocks(
             found.excerpts.push([id, here]);
           });
         }
-        registerPrediction(block.id, here);
+        registerExercise(block.id, here);
         break;
       }
-      case "prediction": {
-        for (const id of validatePrediction(block, here))
+      case "choice":
+      case "structure":
+      case "ranking":
+      case "number": {
+        for (const id of validateExercise(block, here))
           found.excerpts.push([id, here]);
-        registerPrediction(block.id ?? chapter.id, here);
+        text(block.id, `${here} id`);
+        registerExercise(block.id, here);
         break;
       }
       case "matrix": {
@@ -1101,7 +1140,7 @@ export function validateBlocks(
         for (const name of ["heading", "instruction", "quoteLang"])
           optionalText(block[name], `${here} ${name}`);
         field("matrix", (matrix, w) => defined(defineMatrix, matrix, w));
-        registerPrediction(block.id ?? chapter.id, here);
+        registerExercise(block.id ?? chapter.id, here);
         break;
       }
       case "lab": {
@@ -1166,7 +1205,7 @@ export function validateBlocks(
         );
         // A quiz block with an id is recorded as answered once every
         // question has an answer.
-        if (block.id !== undefined) registerPrediction(block.id, here);
+        if (block.id !== undefined) registerExercise(block.id, here);
         for (const id of block.questions) found.quiz.push([id, here]);
         break;
       case "reading":
@@ -1184,27 +1223,27 @@ export function validateBlocks(
 
 const staticOnly = new Set([
   "problem",
-  "prediction",
+  ...exerciseBlockTypes,
   "matrix",
   "quiz",
   "reading",
 ]);
 
-/** Checks the blocks of a page that has no predictions of its own (the sources page intro); spectrum assignments may reference `predictionIds`. */
+/** Checks the blocks of a page that has no exercises of its own (the sources page intro); spectrum assignments may reference `exerciseIds`. */
 export function validateStaticBlocks(
   blocks: unknown,
   data: Record<string, unknown> | undefined,
   where: string,
-  predictionIds: ReadonlySet<unknown>,
+  exerciseIds: ReadonlySet<unknown>,
 ): BlockReferences {
   const found: BlockReferences = {
     excerpts: [],
     quiz: [],
-    predictionIds: new Set(),
+    exerciseIds: new Set(),
     pathPicker: false,
   };
   const page = { id: where, blocks };
-  validateBlocks(page, data, where, found, predictionIds);
+  validateBlocks(page, data, where, found, exerciseIds);
   for (const block of page.blocks)
     assert(
       !staticOnly.has(block.type),

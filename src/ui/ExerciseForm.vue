@@ -9,7 +9,7 @@ function submit() {
 }
 </script>
 <template>
-  <section aria-label="先预测再揭晓">
+  <section aria-label="练习">
     <h3>
       <slot name="prompt">{{ prompt }}</slot>
     </h3>
@@ -19,7 +19,7 @@ function submit() {
       :disabled="submitted || !canSubmit"
       @click="submit"
     >
-      提交预测
+      提交
     </button>
     <div v-if="submitted" class="reveal" role="status">
       <slot name="result" />

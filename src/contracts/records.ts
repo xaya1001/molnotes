@@ -19,7 +19,7 @@ export interface RecordField<T> {
 
 export type RecordFields<E> = { [K in keyof E]: RecordField<E[K]> };
 
-export const RECORD_VERSION = 1;
+export const RECORD_VERSION = 2;
 const MAX_NOTE_LENGTH = 50000;
 
 export function isObject(value: unknown): value is Record<string, unknown> {

@@ -1,3 +1,4 @@
+import { isExerciseBlock } from "../../src/ui/topic/blocks.ts";
 import { compileUnit } from "./compile-unit.ts";
 import { readChemicalLibrary, libraryUsage } from "./chemical-library.ts";
 import { verifyLibraryFigures } from "./figure-build.ts";
@@ -152,7 +153,12 @@ function notebookSources(data: PublishData) {
             block.items.forEach((item) => visit(item.blocks));
           if (block.type === "quiz")
             block.questions.forEach((id) => quizIds.add(id));
-          if (["prediction", "problem", "matrix"].includes(block.type)) count++;
+          if (
+            isExerciseBlock(block) ||
+            block.type === "problem" ||
+            block.type === "matrix"
+          )
+            count++;
         }
       };
       visit(chapter.blocks ?? []);

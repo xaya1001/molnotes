@@ -10,11 +10,11 @@ import type { FlowInput } from "../diagrams/flow.ts";
 import type { TimelineInput } from "../diagrams/model.ts";
 import type { MatrixInput } from "../matrix/model.ts";
 import type { StructureSetInput } from "../structure/model.ts";
-import type { TopicPrediction } from "./content.ts";
+import type { TopicExercise } from "./content.ts";
 import type { ProblemProse, ProsePart } from "../../../shared/prose-format.ts";
 
 interface BlockBase {
-  /** Names the block; a prediction's records are kept under it (the chapter id when absent). */
+  /** Names the block. */
   id?: string;
 }
 
@@ -194,8 +194,16 @@ export interface ProblemBlock extends BlockBase {
   evidence?: string[];
   prose?: ProblemProse;
 }
-export type PredictionBlock = BlockBase &
-  TopicPrediction & { type: "prediction" };
+export const exerciseBlockTypes = [
+  "choice",
+  "structure",
+  "ranking",
+  "number",
+] as const;
+
+export function isExerciseBlock(block: TopicBlock): block is TopicExercise {
+  return exerciseBlockTypes.some((type) => type === block.type);
+}
 /** Guess every required cell, then see the grid; answered once every required cell is. */
 export interface MatrixBlock extends BlockBase {
   type: "matrix";
@@ -276,7 +284,7 @@ export type TopicBlock =
   | TabsBlock
   | PanelsBlock
   | ProblemBlock
-  | PredictionBlock
+  | TopicExercise
   | MatrixBlock
   | LabBlock
   | QuizBlock

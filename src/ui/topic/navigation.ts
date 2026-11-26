@@ -1,12 +1,12 @@
 import type { Topic } from "./content.ts";
 import type { TopicRecordsBase } from "../../contracts/records.ts";
-import type { TopicPredictionRecords } from "./context.ts";
-import { predictionMistaken } from "./prediction.ts";
+import type { TopicExerciseRecords } from "./context.ts";
+import { answerOf, exerciseMistaken } from "./exercise.ts";
 import { topicProblems } from "./problem.ts";
 
 export function chapterMistakes(
   content: Topic,
-  saved: TopicRecordsBase & TopicPredictionRecords,
+  saved: TopicRecordsBase & TopicExerciseRecords,
 ) {
   const count = new Map<string, number>();
   const add = (chapter: string) =>
@@ -17,11 +17,11 @@ export function chapterMistakes(
       saved.answers[question.id] !== question.answer
     )
       add(question.chapter);
-  for (const { id, chapter, prediction } of content.predictions)
+  for (const { chapter, exercise } of content.exercises)
     if (
-      prediction.kind !== "matrix" &&
-      prediction.kind !== "quiz" &&
-      predictionMistaken(prediction, saved.predictions[id])
+      exercise.type !== "matrix" &&
+      exercise.type !== "quiz" &&
+      exerciseMistaken(exercise, answerOf(exercise, saved))
     )
       add(chapter);
   for (const problem of topicProblems(content))

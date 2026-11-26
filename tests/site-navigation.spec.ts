@@ -1,3 +1,4 @@
+import { RECORD_VERSION } from "../src/contracts/records.ts";
 import { expect, test, type Page } from "./helpers/test.ts";
 
 // Records are served per page, so other specs writing the shared test database never change them.
@@ -17,13 +18,13 @@ test.beforeEach(async ({ page }) => {
 });
 
 const sampleRecord = {
-  version: 1,
+  version: RECORD_VERSION,
   complete: ["start"],
   bookmarks: ["next"],
   notes: {},
   answers: { q1: 1 },
   diagnostic: {},
-  predictions: {},
+  exercises: {},
   problems: {},
   path: "all",
 };

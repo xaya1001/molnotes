@@ -4,7 +4,7 @@ test("molecule selection supports mouse and keyboard; result is absent until sub
   page,
 }) => {
   await page.goto("/showcase/molecule");
-  const exercise = page.getByRole("region", { name: "先预测再揭晓" }).first();
+  const exercise = page.getByRole("region", { name: "练习" }).first();
   const atom = exercise.getByRole("button", { name: "原子 2", exact: true });
   await expect(atom).toBeVisible({ timeout: 45_000 });
   await expect(exercise.getByText(/图中标出的是氧原子/)).toHaveCount(0);
@@ -15,17 +15,17 @@ test("molecule selection supports mouse and keyboard; result is absent until sub
   await page.keyboard.press("Space");
   await expect(atom).toHaveAttribute("aria-pressed", "false");
   await page.keyboard.press("Enter");
-  await exercise.getByRole("button", { name: "提交预测" }).click();
+  await exercise.getByRole("button", { name: "提交" }).click();
   await expect(
     exercise.getByText(/图中标出的是氧原子；你的选择与之一致/),
   ).toBeVisible();
   await expect(exercise.getByText(/索引|原子 2/)).toHaveCount(0);
   await expect(exercise.locator("#demo-evidence")).toBeVisible();
-  const cut = page.getByRole("region", { name: "先预测再揭晓" }).nth(1);
+  const cut = page.getByRole("region", { name: "练习" }).nth(1);
   await cut
     .getByRole("button", { name: "键 1（原子 1–2）", exact: true })
     .click();
-  await cut.getByRole("button", { name: "提交预测" }).click();
+  await cut.getByRole("button", { name: "提交" }).click();
   await expect(
     cut.getByText(/图中标出的是 C–O 键；你的选择与之一致/),
   ).toBeVisible();
@@ -50,7 +50,7 @@ test("WASM failure leaves the SMILES and an actionable error", async ({
     (route) => route.abort(),
   );
   await page.goto("/showcase/molecule");
-  const exercise = page.getByRole("region", { name: "先预测再揭晓" }).first();
+  const exercise = page.getByRole("region", { name: "练习" }).first();
   await expect(exercise.getByRole("alert")).toBeVisible({ timeout: 45_000 });
   await expect(exercise.getByRole("alert")).toContainText("CCO");
   await expect(

@@ -72,11 +72,11 @@ export function recordSync<T>(
   endpoint: string,
   validate: (document: T) => void = () => {},
   storage?: Pick<Storage, "getItem" | "setItem" | "removeItem">,
+  key = `molnotes/pending:${endpoint}`,
 ) {
   let base: T | undefined,
     etag: string | null = null,
     conflicted = false;
-  const key = `molnotes/pending:${endpoint}`;
   let pending = false;
   function stage(document: T) {
     if (!storage) return;
