@@ -1062,7 +1062,7 @@ export function chargeMarks(
       return [Math.atan2(q.y - p.y, q.x - p.x)];
     });
     for (const [other, r] of Object.entries(boxes)) {
-      if (other === id) continue;
+      if (other === id || other.startsWith("union:")) continue;
       const q = { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 };
       if (dist(p, q) < B) directions.push(Math.atan2(q.y - p.y, q.x - p.x));
     }
@@ -1092,16 +1092,17 @@ export function chargeMarks(
         : preferred(b.angle) - preferred(a.angle),
     );
     const aim = aims[id];
+    const fallback = aim
+      ? gaps.length
+        ? gaps.map((gap) => gap.angle)
+        : [Math.atan2(aim.y - p.y, aim.x - p.x)]
+      : blocked
+        ? gaps.map((gap) => gap.angle)
+        : [defaultAngle, ...gaps.map((gap) => gap.angle)];
     const candidates =
       angles[id] !== undefined
-        ? [(angles[id] * Math.PI) / 180]
-        : aim
-          ? gaps.length
-            ? gaps.map((gap) => gap.angle)
-            : [Math.atan2(aim.y - p.y, aim.x - p.x)]
-          : blocked
-            ? gaps.map((gap) => gap.angle)
-            : [defaultAngle, ...gaps.map((gap) => gap.angle)];
+        ? [(angles[id] * Math.PI) / 180, ...fallback]
+        : fallback;
     let bestScore = -Infinity,
       bestCollisions = Infinity,
       best: (typeof placed)[string] | undefined;
@@ -1110,18 +1111,36 @@ export function chargeMarks(
         dy = Math.sin(a);
       const kx = dx > 0 ? box.right - p.x : p.x - box.left,
         ky = dy > 0 ? box.bottom - p.y : p.y - box.top;
-      const k =
+      const outer = radius + 0.8;
+      let k =
         Math.min(
           Math.abs(dx) > 1e-6 ? kx / Math.abs(dx) : 1e9,
           Math.abs(dy) > 1e-6 ? ky / Math.abs(dy) : 1e9,
         ) +
         radius +
         B * 0.09;
+      if (
+        Math.min(p.x + dx * k + outer, box.right) -
+          Math.max(p.x + dx * k - outer, box.left) >
+          0.7 &&
+        Math.min(p.y + dy * k + outer, box.bottom) -
+          Math.max(p.y + dy * k - outer, box.top) >
+          0.7
+      ) {
+        const clearance = outer + B * 0.03;
+        k = Math.max(
+          k,
+          Math.min(
+            Math.abs(dx) > 1e-6 ? (kx + clearance) / Math.abs(dx) : 1e9,
+            Math.abs(dy) > 1e-6 ? (ky + clearance) / Math.abs(dy) : 1e9,
+          ),
+        );
+      }
       const point = add(p, { x: dx * k, y: dy * k });
       const facing = aim ? dot({ x: dx, y: dy }, unit(sub(aim, p))) : 0;
-      const score = aim ? facing : -index;
-      const outer = radius + 0.8,
-        dotPoint = radicalIons.has(id)
+      const score =
+        index === 0 && angles[id] !== undefined ? 2 : aim ? facing : -index;
+      const dotPoint = radicalIons.has(id)
           ? {
               x: point.x + (dx >= 0 ? 1 : -1) * (radius + B * 0.07),
               y: point.y,
@@ -1143,7 +1162,7 @@ export function chargeMarks(
         ];
       let collisions = 0;
       for (const mark of Object.values(placed))
-        if (dist(point, mark.point) < radius + mark.radius) collisions++;
+        if (dist(point, mark.point) < radius + mark.radius + 1.6) collisions++;
       for (const [other, b] of Object.entries(boxes))
         if (
           other !== id &&

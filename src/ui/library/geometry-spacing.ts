@@ -72,6 +72,8 @@ export function spaceBondEndpoints(
   parent: FigureGroup,
   ctx: FigureScene,
   atomPoints?: Record<string, Point>,
+  strippedChargeAtoms?: ReadonlySet<string>,
+  labelPadding = 0,
 ) {
   const labels = new Map<string, FigureRect[]>();
   const anchors = new Map<string, FigureRect[]>();
@@ -91,7 +93,9 @@ export function spaceBondEndpoints(
       continue;
     const owners = (ctx.data(trace.el, "atoms") ?? "").split(" ");
     const boxes = owners.flatMap((id) =>
-      labels.has(id) ? [mainRowBox(anchors.get(id) ?? labels.get(id)!)] : [],
+      labels.has(id)
+        ? [{ id, box: mainRowBox(anchors.get(id) ?? labels.get(id)!) }]
+        : [],
     );
     if (!boxes.length) continue;
     let changed = false;
@@ -102,12 +106,19 @@ export function spaceBondEndpoints(
         dy = q.y - p.y;
       const length = Math.hypot(dx, dy);
       const [a, b] = owners.map((id) => atomPoints?.[id]);
+      const restoredCharges = new Set<string>();
+      const fullLength = a && b ? Math.hypot(b.x - a.x, b.y - a.y) : 0;
+      const shortBond =
+        !!fullLength && length < fullLength * minimumVisibleBondFraction;
+      const hasStrippedCharge =
+        !!strippedChargeAtoms?.size &&
+        owners.some((id) => strippedChargeAtoms.has(id));
       if (
         trace.contours.length === 1 &&
         a &&
         b &&
         length &&
-        length < Math.hypot(b.x - a.x, b.y - a.y) * minimumVisibleBondFraction
+        (shortBond || hasStrippedCharge)
       ) {
         const x = dx / length,
           y = dy / length;
@@ -116,18 +127,44 @@ export function spaceBondEndpoints(
         const ends = owners
           .map((id, i) => ({ id, at: project(i === 0 ? a : b) }))
           .sort((left, right) => left.at - right.at);
-        // Native parallel strokes can be clipped against the entire label.
-        // Restore the labelled end along its original stroke before clipping to the element ink.
-        if (ends[1].at - ends[0].at > Math.hypot(b.x - a.x, b.y - a.y) * 0.95) {
+        // Native parallel strokes or strokes clipped by a removed native charge
+        // glyph can stop short of the remaining label. Restore along the stroke
+        // before re-clipping to the element ink.
+        if (ends[1].at - ends[0].at > fullLength * 0.95) {
           for (const [i, end] of ends.entries()) {
-            if (!anchors.has(end.id)) continue;
-            points[i] = { x: p.x + end.at * x, y: p.y + end.at * y };
-            changed = true;
+            if (shortBond && anchors.has(end.id)) {
+              points[i] = { x: p.x + end.at * x, y: p.y + end.at * y };
+              changed = true;
+            } else if (strippedChargeAtoms?.has(end.id)) {
+              const entry = boxes.find((item) => item.id === end.id);
+              if (!entry) continue;
+              const gap = Math.hypot(
+                Math.max(
+                  entry.box.x - points[i].x,
+                  0,
+                  points[i].x - (entry.box.x + entry.box.width),
+                ),
+                Math.max(
+                  entry.box.y - points[i].y,
+                  0,
+                  points[i].y - (entry.box.y + entry.box.height),
+                ),
+              );
+              if (gap > Math.max(labelPadding, trace.width / 2 + 0.1) + 1) {
+                points[i] = { x: p.x + end.at * x, y: p.y + end.at * y };
+                restoredCharges.add(end.id);
+                changed = true;
+              }
+            }
           }
         }
       }
-      for (const box of boxes) {
+      for (const { id, box } of boxes) {
+        const pad = restoredCharges.has(id)
+          ? Math.max(trace.width / 2 + 0.1, labelPadding)
+          : trace.width / 2 + 0.1;
         if (
+          !restoredCharges.has(id) &&
           !inkIntersectsBox(
             [{ points, box: bounds(points) }],
             box,
@@ -136,8 +173,7 @@ export function spaceBondEndpoints(
           )
         )
           continue;
-        const pad = trace.width / 2 + 0.1,
-          left = box.x - pad,
+        const left = box.x - pad,
           right = box.x + box.width + pad,
           top = box.y - pad,
           bottom = box.y + box.height + pad;
