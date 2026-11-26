@@ -68,7 +68,7 @@ test("page check rejects a new diagnostic in an unselected compound variant", ()
   assert.equal(check.status, 1, check.stderr);
   assert.match(
     check.stderr,
-    /cmp_table_sample \[variant reverse\]: LABEL_OVERLAP/,
+    /cmp_table_sample \[variant reverse\]: BOND_LABEL_OVERLAP/,
   );
   commit();
   const unchanged = cli(dir, "check", file, "--figure-base", "HEAD");
