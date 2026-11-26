@@ -26,6 +26,10 @@ export interface RouteLayoutStep {
   turn?: "down" | "elbow" | "wrap";
   side?: "left" | "right";
   reverse?: boolean;
+  mechanism?: {
+    horizontal: { width: number; height: number };
+    vertical: { width: number; height: number };
+  };
 }
 export interface RouteLayoutItem {
   kind: "molecule" | "reference" | "plus" | "arrow";
@@ -40,6 +44,7 @@ export interface RouteLayoutItem {
   below?: string[];
   boxes?: { key: string; at: Point }[];
   side?: "left" | "right";
+  mechanismWidth?: number;
 }
 type Kind =
   "molecule" | "reference" | "plus" | "horizontal" | "vertical" | "elbow";
@@ -225,6 +230,8 @@ export function layoutRoute(
         rects: [number, number, number, number][] = [
           [left, right, -bond * 0.12, bond * 0.12],
         ];
+      const frameHeight = (p.step.mechanism?.horizontal.height ?? 0) / 2;
+      if (frameHeight) rects.push([left, right, -frameHeight, frameHeight]);
       const topHeight =
           (p.above ? p.above.height + padding : 0) +
           (box.height ? box.height + padding : 0),
@@ -233,15 +240,15 @@ export function layoutRoute(
         rects.push([
           p.textCenter - topWidth / 2,
           p.textCenter + topWidth / 2,
-          -topHeight - padding,
-          0,
+          -topHeight - padding - frameHeight,
+          -frameHeight,
         ]);
       if (p.below)
         rects.push([
           p.textCenter - p.below.width / 2,
           p.textCenter + p.below.width / 2,
-          0,
-          p.below.height + padding * 1.4,
+          frameHeight,
+          frameHeight + p.below.height + padding * 1.4,
         ]);
       return rects;
     }
@@ -418,13 +425,16 @@ export function layoutRoute(
       below = step.below.length ? options.text(step.below) : undefined,
       box = boxSize(boxes),
       textWidth = Math.max(above?.width ?? 0, below?.width ?? 0),
-      length = card
-        ? Math.max(
-            96 / card.scale,
-            textWidth + 24 / card.scale,
-            box.width + gap,
-          )
-        : Math.max(bond * 4.5, textWidth + bond * 1.4, box.width + bond);
+      length = Math.max(
+        step.mechanism ? step.mechanism.horizontal.width + 2 * gap : 0,
+        card
+          ? Math.max(
+              96 / card.scale,
+              textWidth + 24 / card.scale,
+              box.width + gap,
+            )
+          : Math.max(bond * 4.5, textWidth + bond * 1.4, box.width + bond),
+      );
     const continuation = step.to.find((o) => uses.has(o.id)) ?? step.to.at(-1)!;
     const outputs = [
       ...step.to.filter((o) => o !== continuation),
@@ -555,7 +565,7 @@ export function layoutRoute(
     }
     const lead = fan ? gap + stub : gap;
     if (!turn && overflows(line, edge, lead))
-      turn = joined || options.serpentine ? "down" : "wrap";
+      turn = joined || options.serpentine || step.mechanism ? "down" : "wrap";
     if (card?.vertical) turn = "down";
     cur.tail = false;
     let x: number, arrow: Item;
@@ -760,6 +770,7 @@ export function layoutRoute(
       }
     }
   }
+  const inlineMechanisms = steps.some((step) => step.mechanism);
   const bottom = (p: Item) => p.y + p.measure.bottom + padding;
   const obstacles: [number, number, number, number][] = [],
     centers: number[] = [];
@@ -769,15 +780,24 @@ export function layoutRoute(
     if (index) {
       for (const p of mine) {
         if (p.kind === "vertical") {
+          const detail = p.step.mechanism?.vertical;
+          const offset =
+            verticalArrowLabelOffset(bond) + (detail?.width ?? 0) / 2;
+          if (inlineMechanisms && card?.artworkWidth !== undefined)
+            p.side =
+              p.step.side ??
+              (p.x > card.artworkWidth / card.scale / 2 ? "left" : "right");
           const side = (p.side ?? p.step.side) === "left" ? -1 : 1;
-          const offset = verticalArrowLabelOffset(bond);
           if (card?.artworkWidth !== undefined) {
             const labelX = p.x + side * offset;
-            const remaining =
-              side < 0 ? labelX : card.artworkWidth / card.scale - labelX;
-            p.above = p.step.above.length
-              ? options.text(p.step.above, remaining)
-              : undefined;
+            const remaining = Math.max(
+              bond,
+              side < 0 ? labelX : card.artworkWidth / card.scale - labelX,
+            );
+            const above = inlineMechanisms
+              ? (p.above?.lines ?? [])
+              : p.step.above;
+            p.above = above.length ? options.text(above, remaining) : undefined;
             p.below = p.step.below.length
               ? options.text(p.step.below, remaining)
               : undefined;
@@ -793,9 +813,17 @@ export function layoutRoute(
               Math.max(
                 card ? (card.vertical ? 72 : 56) / card.scale : bond * 2.6,
                 contentHeight + bond,
+                detail ? detail.height + bond : 0,
               ) +
               p.target!.measure.top,
           );
+          if (detail)
+            obstacles.push([
+              p.x - detail.width / 2,
+              p.x + detail.width / 2,
+              start,
+              y - p.target!.measure.top,
+            ]);
           if (contentHeight) {
             const w = Math.max(
               p.above?.width ?? 0,
@@ -896,6 +924,7 @@ export function layoutRoute(
                 : p.y -
                   padding -
                   (p.above?.height ?? 0) -
+                  (p.step.mechanism?.horizontal.height ?? 0) / 2 -
                   padding -
                   box.measure.bottom -
                   bond * 0.55,
@@ -913,6 +942,10 @@ export function layoutRoute(
             : p.length,
         top: 0,
         bottom: 0,
+        ...(p.kind === "vertical" &&
+          p.step.mechanism && {
+            mechanismWidth: p.step.mechanism.vertical.width,
+          }),
         points,
         above: p.above?.lines,
         below: p.below?.lines,
@@ -929,6 +962,12 @@ export function layoutRoute(
               box.at.x + molecules[box.key].width + bond * 0.55,
             ]),
             ...(p.points ?? []).map((q) => q.x),
+            ...(p.mechanismWidth
+              ? [
+                  p.points![0].x - p.mechanismWidth / 2,
+                  p.points![0].x + p.mechanismWidth / 2,
+                ]
+              : []),
             p.at.x -
               Math.max(
                 p.above ? options.text(p.above).width : 0,

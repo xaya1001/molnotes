@@ -76,6 +76,7 @@ export interface StepInput {
   changes?: boolean | "on" | "off" | { add?: number[]; remove?: number[] };
   arrow?: ArrowKind;
   tags?: string[];
+  mechanism?: { frames: FrameInput<StructureInput | { compound: Key }>[] };
   reagentPosition?: "above-arrow" | "below-arrow";
 }
 export type Show = "box" | "text" | "plus" | "none";
@@ -85,10 +86,10 @@ export type ProductInput = {
   yield?: string;
   fraction?: number;
 };
-export interface FrameInput extends StructureInput {
+export interface FrameInput<Spec = StructureInput> extends StructureInput {
   id: Key;
   title?: Key;
-  compounds?: Record<string, string | StructureInput>;
+  compounds?: Record<string, string | Spec>;
   steps?: Pick<StepInput, "id" | "from" | "to" | "above" | "below" | "arrow">[];
   labels?: {
     id: Key;
@@ -318,30 +319,7 @@ export function validateFigureInput(source: unknown): {
   const sources = list(
     object({ source: text, locator: text, note: text }, ["source"]),
   );
-  const step = object(
-    {
-      id: text,
-      title: text,
-      sources,
-      from,
-      to,
-      above: text,
-      below: text,
-      others: show,
-      turn: choice("down", "elbow", "wrap"),
-      side: choice("left", "right"),
-      reverse: bool,
-      changes: either(
-        choice(true, false, "on", "off"),
-        object({ add: list(number), remove: list(number) }),
-      ),
-      enclose: map(enclose),
-      arrow: arrowKind,
-      tags: list(string),
-      reagentPosition: choice("above-arrow", "below-arrow"),
-    },
-    ["from", "to"],
-  );
+
   const kind = value.kind ?? "route";
   if (kind === "markush") {
     validateMarkushFigure(value, "figure");
@@ -406,6 +384,122 @@ export function validateFigureInput(source: unknown): {
     number(v, p);
     if (Number(v) <= 0) fail(p, "expected positive number");
   };
+  const frames = (nested: boolean): Rule =>
+    list((v, p) => {
+      const frame = {
+        id: text,
+        title: text,
+        map: map(either(number, string)),
+        above: text,
+        below: text,
+        arrow: arrowKind,
+        labels: list(
+          object(
+            {
+              id: text,
+              at: string,
+              kind: choice(
+                "lonePair",
+                "radical",
+                "charge",
+                "partialCharge",
+                "text",
+              ),
+              text,
+            },
+            ["id", "at", "kind"],
+          ),
+        ),
+        partialBonds: list(
+          object({ from: string, to: string, order: positive }, ["from", "to"]),
+        ),
+      };
+      if (isObject(v) && "template" in v) {
+        validateConformationSpec(v, p, Object.keys(frame));
+        for (const [key, rule] of Object.entries(frame))
+          if (v[key] !== undefined) rule(v[key], `${p}.${key}`);
+        if (v.id === undefined) fail(`${p}.id`, "required");
+      } else if (isObject(v) && "compounds" in v)
+        object(
+          {
+            ...frame,
+            compounds: nested
+              ? map((v, p) =>
+                  isObject(v) && "compound" in v
+                    ? object({ compound: text }, ["compound"])(v, p)
+                    : typeof v === "string"
+                      ? string(v, p)
+                      : structureRule(v, p),
+                )
+              : compounds,
+            arrows,
+            focus,
+            steps: list(
+              object(
+                {
+                  id: text,
+                  from: either(text, list(text)),
+                  to: either(text, list(text)),
+                  above: text,
+                  below: text,
+                  arrow: arrowKind,
+                },
+                ["from", "to"],
+              ),
+            ),
+          },
+          ["id", "compounds"],
+        )(v, p);
+      else
+        object(
+          {
+            smiles: string,
+            rot: number,
+            flip: choice("h", "v"),
+            coordgen: bool,
+            drawing: structure.drawing,
+            ring_h: bool,
+            abbreviate: bool,
+            abbreviations: figureAbbreviations,
+            bracket: structure.bracket,
+            scale: structure.scale,
+            numbers: bool,
+            notes: map(text),
+            arrows,
+            focus,
+            enclose,
+            ...frame,
+          },
+          ["id", "smiles"],
+        )(v, p);
+    });
+  const step = object(
+    {
+      id: text,
+      title: text,
+      sources,
+      from,
+      to,
+      above: text,
+      below: text,
+      others: show,
+      turn: choice("down", "elbow", "wrap"),
+      side: choice("left", "right"),
+      reverse: bool,
+      changes: either(
+        choice(true, false, "on", "off"),
+        object({ add: list(number), remove: list(number) }),
+      ),
+      enclose: map(enclose),
+      arrow: arrowKind,
+      tags: list(string),
+      ...(scheme && {
+        mechanism: object({ frames: frames(true) }, ["frames"]),
+      }),
+      reagentPosition: choice("above-arrow", "below-arrow"),
+    },
+    ["from", "to"],
+  );
   if (kind === "gallery" || kind === "scope")
     object(
       {
@@ -456,89 +550,7 @@ export function validateFigureInput(source: unknown): {
       {
         ...shared,
         category: choice("reaction", "comparison", "resonance", "examples"),
-        frames: list((v, p) => {
-          const frame = {
-            id: text,
-            title: text,
-            map: map(either(number, string)),
-            above: text,
-            below: text,
-            arrow: arrowKind,
-            labels: list(
-              object(
-                {
-                  id: text,
-                  at: string,
-                  kind: choice(
-                    "lonePair",
-                    "radical",
-                    "charge",
-                    "partialCharge",
-                    "text",
-                  ),
-                  text,
-                },
-                ["id", "at", "kind"],
-              ),
-            ),
-            partialBonds: list(
-              object({ from: string, to: string, order: positive }, [
-                "from",
-                "to",
-              ]),
-            ),
-          };
-          if (isObject(v) && "template" in v) {
-            validateConformationSpec(v, p, Object.keys(frame));
-            for (const [key, rule] of Object.entries(frame))
-              if (v[key] !== undefined) rule(v[key], `${p}.${key}`);
-            if (v.id === undefined) fail(`${p}.id`, "required");
-          } else if (isObject(v) && "compounds" in v)
-            object(
-              {
-                ...frame,
-                compounds,
-                arrows,
-                focus,
-                steps: list(
-                  object(
-                    {
-                      id: text,
-                      from: either(text, list(text)),
-                      to: either(text, list(text)),
-                      above: text,
-                      below: text,
-                      arrow: arrowKind,
-                    },
-                    ["from", "to"],
-                  ),
-                ),
-              },
-              ["id", "compounds"],
-            )(v, p);
-          else
-            object(
-              {
-                smiles: string,
-                rot: number,
-                flip: choice("h", "v"),
-                coordgen: bool,
-                drawing: structure.drawing,
-                ring_h: bool,
-                abbreviate: bool,
-                abbreviations: figureAbbreviations,
-                bracket: structure.bracket,
-                scale: structure.scale,
-                numbers: bool,
-                notes: map(text),
-                arrows,
-                focus,
-                enclose,
-                ...frame,
-              },
-              ["id", "smiles"],
-            )(v, p);
-        }),
+        frames: frames(false),
       },
       ["frames"],
     )(value, "figure");
@@ -554,24 +566,28 @@ export function validateFigureInput(source: unknown): {
     (!input.steps!.length || !Object.keys(input.compounds!).length)
   )
     fail("figure", "requires compounds and steps");
-  if (kind === "mechanism" && !input.frames!.length)
-    fail("figure.frames", "requires frames");
-  if (kind === "mechanism")
-    for (const [i, frame] of input.frames!.entries()) {
+  const validateFrames = (group: FrameInput<unknown>[], where: string) => {
+    if (!group.length) fail(where, "requires frames");
+    for (const [i, frame] of group.entries()) {
       if (
         [frame.smiles, frame.template, frame.compounds].filter(
           (v) => v !== undefined,
         ).length !== 1
       )
-        fail(
-          `figure.frames.${i}`,
-          "requires one of smiles, template or compounds",
-        );
+        fail(`${where}.${i}`, "requires one of smiles, template or compounds");
       if (frame.compounds && !Object.keys(frame.compounds).length)
-        fail(`figure.frames.${i}.compounds`, "requires compounds");
+        fail(`${where}.${i}.compounds`, "requires compounds");
       if (frame.steps && !frame.compounds)
-        fail(`figure.frames.${i}.steps`, "requires compounds");
+        fail(`${where}.${i}.steps`, "requires compounds");
     }
+  };
+  if (input.frames) validateFrames(input.frames, "figure.frames");
+  for (const [i, step] of (input.steps ?? []).entries())
+    if (step.mechanism)
+      validateFrames(
+        step.mechanism.frames,
+        `figure.steps.${i}.mechanism.frames`,
+      );
   if (
     (kind === "gallery" || kind === "scope") &&
     !Object.keys(input.compounds!).length

@@ -14,9 +14,14 @@ import {
   chemicalCardLayout,
   cardConditionFont,
   chemicalCardWidths,
+  cardInset,
+  phoneCardWidth,
 } from "../src/ui/library/card-layout.ts";
 import type { FigureInput, StepInput } from "./figure-input.ts";
-import { prepareFigure } from "../src/ui/library/prepare.ts";
+import {
+  prepareFigure,
+  prepareReactionFrames,
+} from "../src/ui/library/prepare.ts";
 import { loadFigureFonts } from "./figure-fonts.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import { finishFigureEntry } from "./figure-output.ts";
@@ -115,7 +120,7 @@ export async function compileRouteLayout(
     bond = ctx.token("--chemical-bond"),
     width = ctx.token("--chemical-route-width"),
     gap = ctx.token("--chemical-route-gap");
-  const text = (lines: string[], scale?: number) => {
+  const text = (lines: string[], scale?: number, available?: number) => {
     const font =
       lines.length === 1 && lines[0] === "+"
         ? "var(--chemical-plus-font)"
@@ -124,8 +129,9 @@ export async function compileRouteLayout(
           : "var(--chemical-caption-font)";
     const wrapped = wrapFigureText(
       lines,
-      scale ? 152 / scale : width * 0.45,
+      scale ? Math.min(152 / scale, available ?? Infinity) : width * 0.45,
       (text) => ctx.textWidth(text, font),
+      { breakHan: available !== undefined },
     );
     const nodes = wrapped.map((line) => ctx.label({ x: 0, y: 0 }, line, font));
     return {
@@ -287,7 +293,44 @@ export async function compileRouteLayout(
       return { id, measure: m.measure };
     });
     measured.set(step.id, byId);
+    let mechanism: RouteLayoutStep["mechanism"];
+    if (reaction.mechanism) {
+      const source = { ...reaction, mechanism: reaction.mechanism };
+      const prefix =
+        card && library[card.ref].kind === "route" ? step.id + "/" : "";
+      const reference = {
+        ref: reaction.id,
+        numbers: prefix ? card?.numbers : numbers,
+        focus: card?.focus,
+      };
+      const options = { toolkit, fonts, style };
+      const heading =
+        reaction.title !== route.title ? reaction.title : undefined;
+      const horizontal = await prepareReactionFrames(
+        library,
+        source,
+        reference,
+        options,
+        "right",
+        prefix,
+        heading,
+      );
+      const vertical = await prepareReactionFrames(
+        library,
+        source,
+        reference,
+        options,
+        "down",
+        prefix,
+        heading,
+      );
+      mechanism = {
+        horizontal: { width: horizontal.width, height: horizontal.height },
+        vertical: { width: vertical.width, height: vertical.height },
+      };
+    }
     layoutSteps.push({
+      mechanism,
       id: step.id,
       from,
       to,
@@ -314,6 +357,9 @@ export async function compileRouteLayout(
         width,
         bond,
         text,
+        width === phoneCardWidth && layoutSteps.some((step) => step.mechanism)
+          ? width - cardInset(true)
+          : undefined,
       );
       const variant = structuredClone(route);
       applyLayout(variant, layout, library, measured, rawSteps, bond, scale);

@@ -36,12 +36,18 @@ export function figureChargeDiagnostics(
       0,
     );
   for (const entry of Object.values(entries)) {
-    const scenes =
+    const mechanism =
       entry.kind === "mechanism"
-        ? entry.frames
+        ? entry
         : entry.kind === "reaction"
-          ? [{ id: "scene", scene: entry.scene }]
-          : [];
+          ? entry.mechanism
+          : undefined;
+    const scenes = [
+      ...(entry.kind === "reaction"
+        ? [{ id: "scene", scene: entry.scene }]
+        : []),
+      ...(mechanism?.frames ?? []),
+    ];
     for (const frame of scenes) {
       for (const arrow of frame.scene.arrows ?? []) {
         if (arrow.from.kind !== "charge") continue;
@@ -61,10 +67,10 @@ export function figureChargeDiagnostics(
           });
       }
     }
-    if (entry.kind === "mechanism") {
-      for (let i = 1; i < entry.frames.length; i++) {
-        const previous = entry.frames[i - 1],
-          current = entry.frames[i];
+    if (mechanism) {
+      for (let i = 1; i < mechanism.frames.length; i++) {
+        const previous = mechanism.frames[i - 1],
+          current = mechanism.frames[i];
         const before = total(previous.scene),
           after = total(current.scene);
         if (before !== after)

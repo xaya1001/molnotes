@@ -7,7 +7,10 @@ import type {
 import type { FigureGeometry } from "../../shared/chemical-library/geometry.ts";
 import type { UnitAsset } from "./content-files.ts";
 import { sha256 } from "../../shared/assets.ts";
-import { libraryDependencies } from "../../shared/chemical-library/contract.ts";
+import {
+  figureFrames,
+  libraryDependencies,
+} from "../../shared/chemical-library/contract.ts";
 import { figureViewKey } from "../../shared/chemical-library/views.ts";
 import {
   figureProofCache,
@@ -250,23 +253,19 @@ export function figureProofReferences(
     ...Object.values(library).flatMap((entry) =>
       entry.kind === "image"
         ? []
-        : entry.kind === "mechanism"
-          ? [
-              { ref: entry.id },
-              ...entry.frames.map((frame) => ({
-                ref: entry.id,
-                frame: frame.id,
-              })),
-            ]
-          : entry.kind === "compound"
-            ? [
-                { ref: entry.id },
-                ...Object.keys(entry.variants ?? {}).map((variant) => ({
+        : [
+            { ref: entry.id },
+            ...figureFrames(library, entry).map(({ id }) => ({
+              ref: entry.id,
+              frame: id,
+            })),
+            ...(entry.kind === "compound"
+              ? Object.keys(entry.variants ?? {}).map((variant) => ({
                   ref: entry.id,
                   variant,
-                })),
-              ]
-            : [{ ref: entry.id }],
+                }))
+              : []),
+          ],
     ),
     ...references.filter(
       (reference) => library[reference.ref]?.kind !== "image",
@@ -279,8 +278,7 @@ export function figureProofReferences(
         const kind = entry?.kind;
         const instance: FigureReference = { ref: reference.ref };
         if (kind === "compound") instance.variant = reference.variant;
-        if (entry?.kind === "mechanism" && reference.frame)
-          instance.frame = reference.frame;
+        if (reference.frame) instance.frame = reference.frame;
         instance.numbers = reference.numbers;
         instance.focus = reference.focus;
         return [stableFigureValue(instance), instance];

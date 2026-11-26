@@ -726,6 +726,13 @@ Run `npm run figure:lint -- [<figure.yaml>... | --library <content-root>]` to li
 
 Run `npm run figure:compile -- --source <figure.yaml> --library <content-root>`.
 Use `kind: scheme` with top-level `compounds` and `steps` for reactions and routes, or top-level `frames` for a standalone mechanism, resonance scheme or comparison.
+A step can include `mechanism: {frames: [...]}`.
+The authored frames occupy that step in the route, with the same above-arrow and below-arrow text conventions as an ordinary step.
+They use the standalone frame syntax, and a frame can place a route structure with `compounds: {placementId: {compound: routeCompoundKey}}`.
+The placement uses that compound's saved identity while keeping its own placement key.
+Use `frame: stepId/frameId` on a route reference or `frame: frameId` on a reaction reference to show a single attached frame.
+In the complete figure, number and focus keys for attached placements start with `stepId/frameId/` on a route and `frameId/` on a reaction.
+An individual frame uses its local placement keys.
 The compiler also reads route sources with `kind: route` or an omitted kind, and frame sources with `kind: mechanism`.
 Galleries, grouped substrate scopes, catalytic cycles, Markush formulas and standalone conformation drawings have their own kinds.
 

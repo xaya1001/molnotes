@@ -1,3 +1,4 @@
+import { figureFrames } from "../../../shared/chemical-library/contract.ts";
 import { fitFigureCanvas } from "./figure-canvas.ts";
 import { chemicalFigureStyle } from "../../../shared/chemical-library/style.ts";
 import { prepareMarkush } from "./markush-geometry.ts";
@@ -81,7 +82,10 @@ import type {
   Focus,
   FocusGroup,
   Library,
+  Mechanism,
   Point,
+  Placement,
+  Reaction,
   Route,
   Scene,
 } from "../../../shared/chemical-library/types.ts";
@@ -132,19 +136,56 @@ function prefixedFocus(
     supporting: f.supporting?.map(group),
   };
 }
+interface PrepareOptions {
+  toolkit: ChemistryToolkit;
+  fonts: FigureFontResolver;
+  style: FigureStyle;
+  canvas?: "scene";
+  cardWidth?: number;
+  cardWidths?: number[];
+  cardScale?: number;
+  cardRoute?: Route;
+  frameFlow?: "right" | "left" | "down";
+  framePrefix?: string;
+  frameHeading?: string;
+}
+
+export function prepareReactionFrames(
+  library: Library,
+  reaction: Reaction & { mechanism: NonNullable<Reaction["mechanism"]> },
+  reference: FigureReference,
+  options: PrepareOptions,
+  flow: NonNullable<PrepareOptions["frameFlow"]>,
+  prefix = "",
+  heading?: string,
+) {
+  const mechanism: Mechanism = {
+    id: reaction.id,
+    title: reaction.title,
+    sources: reaction.sources,
+    style: reaction.style,
+    kind: "mechanism",
+    category: "reaction",
+    ...reaction.mechanism,
+  };
+  return prepareFigure(
+    { ...library, [mechanism.id]: mechanism },
+    { ...reference, ref: mechanism.id, frame: undefined },
+    {
+      toolkit: options.toolkit,
+      fonts: options.fonts,
+      style: options.style,
+      frameFlow: flow,
+      framePrefix: prefix,
+      frameHeading: heading,
+    },
+  );
+}
+
 export async function prepareFigure(
   library: Library,
   reference: FigureReference,
-  options: {
-    toolkit: ChemistryToolkit;
-    fonts: FigureFontResolver;
-    style: FigureStyle;
-    canvas?: "scene";
-    cardWidth?: number;
-    cardWidths?: number[];
-    cardScale?: number;
-    cardRoute?: Route;
-  },
+  options: PrepareOptions,
 ): Promise<FigureGeometry> {
   options = {
     ...options,
@@ -179,23 +220,26 @@ export async function prepareFigure(
   let cardPlan: FigureGeometry["cardPlan"];
   if (!entry) throw new Error(`Unknown figure ${reference.ref}`);
   const figureNumbers: Record<string, string[]> = {};
-  const numbering = (
-    reaction: import("../../../shared/chemical-library/types.ts").Reaction,
-    prefix = "",
-  ) => {
-    for (const p of [...reaction.reactants, ...reaction.products])
+  const participantNames: Record<string, string> = {};
+  const numbering = (reaction: Reaction, prefix = "") => {
+    for (const p of [...reaction.reactants, ...reaction.products]) {
+      if (p.name) participantNames[prefix + p.id] = p.name;
       if (p.number !== undefined || p.name)
         figureNumbers[prefix + p.id] = figureLabelLines(p.number, p.name);
+    }
   };
-  if (entry.kind === "reaction") numbering(entry);
-  if (entry.kind === "route")
+  if (entry.kind === "reaction" && !reference.frame) numbering(entry);
+  if (entry.kind === "route" && !reference.frame)
     for (const step of entry.steps) {
       const reaction = library[step.reaction];
       if (reaction?.kind === "reaction")
         numbering(reaction, standalone ? "" : step.id + "/");
     }
   const svg = element("g", {
-    role: entry.kind === "reaction" || entry.kind === "route" ? "group" : "img",
+    role:
+      !reference.frame && (entry.kind === "reaction" || entry.kind === "route")
+        ? "group"
+        : "img",
     "aria-label": entry.title,
     "data-figure": entry.id,
   });
@@ -225,6 +269,7 @@ export async function prepareFigure(
     explicitRadicals = new Set<string>(),
     allowReagents = false,
     protectedAtoms = new Map<string, "atom" | "bond">(),
+    caption?: Placement["caption"],
   ) {
     c = compoundView(toolkit, c, layout);
     const coords = placedCoordinates(toolkit, c, layout, rotate, mirror);
@@ -1164,15 +1209,23 @@ export async function prepareFigure(
           ctx.append(g, mark);
         }
       }
-      appendNumbers(g, id);
+      appendNumbers(g, id, caption);
     } finally {
       if (depiction !== mol) depiction.delete();
       mol.delete();
     }
   }
-  function appendNumbers(g: FigureGroup, id: string) {
+  function appendNumbers(
+    g: FigureGroup,
+    id: string,
+    caption?: Placement["caption"],
+  ) {
     const local = reference.numbers?.[id];
-    const numbers = local ? figureLabelLines(local) : figureNumbers[id];
+    const numbers = caption
+      ? figureLabelLines(local ?? caption.number, caption.name)
+      : local
+        ? figureLabelLines(local, participantNames[id])
+        : figureNumbers[id];
     if (numbers?.length) {
       const bounds = ctx.box(g);
       const group = element("g", { "data-number": `${id}:number` });
@@ -1191,6 +1244,32 @@ export async function prepareFigure(
         ctx.append(group, e);
         bottom += ctx.box(e).height + B * 0.15;
       }
+    }
+    if (caption)
+      appendQuantities(g, id, [
+        ...(caption.yield ? [`(${caption.yield})`] : []),
+        ...(caption.note ? [caption.note] : []),
+      ]);
+  }
+  function appendQuantities(group: FigureGroup, id: string, parts: string[]) {
+    if (!parts.length) return;
+    const number = ctx.nodes(
+      group,
+      (node) => ctx.data(node, "number") === id + ":number",
+    )[0];
+    const box = ctx.box(number ?? group);
+    const quantities = element("g", { "data-quantity": id + ":quantity" });
+    ctx.append(group, quantities);
+    let y = box.y + box.height + B * 0.42;
+    for (const [index, text] of parts.entries()) {
+      const e = label(
+        { x: box.x + box.width / 2, y },
+        text,
+        "var(--chemical-number-font)",
+      );
+      ctx.set(e, "data-label", `${id}:quantity:${index}`);
+      ctx.append(quantities, e);
+      y += ctx.box(e).height + B * 0.15;
     }
   }
   function encloseFocus(
@@ -1216,6 +1295,86 @@ export async function prepareFigure(
       );
     }
   }
+  function addHeading(group: FigureGroup, id: string, title: string) {
+    const bounds = ctx.box(group);
+    const font = "var(--chemical-caption-font)";
+    const heading = wrapFigureText(
+      [title],
+      Math.max(bounds.width, 8 * B),
+      (text) => ctx.textWidth(`**${text}**`, font),
+      { breakHan: true },
+    );
+    let y = bounds.y - B * 0.4;
+    for (const [index, line] of [...heading].reverse().entries()) {
+      const node = label(
+        { x: bounds.x + bounds.width / 2, y: 0 },
+        `**${line}**`,
+        font,
+      );
+      const box = ctx.box(node);
+      ctx.set(node, "y", String(y - box.y - box.height));
+      ctx.setData(node, "label", id + ":title:" + index);
+      ctx.append(group, node);
+      y -= box.height + B * 0.15;
+    }
+  }
+  function arrowText(
+    parent: FigureGroup,
+    id: string,
+    a: Point,
+    b: Point,
+    above: string[],
+    below: string[],
+    options: {
+      font?: string;
+      side?: "left" | "right";
+      x?: number;
+      top?: number;
+      bottom?: number;
+      verticalTop?: number;
+      ink?: string;
+      width?: number;
+    } = {},
+  ) {
+    const font = options.font ?? "var(--chemical-caption-font)";
+    const gap = parseFloat(ctx.resolve(font)) / 4;
+    const vertical = Math.abs(a.y - b.y) > Math.abs(a.x - b.x);
+    const left = options.side === "left";
+    const center = options.x ?? (a.x + b.x) / 2;
+    const offset = verticalArrowLabelOffset(B) + (options.width ?? 0) / 2;
+    let cursor = options.verticalTop ?? Math.min(a.y, b.y) + B * 0.3;
+    for (const [lines, sign] of [
+      [above, -1],
+      [below, 1],
+    ] as const) {
+      const upward = sign < 0 && !vertical;
+      if (!vertical)
+        cursor =
+          (upward
+            ? (options.top ?? Math.min(a.y, b.y))
+            : (options.bottom ?? Math.max(a.y, b.y))) +
+          sign * gap;
+      for (const [index, text] of (upward
+        ? [...lines].reverse()
+        : lines
+      ).entries()) {
+        const i = upward ? lines.length - 1 - index : index;
+        const node = label({ x: center, y: 0 }, text, font);
+        const box = ctx.box(node);
+        if (vertical)
+          ctx.set(
+            node,
+            "x",
+            String(center + (left ? -1 : 1) * (offset + box.width / 2)),
+          );
+        ctx.set(node, "y", String(cursor - box.y - (upward ? box.height : 0)));
+        ctx.setData(node, "label", `${id}:${sign}:${i}`);
+        if (options.ink) ctx.setStyle(node, "fill", options.ink);
+        ctx.append(parent, node);
+        cursor += (upward ? -1 : 1) * (box.height + gap);
+      }
+    }
+  }
   async function scene(
     s: Scene,
     prefix = "",
@@ -1224,6 +1383,27 @@ export async function prepareFigure(
     hidden = new Set<string>(),
     others = new Set<string>(),
   ) {
+    if (
+      override &&
+      (prefix || (entry.kind === "reaction" && entry.mechanism))
+    ) {
+      const placements = new Set(s.molecules.map(({ id }) => prefix + id));
+      const arrows = new Set(s.arrows?.map(({ id }) => prefix + id));
+      const within = (ref: AtomRef) => placements.has(ref.molecule);
+      const select = (group: FocusGroup) => {
+        const atoms = group.atoms?.filter(within);
+        const bonds = group.bonds?.filter((pair) => pair.every(within));
+        const selected = group.arrows?.filter((id) => arrows.has(id));
+        if (atoms?.length || bonds?.length || selected?.length)
+          return { atoms, bonds, arrows: selected };
+      };
+      const primary = override.primary && select(override.primary);
+      const supporting = override.supporting?.flatMap(
+        (group) => select(group) ?? [],
+      );
+      override =
+        primary || supporting?.length ? { primary, supporting } : undefined;
+    }
     const f = override ?? prefixedFocus(s.focus, prefix);
     validateSceneChemistry(toolkit, library, s, entry.id);
     if (override) {
@@ -1310,7 +1490,7 @@ export async function prepareFigure(
           transform: `translate(${p.at.x * B} ${p.at.y * B})`,
         });
         ctx.append(g, conformationGeometry(c, ctx, prefix + p.id));
-        appendNumbers(g, prefix + p.id);
+        appendNumbers(g, prefix + p.id, p.caption);
         ctx.append(parent, g);
         continue;
       }
@@ -1373,10 +1553,11 @@ export async function prepareFigure(
         chargeAims,
         deferredCharges,
         explicitRadicals,
-        (entry.kind === "mechanism" &&
+        ((entry.kind === "mechanism" || reference.frame !== undefined) &&
           (s.molecules.length > 1 || c.smiles.includes("."))) ||
           others.has(p.id),
         protectedAtoms,
+        p.caption,
       );
     }
     const atom = (a: AtomRef) => {
@@ -1921,38 +2102,9 @@ export async function prepareFigure(
         );
         if (a.kind === "resonance") draw(q, p);
       }
-      for (const [lines, sign] of [
-        [a.above ?? [], -1],
-        [a.below ?? [], 1],
-      ] as const) {
-        let previous: FigureRect | undefined;
-        lines.forEach((text, i) => {
-          const y = (p.y + q.y) / 2 + sign * B * 0.65;
-          const e = label(
-            {
-              x: (p.x + q.x) / 2,
-              y,
-            },
-            text,
-            "var(--chemical-caption-font)",
-          );
-          if (previous) {
-            const bounds = ctx.box(e);
-            ctx.set(
-              e,
-              "y",
-              y +
-                (sign < 0
-                  ? previous.y - B * 0.15 - bounds.y - bounds.height
-                  : previous.y + previous.height + B * 0.15 - bounds.y),
-            );
-          }
-          previous = ctx.box(e);
-          ctx.setStyle(e, "fill", ink);
-          ctx.setData(e, "label", prefix + a.id + ":" + sign + ":" + i);
-          ctx.append(parent, e);
-        });
-      }
+      arrowText(parent, prefix + a.id, p, q, a.above ?? [], a.below ?? [], {
+        ink,
+      });
     }
     for (const [i, box] of (s.captionBoxes ?? []).entries()) {
       const e = element("path", {
@@ -2116,24 +2268,56 @@ export async function prepareFigure(
           },
         };
       });
+    const vertical = Math.abs(a.y - b.y) > Math.abs(a.x - b.x);
+    const detail =
+      r.mechanism && options.canvas !== "scene"
+        ? await prepareReactionFrames(
+            library,
+            { ...r, mechanism: r.mechanism },
+            reference,
+            options,
+            vertical ? "down" : a.x > b.x ? "left" : "right",
+            prefix,
+            entry.kind === "route" && r.title !== entry.title
+              ? r.title
+              : undefined,
+          )
+        : undefined;
+    if (detail) {
+      const center = mul(plus(a, b), 0.5);
+      const shift = {
+        x: center.x - detail.width / 2,
+        y: center.y - detail.height / 2,
+      };
+      const group = element("g", {
+        "data-step-mechanism": prefix + id,
+        transform: `translate(${shift.x} ${shift.y})`,
+      });
+      if (detail.root.kind === "group")
+        ctx.append(group, ...detail.root.children);
+      ctx.append(parent, group);
+      for (const [id, point] of Object.entries(detail.atomPoints))
+        atomPoints[id] = plus(point, shift);
+    }
     const arrowShape = solidArrow(a, b, B);
-    await scene(
-      {
-        width: r.scene.width,
-        height: r.scene.height,
-        molecules: [],
-        reactionArrows: [
-          {
-            id,
-            from: { x: a.x / B, y: a.y / B },
-            to: { x: b.x / B, y: b.y / B },
-            kind: r.arrow.kind,
-          },
-        ],
-      },
-      prefix,
-      parent,
-    );
+    if (!detail)
+      await scene(
+        {
+          width: r.scene.width,
+          height: r.scene.height,
+          molecules: [],
+          reactionArrows: [
+            {
+              id,
+              from: { x: a.x / B, y: a.y / B },
+              to: { x: b.x / B, y: b.y / B },
+              kind: r.arrow.kind,
+            },
+          ],
+        },
+        prefix,
+        parent,
+      );
     if (routePoints.length > 2 && r.arrow.kind !== "none")
       ctx.append(
         parent,
@@ -2155,7 +2339,6 @@ export async function prepareFigure(
       ctx.set(path, "aria-label", r.title);
       ctx.set(path, "pointer-events", "bounding-box");
     }
-    const center = (a.x + b.x) / 2;
     const reactants = r.reactants
       .filter((p) => !p.position || p.position === "inline")
       .map((p) => r.scene.molecules.find((m) => m.id === p.id)!);
@@ -2188,50 +2371,35 @@ export async function prepareFigure(
       wrapFigureText(lines, textWidth, (text) =>
         ctx.textWidth(text, conditionFont),
       );
-    let verticalCursor = Math.max(
-      Math.min(a.y, b.y) + B * 0.3,
-      ...overhead.map((p) => p.bounds.y + p.bounds.height + B * 0.3),
-    );
     const reagentsBelow = r.reagentPosition === "below-arrow";
-    for (const [lines, sign] of [
-      [reagentsBelow ? [] : wrap(r.reagents), -1],
-      [[...(reagentsBelow ? wrap(r.reagents) : []), ...wrap(r.conditions)], 1],
-    ] as const) {
-      const occupied = overhead.filter(
-        (p) => p.position === (sign < 0 ? "above-arrow" : "below-arrow"),
-      );
-      const edge =
-        sign < 0
-          ? Math.min(a.y, b.y, ...arrowShape.vertices.map((p) => p.y))
-          : Math.max(
-              a.y,
-              b.y,
-              ...arrowShape.vertices.map((p) => p.y),
-              ...occupied.map((p) => p.bounds.y + p.bounds.height),
-            );
-      const gap = parseFloat(ctx.resolve(conditionFont)) / 4;
-      let cursor = edge;
-      const vertical = Math.abs(a.y - b.y) > Math.abs(a.x - b.x);
-      const upward = sign < 0 && !vertical;
-      (upward ? [...lines].reverse() : lines).forEach((text, index) => {
-        const i = upward ? lines.length - 1 - index : index;
-        const e = label({ x: center, y: 0 }, text, conditionFont);
-        ctx.set(e, "data-label", `${prefix}${id}:condition:${sign}:${i}`);
-        ctx.append(parent, e);
-        const bounds = ctx.box(e);
-        const y =
-          sign < 0
-            ? cursor - gap - bounds.y - bounds.height
-            : cursor + gap - bounds.y;
-        if (vertical) {
-          const side = r.arrow.side === "left" ? -1 : 1;
-          ctx.set(e, "x", String(center + side * (B * 0.6 + bounds.width / 2)));
-          ctx.set(e, "y", String(verticalCursor - bounds.y));
-          verticalCursor += bounds.height + gap;
-        } else ctx.set(e, "y", String(y));
-        cursor = y + bounds.y + (sign > 0 ? bounds.height : 0);
-      });
-    }
+    const frameHeight = (detail?.height ?? 0) / 2;
+    arrowText(
+      parent,
+      prefix + id + ":condition",
+      a,
+      b,
+      reagentsBelow ? [] : wrap(r.reagents),
+      [...(reagentsBelow ? wrap(r.reagents) : []), ...wrap(r.conditions)],
+      {
+        font: conditionFont,
+        side: r.arrow.side,
+        width: detail?.width,
+        top:
+          Math.min(a.y, b.y, ...arrowShape.vertices.map((p) => p.y)) -
+          frameHeight,
+        bottom: Math.max(
+          Math.max(a.y, b.y, ...arrowShape.vertices.map((p) => p.y)) +
+            frameHeight,
+          ...overhead
+            .filter(({ position }) => position === "below-arrow")
+            .map(({ bounds }) => bounds.y + bounds.height),
+        ),
+        verticalTop: Math.max(
+          Math.min(a.y, b.y) + B * 0.3,
+          ...overhead.map(({ bounds }) => bounds.y + bounds.height + B * 0.3),
+        ),
+      },
+    );
     for (const p of [...r.reactants, ...r.products]) {
       if (p.position === "text" || p.position === "none") continue;
       const parts = [
@@ -2246,29 +2414,7 @@ export async function prepareFigure(
         const group = ctx
           .nodes(parent, (node) => ctx.data(node, "molecule") === prefix + p.id)
           .filter((node) => node.kind === "group")[0]!;
-        const number = ctx.nodes(
-          group,
-          (node) => ctx.data(node, "number") === prefix + p.id + ":number",
-        )[0];
-        const box = ctx.box(number ?? group);
-        const quantities = element("g", {
-          "data-quantity": `${prefix}${p.id}:quantity`,
-        });
-        ctx.append(group, quantities);
-        let y = box.y + box.height + B * 0.42;
-        for (const [index, text] of parts.entries()) {
-          const e = label(
-            {
-              x: box.x + box.width / 2,
-              y,
-            },
-            text,
-            "var(--chemical-number-font)",
-          );
-          ctx.set(e, "data-label", `${prefix}${p.id}:quantity:${index}`);
-          ctx.append(quantities, e);
-          y += ctx.box(e).height + B * 0.15;
-        }
+        appendQuantities(group, prefix + p.id, parts);
       }
     }
     if (view?.display)
@@ -2355,10 +2501,18 @@ export async function prepareFigure(
     };
     return options.canvas === "scene"
       ? geometry
-      : fitFigureCanvas(geometry, targetCardWidth ? 0 : B);
+      : fitFigureCanvas(geometry, targetCardWidth || options.frameFlow ? 0 : B);
   };
   let cardPlans: FigureGeometry["cardPlans"];
-  if (entry.kind === "conformation") {
+  if (reference.frame) {
+    const frame = figureFrames(library, entry).find(
+      (f) => f.id === reference.frame,
+    );
+    if (!frame) throw new Error("Unknown frame");
+    width = frame.scene.width * B;
+    height = frame.scene.height * B;
+    await scene(frame.scene, "", svg, reference.focus);
+  } else if (entry.kind === "conformation") {
     const group = conformationGeometry(entry, ctx);
     ctx.append(svg, group);
     const box = ctx.box(group);
@@ -2420,11 +2574,8 @@ export async function prepareFigure(
     height = entry.scene.height * B;
     await reaction(entry.id);
   } else if (entry.kind === "mechanism") {
-    if (reference.frame || entry.frames.length === 1) {
-      const frame = reference.frame
-        ? entry.frames.find((f) => f.id === reference.frame)
-        : entry.frames[0];
-      if (!frame) throw new Error("Unknown frame");
+    if (entry.frames.length === 1 && !options.frameFlow) {
+      const frame = entry.frames[0];
       width = frame.scene.width * B;
       height = frame.scene.height * B;
       await scene(frame.scene, "", svg, reference.focus);
@@ -2432,9 +2583,10 @@ export async function prepareFigure(
       const panels = new Map<string, { group: FigureGroup; box: FigureRect }>();
       const measures: Record<string, RouteMolecule> = {};
       for (const frame of entry.frames) {
-        const prefix = frame.id + "/";
-        for (const [id, number] of Object.entries(reference.numbers ?? {}))
-          figureNumbers[prefix + id] = figureLabelLines(number);
+        const prefix = (options.framePrefix ?? "") + frame.id + "/";
+        if (!options.frameFlow)
+          for (const [id, number] of Object.entries(reference.numbers ?? {}))
+            figureNumbers[prefix + id] = figureLabelLines(number);
         const group = element("g", { "data-frame": frame.id });
         ctx.append(svg, group);
         await scene(
@@ -2446,8 +2598,12 @@ export async function prepareFigure(
           },
           prefix,
           group,
-          prefixedFocus(reference.focus, prefix),
+          options.frameFlow
+            ? reference.focus
+            : prefixedFocus(reference.focus, prefix),
         );
+        if (!options.frameFlow || frame.title !== frame.id)
+          addHeading(group, prefix + frame.id, frame.title);
         const box = ctx.box(group);
         panels.set(frame.id, { group, box });
         measures[frame.id] = {
@@ -2475,8 +2631,12 @@ export async function prepareFigure(
         id: frame.id,
         from: [{ id: frame.id }],
         to: [{ id: entry.frames[index + 1].id }],
-        above: [frame.title, ...(frame.above ?? [])],
+        above: frame.above ?? [],
         below: frame.below ?? [],
+        ...(options.frameFlow === "down" && {
+          turn: "down" as const,
+          reverse: false,
+        }),
       }));
       const assembleMechanism = async (
         targetSvg: FigureGroup,
@@ -2543,29 +2703,43 @@ export async function prepareFigure(
           : undefined;
         const layout =
           plan?.layout ??
-          layoutRoute(steps, measures, {
-            width: entry.frames.length === 2 ? Infinity : limit,
-            bond: B,
-            gap: token("--chemical-route-gap"),
-            serpentine: true,
-            text: (lines) => text(lines),
-          });
+          (entry.frames.length === 1
+            ? undefined
+            : layoutRoute(steps, measures, {
+                width:
+                  options.frameFlow || entry.frames.length === 2
+                    ? Infinity
+                    : limit,
+                bond: B,
+                gap: token("--chemical-route-gap"),
+                serpentine: true,
+                text: (lines) => text(lines),
+              }));
+        if (!layout)
+          return {
+            width: measures[entry.frames[0].id].width,
+            height: measures[entry.frames[0].id].top * 2,
+            cardPlan: undefined,
+          };
         const w = layout.width;
         const h = layout.height;
+        const reverse = options.frameFlow === "left";
+        const position = (point: Point) =>
+          reverse ? { x: w - point.x, y: point.y } : point;
         for (const item of layout.items) {
           if (item.kind === "molecule") {
             const { group, box } = targetPanels.get(item.key!)!;
-            const dx = item.at.x - box.x,
+            const dx = position(item.at).x - box.x - (reverse ? box.width : 0),
               dy = item.at.y - box.height / 2 - box.y;
             ctx.set(group, "transform", `translate(${dx} ${dy})`);
             for (const [id, point] of Object.entries(targetAtomPoints))
-              if (id.startsWith(item.key + "/")) {
+              if (id.startsWith((options.framePrefix ?? "") + item.key + "/")) {
                 point.x += dx;
                 point.y += dy;
               }
           } else if (item.kind === "arrow") {
             const frame = entry.frames.find((frame) => frame.id === item.step)!;
-            const points = item.points!;
+            const points = item.points!.map(position);
             await scene(
               {
                 width: w / B,
@@ -2580,45 +2754,25 @@ export async function prepareFigure(
                   },
                 ],
               },
-              "",
+              options.framePrefix ?? "",
               targetSvg,
             );
-            const vertical = points[0].x === points.at(-1)!.x;
-            const side = item.side === "left" ? -1 : 1;
-            const labelX = vertical
-              ? points[0].x + side * verticalArrowLabelOffset(B)
-              : item.at.x;
-            const labelAlign = vertical
-              ? side < 0
-                ? "end"
-                : "start"
-              : "middle";
-            let cursor = points[0].y + B * 0.3;
-            for (const [lines, sign] of [
-              [item.above ?? [], -1],
-              [item.below ?? [], 1],
-            ] as const) {
-              if (!vertical) cursor = item.at.y + sign * B * 0.4;
-              for (const text of sign < 0 && !vertical
-                ? [...lines].reverse()
-                : lines) {
-                const node = label(
-                  { x: labelX, y: 0 },
-                  text,
-                  plan
-                    ? cardConditionFont(plan.scale)
-                    : "var(--chemical-caption-font)",
-                  labelAlign,
-                );
-                const box = ctx.box(node);
-                const y =
-                  cursor - box.y - (sign < 0 && !vertical ? box.height : 0);
-                ctx.set(node, "y", String(y));
-                ctx.setData(node, "label", `${frame.id}:step:${sign}:${text}`);
-                ctx.append(targetSvg, node);
-                cursor += (vertical ? 1 : sign) * (box.height + B * 0.15);
-              }
-            }
+            arrowText(
+              targetSvg,
+              `${options.framePrefix ?? ""}${frame.id}:step`,
+              points.at(-2)!,
+              points.at(-1)!,
+              item.above ?? [],
+              item.below ?? [],
+              {
+                font: plan ? cardConditionFont(plan.scale) : undefined,
+                side: item.side,
+                x:
+                  points[0].x === points.at(-1)!.x
+                    ? points[0].x
+                    : position(item.at).x,
+              },
+            );
           }
         }
         return { width: w, height: h, cardPlan: resolvedCardPlan };
@@ -2705,6 +2859,12 @@ export async function prepareFigure(
         ),
       );
   }
+  if (options.frameHeading)
+    addHeading(
+      svg,
+      (options.framePrefix ?? "") + entry.id,
+      options.frameHeading,
+    );
   const geometry = finalizeGeometry(
     svg,
     width,
