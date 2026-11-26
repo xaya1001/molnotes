@@ -27,7 +27,6 @@ import type { FigureRect } from "../../../shared/chemical-library/geometry.ts";
 import { rectangle } from "./geometry-math.ts";
 import { walkGeometry } from "./geometry-walk.ts";
 import { minimumVisibleBondFraction } from "./geometry-spacing.ts";
-import { ionPairDistance } from "../../../shared/chemical-library/ion-layout.ts";
 import {
   samplePath,
   pathMetrics,
@@ -137,7 +136,6 @@ export function figureGeometryDiagnostics(
   )
     return errors;
   const charges = new Map<string, number>();
-  const ionPairLimit = ionPairDistance + 0.1;
   for (const { data, bounds } of elements) {
     if (data.unexpectedNativeMark)
       add(
@@ -147,10 +145,10 @@ export function figureGeometryDiagnostics(
         { x: bounds.left, y: bounds.top },
       );
     if (data.ionPairDistances) {
-      const pairs: { atoms: string[]; distance: number }[] = JSON.parse(
-        data.ionPairDistances,
-      );
-      for (const { atoms, distance } of pairs)
+      const pairs: { atoms: string[]; distance: number; expected: number }[] =
+        JSON.parse(data.ionPairDistances);
+      for (const { atoms, distance, expected } of pairs) {
+        const ionPairLimit = expected + 0.1;
         if (distance > ionPairLimit)
           add(
             "COUNTERION_DISTANCE",
@@ -160,6 +158,7 @@ export function figureGeometryDiagnostics(
             distance,
             ionPairLimit,
           );
+      }
     }
   }
   for (const marker of elements.filter(

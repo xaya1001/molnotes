@@ -1,7 +1,7 @@
 import type { ChemicalGraph } from "./chemistry.ts";
 import type { Point } from "./types.ts";
 
-export const ionPairDistance = 1.5;
+export const ionPairDistance = (atoms: number) => (atoms === 1 ? 1.5 : 1.75);
 
 export function counterionGroups(
   graph: ChemicalGraph,
@@ -91,6 +91,7 @@ export function ionPairCoordinates(
       clearance = -Infinity;
     // Try the saved orientation first, then turn multi-atom ions about their charge.
     const orientations = atoms.length === 1 ? 1 : 12;
+    const spacing = ionPairDistance(atoms.length);
     for (let turn = 0; turn < orientations; turn++) {
       const rotation = (turn * 2 * Math.PI) / orientations;
       const cos = Math.cos(rotation),
@@ -105,8 +106,8 @@ export function ionPairCoordinates(
         const angle = Math.atan2(origin.y - anchor.y, origin.x - anchor.x);
         for (let k = 0; k < 24; k++) {
           const a = angle + (k * Math.PI) / 12;
-          const x = anchor.x + ionPairDistance * Math.cos(a),
-            y = anchor.y + ionPairDistance * Math.sin(a);
+          const x = anchor.x + spacing * Math.cos(a),
+            y = anchor.y + spacing * Math.sin(a);
           const candidate = new Map(
             atoms.map((i, j) => [
               i,

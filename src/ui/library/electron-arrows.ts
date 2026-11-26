@@ -837,7 +837,7 @@ export function electronArrowShapes(
           count++;
       }
       for (const [id, mark] of Object.entries(marks)) {
-        if (fromMark && id === fa[0]) continue;
+        if (fromMark && from.kind !== "lonePair" && id === fa[0]) continue;
         const rect = rectPoints({
           left: mark.point.x - mark.radius,
           right: mark.point.x + mark.radius,
