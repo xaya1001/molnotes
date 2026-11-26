@@ -24,6 +24,10 @@ import {
 } from "./electron-arrows.ts";
 import { drawEnclosure } from "./geometry-enclosures.ts";
 import { nativeDepictionGeometry } from "./native-geometry.ts";
+import {
+  counterionGroups,
+  ionPairDistance,
+} from "../../../shared/chemical-library/ion-layout.ts";
 import { transformPoint, rectangle } from "./geometry-math.ts";
 import { pathContours, inkIntersectsBox } from "./path-geometry.ts";
 import { refreshGeometry } from "./geometry-tree.ts";
@@ -425,6 +429,34 @@ export async function prepareFigure(
         "data-molecule": id,
         "data-compound": c.id,
       });
+      const counterions =
+        layout.ionPairs !== "keep" && c.smiles.includes(".")
+          ? counterionGroups(
+              graph,
+              new Set(
+                Object.keys(layout.pins ?? {}).map((atom) =>
+                  c.atomIds.indexOf(atom),
+                ),
+              ),
+            )
+          : [];
+      if (counterions.length) {
+        const pairDistances = counterions.map(({ atoms, pivot, centres }) => {
+          const distant = positions[pivot];
+          const distances = centres.map((i) =>
+            Math.hypot(distant.x - positions[i].x, distant.y - positions[i].y),
+          );
+          const distance = Math.min(...distances);
+          return {
+            atoms: [pivot, centres[distances.indexOf(distance)]].map((i) =>
+              key({ molecule: id, atom: c.atomIds[i] }),
+            ),
+            distance: distance / B,
+            expected: ionPairDistance(atoms.length),
+          };
+        });
+        ctx.setData(g, "ionPairDistances", JSON.stringify(pairDistances));
+      }
       const nativeBonds = new Map<number, [number, number]>();
       const bondParts = new Map<number, number>();
       for (const e of ctx
@@ -556,6 +588,13 @@ export async function prepareFigure(
         )
           continue;
         const e = node;
+        if (
+          e.kind === "path" &&
+          [e.paint.fill, e.paint.stroke].some(
+            (color) => !/^(none|#([0-9a-f]{2})\2\2)$/i.test(color),
+          )
+        )
+          ctx.setData(e, "unexpectedNativeMark", id);
         if (
           e.kind === "path" &&
           !bi &&
@@ -866,10 +905,15 @@ export async function prepareFigure(
           const anchorNodes = labelNodes.filter(
             (node) => node.attributes["data-element-anchor"] === "true",
           );
-          const boxes = (anchorNodes.length ? anchorNodes : labelNodes).map(
-            (node) => inkBox(node, g, ctx),
+          const useAnchor =
+            anchorNodes.length &&
+            !counterions.some(
+              ({ atoms, pivot }) => atoms.length > 1 && pivot === i,
+            );
+          const boxes = (useAnchor ? anchorNodes : labelNodes).map((node) =>
+            inkBox(node, g, ctx),
           );
-          if (anchorNodes.length)
+          if (useAnchor)
             for (const [index, node] of labelNodes.entries())
               if (!anchorNodes.includes(node))
                 chargeBoxes[`glyph:${i}:${index}`] = inkBox(node, g, ctx);

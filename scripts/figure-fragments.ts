@@ -48,7 +48,6 @@ export function placeArrowFragments(
       for (const j of frag) of[j] = frags.length;
       frags.push(frag);
     }
-  if (frags.length < 2) return input;
   const contacts = links
     .filter(([a, b]) => of[a] !== of[b])
     .map(([a, b]): [number, number] => (of[a] < of[b] ? [a, b] : [b, a]));
@@ -339,5 +338,5 @@ export function placeArrowFragments(
     for (const i of frags[n]) pos[i] = add(pos[i], { x: dx, y: dy });
     placed.add(n);
   }
-  return pos;
+  return { points: pos, contactAtoms: new Set(contacts.flat()) };
 }

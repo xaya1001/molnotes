@@ -175,7 +175,7 @@ test("two reacting ends fold together and face the second fragment evenly", () =
       { atoms: [4, 5] as [number, number], bo: 2 },
     ],
   };
-  const placed = placeArrowFragments(graph, input, [
+  const { points: placed } = placeArrowFragments(graph, input, [
     [0, 4],
     [3, 5],
   ]);
@@ -197,7 +197,7 @@ test("spectators leave the reacting fragment network free", () => {
       { atoms: [3, 4] as [number, number] },
     ],
   };
-  const placed = placeArrowFragments(
+  const { points: placed } = placeArrowFragments(
     graph,
     [
       { x: 0, y: 0 },
@@ -218,7 +218,7 @@ test("spectators leave the reacting fragment network free", () => {
 });
 
 test("unlinked fragments reserve space for their labels", () => {
-  const placed = placeArrowFragments(
+  const { points: placed } = placeArrowFragments(
     { atoms: [{ z: 7 }, { z: 8 }], bonds: [] },
     [
       { x: 0, y: 0 },

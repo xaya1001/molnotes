@@ -136,6 +136,31 @@ export function figureGeometryDiagnostics(
   )
     return errors;
   const charges = new Map<string, number>();
+  for (const { data, bounds } of elements) {
+    if (data.unexpectedNativeMark)
+      add(
+        "UNDECLARED_COLORED_MARK",
+        [data.label ?? data.unexpectedNativeMark],
+        "Native structure contains a colored mark without a figure annotation",
+        { x: bounds.left, y: bounds.top },
+      );
+    if (data.ionPairDistances) {
+      const pairs: { atoms: string[]; distance: number; expected: number }[] =
+        JSON.parse(data.ionPairDistances);
+      for (const { atoms, distance, expected } of pairs) {
+        const ionPairLimit = expected + 0.1;
+        if (distance > ionPairLimit)
+          add(
+            "COUNTERION_DISTANCE",
+            atoms,
+            "Place the counterion closer to its opposite charge centre (bond lengths)",
+            undefined,
+            distance,
+            ionPairLimit,
+          );
+      }
+    }
+  }
   for (const marker of elements.filter(
     (node) => node.data.chargeOwner !== undefined,
   )) {

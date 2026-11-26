@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
+import { compileFigure } from "../scripts/figure-scene.ts";
+import { loadFigureStyle } from "../scripts/figure-route.ts";
+import { loadFigureFonts } from "../scripts/figure-fonts.ts";
+import { prepareFigure } from "../src/ui/library/prepare.ts";
+import { geometrySvg } from "../src/ui/library/geometry-tree.ts";
 import { validateLibraryEntry } from "../shared/chemical-library/contract.ts";
 import {
   prepareCompound,
@@ -11,6 +16,51 @@ import {
 } from "../shared/chemical-library/chemistry.ts";
 
 const sources = [{ source: "example", locator: "structure" }];
+
+test("native close-contact flags do not draw colored atom marks", async () => {
+  const toolkit = await moleculeToolkit();
+  const compound = prepareCompound(toolkit, {
+    id: "cmp_contacts",
+    title: "Close contacts",
+    smiles: "CCCC",
+    sources,
+  });
+  compound.layout.coords[compound.atomIds[3]] = {
+    ...compound.layout.coords[compound.atomIds[0]],
+  };
+  const geometry = await prepareFigure(
+    { [compound.id]: compound },
+    { ref: compound.id },
+    {
+      toolkit,
+      fonts: await loadFigureFonts(),
+      style: await loadFigureStyle(),
+    },
+  );
+  assert.doesNotMatch(geometrySvg(geometry), /stroke="#ff0000"/i);
+});
+
+test("compiled reaction places a spectator ion beside its charge centre", async () => {
+  const { entries, reference } = await compileFigure({
+    compounds: { salt: "CC(=O)[O-].[Li+]", product: "CC(=O)O" },
+    steps: [{ from: "salt", to: "product" }],
+  });
+  const reaction = entries[reference.ref];
+  assert.ok(reaction.kind === "reaction");
+  const placement = reaction.scene.molecules.find(({ id }) => id === "salt")!;
+  const compound = entries[placement.compound];
+  assert.ok(compound.kind === "compound");
+  const toolkit = await moleculeToolkit();
+  const layout = compound.variants![placement.variant!];
+  const points = placedCoordinates(toolkit, compound, layout);
+  const mol = toolkit.get_mol(compound.smiles)!;
+  const graph = graphOf(mol);
+  mol.delete();
+  const [a, b] = graph.atoms.flatMap((atom, i) =>
+    atom.chg ? [points[i]] : [],
+  );
+  assert.ok(Math.abs(Math.hypot(a.x - b.x, a.y - b.y) - 1.5) < 1e-8);
+});
 
 test("counterions approach their charged fragment while pins and authored separation are retained", async () => {
   const rd = await moleculeToolkit();
