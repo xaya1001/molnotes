@@ -19,6 +19,8 @@ import {
 } from "./figure-proof-cache.ts";
 import type { AssetStage } from "./asset-stage.ts";
 import { logTiming } from "../../shared/stage-timing.ts";
+import { diagnosticMarksLayer } from "../../src/ui/library/diagnostic-marks.ts";
+import { figureDiagnosticScale } from "../figure-diagnostics.ts";
 
 export interface ProofRunner {
   prepare(reference: FigureReference, slot: number): Promise<PreparedFigure>;
@@ -180,7 +182,17 @@ export async function verifyFigureProofs(
           }
           await cache.saveProof(proofKey, diagnostics);
         }
-        return { ...job, prepared, diagnostics };
+        let diagnosticMarks: string | undefined;
+        if (diagnostics.length) {
+          geometry ??= await cache.geometry(prepared.meta);
+          if (geometry) {
+            const marks = diagnosticMarksLayer(geometry, diagnostics, {
+              scale: figureDiagnosticScale(geometry),
+            });
+            if (marks) diagnosticMarks = marks;
+          }
+        }
+        return { ...job, prepared, diagnostics, diagnosticMarks };
       } catch (error) {
         return {
           ...job,
@@ -213,6 +225,9 @@ export async function verifyFigureProofs(
         height: meta.height,
         minimumScale: meta.minimumScale,
         diagnostics: result.diagnostics,
+        ...(result.diagnosticMarks
+          ? { diagnosticMarks: result.diagnosticMarks }
+          : {}),
       };
     }
   } finally {

@@ -8,9 +8,12 @@ import type {
   FigureReference,
   LibraryFigureRender,
 } from "../../shared/chemical-library/types.ts";
+import type { FigureGeometry } from "../../shared/chemical-library/geometry.ts";
 import { figureViewKey } from "../../shared/chemical-library/views.ts";
 import type { UnitAsset } from "./content-files.ts";
 import { sha256 } from "../../shared/assets.ts";
+import { diagnosticMarksLayer } from "../../src/ui/library/diagnostic-marks.ts";
+import { figureDiagnosticScale } from "../figure-diagnostics.ts";
 import { parseFigureStyle } from "../../src/ui/library/scene-geometry.ts";
 import { figureFontFiles, nativeFigureFontFile } from "../figure-fonts.ts";
 import { figureWorkerPool } from "./figure-worker-pool.ts";
@@ -163,14 +166,32 @@ export async function prepareFigureViews(
         content_type: "image/svg+xml",
         prompt: null,
       });
+      let parsed: FigureGeometry | undefined;
+      const getGeometry = () =>
+        (parsed ??=
+          prepared.geometry ??
+          (prepared.geometryBytes
+            ? (JSON.parse(
+                Buffer.from(prepared.geometryBytes).toString(),
+              ) as FigureGeometry)
+            : undefined));
+      const diagnostics =
+        prepared.diagnostics ?? (await runner.diagnose(getGeometry()!, 0));
+      let diagnosticMarks = "";
+      if (diagnostics.length) {
+        const geometry = getGeometry();
+        if (geometry)
+          diagnosticMarks = diagnosticMarksLayer(geometry, diagnostics, {
+            scale: figureDiagnosticScale(geometry),
+          });
+      }
       renders[key] = {
         asset: `/library/${path}`,
         width: prepared.width ?? prepared.geometry!.width,
         height: prepared.height ?? prepared.geometry!.height,
         minimumScale: prepared.minimumScale ?? prepared.geometry!.minimumScale,
-        diagnostics:
-          prepared.diagnostics ??
-          (await runner.diagnose(prepared.geometry!, 0)),
+        diagnostics,
+        ...(diagnosticMarks ? { diagnosticMarks } : {}),
       };
     }
     return { renders, assets: [...assets.values()] };

@@ -12,6 +12,11 @@ import { figureRouteMetrics } from "../../shared/chemical-library/routes.ts";
 const props = defineProps<{ library: LibrarySnapshot }>();
 const statuses = ref<Record<string, Diagnostic[]>>({});
 const opened = ref<Record<string, boolean>>({});
+const selectedDiagnostic = ref<Record<string, number | null>>({});
+const toggleDiagnostic = (entryId: string, index: number) => {
+  selectedDiagnostic.value[entryId] =
+    selectedDiagnostic.value[entryId] === index ? null : index;
+};
 const coverSrc = (entry: LibraryEntry) =>
   entry.kind === "image"
     ? entry.crop
@@ -102,7 +107,11 @@ onMounted(() => {
         {{ library.uses[entry.id]?.length ?? 0 }} 处引用
       </p>
       <button
-        v-if="coverSrc(entry) && !opened[entry.id]"
+        v-if="
+          coverSrc(entry) &&
+          !opened[entry.id] &&
+          !(entryDiagnostics(entry)?.length ?? 0)
+        "
         class="preview"
         type="button"
         :aria-label="`查看：${entry.title}`"
@@ -111,9 +120,15 @@ onMounted(() => {
         <img :src="coverSrc(entry)" :alt="entry.title" loading="lazy" />
       </button>
       <LibraryFigure
-        v-if="!coverSrc(entry) || opened[entry.id]"
+        v-if="
+          !coverSrc(entry) ||
+          opened[entry.id] ||
+          (entryDiagnostics(entry)?.length ?? 0) > 0
+        "
         :library="library"
         :reference="{ ref: entry.id }"
+        show-diagnostic-marks
+        :active-diagnostic="selectedDiagnostic[entry.id] ?? null"
         @diagnostics="statuses[entry.id] = $event"
       />
       <p v-if="entryDiagnostics(entry)" class="check-status">
@@ -142,13 +157,24 @@ onMounted(() => {
                 : "布局通过"
           }}
         </p>
-        <ul v-if="entryDiagnostics(entry)?.length">
+        <ul v-if="entryDiagnostics(entry)?.length" class="diagnostic-list">
           <li
             v-for="(d, i) in entryDiagnostics(entry)"
             :key="i"
             :data-diagnostic="d.code"
           >
-            {{ d.code }} · {{ d.elements.join("，") }} · {{ d.message }}
+            <button
+              type="button"
+              class="diagnostic-item"
+              :class="{ 'is-active': selectedDiagnostic[entry.id] === i }"
+              :aria-pressed="selectedDiagnostic[entry.id] === i"
+              @click="toggleDiagnostic(entry.id, i)"
+            >
+              <span class="diagnostic-index">{{ i + 1 }}</span>
+              <span class="diagnostic-text">
+                {{ d.code }} · {{ d.elements.join("，") }} · {{ d.message }}
+              </span>
+            </button>
           </li>
         </ul>
         <p v-for="s in entry.sources" :key="s.source + s.locator">
@@ -206,5 +232,50 @@ main {
 .entry > p {
   color: var(--ink-muted);
   font-size: var(--text-sm);
+}
+.diagnostic-list {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-2) 0 var(--space-3);
+  display: grid;
+  gap: var(--space-1);
+}
+.diagnostic-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  width: 100%;
+  text-align: left;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+}
+.diagnostic-item:hover {
+  background: var(--paper-deep);
+}
+.diagnostic-item.is-active {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+}
+.diagnostic-index {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 </style>

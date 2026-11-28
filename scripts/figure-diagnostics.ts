@@ -3,6 +3,13 @@ import type { FigureStyle } from "../src/ui/library/scene-geometry.ts";
 import { figureGeometryDiagnostics } from "../src/ui/library/geometry-diagnostics.ts";
 
 /** The desktop proof and creation tools share one explicit viewport scale. */
+export function figureDiagnosticScale(geometry: FigureGeometry, width = 1366) {
+  return Math.max(
+    geometry.minimumScale,
+    Math.min(1, (width - 48) / geometry.width),
+  );
+}
+
 export function diagnoseFigure(
   geometry: FigureGeometry,
   style: FigureStyle,
@@ -11,6 +18,6 @@ export function diagnoseFigure(
   return figureGeometryDiagnostics(
     geometry,
     style,
-    Math.max(geometry.minimumScale, Math.min(1, (width - 48) / geometry.width)),
+    figureDiagnosticScale(geometry, width),
   );
 }

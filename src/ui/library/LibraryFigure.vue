@@ -18,6 +18,8 @@ const props = defineProps<{
   reference: FigureReference;
   contained?: boolean;
   scale?: number;
+  showDiagnosticMarks?: boolean;
+  activeDiagnostic?: number | null;
 }>();
 const emit = defineEmits<{ diagnostics: [value: Diagnostic[]] }>();
 const entry = computed(() => props.library.entries[props.reference.ref]);
@@ -32,6 +34,8 @@ const drawing = shallowRef<{
   height: number;
   minimumScale: number;
   diagnostics: Diagnostic[];
+  diagnosticMarks?: string;
+  marksGroup?: Element;
   original: Element[];
   plans: {
     width: number;
@@ -43,6 +47,25 @@ const drawing = shallowRef<{
     group: Element;
   }[];
 }>();
+
+function parseMarksGroup(markup?: string): Element | undefined {
+  if (!markup) return undefined;
+  const doc = new DOMParser().parseFromString(
+    `<svg xmlns="http://www.w3.org/2000/svg">${markup}</svg>`,
+    "image/svg+xml",
+  );
+  return doc.documentElement.firstElementChild ?? undefined;
+}
+
+function syncActiveMark(group: Element | undefined, active?: number | null) {
+  if (!group) return;
+  const hasActive = active !== null && active !== undefined;
+  group.classList.toggle("has-active", hasActive);
+  for (const mark of group.querySelectorAll(".diagnostic-mark")) {
+    const index = Number(mark.getAttribute("data-diagnostic-index"));
+    mark.classList.toggle("is-active", hasActive && index === active);
+  }
+}
 const inlineImage = computed(
   () => entry.value?.kind === "image" && !entry.value.crop,
 );
@@ -71,7 +94,17 @@ watch(
         group,
       }));
       list?.remove();
-      drawing.value = { ...result, plans, original: [...result.svg.children] };
+      const marksGroup =
+        props.showDiagnosticMarks && "diagnosticMarks" in result
+          ? parseMarksGroup(result.diagnosticMarks)
+          : undefined;
+      syncActiveMark(marksGroup, props.activeDiagnostic);
+      drawing.value = {
+        ...result,
+        marksGroup,
+        plans,
+        original: [...result.svg.children],
+      };
       root.value.replaceChildren(result.svg);
       error.value = "";
       emit("diagnostics", result.diagnostics);
@@ -85,7 +118,7 @@ watch(
 const choice = computed(() => {
   const result = drawing.value;
   const { reading, wide, desktop } = widths.value;
-  if (!result || !result.plans.length) return;
+  if (!result || !result.plans.length || result.marksGroup) return;
   const pad = desktop ? 34 : 26;
   const phone = result.plans.at(-1)!;
   if (!desktop) return { plan: phone, wide: undefined };
@@ -125,12 +158,26 @@ watch(
         result.minimumScale,
         Math.min(naturalScale, root.value.clientWidth / width),
       );
-    result.svg.replaceChildren(...(plan ? [plan.group] : result.original));
+    result.svg.replaceChildren(
+      ...(plan
+        ? [plan.group]
+        : result.marksGroup
+          ? [...result.original, result.marksGroup]
+          : result.original),
+    );
+    syncActiveMark(result.marksGroup, props.activeDiagnostic);
     result.svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
     result.svg.style.width = `${width * scale}px`;
     result.svg.style.height = `${height * scale}px`;
   },
   { flush: "post" },
+);
+
+watch(
+  () => props.activeDiagnostic,
+  (active) => {
+    syncActiveMark(drawing.value?.marksGroup, active);
+  },
 );
 </script>
 
@@ -199,6 +246,16 @@ watch(
   display: block;
   margin-inline: auto;
   max-width: none;
+}
+.library-canvas
+  :deep(.diagnostic-marks.has-active .diagnostic-mark:not(.is-active)) {
+  opacity: 0.25;
+}
+.library-canvas
+  :deep(.diagnostic-marks .diagnostic-mark.is-active .diagnostic-mark-shape) {
+  stroke-width: 2.75;
+  fill: var(--danger-soft, #f8e8e5);
+  fill-opacity: 0.35;
 }
 .library-image :deep(svg) {
   display: block;
