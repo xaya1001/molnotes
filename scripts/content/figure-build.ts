@@ -166,26 +166,30 @@ export async function prepareFigureViews(
         content_type: "image/svg+xml",
         prompt: null,
       });
-      const geometry =
-        prepared.geometry ??
-        (prepared.geometryBytes
-          ? (JSON.parse(
-              Buffer.from(prepared.geometryBytes).toString(),
-            ) as FigureGeometry)
-          : undefined);
+      let parsed: FigureGeometry | undefined;
+      const getGeometry = () =>
+        (parsed ??=
+          prepared.geometry ??
+          (prepared.geometryBytes
+            ? (JSON.parse(
+                Buffer.from(prepared.geometryBytes).toString(),
+              ) as FigureGeometry)
+            : undefined));
       const diagnostics =
-        prepared.diagnostics ?? (await runner.diagnose(geometry!, 0));
-      const diagnosticMarks =
-        diagnostics.length && geometry
-          ? diagnosticMarksLayer(geometry, diagnostics, {
-              scale: figureDiagnosticScale(geometry),
-            })
-          : "";
+        prepared.diagnostics ?? (await runner.diagnose(getGeometry()!, 0));
+      let diagnosticMarks = "";
+      if (diagnostics.length) {
+        const geometry = getGeometry();
+        if (geometry)
+          diagnosticMarks = diagnosticMarksLayer(geometry, diagnostics, {
+            scale: figureDiagnosticScale(geometry),
+          });
+      }
       renders[key] = {
         asset: `/library/${path}`,
-        width: prepared.width ?? geometry!.width,
-        height: prepared.height ?? geometry!.height,
-        minimumScale: prepared.minimumScale ?? geometry!.minimumScale,
+        width: prepared.width ?? prepared.geometry!.width,
+        height: prepared.height ?? prepared.geometry!.height,
+        minimumScale: prepared.minimumScale ?? prepared.geometry!.minimumScale,
         diagnostics,
         ...(diagnosticMarks ? { diagnosticMarks } : {}),
       };
