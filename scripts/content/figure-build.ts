@@ -8,9 +8,12 @@ import type {
   FigureReference,
   LibraryFigureRender,
 } from "../../shared/chemical-library/types.ts";
+import type { FigureGeometry } from "../../shared/chemical-library/geometry.ts";
 import { figureViewKey } from "../../shared/chemical-library/views.ts";
 import type { UnitAsset } from "./content-files.ts";
 import { sha256 } from "../../shared/assets.ts";
+import { diagnosticMarksLayer } from "../../src/ui/library/diagnostic-marks.ts";
+import { figureDiagnosticScale } from "../figure-diagnostics.ts";
 import { parseFigureStyle } from "../../src/ui/library/scene-geometry.ts";
 import { figureFontFiles, nativeFigureFontFile } from "../figure-fonts.ts";
 import { figureWorkerPool } from "./figure-worker-pool.ts";
@@ -163,14 +166,28 @@ export async function prepareFigureViews(
         content_type: "image/svg+xml",
         prompt: null,
       });
+      const geometry =
+        prepared.geometry ??
+        (prepared.geometryBytes
+          ? (JSON.parse(
+              Buffer.from(prepared.geometryBytes).toString(),
+            ) as FigureGeometry)
+          : undefined);
+      const diagnostics =
+        prepared.diagnostics ?? (await runner.diagnose(geometry!, 0));
+      const diagnosticMarks =
+        diagnostics.length && geometry
+          ? diagnosticMarksLayer(geometry, diagnostics, {
+              scale: figureDiagnosticScale(geometry),
+            })
+          : "";
       renders[key] = {
         asset: `/library/${path}`,
-        width: prepared.width ?? prepared.geometry!.width,
-        height: prepared.height ?? prepared.geometry!.height,
-        minimumScale: prepared.minimumScale ?? prepared.geometry!.minimumScale,
-        diagnostics:
-          prepared.diagnostics ??
-          (await runner.diagnose(prepared.geometry!, 0)),
+        width: prepared.width ?? geometry!.width,
+        height: prepared.height ?? geometry!.height,
+        minimumScale: prepared.minimumScale ?? geometry!.minimumScale,
+        diagnostics,
+        ...(diagnosticMarks ? { diagnosticMarks } : {}),
       };
     }
     return { renders, assets: [...assets.values()] };

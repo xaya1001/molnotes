@@ -10,16 +10,16 @@ Use this as the authoring entrypoint. Read the current [content contract](../../
 ## Render and review
 
 1. Check the source, graph, stereochemistry and electron direction. Reuse saved compound IDs and atom IDs.
-2. For a direct drawing, write YAML and run `npm run figure:draw -- figure.yaml --out <directory|file.svg>` directly. It compiles in memory without a library or permanent identity. Each frame produces an SVG; diagnostics go to stderr and do not block drawing. Parse, chemistry and renderer failures exit nonzero. To save a reusable figure, run `heavy npm run figure:compile -- --source figure.yaml --library <content-root>`. Edit and recompile the saved `library/sources/<id>.yaml` to retain the figure ID. Read the [compilation contract](../../../docs/content.md#figure-yaml-compilation) for route and mechanism fields.
+2. For a direct drawing, write YAML and run `npm run figure:draw -- figure.yaml --out <directory|file.svg> --marks` directly. It compiles in memory without a library or permanent identity. Each frame produces an SVG with red diagnostic marks on frames that have diagnostics (omit `--marks` for clean output); diagnostics go to stderr and do not block drawing. Parse, chemistry and renderer failures exit nonzero. To save a reusable figure, run `heavy npm run figure:compile -- --source figure.yaml --library <content-root>`. Edit and recompile the saved `library/sources/<id>.yaml` to retain the figure ID. Read the [compilation contract](../../../docs/content.md#figure-yaml-compilation) for route and mechanism fields.
 3. Run the website renderer with `heavy`:
    ```sh
-   heavy npm run figure:render -- --library <content-root> --entry <id> --out <output>
+   heavy npm run figure:render -- --library <content-root> --entry <id> --out <output> --marks
    ```
-   The default renders at 1366 px; use `--width 1366,390` to render desktop and phone proofs in one call.
+   The default renders at 1366 px; use `--width 1366,390` to render desktop and phone proofs in one call. `--marks` overlays numbered red diagnostic marks on PNGs and SVGs for views with diagnostics.
    Inspect the PNG and JSON diagnostics; a clean diagnostic report does not establish chemical correctness.
    `content:preview` collects topic `figure-ref`, panels and flow blocks, including tabs, and reports the website renderer's diagnostics. Use `npm run figure:lint -- [<figure.yaml>... | --library <content-root>]` to list diagnostics with files or entries, frames and totals. Run lint for a single YAML directly; use `heavy` for the library, including when no arguments are given. Lint exits nonzero for issues and remains an independent inspection tool. Content publication retains diagnostics and prints their total; drawing failures stop publication.
 4. Adjust `rot`, `flip` or common-core `align` in source and recompile; routes compute their arrow geometry. For a saved scene, adjust coordinates and semantic endpoint placement, then render and inspect again. Check normal-size labels, visible gaps, arrow origins and heads, and mobile scrolling.
-5. Make the requested comparison HTML, publish it with `artifact publish --task <task> --name <name> <directory>`, run `artifact shot <published-index>`, and inspect that screenshot before returning `artifact url <published-index>`. Artifact review and product/content publication follow the task's separate permissions.
+5. Make the requested comparison HTML using the `--marks` proofs, publish it with `artifact publish --task <task> --name <name> <directory>`, run `artifact shot <published-index>`, and inspect that screenshot before returning `artifact url <published-index>`. Artifact review and product/content publication follow the task's separate permissions.
 
 ```yaml
 kind: scheme

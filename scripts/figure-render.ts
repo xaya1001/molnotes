@@ -9,9 +9,13 @@ import {
 } from "../shared/chemical-library/contract.ts";
 import { figureBrowser } from "./figure-browser.ts";
 import { figureBuildRunner } from "./content/figure-build.ts";
-import { diagnoseFigure } from "./figure-diagnostics.ts";
+import { diagnoseFigure, figureDiagnosticScale } from "./figure-diagnostics.ts";
 import { parseFigureStyle } from "../src/ui/library/scene-geometry.ts";
 import { geometryObservation } from "../src/ui/library/geometry-observation.ts";
+import {
+  diagnosticMarksLayer,
+  withDiagnosticMarks,
+} from "../src/ui/library/diagnostic-marks.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import {
   prepareCompound,
@@ -31,7 +35,8 @@ const root = value("--library"),
   out = value("--out"),
   input = value("--prepare"),
   selected = value("--entry"),
-  refsFile = value("--references");
+  refsFile = value("--references"),
+  marks = args.includes("--marks");
 if (
   !root ||
   !out ||
@@ -42,7 +47,7 @@ if (
     !args.includes("--all"))
 )
   throw new Error(
-    "Usage: npm run figure:render -- --library <content-root> --out <directory> (--entry <id> | --all | --references <json-file> | --prepare <compound-json> | --inventory) [--width 1366,390]",
+    "Usage: npm run figure:render -- --library <content-root> --out <directory> (--entry <id> | --all | --references <json-file> | --prepare <compound-json> | --inventory) [--width 1366,390] [--marks]",
   );
 await mkdir(out, { recursive: true });
 if (input) {
@@ -137,8 +142,17 @@ if (input) {
                 Buffer.from(prepared.geometryBytes!).toString(),
               ) as import("../shared/chemical-library/geometry.ts").FigureGeometry);
             const diagnostics = diagnoseFigure(geometry, style, width);
+            const svg =
+              marks && diagnostics.length
+                ? withDiagnosticMarks(
+                    prepared.svg,
+                    diagnosticMarksLayer(geometry, diagnostics, {
+                      scale: figureDiagnosticScale(geometry, width),
+                    }),
+                  )
+                : prepared.svg;
             result = {
-              svg: prepared.svg,
+              svg,
               diagnostics,
               width: geometry.width,
               height: geometry.height,
@@ -149,7 +163,7 @@ if (input) {
             if (!args.includes("--check")) {
               browser ??= await figureBrowser(entries, resolve(root));
               await browser.prepareBatch();
-              await browser.mount({ svg: prepared.svg, ...geometry }, 0, width);
+              await browser.mount({ svg, ...geometry }, 0, width);
               await browser.page
                 .locator("#title")
                 .evaluate(

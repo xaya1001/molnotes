@@ -6,6 +6,17 @@ import { tmpdir } from "node:os";
 import { promisify } from "node:util";
 import { execFile } from "node:child_process";
 import { unescapedLocants } from "../scripts/figure-text-diagnostics.ts";
+import {
+  diagnosticMarksLayer,
+  withDiagnosticMarks,
+} from "../src/ui/library/diagnostic-marks.ts";
+import {
+  figureGroup,
+  figurePath,
+  geometrySvg,
+} from "../src/ui/library/geometry-tree.ts";
+import type { FigureGeometry } from "../shared/chemical-library/geometry.ts";
+import type { Diagnostic } from "../shared/chemical-library/types.ts";
 
 const run = promisify(execFile);
 test("draw accepts standalone SMILES and the gallery structure fields", async (t) => {
@@ -183,4 +194,65 @@ test("figure:lint flags unescaped locants and ignores chemical formulas and esca
     options,
   );
   assert.match(clean.stdout, /Figure lint: 0 issues/);
+});
+
+test("diagnosticMarksLayer draws covering boxes for element diagnostics and circles for point diagnostics", () => {
+  const label = figurePath("M20 30L36 30L36 42L20 42Z");
+  label.attributes["data-label"] = "m:a1";
+  const bond = figurePath("M40 36L72 38");
+  bond.attributes["data-bond"] = "m:b0";
+  const geometry: FigureGeometry = {
+    format: 1,
+    width: 160,
+    height: 100,
+    minimumScale: 1,
+    atomPoints: {},
+    root: figureGroup([label, bond]),
+  };
+  const diagnostics: Diagnostic[] = [
+    {
+      code: "BOND_LABEL_OVERLAP",
+      severity: "error",
+      object: "fig",
+      elements: ["m:a1", "m:b0"],
+      message: "Overlap",
+    },
+    {
+      code: "UNDECLARED_COLORED_MARK",
+      severity: "error",
+      object: "fig",
+      elements: [],
+      message: "Point issue",
+      at: { x: 110, y: 50 },
+    },
+    {
+      code: "BOND_TOO_SMALL",
+      severity: "error",
+      object: "fig",
+      elements: [],
+      message: "Global issue",
+    },
+  ];
+  const marks = diagnosticMarksLayer(geometry, diagnostics);
+  assert.match(marks, /<g class="diagnostic-marks"/);
+  const rectMatch =
+    /<g class="diagnostic-mark" data-diagnostic-index="0"[^>]*><rect class="diagnostic-mark-shape" x="([^"]+)" y="([^"]+)" width="([^"]+)" height="([^"]+)"/.exec(
+      marks,
+    );
+  assert.ok(rectMatch, "expected box mark for diagnostic with element boxes");
+  const [, rx, ry, rw, rh] = rectMatch.map(Number);
+  assert.ok(rx < 20 && ry < 30, "box should expand outward past min corner");
+  assert.ok(
+    rx + rw > 72 && ry + rh > 42,
+    "box should expand outward past max corner",
+  );
+  assert.match(
+    marks,
+    /<g class="diagnostic-mark" data-diagnostic-index="1"[^>]*><circle class="diagnostic-mark-shape" cx="110" cy="50"/,
+  );
+  assert.doesNotMatch(marks, /data-diagnostic-index="2"/);
+  const rawSvg = geometrySvg(geometry);
+  const markedSvg = withDiagnosticMarks(rawSvg, marks);
+  assert.ok(markedSvg.includes(marks));
+  assert.ok(markedSvg.startsWith(rawSvg.slice(0, -"</svg>".length)));
 });

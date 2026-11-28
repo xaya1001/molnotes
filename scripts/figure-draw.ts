@@ -8,7 +8,11 @@ import { loadFigureFonts } from "./figure-fonts.ts";
 import { moleculeToolkit } from "../shared/molecule-toolkit.ts";
 import { prepareFigure } from "../src/ui/library/prepare.ts";
 import { geometrySvg } from "../src/ui/library/geometry-tree.ts";
-import { diagnoseFigure } from "./figure-diagnostics.ts";
+import {
+  diagnosticMarksLayer,
+  withDiagnosticMarks,
+} from "../src/ui/library/diagnostic-marks.ts";
+import { diagnoseFigure, figureDiagnosticScale } from "./figure-diagnostics.ts";
 import { isObject } from "../shared/json.ts";
 import type {
   Diagnostic,
@@ -39,6 +43,7 @@ export function diagnosticLine(
 export async function* drawFigure(
   library: Library,
   reference: FigureReference,
+  drawOptions: { marks?: boolean } = {},
 ) {
   const style = await loadFigureStyle();
   const options = {
@@ -48,10 +53,21 @@ export async function* drawFigure(
   };
   for (const view of figureViews(library, reference)) {
     const geometry = await prepareFigure(library, view, options);
+    const diagnostics = diagnoseFigure(geometry, style);
+    const rawSvg = geometrySvg(geometry);
+    const svg =
+      drawOptions.marks && diagnostics.length
+        ? withDiagnosticMarks(
+            rawSvg,
+            diagnosticMarksLayer(geometry, diagnostics, {
+              scale: figureDiagnosticScale(geometry),
+            }),
+          )
+        : rawSvg;
     yield {
       reference: view,
-      svg: geometrySvg(geometry),
-      diagnostics: diagnoseFigure(geometry, style),
+      svg,
+      diagnostics,
     };
   }
 }
@@ -83,12 +99,15 @@ export async function compileFigureFile(source: string) {
 
 if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
   const args = process.argv.slice(2),
-    source = args[0],
     outIndex = args.indexOf("--out"),
-    out = args[outIndex + 1];
+    out = outIndex < 0 ? undefined : args[outIndex + 1],
+    marks = args.includes("--marks"),
+    source = args.find(
+      (arg, index) => !arg.startsWith("--") && index !== outIndex + 1,
+    );
   if (!source || outIndex < 0 || !out)
     throw new Error(
-      "Usage: npm run figure:draw -- <figure.yaml> --out <directory|file.svg>",
+      "Usage: npm run figure:draw -- <figure.yaml> --out <directory|file.svg> [--marks]",
     );
   const compiled = await compileFigureFile(source);
   const name = basename(source, extname(source)),
@@ -101,6 +120,7 @@ if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
   for await (const rendered of drawFigure(
     compiled.entries,
     compiled.reference,
+    { marks },
   )) {
     const suffix = multiple ? `-${++index}` : "";
     const target = file

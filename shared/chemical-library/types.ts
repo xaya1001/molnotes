@@ -336,4 +336,5 @@ export interface LibraryFigureRender {
   height: number;
   minimumScale: number;
   diagnostics: Diagnostic[];
+  diagnosticMarks?: string;
 }
